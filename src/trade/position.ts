@@ -9,6 +9,7 @@ import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, Z
 import type { Position } from './types';
 import { unrealizedPnl, unrealizedPnlPercent } from './pnl';
 import { withAlpha, shade, contrastText, drawPillGroup } from '../render/pill';
+import { drawAxisTag } from './axis-tag';
 
 const TAG_H = 18;
 const GAP = 2;
@@ -84,12 +85,8 @@ export class PositionMarker implements IPrimitive {
     const padX = 6 * dpr;
     const r = 3 * dpr;
 
-    // compact right-axis tag: avg entry price, colored by P&L sign
-    const px = rc.priceScale.format(this._position.avgPrice);
-    ctx.fillStyle = pnlColor;
-    ctx.fillRect(xEnd + 1, entryY - boxH / 2, ctx.measureText(px).width + padX * 2, boxH);
-    ctx.fillStyle = contrastText(pnlColor);
-    ctx.fillText(px, xEnd + 1 + padX, entryY);
+    // compact axis tag: avg entry price, colored by P&L sign
+    drawAxisTag(ctx, rc, entryY, rc.priceScale.format(this._position.avgPrice), { fill: pnlColor, text: contrastText(pnlColor) }, { height: boxH, padX });
 
     // segmented pill group: [LONG|SHORT][qty][±pnl (±pct)][✕]
     const surface = rc.theme.background === 'transparent' ? withAlpha(sideColor, 0.14) : rc.theme.background;
