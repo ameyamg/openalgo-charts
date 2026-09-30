@@ -20,40 +20,12 @@
  * column of prices and a signal is a named event at one bar.
  */
 import { rsi, atr, trueRange, sourceValues } from 'openalgo-charts';
-import type { IndicatorDescriptor, IndicatorSource, SeriesMarker } from 'openalgo-charts';
+import type { IndicatorDescriptor, SeriesMarker } from 'openalgo-charts';
 import {
   nulls, rollingSum, correlation, pivotHigh, pivotLow, barsSince, valueWhen,
 } from './calc';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A length that indexes or windows a series: a whole number, always. */
-const len = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.max(1, Math.floor(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
-const on = (s: Readonly<Record<string, unknown>>, k: string): boolean => s[k] !== false;
-
-/** The reading `k` bars back, with no value before the series starts. */
-function shift(values: readonly number[], k: number): number[] {
-  const out = new Array<number>(values.length).fill(NaN);
-  // Callers shift by a whole `k` of zero or more, so `i - k` is in [0, i].
-  for (let i = k; i < values.length; i++) out[i] = values[i - k]!;
-  return out;
-}
-
-/** `shift` for a condition series. An out-of-range flag reads as false. */
-function shiftFlags(flags: readonly boolean[], k: number): boolean[] {
-  const out = new Array<boolean>(flags.length).fill(false);
-  for (let i = k; i < flags.length; i++) out[i] = flags[i - k]!;
-  return out;
-}
+import { num, int, str, flag, src } from './settings';
+import { shift, shiftFlags } from './series';
 
 /**
  * Vortex Indicator: how much of the window's total travel was spent reaching up
@@ -82,7 +54,7 @@ export const VORTEX: IndicatorDescriptor = {
   ],
   calc: (bars, s) => {
     const n = bars.length;
-    const length = len(s, 'length', 14);
+    const length = int(s, 'length', 14);
     const vip = new Array<number>(n).fill(NaN);
     const vim = new Array<number>(n).fill(NaN);
     if (n === 0) return { vip: nulls(vip), vim: nulls(vim) };
@@ -167,7 +139,7 @@ export const VOLATILITY_STOP: IndicatorDescriptor = {
     const high = bars.map((b) => b.high);
     const low = bars.map((b) => b.low);
     const close = bars.map((b) => b.close);
-    const band = atr(high, low, close, len(s, 'length', 20));
+    const band = atr(high, low, close, int(s, 'length', 20));
     const tr = trueRange(high, low, close);
 
     // The running state is seeded on the first bar: both extremes start at the
@@ -245,7 +217,7 @@ export const TREND_STRENGTH_INDEX: IndicatorDescriptor = {
   calc: (bars, s) => {
     const index = bars.map((_, i) => i);
     const close = bars.map((b) => b.close);
-    return { tsi: nulls(correlation(close, index, len(s, 'length', 14))) };
+    return { tsi: nulls(correlation(close, index, int(s, 'length', 14))) };
   },
   levels: (s) => [
     { price: 1, color: str(s, 'bullishColor', '#089981'), title: 'TSI Bullish Band' },
@@ -327,11 +299,11 @@ export const WILLIAMS_FRACTALS: IndicatorDescriptor = {
     const out = { fractals, upFractal, downFractal };
     if (n === 0) return out;
 
-    const periods = Math.max(2, len(s, 'periods', 2));
+    const periods = Math.max(2, int(s, 'periods', 2));
     const high = bars.map((b) => b.high);
     const low = bars.map((b) => b.low);
-    const showUp = on(s, 'showUp');
-    const showDown = on(s, 'showDown');
+    const showUp = flag(s, 'showUp', true);
+    const showDown = flag(s, 'showDown', true);
     for (let i = 0; i < n; i++) {
       if (showUp && isFractal(high, i, periods, true)) upFractal[i] = high[i]!;
       if (showDown && isFractal(low, i, periods, false)) downFractal[i] = low[i]!;
@@ -421,14 +393,14 @@ export const RSI_DIVERGENCE: IndicatorDescriptor = {
     const hiddenBull: (number | null)[] = new Array(n).fill(null);
     const bear: (number | null)[] = new Array(n).fill(null);
     const hiddenBear: (number | null)[] = new Array(n).fill(null);
-    const osc = rsi(sourceValues(bars, src(s)), len(s, 'length', 14));
+    const osc = rsi(sourceValues(bars, src(s)), int(s, 'length', 14));
     const out = { rsi: nulls(osc), bull, hiddenBull, bear, hiddenBear };
     if (n === 0) return out;
 
-    const lbR = len(s, 'lbR', 5);
-    const lbL = len(s, 'lbL', 5);
-    const lower = num(s, 'rangeLower', 5);
-    const upper = num(s, 'rangeUpper', 60);
+    const lbR = int(s, 'lbR', 5);
+    const lbL = int(s, 'lbL', 5);
+    const lower = int(s, 'rangeLower', 5);
+    const upper = int(s, 'rangeUpper', 60);
     // Each class is gated on its own input, so an unwanted one produces no signal
     // at all rather than an invisible one.
     const wantBull = s.plotBull !== false;
@@ -628,7 +600,7 @@ export const CONSOLIDATION_BREAKOUT: IndicatorDescriptor = {
   // the bar from it, which keeps it clear of the range rails.
   markers: ({ bars, values, settings }) => {
     const out: SeriesMarker[] = [];
-    if (!on(settings, 'markbreakout')) return out;
+    if (!flag(settings, 'markbreakout', true)) return out;
     const up = values.breakUp ?? [];
     const down = values.breakDown ?? [];
     const upColor = str(settings, 'bullBreakColor', '#00c853');
@@ -655,7 +627,7 @@ export const CONSOLIDATION_BREAKOUT: IndicatorDescriptor = {
   barColors: ({ bars, values, settings }) => {
     const age = values.insideAge ?? [];
     const tint = str(settings, 'insideColor', '#000000');
-    const wanted = on(settings, 'colorinside');
+    const wanted = flag(settings, 'colorinside', true);
     return bars.map((_, i) =>
       (wanted && age[i] !== null && age[i] !== undefined ? tint : null));
   },

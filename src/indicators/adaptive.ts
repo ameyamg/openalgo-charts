@@ -13,30 +13,14 @@
  * (`openalgo-charts`), not deep paths. See the note in `src/indicators/index.ts`.
  */
 import { atr, trueRange, sourceValues, sourceValue } from 'openalgo-charts';
-import type { IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { IndicatorDescriptor } from 'openalgo-charts';
 import { sma, rma, nulls, smaSeededEma, change, roc, rollingSum, linreg } from './calc';
 import { emaOfGapped } from './smoothing';
 import { withTail, machineTail, whole, cell } from './tail';
 import { seeded, smooth, wilder, atrStep, trueRangeAt, meanAt } from './steppers';
 import { withTimeframe } from './timeframe';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** the reference `input.int` is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Readonly<Record<string, unknown>>, k: string, d: number, min = 1): number =>
-  Math.max(min, Math.round(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const flag = (s: Readonly<Record<string, unknown>>, k: string, d: boolean): boolean => {
-  const v = s[k];
-  return typeof v === 'boolean' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
+import { num, int, offsetOf, str, flag, src } from './settings';
+import { zip } from './series';
 
 /**
  * Kaufman's Adaptive Moving Average: an EMA whose smoothing constant is chosen
@@ -176,7 +160,7 @@ export const KELTNER_CHANNEL: IndicatorDescriptor = withTimeframe(withTail({
       // going `na`, which is exactly what the shared `trueRange` already does.
       rail = trueRange(high, low, close);
     } else if (style === 'Range') {
-      rail = rma(high.map((h, i) => h - low[i]!), length);
+      rail = rma(zip(high, low, (h, l) => h - l), length);
     } else {
       rail = atr(high, low, close, int(s, 'atrlength', 10));
     }
@@ -246,7 +230,7 @@ export const LSMA: IndicatorDescriptor = withTimeframe({
     lsma: nulls(linreg(
       sourceValues(bars, src(s)),
       int(s, 'length', 25, 2),
-      Math.round(num(s, 'offset', 0)),
+      offsetOf(s, 'offset', 0),
     )),
   }),
 });

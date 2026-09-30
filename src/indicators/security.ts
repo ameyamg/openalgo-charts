@@ -172,6 +172,25 @@ export function bucketKeys(b: Bucketing, zone: string, sessionStart: number | nu
 
 const finite = (v: number): boolean => Number.isFinite(v);
 
+/**
+ * Fold a later bar into its bucket, the one rule both the series and the
+ * expression paths read a higher timeframe by: the first real open, the
+ * widest real range, the last real close, volume summed and open interest
+ * replaced, since a bucket's open interest is the position as at its last bar
+ * (see Bar.oi).
+ */
+function foldBar(
+  into: { open: number; high: number; low: number; close: number; volume?: number | null; oi?: number | null },
+  bar: Bar,
+): void {
+  if (!finite(into.open) && finite(bar.open)) into.open = bar.open;
+  if (finite(bar.high) && (!finite(into.high) || bar.high > into.high)) into.high = bar.high;
+  if (finite(bar.low) && (!finite(into.low) || bar.low < into.low)) into.low = bar.low;
+  if (finite(bar.close)) into.close = bar.close;
+  if (bar.volume !== undefined) into.volume = (into.volume ?? 0) + bar.volume;
+  if (bar.oi !== undefined) into.oi = bar.oi;
+}
+
 export function securitySeries(
   bars: readonly Bar[],
   interval: string,
@@ -227,15 +246,7 @@ export function securitySeries(
       });
       isNew[i] = true;
     } else {
-      const k = buckets[buckets.length - 1]!;
-      if (!finite(k.open) && finite(bar.open)) k.open = bar.open;
-      if (finite(bar.high) && (!finite(k.high) || bar.high > k.high)) k.high = bar.high;
-      if (finite(bar.low) && (!finite(k.low) || bar.low < k.low)) k.low = bar.low;
-      if (finite(bar.close)) k.close = bar.close;
-      if (bar.volume !== undefined) k.volume = (k.volume ?? 0) + bar.volume;
-      // Replaced, not accumulated: see Bar.oi. The bucket's open interest is
-      // the position as at its last bar.
-      if (bar.oi !== undefined) k.oi = bar.oi;
+      foldBar(buckets[buckets.length - 1]!, bar);
     }
     of[i] = buckets.length - 1;
     prevKey = key;
@@ -364,14 +375,8 @@ export function securityExpression(
     const key = keyAt(bar.time);
     if (key !== previousKey) folded.push(Object.freeze({ ...bar }));
     else {
-      const old = folded[folded.length - 1]!;
-      const next = { ...old };
-      if (!finite(old.open) && finite(bar.open)) next.open = bar.open;
-      if (finite(bar.high) && (!finite(old.high) || bar.high > old.high)) next.high = bar.high;
-      if (finite(bar.low) && (!finite(old.low) || bar.low < old.low)) next.low = bar.low;
-      if (finite(bar.close)) next.close = bar.close;
-      if (bar.volume !== undefined) next.volume = (old.volume ?? 0) + bar.volume;
-      if (bar.oi !== undefined) next.oi = bar.oi;
+      const next = { ...folded[folded.length - 1]! };
+      foldBar(next, bar);
       folded[folded.length - 1] = Object.freeze(next);
     }
     previousKey = key;

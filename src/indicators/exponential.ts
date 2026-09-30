@@ -11,21 +11,13 @@
  * (see ./tail), so a tick costs a step, not a pass over the history.
  */
 import { sourceValues, sourceValue } from 'openalgo-charts';
-import type { Bar, IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
 import { nulls, smaSeededEma } from './calc';
 import { withTail, machineTail, stepAll, cell, type Machine } from './tail';
 import { seeded, smooth, type Seeded } from './steppers';
 import { withTimeframe } from './timeframe';
-
-type Settings = Readonly<Record<string, unknown>>;
-
-const num = (s: Settings, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A length is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Settings, k: string, d: number): number => Math.max(1, Math.round(num(s, k, d)));
-const src = (s: Settings): IndicatorSource => (s.source as IndicatorSource) ?? 'close';
+import { type Settings, num, int, src } from './settings';
+import { zip } from './series';
 
 /** ZLEMA's lag: half the length, rounded down. */
 const lagOf = (length: number): number => Math.floor((length - 1) / 2);
@@ -181,8 +173,8 @@ export const ELDER_RAY: IndicatorDescriptor = withTail({
     const ema = smaSeededEma(sourceValues(bars, 'close'), int(s, 'length', 13));
     // `ema` holds one value per bar.
     return {
-      bull: nulls(bars.map((b, i) => b.high - ema[i]!)),
-      bear: nulls(bars.map((b, i) => b.low - ema[i]!)),
+      bull: nulls(zip(bars, ema, (b, e) => b.high - e)),
+      bear: nulls(zip(bars, ema, (b, e) => b.low - e)),
     };
   },
   levels: () => [{ price: 0, color: '#787b86', title: 'Zero', dashed: true }],

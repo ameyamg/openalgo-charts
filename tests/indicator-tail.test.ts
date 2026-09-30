@@ -256,10 +256,11 @@ const FLAVOURS: Flavour[] = [
 
 /** Settings for each built-in: defaults first, then the edges of its inputs. */
 const CASES: Record<string, IndicatorSettings[]> = {
-  sma: [{}, { length: 1 }, { length: 20, source: 'hl2' }, { length: 4, source: 'volume' }],
+  // A fractional length reads as the nearest whole one, in calc and tail alike.
+  sma: [{}, { length: 1 }, { length: 20, source: 'hl2' }, { length: 4, source: 'volume' }, { length: 2.5 }],
   wma: [{}, { length: 1 }, { length: 12, source: 'ohlc4' }],
-  ema: [{}, { length: 1 }, { length: 21, source: 'hlc3' }, { length: 3, source: 'volume' }],
-  rsi: [{}, { length: 1 }, { length: 2, source: 'open' }, { length: 30, overbought: 80, oversold: 20 }],
+  ema: [{}, { length: 1 }, { length: 21, source: 'hlc3' }, { length: 3, source: 'volume' }, { length: 1.5 }],
+  rsi: [{}, { length: 1 }, { length: 2, source: 'open' }, { length: 30, overbought: 80, oversold: 20 }, { length: 7.5 }],
   atr: [{}, { period: 1 }, { period: 3 }],
   adx: [{}, { period: 5, adxPeriod: 3 }, { period: 1, adxPeriod: 1 }],
   macd: [{}, { fastPeriod: 3, slowPeriod: 7, signalPeriod: 2 }, { fastPeriod: 1, slowPeriod: 1, signalPeriod: 1, source: 'ohlc4' }],
@@ -295,13 +296,17 @@ const CASES: Record<string, IndicatorSettings[]> = {
   'high-low-52-week': [{}, { timezone: 'America/New_York' }, { timezone: 'Europe/London' }],
 };
 
-/** Settings a tail deliberately declines: the full calc must still be what the runtime shows. */
+/**
+ * Settings a tail deliberately declines: the full calc must still be what the
+ * runtime shows. A length past the safe integers is one the stepping kernels
+ * cannot take, so the tail leaves it to the full calc.
+ */
 const DECLINED: Record<string, IndicatorSettings[]> = {
-  sma: [{ length: 2.5 }],
-  ema: [{ length: 1.5 }],
+  sma: [{ length: 2 ** 53 }],
+  ema: [{ length: 2 ** 53 }],
   vwap: [{ offset: 2 }, { offset: -1 }],
   donchian: [{ offset: -2 }],
-  rsi: [{ length: 7.5 }],
+  rsi: [{ length: 2 ** 53 }],
 };
 
 const settingsFor = (d: IndicatorDescriptor, patch: IndicatorSettings): IndicatorSettings => ({ ...indicatorDefaults(d), ...patch });

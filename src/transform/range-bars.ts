@@ -7,6 +7,7 @@ import type { Bar } from '../model/bar';
 import { copyState, type ISeriesTransform } from './transform';
 
 export interface RangeOptions {
+  /** High-to-low span that closes a bar. The constructor throws unless it is above 0. */
   range: number;
 }
 

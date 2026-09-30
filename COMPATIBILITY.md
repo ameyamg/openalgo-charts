@@ -78,6 +78,7 @@ this table is where they are recorded.
 | `priceAxisMoved` event | `src/core/chart-events.ts` (its `ChartEventMap` key; `movePriceAxis` in `src/core/chart.ts` alone emits it), an event name | 2.5.4 | 3.0.0 | `priceAxisPlacementChanged`, which `setPriceAxisPlacement` emits with the pane, the scale id and its new side |
 | `Chart.on`, `Chart.once` and `Chart.off` given a name outside `ChartEventMap` (the `string` overload) | `src/core/chart.ts` | 2.6.0 | 3.0.0 | The same calls with a `ChartEventMap` name, which types the listener's payload; declare an event of your own by merging it into `ChartEventMap` |
 | `Chart.emit` | `src/core/chart.ts` | 2.5.10 | 3.0.0 | `setDataContext` to announce an instrument, `LinkGroup.setSymbol`, `setInterval` and `setChartType` to drive a link group, and an emitter of your own for events of your own |
+| `VolumeProfileOptions` | `src/profile/volume-profile.ts` | 1.0.1 | 3.0.0 | Nothing takes this type: pass `computeVolumeProfile(bars, tickSize, valueAreaPercent)` its arguments as before, or use `computeVolumeProfileSessions` with `VolumeProfileFamilyOptions` for an options object |
 
 Migration, for the five a host is most likely to hold:
 
@@ -170,6 +171,19 @@ remove them:
   member through 2.x. 3.0.0 changes it, to a member typed by `ChartEventMap` or
   to a dispatch the base exports for its tiers, and a host that implements one
   of them for an object that is not a `Chart` will change with it.
+
+### Planned for 3.0.0
+
+- **Visibility option names.** A switch that shows or hides part of the chart
+  is named two ways: `xVisible` in the style bags that mirror a series property
+  (`bodyVisible`, `wickVisible`, `borderVisible`, `priceLineVisible`,
+  `lastValueVisible`, a primitive's `lineVisible`) and `showX` in the profile
+  primitives (`showPoc`, `showValueArea`, `showLastPrice`, the footprint's
+  `showCandle`) and in `PaneOptions` (`showTimeAxis`, `showVertGrid`). Both
+  forms are public and saved in chart settings, so 2.x renames neither. Until
+  3.0.0 settles on one, with the other kept as a deprecated alias, a new option
+  follows its neighbours: `xVisible` in a style bag that mirrors a series
+  property, `showX` on a primitive or profile toggle.
 
 ## Runtime boundary
 

@@ -6,10 +6,11 @@
 // Renko / Range / Line Break render as a 'candlestick' series; Point & Figure
 // as 'point-figure'; Kagi as 'kagi'.
 
-// The registry MUST come from the base entry, not a deep path: each tier is its
-// own rollup bundle, so a deep import would inline a *second* copy of the
-// registry and `createChart` would never see what this tier registers.
-// `../index` is marked external for tier builds and emitted as 'openalgo-charts'.
+// The registry MUST come from the package specifier 'openalgo-charts', not a
+// relative path: each tier is its own rollup bundle, and rollup.config.js
+// (`tierExternal`) leaves only the package specifiers external, so a relative
+// import would inline a *second* copy of the registry and `createChart` would
+// never see what this tier registers.
 import { registerChartType } from 'openalgo-charts';
 import { drawPointFigure } from '../render/point-figure';
 import { drawKagi } from '../render/kagi';

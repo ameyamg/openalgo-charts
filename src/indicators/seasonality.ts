@@ -41,38 +41,9 @@
  * Original implementation written from the described behaviour, per
  * ARCHITECTURE.md §0.1, not ported from any third-party source.
  */
-import {
-  utcSecondsToZonedParts, zonedWallClockToUtcSeconds, DEFAULT_TIMEZONE, isValidTimezone,
-} from 'openalgo-charts';
+import { utcSecondsToZonedParts, zonedWallClockToUtcSeconds } from 'openalgo-charts';
 import type { Bar, IndicatorDescriptor, TableCell, TablePosition } from 'openalgo-charts';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const on = (s: Readonly<Record<string, unknown>>, k: string): boolean => s[k] !== false;
-
-/**
- * The chart's configured zone, as it reaches an indicator.
- *
- * A descriptor's hooks are handed bars and settings and never the chart, so the
- * zone travels on the settings blob under the reserved `timezone` key. A blob
- * without one, which is every caller that predates the option, resolves to the
- * shipped default and tabulates exactly what 1.2.0 tabulated.
- *
- * An unrecognised name falls back rather than throwing: `chart.setTimezone`
- * already rejects a bad zone at the call site, and a hook that throws takes the
- * whole repaint down with it.
- */
-const zoneOf = (s: Readonly<Record<string, unknown>>): string => {
-  const v = s.timezone;
-  if (typeof v !== 'string' || v === '' || v === DEFAULT_TIMEZONE) return DEFAULT_TIMEZONE;
-  return isValidTimezone(v) ? v : DEFAULT_TIMEZONE;
-};
+import { num, str, flag, zoneOf } from './settings';
 
 const POS_DEFAULT = '#089981';
 const NEG_DEFAULT = '#F23745';
@@ -367,9 +338,9 @@ export const SEASONALITY: IndicatorDescriptor = {
       rowWeights.push(1);
     }
 
-    const showAvg = on(settings, 'showAvg');
-    const showStDev = on(settings, 'showStDev');
-    const showPos = on(settings, 'showPos');
+    const showAvg = flag(settings, 'showAvg', true);
+    const showStDev = flag(settings, 'showStDev', true);
+    const showPos = flag(settings, 'showPos', true);
     if (showAvg || showStDev || showPos) {
       // The reference separates the metrics with one cell merged across the
       // table. Without cell merging the same band is thirteen empty cells

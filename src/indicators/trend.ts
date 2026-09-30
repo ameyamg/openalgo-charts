@@ -2,14 +2,13 @@
  * Tier-1 trend indicators — computed from the chart's own OHLCV, no extra data.
  * Part of the lazy `openalgo-charts/indicators` tier.
  *
- * `ema`, `supertrend`, and the `sourceValues` helper come from the base bundle
- * (`../index`), not deep paths — see the note in `src/indicators/index.ts`.
+ * `supertrend`, `atr` and the `sourceValues` helper come from the base bundle
+ * through the `'openalgo-charts'` specifier, not relative paths; see the note
+ * in `src/indicators/index.ts`.
  */
 import {
   supertrend, atr, sourceValues, sourceValue,
-  sessionStartFlags, calendarPeriodFlags, isNewZonedPeriod, isNewIstDay, isNewZonedDay,
-  utcSecondsToIstParts, IST_OFFSET_SECONDS,
-  DEFAULT_TIMEZONE, isValidTimezone,
+  sessionStartFlags, calendarPeriodFlags, isNewIstDay, isNewZonedDay, DEFAULT_TIMEZONE,
 } from 'openalgo-charts';
 import type { Bar, IndicatorDescriptor, IndicatorSource, IndicatorStudySource } from 'openalgo-charts';
 import { sma, wma, stdev, highest, lowest, nulls, smaSeededEma } from './calc';
@@ -17,37 +16,11 @@ import type { NumericalWindowOptions } from './statistics';
 import { withTail, whole, cell, claimOf, settle, windowTail, machineTail, type Tail } from './tail';
 import { seeded, smooth, observed, observedStep, supertrendState, supertrendStep, sarState, sarStep } from './steppers';
 import { withTimeframe } from './timeframe';
+import { num, int, offsetOf, str, src, zoneOf } from './settings';
+import { shift, zip } from './series';
+import { periodBoundary } from './calendar';
 
 type Calc = IndicatorDescriptor['calc'];
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
-
-/**
- * The chart's configured zone, as it reaches an indicator.
- *
- * A `calc` is handed `(bars, settings, store)` and never the chart, so the zone
- * travels on the settings blob under the reserved `timezone` key. A blob without
- * one, which is every caller that predates the option, resolves to the shipped
- * default and computes exactly what 1.2.0 computed.
- *
- * An unrecognised name falls back rather than throwing: `chart.setTimezone`
- * already rejects a bad zone at the call site, and a `calc` that throws takes
- * the whole repaint down with it.
- */
-const zoneOf = (s: Readonly<Record<string, unknown>>): string => {
-  const v = s.timezone;
-  if (typeof v !== 'string' || v === '' || v === DEFAULT_TIMEZONE) return DEFAULT_TIMEZONE;
-  return isValidTimezone(v) ? v : DEFAULT_TIMEZONE;
-};
 
 type Kernel = (values: readonly number[], period: number, options?: NumericalWindowOptions) => number[];
 
@@ -61,7 +34,7 @@ function movingAverage(id: string, name: string, color: string, kernel: Kernel, 
     const source = src(s) as IndicatorSource | IndicatorStudySource;
     const values = typeof source === 'string' ? sourceValues(bars, source)
       : sourceValues(bars, source, context).map(value => value ?? NaN);
-    return { ma: nulls(kernel(values, num(s, 'length', 9),
+    return { ma: nulls(kernel(values, int(s, 'length', 9),
       typeof source === 'string' ? undefined : { missing: 'propagate' })) };
   };
   return withTail({
@@ -86,13 +59,13 @@ function movingAverage(id: string, name: string, color: string, kernel: Kernel, 
  */
 function windowAverageTail(calc: Calc, kernel: Kernel): Tail {
   const byBars = windowTail(calc, (s) => {
-    const length = num(s, 'length', 9);
+    const length = int(s, 'length', 9);
     return whole(length) ? length - 1 : null;
   });
   return (bars, s, from, previous, store, ctx) => {
     const source = src(s) as IndicatorSource | IndicatorStudySource;
     if (typeof source === 'string') return byBars(bars, s, from, previous, store, ctx);
-    const length = num(s, 'length', 9);
+    const length = int(s, 'length', 9);
     const claim = claimOf(store, calc, bars, from);
     const column = claim === undefined ? undefined : ctx?.resolveSource?.(source);
     if (claim === undefined || !whole(length) || !Array.isArray(column) || column.length !== bars.length) return null;
@@ -105,7 +78,7 @@ function windowAverageTail(calc: Calc, kernel: Kernel): Tail {
 /** The exponential average resumes its running value, over a price or over a study output. */
 function emaTail(calc: Calc): Tail {
   return (bars, s, from, previous, store, ctx) => {
-    const length = num(s, 'length', 9);
+    const length = int(s, 'length', 9);
     if (!whole(length)) return null;
     const source = src(s) as IndicatorSource | IndicatorStudySource;
     if (typeof source === 'string') {
@@ -137,13 +110,13 @@ export const EMA: IndicatorDescriptor = withTimeframe(movingAverage('ema', 'EMA'
 
 function bollinger(bars: readonly Bar[], s: Readonly<Record<string, unknown>>): Record<string, (number | null)[]> {
   const values = sourceValues(bars, src(s));
-  const length = num(s, 'length', 20);
+  const length = int(s, 'length', 20);
   const mult = num(s, 'stdDev', 2);
   const basis = sma(values, length);
   const dev = stdev(values, length);
-  // Both kernels return one value per input, so `dev[i]` is there.
-  const upper = basis.map((b, i) => b + mult * dev[i]!);
-  const lower = basis.map((b, i) => b - mult * dev[i]!);
+  // Both kernels return one value per input, as `zip` needs.
+  const upper = zip(basis, dev, (b, d) => b + mult * d);
+  const lower = zip(basis, dev, (b, d) => b - mult * d);
   return { upper: nulls(upper), basis: nulls(basis), lower: nulls(lower) };
 }
 
@@ -167,7 +140,7 @@ export const BOLLINGER: IndicatorDescriptor = withTimeframe(withTail({
   calc: bollinger,
 }, (calc) => windowTail(calc, (s) => {
   // The basis and the deviation both read one window of the source.
-  const length = num(s, 'length', 20);
+  const length = int(s, 'length', 20);
   return whole(length) ? length - 1 : null;
 })));
 
@@ -178,48 +151,6 @@ export const BOLLINGER: IndicatorDescriptor = withTimeframe(withTail({
  */
 type VwapAnchor = 'session' | 'week' | 'month' | 'quarter' | 'year' | 'continuous';
 
-/** The anchors that are a calendar period rather than a trading session. */
-type CalendarAnchor = Exclude<VwapAnchor, 'session' | 'continuous'>;
-
-/** Epoch day in IST. Cheap only because IST is a fixed offset; nothing else is. */
-const istDay = (t: number): number => Math.floor((t + IST_OFFSET_SECONDS) / 86400);
-
-/** Monday-based week index. Epoch day 4 is Monday 1970-01-05. */
-const istWeek = (t: number): number => Math.floor((istDay(t) - 4) / 7);
-
-function istPeriodBoundary(period: CalendarAnchor, prev: number, now: number): boolean {
-  // Week first: a Monday-start week straddles the turn of the year, so the year
-  // test below would report a boundary the week itself does not have.
-  if (period === 'week') return istWeek(prev) !== istWeek(now);
-  const a = utcSecondsToIstParts(prev);
-  const b = utcSecondsToIstParts(now);
-  if (a.year !== b.year) return true;
-  if (period === 'year') return false;
-  if (period === 'quarter') return Math.floor((a.month - 1) / 3) !== Math.floor((b.month - 1) / 3);
-  return a.month !== b.month;
-}
-
-/**
- * The boundary test for one anchor period, on the calendar of `zone`.
- *
- * The default zone keeps the offset arithmetic. Intl is the right answer for an
- * arbitrary zone and the wrong price for the one zone that has no DST to get
- * wrong: measured over twelve thousand daily bars the sweep costs 38ms through
- * Intl against 3ms through `utcSecondsToIstParts`, and a week anchor runs one
- * test per bar. The two answers are pinned identical for Asia/Kolkata by
- * `tests/indicator-timezone.test.ts`, so the branch buys back the old speed for
- * every existing caller and changes nothing about what it returns. The
- * foundation's own `sessionStartFlags` splits on the same line for the same
- * reason.
- */
-function periodBoundary(
-  period: CalendarAnchor,
-  zone: string,
-): (prev: number, now: number) => boolean {
-  return zone === DEFAULT_TIMEZONE
-    ? (prev, now): boolean => istPeriodBoundary(period, prev, now)
-    : (prev, now): boolean => isNewZonedPeriod(prev, now, period, zone);
-}
 
 /**
  * Per-bar flags for the first bar of each anchor period, on the calendar of
@@ -235,17 +166,6 @@ function anchorRestarts(bars: readonly Bar[], anchor: VwapAnchor, zone: string):
   const times = bars.map((b) => b.time);
   if (anchor === 'session') return sessionStartFlags(times, zone);
   return calendarPeriodFlags(times, periodBoundary(anchor, zone));
-}
-
-/** Shift a column forward by `by` bars, the way a plot offset would draw it. */
-function shiftColumn(col: readonly number[], by: number): number[] {
-  if (by === 0) return col.slice();
-  const out = new Array<number>(col.length).fill(NaN);
-  for (let i = 0; i < col.length; i++) {
-    const to = i + by;
-    if (to >= 0 && to < col.length) out[to] = col[i]!;
-  }
-  return out;
 }
 
 const HOUR = 3600;
@@ -336,9 +256,9 @@ interface VwapState { pv: number; vol: number; pv2: number; reading: Reading | n
 function vwapTail(calc: Calc): Tail {
   return (bars, s, from, previous, store) => {
     const n = bars.length;
-    if (Math.round(num(s, 'offset', 0)) !== 0 || n - from > 2) return null;
-    const source = src(s);
-    const anchor = (typeof s.anchor === 'string' ? s.anchor : 'session') as VwapAnchor;
+    if (offsetOf(s, 'offset', 0) !== 0 || n - from > 2) return null;
+    const source = src(s, 'source', 'hlc3');
+    const anchor = str(s, 'anchor', 'session') as VwapAnchor;
     const zone = zoneOf(s);
     const percent = s.calcMode === 'percent';
     const shows = [s.showBand1 !== false, s.showBand2 === true, s.showBand3 === true];
@@ -456,10 +376,10 @@ export const VWAP: IndicatorDescriptor = withTail({
   ],
   calc: (bars, s) => {
     const n = bars.length;
-    const values = sourceValues(bars, src(s));
-    const anchor = (typeof s.anchor === 'string' ? s.anchor : 'session') as VwapAnchor;
+    const values = sourceValues(bars, src(s, 'source', 'hlc3'));
+    const anchor = str(s, 'anchor', 'session') as VwapAnchor;
     const percentMode = s.calcMode === 'percent';
-    const offset = Math.round(num(s, 'offset', 0));
+    const offset = offsetOf(s, 'offset', 0);
 
     const vwap = new Array<number>(n).fill(NaN);
     // The band half-width in price terms, before the multiplier. Kept as its own
@@ -518,13 +438,13 @@ export const VWAP: IndicatorDescriptor = withTail({
     const m3 = num(s, 'bandMult3', 3);
 
     return {
-      vwap: nulls(shiftColumn(vwap, offset)),
-      upper1: nulls(shiftColumn(band(b1, m1, 1), offset)),
-      lower1: nulls(shiftColumn(band(b1, m1, -1), offset)),
-      upper2: nulls(shiftColumn(band(b2, m2, 1), offset)),
-      lower2: nulls(shiftColumn(band(b2, m2, -1), offset)),
-      upper3: nulls(shiftColumn(band(b3, m3, 1), offset)),
-      lower3: nulls(shiftColumn(band(b3, m3, -1), offset)),
+      vwap: nulls(shift(vwap, offset)),
+      upper1: nulls(shift(band(b1, m1, 1), offset)),
+      lower1: nulls(shift(band(b1, m1, -1), offset)),
+      upper2: nulls(shift(band(b2, m2, 1), offset)),
+      lower2: nulls(shift(band(b2, m2, -1), offset)),
+      upper3: nulls(shift(band(b3, m3, 1), offset)),
+      lower3: nulls(shift(band(b3, m3, -1), offset)),
     };
   },
 }, vwapTail);
@@ -560,7 +480,7 @@ export const SUPERTREND: IndicatorDescriptor = withTimeframe(withTail({
     { between: ['bodyMid', 'down'], colorUpKey: 'downColor', colorDownKey: 'downColor', opacity: 0.1 },
   ],
   calc: (bars, s) => {
-    const st = supertrend(bars, num(s, 'period', 10), num(s, 'multiplier', 3));
+    const st = supertrend(bars, int(s, 'period', 10), num(s, 'multiplier', 3));
     const up: (number | null)[] = [];
     const down: (number | null)[] = [];
     const bodyMid: (number | null)[] = [];
@@ -577,7 +497,7 @@ export const SUPERTREND: IndicatorDescriptor = withTimeframe(withTail({
     return { up, down, bodyMid };
   },
 }, (calc) => (bars, s, from, previous, store) => {
-  const period = num(s, 'period', 10);
+  const period = int(s, 'period', 10);
   const multiplier = num(s, 'multiplier', 3);
   if (!whole(period)) return null;
   const turn: { direction: -1 | 1 } = { direction: 1 };
@@ -685,18 +605,6 @@ export const PARABOLIC_SAR: IndicatorDescriptor = withTimeframe(withTail({
   }, bars, from, previous, store);
 }));
 
-/** Shift a series by `k` bars: positive = forward (later), negative = backward. */
-function shift(values: readonly number[], k: number): number[] {
-  const n = values.length;
-  const out = new Array<number>(n).fill(NaN);
-  // Callers shift by whole bars, so a `j` inside [0, n) is an index.
-  for (let i = 0; i < n; i++) {
-    const j = i - k;
-    if (j >= 0 && j < n) out[i] = values[j]!;
-  }
-  return out;
-}
-
 export const ICHIMOKU: IndicatorDescriptor = {
   id: 'ichimoku',
   name: 'Ichimoku Cloud',
@@ -733,14 +641,13 @@ export const ICHIMOKU: IndicatorDescriptor = {
   }],
   calc: (bars, s) => {
     const n = bars.length;
-    // Whole bars, the way the other built-ins read a length: `mid` indexes
+    // Whole bars, the way every built-in reads a length (./settings): `mid` indexes
     // bars with the period, so a fractional one read a bar that does not exist
     // and threw, and a fractional displacement found nothing to copy.
-    const period = (k: string, d: number): number => Math.max(1, Math.round(num(s, k, d)));
-    const conv = period('conversionPeriod', 9);
-    const base = period('basePeriod', 26);
-    const lag = period('laggingSpanPeriod', 52);
-    const disp = Math.round(num(s, 'displacement', 26));
+    const conv = int(s, 'conversionPeriod', 9);
+    const base = int(s, 'basePeriod', 26);
+    const lag = int(s, 'laggingSpanPeriod', 52);
+    const disp = offsetOf(s, 'displacement', 26);
 
     // Donchian midpoint over `p` bars, a whole period of one or more, so the
     // window [i - p + 1, i] lies inside the bars.
@@ -761,7 +668,7 @@ export const ICHIMOKU: IndicatorDescriptor = {
 
     const conversion = mid(conv);
     const baseLine = mid(base);
-    const spanA = conversion.map((c, i) => (c + baseLine[i]!) / 2);
+    const spanA = zip(conversion, baseLine, (c, b) => (c + b) / 2);
     const spanB = mid(lag);
     const closes = bars.map((b) => b.close);
     return {
@@ -879,14 +786,14 @@ export const HALFTREND: IndicatorDescriptor = {
     const out = { up, down, atrHigh: chHigh, atrLow: chLow, buySignal: buy, sellSignal: sell };
     if (n === 0) return out;
 
-    const amp = Math.max(1, Math.round(num(s, 'amplitude', 2)));
+    const amp = int(s, 'amplitude', 2);
     const chDev = num(s, 'channelDeviation', 2);
     const showChannels = s.showChannels !== false;
     const showSignals = s.showSignals !== false;
 
     const highs = bars.map((b) => b.high);
     const lows = bars.map((b) => b.low);
-    const halfAtr = atr(highs, lows, bars.map((b) => b.close), Math.max(1, Math.round(num(s, 'atrPeriod', 100))));
+    const halfAtr = atr(highs, lows, bars.map((b) => b.close), int(s, 'atrPeriod', 100));
     const meanHigh = sma(highs, amp);
     const meanLow = sma(lows, amp);
     const rollHigh = highest(highs, amp);

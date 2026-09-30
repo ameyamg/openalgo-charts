@@ -20,30 +20,15 @@
  * Relative Volatility Index feeds its two averages.
  */
 import { rsi, sourceValues } from 'openalgo-charts';
-import type { IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { IndicatorDescriptor } from 'openalgo-charts';
 import {
   sma, stdev, highest, lowest, nulls,
   change, roc, rollingSum, swma, stoch, cci,
 } from './calc';
-import { fromFirstValue, smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
+import { fromFirstValue, smoothingBlock, smoothingInputs, smoothingPlots, smoothingFill } from './smoothing';
 import { withTimeframe } from './timeframe';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** the reference `input.int` is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Readonly<Record<string, unknown>>, k: string, d: number, min = 1): number =>
-  Math.max(min, Math.round(num(s, k, d)));
-/** An offset is a displacement, so it is the one integer setting that may be negative. */
-const offsetOf = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.round(num(s, k, d));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
+import { int, offsetOf, str, src } from './settings';
+import { shift, zip } from './series';
 
 /**
  * the reference `ema`, written the way the reference manual defines it:
@@ -86,24 +71,6 @@ function seededEma(values: readonly number[], period: number, holdFrom: number):
       continue;
     }
     out[i] = prev;
-  }
-  return out;
-}
-
-/**
- * the reference `plot(..., offset = n)` draws bar `i`'s value `n` bars to the right.
- * Plots here have no offset of their own, so the displacement is folded into the
- * column: index `i` holds whatever the chart should paint at bar `i`. Values
- * pushed past either end of the series are dropped, which is why an offset
- * shortens the visible line.
- */
-function shifted(values: readonly (number | null)[], offset: number): (number | null)[] {
-  if (offset === 0) return values.slice();
-  const n = values.length;
-  const out = new Array<number | null>(n).fill(null);
-  for (let i = 0; i < n; i++) {
-    const at = i + offset;
-    if (at >= 0 && at < n) out[at] = values[i] as number | null;
   }
   return out;
 }
@@ -258,7 +225,7 @@ export const ULTIMATE_OSCILLATOR: IndicatorDescriptor = {
       const sumBp = rollingSum(bp, length);
       const sumTr = rollingSum(tr, length);
       // A run of doji bars sums to zero range, which is `na` rather than 0/0.
-      return sumBp.map((v, i) => (sumTr[i] === 0 ? NaN : v / sumTr[i]!));
+      return zip(sumBp, sumTr, (v, tr) => (tr === 0 ? NaN : v / tr));
     };
     const fast = avg(int(s, 'length1', 7));
     const middle = avg(int(s, 'length2', 14));
@@ -304,12 +271,12 @@ export const RELATIVE_VIGOR_INDEX: IndicatorDescriptor = {
     const range = swma(bars.map((b) => b.high - b.low));
     const numerator = fromFirstValue(body, (t) => rollingSum(t, length));
     const denominator = fromFirstValue(range, (t) => rollingSum(t, length));
-    const rvgi = numerator.map((v, i) => (denominator[i] === 0 ? NaN : v / denominator[i]!));
+    const rvgi = zip(numerator, denominator, (v, den) => (den === 0 ? NaN : v / den));
     const signal = fromFirstValue(rvgi, (t) => swma(t));
     const offset = offsetOf(s, 'offset', 0);
     return {
-      rvgi: shifted(nulls(rvgi), offset),
-      signal: shifted(nulls(signal), offset),
+      rvgi: nulls(shift(rvgi, offset)),
+      signal: nulls(shift(signal, offset)),
     };
   },
 };
@@ -336,29 +303,14 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
     { key: 'offset', type: 'number', label: 'Offset', default: 0, min: -500, max: 500, step: 1 },
     { key: 'color', type: 'color', label: 'RVI', default: '#7e57c2' },
     { key: 'fillColor', type: 'color', label: 'Background', default: '#7e57c2' },
-    {
-      key: 'maType', type: 'select', label: 'Type', default: 'SMA',
-      options: SMOOTHING_MA_TYPES, group: 'Smoothing',
-    },
-    { key: 'maLength', type: 'number', label: 'Length', default: 14, min: 1, max: 500, step: 1, group: 'Smoothing' },
-    { key: 'bbMult', type: 'number', label: 'BB StdDev', default: 2, min: 0.001, max: 50, step: 0.5, group: 'Smoothing' },
-    { key: 'maColor', type: 'color', label: 'RVI-based MA', default: '#ffeb3b', group: 'Smoothing' },
-    { key: 'bbUpperColor', type: 'color', label: 'Upper Bollinger Band', default: '#4caf50', group: 'Smoothing' },
-    { key: 'bbLowerColor', type: 'color', label: 'Lower Bollinger Band', default: '#4caf50', group: 'Smoothing' },
+    ...smoothingInputs('RVI', 'SMA', 14),
   ],
   plots: [
     { key: 'rvi', type: 'line', title: 'RVI', colorKey: 'color', style: { lineWidth: 1.5 } },
-    { key: 'ma', type: 'line', title: 'RVI-based MA', colorKey: 'maColor', style: { lineWidth: 1.5 } },
-    { key: 'bbUpper', type: 'line', title: 'Upper Bollinger Band', colorKey: 'bbUpperColor', style: { lineWidth: 1 } },
-    { key: 'bbLower', type: 'line', title: 'Lower Bollinger Band', colorKey: 'bbLowerColor', style: { lineWidth: 1 } },
+    ...smoothingPlots('RVI'),
   ],
   fills: [
-    {
-      between: ['bbUpper', 'bbLower'],
-      colorUpKey: 'bbUpperColor',
-      colorDownKey: 'bbUpperColor',
-      opacity: 0.1,
-    },
+    smoothingFill(),
     // The 80/20 shading spans two reference lines rather than two series, so its
     // edges are constant columns with no plot of their own. One colour on both
     // sides: a level band has no up or down side to tell apart.
@@ -396,26 +348,11 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
       rvi[i] = total === 0 ? NaN : (upper[i]! / total) * 100;
     }
 
-    const maType = str(s, 'maType', 'SMA');
-    const maLength = int(s, 'maLength', 14);
-    const mult = num(s, 'bbMult', 2);
-    const isBB = maType === BOLLINGER_MA;
-    const ma = maType === 'None'
-      ? new Array<number>(n).fill(NaN)
-      : smoothingMa(maType, rvi, bars.map((b) => b.volume ?? 0), maLength);
-    // `smoothingStDev` is `na` unless the bands are on, and `ma + na` is `na`,
-    // so the two band columns switch themselves off exactly as the reference
-    // `display` guards do.
-    const band = isBB
-      ? fromFirstValue(rvi, (t) => stdev(t, maLength)).map((v) => v * mult)
-      : new Array<number>(n).fill(NaN);
-
-    const offset = offsetOf(s, 'offset', 0);
     return {
-      rvi: shifted(nulls(rvi), offset),
-      ma: nulls(ma),
-      bbUpper: nulls(ma.map((v, i) => v + band[i]!)),
-      bbLower: nulls(ma.map((v, i) => v - band[i]!)),
+      rvi: nulls(shift(rvi, offsetOf(s, 'offset', 0))),
+      // The offset moves the RVI line only; the block reads the unshifted
+      // values and stays where it is.
+      ...smoothingBlock(rvi, bars.map((b) => b.volume ?? 0), s, 'SMA', 14),
       // Never null and never shifted: reference lines stay put when the plot is
       // offset, and the shading covers the pane through the study's warmup.
       bandHigh: new Array<number>(n).fill(80),
