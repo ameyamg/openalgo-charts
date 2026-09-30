@@ -9,7 +9,16 @@ export type RafCanceller = (handle: number) => void;
 
 const noopCancel: RafCanceller = () => {};
 
-function defaultRaf(): { schedule: RafScheduler; cancel: RafCanceller } {
+/**
+ * The frame scheduler a chart paints and runs its one-shot callbacks with: the
+ * one a host injects wherever it gives one (a test that drives frames by hand
+ * would otherwise wait on a browser frame that never comes), else the
+ * platform's animation frame, else a 16 ms timer where there is none.
+ */
+export function resolveRaf(
+  opts?: { schedule: RafScheduler; cancel?: RafCanceller },
+): { schedule: RafScheduler; cancel: RafCanceller } {
+  if (opts) return { schedule: opts.schedule, cancel: opts.cancel ?? noopCancel };
   if (typeof requestAnimationFrame === 'function') {
     return { schedule: (cb) => requestAnimationFrame(cb), cancel: (h) => cancelAnimationFrame(h) };
   }
@@ -23,20 +32,11 @@ export class RenderLoop {
   private readonly _cancel: RafCanceller;
   private _handle: number | null = null;
 
-  public constructor(
-    onFrame: () => void,
-    schedule?: RafScheduler,
-    cancel?: RafCanceller,
-  ) {
+  /** The chart resolves the scheduler once (`resolveRaf`) and shares it with its own callbacks. */
+  public constructor(onFrame: () => void, schedule: RafScheduler, cancel: RafCanceller = noopCancel) {
     this._onFrame = onFrame;
-    if (schedule) {
-      this._schedule = schedule;
-      this._cancel = cancel ?? noopCancel;
-    } else {
-      const def = defaultRaf();
-      this._schedule = def.schedule;
-      this._cancel = def.cancel;
-    }
+    this._schedule = schedule;
+    this._cancel = cancel;
   }
 
   /** Whether a frame is currently scheduled but not yet run. */

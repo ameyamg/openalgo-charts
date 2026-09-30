@@ -6,7 +6,7 @@
  * documented contracts.
  */
 import { InvalidateMask, InvalidationLevel } from './invalidate-mask';
-import { RenderLoop, type RafScheduler, type RafCanceller } from './render-loop';
+import { RenderLoop, resolveRaf, type RafScheduler, type RafCanceller } from './render-loop';
 import { type Pane, type PaneRenderContext } from './pane';
 import { ChartMotion, type MotionHost } from './chart-motion';
 import { ChartPixels, type PixelsHost } from './chart-pixels';
@@ -152,22 +152,6 @@ export interface PriceAxisState {
 
 function defaultPixelRatio(): number {
   return typeof window !== 'undefined' && window.devicePixelRatio ? window.devicePixelRatio : 1;
-}
-
-/**
- * The frame scheduler for the chart's own one-shot callbacks, resolved the same
- * way `RenderLoop` resolves its painting one. It has to be the injected
- * scheduler wherever a host supplies one: a test that drives frames by hand
- * would otherwise be waiting on a browser rAF that never comes.
- */
-function resolveRaf(
-  opts?: { schedule: RafScheduler; cancel?: RafCanceller },
-): { schedule: RafScheduler; cancel: RafCanceller } {
-  if (opts) return { schedule: opts.schedule, cancel: opts.cancel ?? ((): void => {}) };
-  if (typeof requestAnimationFrame === 'function') {
-    return { schedule: (cb) => requestAnimationFrame(cb), cancel: (h) => cancelAnimationFrame(h) };
-  }
-  return { schedule: (cb) => setTimeout(cb, 16) as unknown as number, cancel: (h) => clearTimeout(h) };
 }
 
 export class Chart {
