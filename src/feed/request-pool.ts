@@ -21,7 +21,7 @@ function deadline(ms: number): number {
 }
 
 /** Also fences adapters that do not honor an aborted fetch or body read. */
-export function withHistoryDeadline<T>(req: Pick<BarsRequest, 'signal' | 'timeoutMs'>, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+export function withHistoryDeadline<T>(req: { signal?: AbortSignal | undefined; timeoutMs?: number | undefined }, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
   if (req.signal?.aborted) return Promise.reject(requestError('AbortError', 'History request cancelled'));
   const timeout = deadline(req.timeoutMs ?? DEFAULT_TIMEOUT);
   return new Promise<T>((resolve, reject) => {

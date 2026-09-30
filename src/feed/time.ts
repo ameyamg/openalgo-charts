@@ -457,12 +457,12 @@ const DAY_SECONDS = 86400;
 function medianGap(times: readonly number[]): number {
   const gaps: number[] = [];
   for (let i = 1; i < times.length; i++) {
-    const d = times[i] - times[i - 1];
+    const d = times[i]! - times[i - 1]!;
     if (d > 0) gaps.push(d);
   }
   if (gaps.length === 0) return 0;
   gaps.sort((a, b) => a - b);
-  return gaps[gaps.length >> 1];
+  return gaps[gaps.length >> 1]!;
 }
 
 /**
@@ -490,18 +490,19 @@ export function sessionStartIndices(times: readonly number[]): number[] | null {
   const threshold = Math.max(4 * gap, 4 * HOUR_SECONDS);
   const starts: number[] = [];
   for (let i = 1; i < times.length; i++) {
-    if (times[i] - times[i - 1] >= threshold) starts.push(i);
+    if (times[i]! - times[i - 1]! >= threshold) starts.push(i);
   }
   if (starts.length === 0) return null;
   // Spot FX breaks only at weekends and clears the same threshold, so its
   // "sessions" would be whole weeks. Accept the reading only when the breaks
   // recur at roughly daily cadence. The trailing partial session is left out:
   // it is short by construction and would drag the median down.
-  const opens = [times[0], ...starts.map((i) => times[i])];
+  // A start is an index of `times` past the first, so `opens` holds two or more.
+  const opens = [times[0]!, ...starts.map((i) => times[i]!)];
   const spans: number[] = [];
-  for (let i = 1; i < opens.length; i++) spans.push(opens[i] - opens[i - 1]);
+  for (let i = 1; i < opens.length; i++) spans.push(opens[i]! - opens[i - 1]!);
   spans.sort((a, b) => a - b);
-  if (spans[spans.length >> 1] > 36 * HOUR_SECONDS) return null;
+  if (spans[spans.length >> 1]! > 36 * HOUR_SECONDS) return null;
   return starts;
 }
 
@@ -525,7 +526,7 @@ export function sessionStartFlags(times: readonly number[], zone: string = DEFAU
     const isNewDay = zone === DEFAULT_TIMEZONE
       ? isNewIstDay
       : (prev: number, now: number): boolean => isNewZonedDay(prev, now, zone);
-    for (let i = 1; i < times.length; i++) out[i] = isNewDay(times[i - 1], times[i]);
+    for (let i = 1; i < times.length; i++) out[i] = isNewDay(times[i - 1]!, times[i]!);
     return out;
   }
   for (const i of starts) out[i] = true;
@@ -550,13 +551,14 @@ export function calendarPeriodFlags(
   const out = new Array<boolean>(times.length).fill(false);
   const starts = sessionStartIndices(times);
   if (starts === null) {
-    for (let i = 1; i < times.length; i++) out[i] = isNew(times[i - 1], times[i]);
+    for (let i = 1; i < times.length; i++) out[i] = isNew(times[i - 1]!, times[i]!);
     return out;
   }
-  let prevOpen = times[0];
+  // Session starts are indices of `times` past the first, so there is a first bar.
+  let prevOpen = times[0]!;
   for (const i of starts) {
-    if (isNew(prevOpen, times[i])) out[i] = true;
-    prevOpen = times[i];
+    if (isNew(prevOpen, times[i]!)) out[i] = true;
+    prevOpen = times[i]!;
   }
   return out;
 }
@@ -605,8 +607,9 @@ function specMinutes(hh: string, mm: string): number {
 export function parseSessionSpec(spec: string): SessionSpec | null {
   const m = SESSION_RE.exec(spec);
   if (m === null) return null;
-  const start = specMinutes(m[1], m[2]);
-  const end = specMinutes(m[3], m[4]);
+  // The first four groups take part in every match; only the day list is optional.
+  const start = specMinutes(m[1]!, m[2]!);
+  const end = specMinutes(m[3]!, m[4]!);
   if (start < 0 || end < 0) return null;
   return m[5] === undefined ? { start, end } : { start, end, days: [...m[5]].map(Number) };
 }
@@ -649,6 +652,6 @@ export function sessionFlags(
   const out = new Array<boolean>(times.length).fill(false);
   const s = typeof spec === 'string' ? parseSessionSpec(spec) : spec;
   if (s === null) return out;
-  for (let i = 0; i < times.length; i++) out[i] = inSessionParts(resolveParts(times[i], zone), s);
+  for (let i = 0; i < times.length; i++) out[i] = inSessionParts(resolveParts(times[i]!, zone), s);
   return out;
 }

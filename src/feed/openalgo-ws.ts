@@ -23,6 +23,7 @@
  */
 import type { MarketDepth } from './types';
 import { epochMsToUtcSeconds } from './time';
+import type { LooseOptional } from '../helpers/types';
 
 export type WsMode = 'LTP' | 'Quote' | 'Depth';
 
@@ -78,7 +79,7 @@ export type SocketFactory = (url: string) => SocketLike;
 export interface OpenAlgoWsConfig {
   url: string; // e.g. ws://127.0.0.1:8765 (or wss://host/ws)
   apiKey: string;
-  socketFactory?: SocketFactory;
+  socketFactory?: SocketFactory | undefined;
   /**
    * Auto-reconnect after an unexpected close: re-authenticate and resubscribe
    * every active subscription, with jittered exponential backoff. Enabled by
@@ -93,7 +94,7 @@ export interface OpenAlgoWsConfig {
     jitter?: boolean;
     /** Injectable [0,1) source, so a test pins the delay instead of guessing it. */
     random?: () => number;
-  };
+  } | undefined;
   /** Handshake gating. Data frames wait for the server's answer to `authenticate`. */
   auth?: {
     /**
@@ -106,14 +107,14 @@ export interface OpenAlgoWsConfig {
     requireAck?: boolean;
     /** Wait for the acknowledgement this long before failing the connection (default 5000). */
     ackTimeoutMs?: number;
-  };
+  } | undefined;
   /**
    * Liveness watchdog. After `timeoutMs` with no inbound frame the client asks
    * the far end a direct question and gives it `probeMs` to answer; only
    * silence to that counts as death, and the socket is then reconnected
    * (defaults 45000 and 5000; a `timeoutMs` of 0 disables the watchdog).
    */
-  heartbeat?: { timeoutMs?: number; probeMs?: number };
+  heartbeat?: { timeoutMs?: number; probeMs?: number } | undefined;
 }
 
 export interface LtpEvent {
@@ -179,6 +180,7 @@ export function parseOrderUpdate(raw: unknown): OrderUpdateEvent | null {
   };
   const str = (v: unknown): string => (typeof v === 'string' ? v : '');
   const trig = num(m.trigger_price);
+  // No trigger is an undefined `triggerPrice`, which the event reads as absent.
   return {
     orderId: str(m.orderid),
     symbol: str(m.symbol),
@@ -195,7 +197,7 @@ export function parseOrderUpdate(raw: unknown): OrderUpdateEvent | null {
     averagePrice: num(m.average_price),
     rejectionReason: str(m.rejection_reason),
     mode: str(m.mode),
-  };
+  } satisfies LooseOptional<OrderUpdateEvent> as OrderUpdateEvent;
 }
 
 /**
@@ -285,7 +287,7 @@ export function parseTopic(topic: unknown): { symbol: string; exchange: string }
   if (typeof topic !== 'string') return null;
   const parts = topic.split('.');
   if (parts.length !== 2) return null;
-  const [symbol, exchange] = parts;
+  const [symbol, exchange] = parts as [string, string];
   if (symbol === '' || exchange === '') return null;
   return { symbol, exchange };
 }
@@ -385,7 +387,8 @@ export function parseMessage(raw: unknown): { kind: 'ltp'; event: LtpEvent } | {
   }
   const price = d.ltp ?? d.last_price;
   if (typeof price === 'number') {
-    return { kind: 'ltp', event: { symbol, exchange, ltp: price, ltq: d.last_trade_quantity ?? d.ltq, volume: d.volume, timeSec: marketTimeSec(d) } };
+    // A quantity the frame lacks stays undefined, which the event reads as absent.
+    return { kind: 'ltp', event: { symbol, exchange, ltp: price, ltq: d.last_trade_quantity ?? d.ltq, volume: d.volume, timeSec: marketTimeSec(d) } satisfies LooseOptional<LtpEvent> as LtpEvent };
   }
   return null;
 }
@@ -422,7 +425,7 @@ export class OpenAlgoWsFeed {
    * and grows without bound during a long outage, while desired state is
    * inherently deduplicated and bounded by the number of subscriptions.
    */
-  private readonly _subs = new Map<string, { mode: WsMode; symbol: string; exchange: string; depthLevel?: number }>();
+  private readonly _subs = new Map<string, { mode: WsMode; symbol: string; exchange: string; depthLevel?: number | undefined }>();
   /** Last sequence seen per topic. Only ever populated by a server that numbers frames. */
   private readonly _seq = new Map<string, number>();
   private _userClosed = false;

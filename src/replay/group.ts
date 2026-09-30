@@ -52,7 +52,7 @@ interface Member {
   chart: ReplayGroupChartHost;
   options: ReplayGroupMember['options'];
   controller: ReplayController;
-  dispose?: () => void;
+  dispose?: (() => void) | undefined;
   dead: boolean;
 }
 
@@ -79,7 +79,7 @@ function floorIndex(times: readonly number[], time: number | null): number {
   let from = 0, to = times.length;
   while (from < to) {
     const mid = (from + to) >>> 1;
-    if (times[mid] <= time) from = mid + 1;
+    if (times[mid]! <= time) from = mid + 1; // from <= mid < to <= length
     else to = mid;
   }
   return from - 1;
@@ -104,7 +104,7 @@ export class ReplayGroup {
   private readonly _barMs: number;
   private readonly _now: () => number;
   private readonly _scheduler: ReplayScheduler;
-  private readonly _onChange?: (state: ReplayGroupState) => void;
+  private readonly _onChange?: ((state: ReplayGroupState) => void) | undefined;
   private _cancel: (() => void) | null = null;
   private _clockRevision = 0;
   private _lastAdvance = 0;
@@ -113,7 +113,7 @@ export class ReplayGroup {
   public constructor(members: readonly ReplayGroupMember[], options: ReplayGroupOptions = {}) {
     if (!members.length) throw error('needs at least one member');
     this._scope = options.scope ?? 'focused';
-    this._focusedId = options.focusedId ?? members[0].id;
+    this._focusedId = options.focusedId ?? members[0]!.id; // not empty, checked above
     this._speed = options.speed ?? 1;
     this._barMs = options.barMs ?? 1000;
     positive(this._speed, 'speed'); positive(this._barMs, 'barMs');

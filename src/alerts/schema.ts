@@ -13,7 +13,7 @@ const ranges: AlertCondition[] = ['enteringRange', 'leavingRange'];
 export function alertSettingsSchema(source: AlertSource, condition?: AlertCondition): readonly IndicatorInput[] {
   const conditions = source.kind === 'barCondition' ? ['matches' as const]
     : source.kind === 'drawing' ? source.level === 'band' ? ranges : numeric : [...numeric, ...ranges];
-  const selected = condition && conditions.includes(condition) ? condition : conditions[0];
+  const selected = condition && conditions.includes(condition) ? condition : conditions[0]!; // no list above is empty
   const range = ranges.includes(selected);
   const fields: IndicatorInput[] = [
     { key: 'title', type: 'text', label: 'Name', default: 'Chart alert' },

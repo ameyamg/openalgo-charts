@@ -1,8 +1,9 @@
 import type { Bar } from '../model/bar';
-import type { BarsRequest, DataFeed, LiveBarMeta, UnsubscribeFn } from './types';
+import type { BarSubscriptionOptions, BarsRequest, DataFeed, LiveBarMeta, UnsubscribeFn } from './types';
 import { type HistoryRequestPool, sharedHistoryRequests, withHistoryDeadline } from './request-pool';
 import { tryResolveInterval } from './intervals';
 import { dataVariantError, normalizeDataVariant, unsupportedDataVariant, type DataVariantDimension } from './data-variant';
+import type { LooseOptional } from '../helpers/types';
 
 /** `unsupported`: the provider does not declare the requested variant, so nothing was fetched. */
 export type DataLoadingStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'refreshing' | 'stale' | 'error' | 'unsupported';
@@ -64,12 +65,16 @@ export interface DataLoadingOptions {
   now?: () => number;
 }
 
+/** A patch clears an error by writing undefined, which a snapshot reads as none. */
+type SnapshotPatch = Partial<Omit<DataLoadingSnapshot, 'error' | 'historyError'>>
+  & { readonly error?: Error | undefined; readonly historyError?: Error | undefined };
+
 /** What a stream-triggered repair is for, so the refresh can size its window and check its reply. */
 interface Repair {
   /** Oldest time the window must reach, for a gap the stream skipped. */
-  from?: number;
+  from?: number | undefined;
   /** The bar that just closed; a reply that stops short of it is retried. */
-  expect?: number;
+  expect?: number | undefined;
 }
 
 const BAR_CLOSE_DEFAULTS = { delayMs: 2500, retries: 2, retryDelayMs: 5000 };
@@ -181,7 +186,7 @@ export class DataLoadingController {
     this._provisionalTime = null;
     const found = tryResolveInterval(req.interval);
     this._seconds = found?.bucketing.mode === 'interval' ? found.bucketing.seconds : null;
-    const request: BarsRequest = { ...req, signal: undefined, timeoutMs: req.timeoutMs ?? this._options.timeoutMs };
+    const request = { ...req, signal: undefined, timeoutMs: req.timeoutMs ?? this._options.timeoutMs } satisfies LooseOptional<BarsRequest> as BarsRequest;
     // The default variant is no variant at all, so a request naming `{}` keys,
     // shares and fetches exactly like one that names nothing. A malformed one
     // is left for `_load` to report.
@@ -237,9 +242,10 @@ export class DataLoadingController {
         this._bars = cached;
         this._publish('cache', { status: 'refreshing' });
       }
-      const from = cached?.length && req.from !== undefined && cached[0].time <= req.from
-        ? Math.max(req.from, cached[Math.max(0, cached.length - 2)].time) : req.from;
-      const fresh = await this._pool.getBars({ ...req, from, signal: scope.signal, noCache: req.noCache || !!this._feed.getCachedBars }, 10);
+      // `cached` holds a bar whenever it is read here.
+      const from = cached?.length && req.from !== undefined && cached[0]!.time <= req.from
+        ? Math.max(req.from, cached[Math.max(0, cached.length - 2)]!.time) : req.from;
+      const fresh = await this._pool.getBars({ ...req, from, signal: scope.signal, noCache: req.noCache || !!this._feed.getCachedBars } satisfies LooseOptional<BarsRequest> as BarsRequest, 10);
       if (!this._current(generation)) return this._bars;
       this._bars = this._replaceWindow(normalize(fresh), from, req.to);
       this._limit();
@@ -290,7 +296,7 @@ export class DataLoadingController {
     }
     this._publish('state', { status: 'refreshing', error: undefined });
     try {
-      const fresh = await this._pool.getBars({ ...original, from, to, noCache: true, signal: abort.signal }, 5);
+      const fresh = await this._pool.getBars({ ...original, from, to, noCache: true, signal: abort.signal } satisfies LooseOptional<BarsRequest> as BarsRequest, 5);
       if (!this._current(generation) || id !== this._refreshId) return this._bars;
       if (fresh.length === 0 && this._bars.length) throw new Error('History refresh returned no bars');
       const arrived = normalize(fresh);
@@ -318,7 +324,7 @@ export class DataLoadingController {
         byTime.set(held.time, { ...forming,
           high: Math.max(forming.high, held.high), low: Math.min(forming.low, held.low),
           volume: forming.volume === undefined && held.volume === undefined ? undefined : Math.max(forming.volume ?? 0, held.volume ?? 0),
-        });
+        } satisfies LooseOptional<Bar> as Bar);
       }
       if (this._provisionalTime !== null && byTime.has(this._provisionalTime) && this._provisionalTime <= authoritativeTo) {
         this._provisionalTime = null;
@@ -332,7 +338,7 @@ export class DataLoadingController {
           volume: historical.volume === undefined && live.volume === undefined ? undefined : Math.max(historical.volume ?? 0, live.volume ?? 0),
           // Absence on the newer observation must not inherit an older level.
           oi: live.oi,
-        } : live);
+        } satisfies LooseOptional<Bar> as Bar : live);
       }
       this._bars = normalize([...byTime.values()]);
       this._buffer = null;
@@ -375,7 +381,7 @@ export class DataLoadingController {
   public pushBar(value: Bar, meta?: LiveBarMeta): void {
     if (this._destroyed || !this._state.request || this._state.status === 'unsupported') return;
     let bar: Bar;
-    try { bar = normalize([value])[0]; } catch (error) {
+    try { bar = normalize([value])[0]!; } catch (error) { // one valid bar in is one out; an invalid one throws
       this._publish('state', { status: this._bars.length ? 'stale' : 'error', error: asError(error) });
       return;
     }
@@ -387,14 +393,14 @@ export class DataLoadingController {
       if (provisional) this._provisionalTime = bar.time;
     } else if (provisional && this._provisionalTime !== bar.time) {
       bar = { ...bar, open: tail.open, high: Math.max(tail.high, bar.high), low: Math.min(tail.low, bar.low),
-        volume: tail.volume === undefined && bar.volume === undefined ? undefined : Math.max(tail.volume ?? 0, bar.volume ?? 0) };
+        volume: tail.volume === undefined && bar.volume === undefined ? undefined : Math.max(tail.volume ?? 0, bar.volume ?? 0) } satisfies LooseOptional<Bar> as Bar;
     }
     if (this._buffer) {
       this._buffer.set(bar.time, bar);
       while (this._buffer.size > this._options.maxBars!) this._buffer.delete(this._buffer.keys().next().value!);
     }
     const next = this._bars.slice();
-    if (tail?.time === bar.time) next[next.length - 1] = { ...bar, volume: bar.volume ?? tail.volume };
+    if (tail?.time === bar.time) next[next.length - 1] = { ...bar, volume: bar.volume ?? tail.volume } satisfies LooseOptional<Bar> as Bar;
     else next.push(bar);
     this._bars = next;
     this._limit();
@@ -534,9 +540,9 @@ export class DataLoadingController {
   private _limit(): void {
     if (this._bars.length > this._options.maxBars!) this._bars = this._bars.slice(-this._options.maxBars!);
   }
-  private _publish(reason: DataUpdateReason, patch: Partial<DataLoadingSnapshot> = {}): void {
+  private _publish(reason: DataUpdateReason, patch: SnapshotPatch = {}): void {
     if (this._destroyed) return;
-    this._state = { ...this._state, ...patch, reason, bars: this._state.paused || this._buffer ? this._state.bars : this._bars };
+    this._state = { ...this._state, ...patch, reason, bars: this._state.paused || this._buffer ? this._state.bars : this._bars } satisfies LooseOptional<DataLoadingSnapshot> as DataLoadingSnapshot;
     const snapshot = this._state;
     for (const listener of [...this._listeners]) {
       if (this._destroyed || this._state !== snapshot) break;
@@ -555,7 +561,7 @@ export class DataLoadingController {
         if (this._current(generation) && stream === this._stream) this.pushBar(bar, meta);
       }, { seedFrom: this._bars[this._bars.length - 1], onResync: () => {
         if (this._current(generation) && stream === this._stream) void this.refresh();
-      } });
+      } } satisfies LooseOptional<BarSubscriptionOptions> as BarSubscriptionOptions);
       if (this._current(generation) && stream === this._stream) this._unsubscribe = unsubscribe;
       else this._release(unsubscribe);
       // Acquire before releasing so ref-counted feeds retain the underlying topic.

@@ -170,7 +170,7 @@ export interface ReplayOptions {
   /** Initial speed multiplier. Default 1. */
   speed?: number;
   /** Called on every playhead move, after the chart has been updated. */
-  onFrame?: (state: ReplayState) => void;
+  onFrame?: ((state: ReplayState) => void) | undefined;
   /** Playback clock. Default `performance.now`. */
   now?: () => number;
   /** Playback timer. Default `setInterval`. */
@@ -183,7 +183,7 @@ function countUpTo(bars: readonly Bar[], cutoff: number): number {
   let hi = bars.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (bars[mid].time <= cutoff) lo = mid + 1;
+    if (bars[mid]!.time <= cutoff) lo = mid + 1; // lo <= mid < hi <= length
     else hi = mid;
   }
   return lo;
@@ -199,8 +199,9 @@ function countUpTo(bars: readonly Bar[], cutoff: number): number {
  * partial as a new bar every step instead of replacing the forming one.
  */
 function mergeSubBars(subs: readonly Bar[], from: number, to: number, final: Bar): Bar {
-  const raw = startFiner(subs[from], final.time);
-  for (let i = from + 1; i <= to; i++) foldFiner(raw, subs[i]);
+  // `from..to` lies inside the sub-bars of one bucket.
+  const raw = startFiner(subs[from]!, final.time);
+  for (let i = from + 1; i <= to; i++) foldFiner(raw, subs[i]!);
   return formingWithin(raw, final);
 }
 
@@ -280,7 +281,7 @@ export class ReplayController {
     this._series = list;
     this._restore = list.map((s) => s.getData());
     this._restoreConfirmation = list.map(seriesConfirmation);
-    this._bars = options.bars ?? this._restore[0];
+    this._bars = options.bars ?? this._restore[0]!; // `list` holds a series by now
     this._view = { barSpacing: chart.timeScale.barSpacing, rightOffset: chart.timeScale.rightOffset };
     this._subBars = options.subBars ?? [];
     this._simSteps = simulationSteps(options.simulate);
@@ -330,22 +331,25 @@ export class ReplayController {
     const subs = this._subBars;
     let d = -1;
     for (let i = 0; i < subs.length; i++) {
-      const t = subs[i].time;
+      const t = subs[i]!.time;
       // Advance to the last displayed bar that opens at or before this sub-bar.
-      while (d + 1 < n && this._bars[d + 1].time <= t) {
+      while (d + 1 < n && this._bars[d + 1]!.time <= t) {
         d++;
         start[d] = i;
       }
-      if (d >= 0) count[d]++;
+      if (d >= 0) count[d]!++; // `count` holds one entry per displayed bar, `d` among them
     }
     return { start, count };
   }
+
+  // Below, `index` is a displayed bar's, and `_subCount` and `_subStart` hold one entry
+  // per displayed bar: intra-bar replay needs bars, and `_apply` and `seek` clamp to them.
 
   /** How many steps the bar at `index` takes. At least one, always. */
   private _steps(index: number): number {
     if (this._timeline) return this._timeline.steps[index] ?? 1;
     if (!this._intra) return 1;
-    const covered = this._subCount[index];
+    const covered = this._subCount[index]!;
     return covered > 0 ? covered : Math.max(1, this._simSteps);
   }
 
@@ -357,9 +361,9 @@ export class ReplayController {
 
   /** The bar shown at step `sub` of `index`, for a step before its last. */
   private _formingAt(index: number, sub: number): Bar {
-    const final = this._bars[index];
-    if (this._subCount[index] > 0) {
-      const from = this._subStart[index];
+    const final = this._bars[index]!;
+    if (this._subCount[index]! > 0) {
+      const from = this._subStart[index]!;
       return mergeSubBars(this._subBars, from, from + sub, final);
     }
     return simulatedForming(final, sub, this._simSteps, this._bars[index - 1]?.oi);
@@ -525,8 +529,9 @@ export class ReplayController {
     }
     setReplayWindow(this._chart);
     if (transition !== this._transition) return;
+    // `_restore` and `_restoreConfirmation` hold one entry per series.
     for (let i = 0; i < this._series.length; i++) {
-      this._series[i].setData(this._restore[i], this._restoreConfirmation[i]);
+      this._series[i]!.setData(this._restore[i]!, this._restoreConfirmation[i]);
       if (transition !== this._transition) return;
     }
     // Bar spacing and right offset *are* the viewport: the visible logical
@@ -547,7 +552,7 @@ export class ReplayController {
     if (this._timeline) {
       bar = this._timeline.points[this._pointIndex]?.bar ?? null;
     } else if (total > 0) {
-      bar = this._bars[this._index];
+      bar = this._bars[this._index]!; // without a timeline the index is always a bar's
       if (this._intra && this._sub < steps - 1) bar = this._formingAt(this._index, this._sub);
     }
     return {
@@ -600,7 +605,7 @@ export class ReplayController {
       ...(this._timeline && this._time !== null ? { asOf: this._time } : {}) });
     // A boundary listener can stop or seek again before the first series write.
     if (transition !== this._transition) return;
-    this._series[0].setData(shown);
+    this._series[0]!.setData(shown); // replay drives at least one series
     if (transition !== this._transition) return;
     // Followers cut by time, not by count: a volume series may be shorter than
     // the price series, or start later. Under intra-bar replay they stop at the
@@ -612,8 +617,8 @@ export class ReplayController {
       ? (shown[shown.length - 2]?.time ?? Number.NEGATIVE_INFINITY)
       : lastTime;
     for (let i = 1; i < this._series.length; i++) {
-      const snap = this._restore[i];
-      this._series[i].setData(snap.slice(0, countUpTo(snap, cutoff)));
+      const snap = this._restore[i]!;
+      this._series[i]!.setData(snap.slice(0, countUpTo(snap, cutoff)));
       if (transition !== this._transition) return;
     }
     if (first) this._chart.emit('replay:start', this.state());

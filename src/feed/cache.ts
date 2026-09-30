@@ -178,7 +178,7 @@ export function barCacheKey(req: BarsRequest): string {
 /** Bars are mutated in place by live builders; never hand out our own objects. */
 function cloneBars(bars: Bar[]): Bar[] {
   const out: Bar[] = new Array(bars.length) as Bar[];
-  for (let i = 0; i < bars.length; i++) out[i] = { ...bars[i] };
+  for (let i = 0; i < bars.length; i++) out[i] = { ...bars[i]! };
   return out;
 }
 
@@ -386,7 +386,7 @@ export class BarCache implements DataFeed {
     // complete as far as this cache is concerned, so the loop drops the lot and
     // the entry is abandoned below.
     while (end > 0) {
-      const close = this._barCloses(interval, requested[end - 1].time);
+      const close = this._barCloses(interval, requested[end - 1]!.time); // `end > 0`
       if (close !== null && close <= nowSec) break;
       end--;
     }
@@ -395,7 +395,7 @@ export class BarCache implements DataFeed {
     // then itself on the next write, so it is simply not cached.
     if (end > this._maxBars) return;
     const closed = cloneBars(requested.slice(0, end));
-    const last = closed[closed.length - 1];
+    const last = closed[closed.length - 1]!; // `end > 0`, so at least one bar
     // Non-null by construction: the loop above only stopped on a bar that had a
     // close, and `nextClose` is the close of the bar that follows it, which is
     // the instant a hit past coverage stops being safe.

@@ -11,13 +11,14 @@ import type {
   AlertTriggeredPayload, ChartDataUpdate, AlertAvailability, IndicatorAlertSource,
   AlertDrawingProvider, AlertDrawingValue, DrawingAlertSource, AlertsDocument, AlertsChangedEvent,
 } from './types';
+import type { LooseOptional } from '../helpers/types';
 
 interface RecordState {
   alert: Alert;
-  tail?: Bar;
-  value?: number;
+  tail?: Bar | undefined;
+  value?: number | undefined;
   errorTime?: number;
-  plotPane?: number;
+  plotPane?: number | undefined;
 }
 
 interface AlertDragEvent {
@@ -33,7 +34,7 @@ interface AlertDrag {
   index: number;
   paneIndex: number;
   startPrice: number;
-  startY?: number;
+  startY?: number | undefined;
   moved: boolean;
 }
 
@@ -44,10 +45,11 @@ const scopeOf = (chart: AlertChartHost): AlertScope => {
   // The default series names no variant, so a scope from it is what it always
   // was. One the chart was handed malformed is kept as it is: validation
   // refuses to set an alert on it and no comparison matches it.
+  // A context the chart lacks leaves its fields undefined, which a scope reads as absent.
   let variant: DataVariant | undefined = context?.variant;
   try { variant = normalizeDataVariant(variant); } catch { /* see above */ }
   return { symbol: context?.symbol, exchange: context?.exchange, interval: context?.interval,
-    ...(variant ? { variant: { ...variant } } : {}) };
+    ...(variant ? { variant: { ...variant } } : {}) } satisfies LooseOptional<AlertScope> as AlertScope;
 };
 /** One string per series, and one no valid variant can produce for a malformed one, never a throw inside a listener. */
 const variantOf = (scope: AlertScope): string => { try { return dataVariantKey(scope.variant); } catch { return 'invalid'; } };
@@ -378,8 +380,9 @@ export class AlertController {
       if (!info?.available) return { available: false, reason: info?.reason ?? 'Drawing provider is unavailable' };
       if (info.paneIndex !== this._pricePane() && !source.input) return { available: false, reason: 'Select an input plot for this drawing pane' };
       const bounds = this._drawingValue(record.alert, bars[bars.length - 1]?.time);
+      // The provider may leave the pane undefined, which availability reads as absent.
       return bounds ? { available: true, paneIndex: bounds.paneIndex }
-        : { available: false, reason: 'Drawing level, time, input plot or condition is unavailable', paneIndex: info.paneIndex };
+        : { available: false, reason: 'Drawing level, time, input plot or condition is unavailable', paneIndex: info.paneIndex } satisfies LooseOptional<AlertAvailability> as AlertAvailability;
     }
     if (source.kind === 'indicator') {
       const resolved = this._plot(source);
@@ -511,11 +514,11 @@ export class AlertController {
     // A fixed price remains meaningful across timeframes and sessions, not
     // across currencies or units; study and drawing values may not be.
     if (source.kind === 'price' && samePrices(alert.scope, context)) {
-      value = { price: source.price, upperPrice: source.upperPrice, paneIndex: this._pricePane() };
+      value = { price: source.price, upperPrice: source.upperPrice, paneIndex: this._pricePane() } satisfies LooseOptional<AlertDrawingValue> as AlertDrawingValue;
     }
     if (matches) {
       if (source.kind === 'indicator') {
-        if (record.plotPane !== undefined) value = { price: source.value, upperPrice: source.upperValue, paneIndex: record.plotPane };
+        if (record.plotPane !== undefined) value = { price: source.value, upperPrice: source.upperValue, paneIndex: record.plotPane } satisfies LooseOptional<AlertDrawingValue> as AlertDrawingValue;
       }
       if (source.kind === 'drawing') {
         const bars = this._chart.primaryBars();
@@ -577,7 +580,8 @@ export class AlertController {
     }
   }
 
-  private _plot(source: Pick<IndicatorAlertSource, 'instanceId' | 'plotKey'>): { values?: readonly (number | null)[]; paneIndex?: number; reason?: string } {
+  private _plot(source: Pick<IndicatorAlertSource, 'instanceId' | 'plotKey'>):
+    { values: readonly (number | null)[]; paneIndex: number; reason?: undefined } | { values?: undefined; paneIndex?: undefined; reason: string } {
     const instance = this._chart.indicators?.().find(item => item.id === source.instanceId);
     if (!instance) return { reason: 'Indicator instance is unavailable' };
     if (!instance.series(source.plotKey)) return { reason: 'Indicator plot is unavailable' };
@@ -592,21 +596,22 @@ export class AlertController {
     return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   }
 
+  // `index` is the closed bar `_onData` read from `bars`, so `bars[index]` is there.
   private _closedMatch(record: RecordState, bars: readonly Bar[], index: number): number | undefined {
     const { source, condition } = record.alert;
-    if (source.kind === 'barCondition') return this._barMatch(record, bars, index) ? bars[index].close : undefined;
+    if (source.kind === 'barCondition') return this._barMatch(record, bars, index) ? bars[index]!.close : undefined;
     if (source.kind === 'drawing') {
-      const bounds = this._drawingValue(record.alert, bars[index].time);
+      const bounds = this._drawingValue(record.alert, bars[index]!.time);
       const beforeBounds = this._drawingValue(record.alert, bars[index - 1]?.time);
       const values = source.input ? this._plot(source.input).values : undefined;
-      const current = source.input ? this._reading(values, index) : bars[index].close;
+      const current = source.input ? this._reading(values, index) : bars[index]!.close;
       const previous = source.input ? this._reading(values, index - 1) : bars[index - 1]?.close;
       if (!bounds || current === undefined) return undefined;
       return numericMatch(condition, beforeBounds ? previous : undefined, current, bounds.price, bounds.upperPrice,
         beforeBounds?.price, beforeBounds?.upperPrice) ? current : undefined;
     }
-    if (source.kind === 'price') return numericMatch(condition, bars[index - 1]?.close, bars[index].close, source.price, source.upperPrice)
-      ? bars[index].close : undefined;
+    if (source.kind === 'price') return numericMatch(condition, bars[index - 1]?.close, bars[index]!.close, source.price, source.upperPrice)
+      ? bars[index]!.close : undefined;
     const values = this._plot(source).values;
     const current = this._reading(values, index);
     return current !== undefined && numericMatch(condition, this._reading(values, index - 1), current, source.value, source.upperValue)
@@ -616,7 +621,7 @@ export class AlertController {
   private _touchMatch(record: RecordState, bars: readonly Bar[], previous: Bar): number | undefined {
     const { source, condition } = record.alert;
     const index = bars.length - 1;
-    const tail = bars[index];
+    const tail = bars[index]!; // `_onData` evaluates only once `bars` holds its tail
     if (source.kind === 'barCondition') return this._barMatch(record, bars, index) ? tail.close : undefined;
     if (source.kind === 'drawing') return this._drawingTouch(record, source, bars, previous);
     if (source.kind === 'indicator') {
@@ -638,13 +643,13 @@ export class AlertController {
 
   private _barMatch(record: RecordState, bars: readonly Bar[], index: number): boolean {
     const source = record.alert.source;
-    if (source.kind !== 'barCondition' || record.errorTime === bars[index].time) return false;
+    if (source.kind !== 'barCondition' || record.errorTime === bars[index]!.time) return false; // callers pass a bar they read
     const condition = getBarCondition(source.id);
     if (!condition) return false;
     try {
       return condition.when({ bars: bars.slice(0, index + 1), index }) === true;
     } catch (error) {
-      record.errorTime = bars[index].time;
+      record.errorTime = bars[index]!.time;
       this._chart.emit('alert:error', { alert: copy(record.alert), error });
       return false;
     }
@@ -663,7 +668,7 @@ export class AlertController {
   }
 
   private _drawingTouch(record: RecordState, source: DrawingAlertSource, bars: readonly Bar[], previous: Bar): number | undefined {
-    const tail = bars[bars.length - 1];
+    const tail = bars[bars.length - 1]!; // reached through `_touchMatch`, which reads the same tail
     const bounds = this._drawingValue(record.alert, tail.time);
     const beforeBounds = this._drawingValue(record.alert, previous.time);
     if (source.input) {
@@ -696,9 +701,10 @@ export class AlertController {
     this._syncVisual(record);
     this._scheduleExpiry();
     this._saveState();
-    const payload: AlertTriggeredPayload = {
+    // An alert without a message leaves it undefined, which the payload reads as absent.
+    const payload = {
       alertId: alert.id, title: alert.title, message: alert.message, time: bar.time, index, price, alert: copy(alert),
-    };
+    } satisfies LooseOptional<AlertTriggeredPayload> as AlertTriggeredPayload;
     this._chart.emit('alert:triggered', payload);
   }
 

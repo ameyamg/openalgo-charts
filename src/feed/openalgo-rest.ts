@@ -13,6 +13,7 @@ import type { BarsRequest, DataFeed, SymbolMatch, SymbolSearchRequest } from './
 import { epochMsToUtcSeconds, istStringToUtcSeconds, utcSecondsToIstDateString } from './time';
 import { withHistoryDeadline } from './request-pool';
 import { dataVariantError, unsupportedDataVariant } from './data-variant';
+import type { LooseOptional } from '../helpers/types';
 
 export interface OpenAlgoConfig {
   baseUrl: string;
@@ -71,6 +72,7 @@ export function mapHistoryResponse(json: HistoryResponse, hasOpenInterest?: bool
   for (const r of rows) {
     const ts = r.timestamp ?? r.time;
     if (ts === undefined) continue;
+    // A row without volume leaves it undefined, which a Bar reads as absent.
     bars.push({
       time: rowTimeToUtcSeconds(ts),
       open: r.open,
@@ -79,7 +81,7 @@ export function mapHistoryResponse(json: HistoryResponse, hasOpenInterest?: bool
       close: r.close,
       volume: r.volume,
       ...(hasOpenInterest !== false && Number.isFinite(r.oi) ? { oi: r.oi } : {}),
-    });
+    } satisfies LooseOptional<Bar> as Bar);
   }
   return bars.sort((a, b) => a.time - b.time);
 }
@@ -123,7 +125,7 @@ function mapSearchResponse(json: SearchResponse): SymbolMatch[] {
     contracts.push(hit);
   }
   // An expiry with one option lists that option itself.
-  return hits.slice(0, SEARCH_ROWS).map(hit => hit.contractGroup?.contracts.length === 1 ? hit.contractGroup.contracts[0] : hit);
+  return hits.slice(0, SEARCH_ROWS).map(hit => hit.contractGroup?.contracts.length === 1 ? hit.contractGroup.contracts[0]! : hit);
 }
 
 export class OpenAlgoDataFeed implements DataFeed {
