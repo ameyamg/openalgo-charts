@@ -50,7 +50,7 @@ import {
   type PlotLayout, type TickMarkType, type AxisLabelBand,
   type SessionClockOptions, type BarCountdownOptions, type AxisStyle,
 } from '../render/axis';
-import { drawCrosshair, drawCrosshairTag, resolveCrosshairStyle } from '../render/crosshair';
+import { crosshairTagWidth, drawCrosshair, drawCrosshairTag, resolveCrosshairStyle } from '../render/crosshair';
 import { isInvisible } from '../render/pill';
 import type { IPrimitive, PrimitiveHit, PrimitiveHost, PrimitiveRenderContext, ZOrder } from '../primitives/primitive';
 import { PaneLegend } from '../primitives/pane-legend';
@@ -1384,6 +1384,7 @@ export class Pane {
       // reference dialog does; an explicit label background still wins.
       const tagBg = ctx.theme.crosshairLabelBackground ?? style.color;
       const showTags = ctx.theme.crosshairLabelVisible !== false;
+      const axisStyle = resolveScaleStyle(ctx.theme, ctx.canvasOptions?.scales);
       // price tag on the strip this pane's prices are actually labelled in
       // (hovered pane only)
       if (showTags && cross.yLocal !== null) {
@@ -1392,9 +1393,9 @@ export class Pane {
         if (slot) {
           const text = scale.format(scale.yToPrice(cross.yLocal));
           const start = Math.round(slot.x * dpr), end = Math.round((slot.x + slot.width) * dpr);
-          const x = slot.side === 'left' ? end - this._tagWidth(g, text, dpr) : start;
+          const x = slot.side === 'left' ? end - crosshairTagWidth(g, text, dpr, axisStyle) : start;
           g.save(); g.beginPath(); g.rect(start, 0, end - start, Math.round(layout.plotHeight * dpr)); g.clip();
-          drawCrosshairTag(g, text, x, cross.yLocal * dpr, dpr, tagBg, ctx.theme.lastPriceText, 'right');
+          drawCrosshairTag(g, text, x, cross.yLocal * dpr, dpr, tagBg, ctx.theme.lastPriceText, 'right', axisStyle);
           g.restore();
         }
       }
@@ -1414,7 +1415,7 @@ export class Pane {
           drawTimeAxisPill(
             g, label, cross.x * dpr, layout.plotHeight * dpr, dpr,
             { background: tagBg, textColor: ctx.theme.lastPriceText, backplate: ctx.theme.background },
-            resolveScaleStyle(ctx.theme, ctx.canvasOptions?.scales),
+            axisStyle,
           );
         }
       }
@@ -1452,19 +1453,6 @@ export class Pane {
   /** Media-px y of a price on this pane's readout scale. The inverse of `yToPrice`. */
   public priceToY(price: number): number {
     return this._readoutScale().priceToY(price);
-  }
-
-  /**
-   * Width of the box `drawCrosshairTag` draws for this text, in bitmap px. The
-   * font and padding are restated from it because it measures privately and a
-   * left-hand tag has to know its own width before it can be positioned.
-   */
-  private _tagWidth(g: CanvasRenderingContext2D, text: string, dpr: number): number {
-    g.save();
-    g.font = `${11 * dpr}px system-ui, sans-serif`;
-    const w = g.measureText(text).width + 12 * dpr + 1;
-    g.restore();
-    return w;
   }
 
   /** Price at a media-px y on this pane (crosshair magnet, click/drag readout). */
