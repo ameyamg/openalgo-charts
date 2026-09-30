@@ -530,7 +530,21 @@ export type WidgetBuiltinMessage =
   | "{count} chart shortcut struck through: the same chord arms a drawing tool here and takes precedence."
   | "{count} chart shortcuts struck through: the same chord arms a drawing tool here and takes precedence.";
 
-/** Schema keys name descriptor metadata, never saved user values. */
+/**
+ * Every key a translator is asked for. Widget text is keyed three ways, and
+ * no published key is ever renamed:
+ *
+ * - The English source in `WidgetBuiltinMessage`, typed, for new chrome text.
+ * - `schema.*`: descriptor metadata (a settings field's label, a study input,
+ *   a drawing tool's name, a chart type), and under `schema.ui.<area>.<key>`
+ *   chrome keyed by where it sits (the bottom bar, the watchlist, the symbol
+ *   picker), with its English passed as the fallback. A surface already keyed
+ *   there keeps adding its words there, so its catalog entries stay together.
+ * - A feature's own typed union joined into the English one
+ *   (`ChartGridMessage`), for a feature that keeps its words beside it.
+ *
+ * None of them carries saved user values: symbols, names and user text stay literal.
+ */
 export type WidgetMessageKey = WidgetBuiltinMessage | `schema.${string}`;
 export type WidgetMessageValues = Readonly<Record<string, string | number>>;
 

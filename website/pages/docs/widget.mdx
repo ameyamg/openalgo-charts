@@ -242,6 +242,13 @@ parameters through `WidgetMessageParameters`. Generated field labels use
 `schema.settings.<fieldKey>.label`, `schema.indicator.<id>.<key>.label`,
 `schema.drawing.<toolId>.<path>.label` and `schema.alert.<key>.label`.
 
+Widget text has three kinds of key, and none is ever renamed. Most chrome uses its
+English words as the key (the `WidgetBuiltinMessage` union, so a typed catalog lists
+them). Descriptor metadata uses `schema.*`, and some chrome is keyed by where it sits,
+under `schema.ui.<area>.<key>` (the bottom bar, the watchlist, the symbol picker), with
+its English as the fallback your translator receives. The chart grid's words are their
+own union, `ChartGridMessage`, already part of `WidgetMessageKey`.
+
 Symbols, exchanges, interval codes, values, user alert/drawing text, search result
 names, object names, configured branding and engine/provider diagnostics remain
 literal. Canvas labels stay under the engine's formatting contracts. A translator
