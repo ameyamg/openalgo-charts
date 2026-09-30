@@ -285,7 +285,8 @@ describe('watchlist panel', () => {
   });
 
   it('reorders with Alt+Arrow in list order, refusing a move computed from an older revision', async () => {
-    const r = await rig({ lists: [['Order', [nse('A'), nse('B'), nse('C')]]] });
+    const storage = createMemoryWatchlistStorage();
+    const r = await rig({ storage, lists: [['Order', [nse('A'), nse('B'), nse('C')]]] });
     const open = (i: number) => r.rows()[i].querySelector('.oac-watchlist__open') as FakeElement;
     open(0).focus();
     fireKey(open(0), 'ArrowDown', { altKey: true }); await flush();
@@ -294,7 +295,7 @@ describe('watchlist panel', () => {
     fireKey(open(1), 'ArrowDown'); await flush();
     expect(r.doc.activeElement).toBe(open(2));
     // Another session reorders first; the stale move is refused and the saved order shown.
-    await new WatchlistRepository((r.store as unknown as { _storage: WatchlistStorage })._storage, 'user').moveEntry('l1', nse('C'), 0);
+    await new WatchlistRepository(storage, 'user').moveEntry('l1', nse('C'), 0);
     fireKey(open(2), 'ArrowUp', { altKey: true }); await flush();
     expect(r.host.querySelector('.oac-watchlist__message')!.textContent).toContain('changed in another session');
     expect(r.symbols()).toEqual(['C', 'B', 'A']);

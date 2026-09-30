@@ -27,7 +27,7 @@
  */
 import {
   applyChartSettings, createLinkGroup, isKnownInterval, readChartSettings,
-  type LinkChart, type LinkGroup, type LinkMemberOptions, type LinkOptions, type ResolvedLinkOptions,
+  type Chart, type ChartEventMap, type LinkChart, type LinkGroup, type LinkMemberOptions, type LinkOptions, type ResolvedLinkOptions,
 } from 'openalgo-charts';
 import { DrawingLinkGroup } from 'openalgo-charts/draw';
 import type { WorkspaceLinkChannels, WorkspaceLinkGroup, WorkspacePayload, WorkspaceSync } from 'openalgo-charts/workspace';
@@ -135,6 +135,32 @@ export function checkLinks(p: WorkspacePayload): string {
     if (channels.chartType === true && differ(x => x.chartType)) return 'linked chart types differ between charts';
   }
   return '';
+}
+
+/**
+ * A chart as its link group reaches it. A pan or zoom the chart did not make
+ * itself (`own`: fresh bars, the grid, the group following another chart)
+ * is not passed on, and a window the group sets goes through `follow`, so the
+ * chart can tell that move from its own.
+ */
+export function linkMember(chart: Chart, own: () => boolean, follow: (move: () => void) => void): LinkChart {
+  return {
+    // The link group asks only for names the chart's map declares, so the
+    // forward stays on the typed overload rather than the string form 3.0.0 drops.
+    on: (event, cb) => chart.on(event as keyof ChartEventMap, event === 'pan' || event === 'zoom'
+      ? payload => { if (!own()) cb(payload); }
+      : event === 'symbol'
+        ? payload => { const p = payload as { symbol: string; exchange: string }; cb({ symbol: instrument(p.symbol, p.exchange) }); }
+        : cb),
+    getVisibleLogicalRange: () => chart.getVisibleLogicalRange(),
+    setVisibleLogicalRange: range => follow(() => chart.setVisibleLogicalRange(range)),
+    get dataLayer() { return chart.dataLayer; },
+    get isDestroyed() { return chart.isDestroyed; },
+    panes: () => chart.panes(),
+    addPrimitive: (primitive, pane) => chart.addPrimitive(primitive, pane),
+    removePrimitive: primitive => chart.removePrimitive(primitive),
+    setLinkedCrosshairIndex: index => chart.setLinkedCrosshairIndex(index),
+  };
 }
 
 /**
