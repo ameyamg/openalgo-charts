@@ -8,12 +8,10 @@ export interface PanelDockContent { initialFocus?: HTMLElement; destroy(): void 
 export interface PanelDockOptions {
   data(host: HTMLElement): PanelDockContent;
   objects(host: HTMLElement): PanelDockContent;
-  // A handler the widget may pass as undefined is a property typed from a
-  // method signature, so it takes the same host functions a method does.
   /** Named symbol lists. Its tab appears only when this is supplied. */
-  watchlist?: { watchlist(host: HTMLElement): PanelDockContent }['watchlist'] | undefined;
+  watchlist?(host: HTMLElement): PanelDockContent;
   /** The chart instrument's news. Its tab appears only when this is supplied. */
-  news?: { news(host: HTMLElement): PanelDockContent }['news'] | undefined;
+  news?(host: HTMLElement): PanelDockContent;
   state?: unknown;
   onChange?(state: PanelDockState): void;
 }

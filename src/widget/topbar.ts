@@ -117,17 +117,15 @@ export interface TopbarOptions {
   onIndicators(anchor: HTMLElement): boolean;
   /** A text control for the host's object inventory, omitted without a handler. */
   onObjects?(anchor: HTMLElement): boolean;
-  // A handler the widget may pass as undefined is a property typed from a
-  // method signature, so it takes the same host functions a method does.
   /** Open the docked data window, omitted without a handler. */
-  onDataWindow?: { onDataWindow(anchor: HTMLElement): void | boolean }['onDataWindow'] | undefined;
+  onDataWindow?(anchor: HTMLElement): void | boolean;
   onAlerts?(anchor: HTMLElement): boolean;
   /** Open the docked watchlist, omitted without a handler (the host supplied no lists). */
-  onWatchlist?: { onWatchlist(anchor: HTMLElement): void | boolean }['onWatchlist'] | undefined;
+  onWatchlist?(anchor: HTMLElement): void | boolean;
   /** Open the docked news reader, omitted without a handler (the host supplied no news source). */
-  onNews?: { onNews(anchor: HTMLElement): void | boolean }['onNews'] | undefined;
+  onNews?(anchor: HTMLElement): void | boolean;
   /** Open the date and range navigation panel, omitted without a handler. */
-  onGoTo?: { onGoTo(anchor: HTMLElement): void | boolean }['onGoTo'] | undefined;
+  onGoTo?(anchor: HTMLElement): void | boolean;
   /**
    * The saved layouts the Layouts button names: it shows the held layout and
    * marks one with unsaved changes. Omitted, with `onLayouts`, without a store.

@@ -74,16 +74,14 @@ export interface MenuItem {
 export type MenuEntry = MenuItem | { kind: 'separator' } | { kind: 'header'; label: string };
 
 export interface ContextMenuHooks {
-  // A handler the widget may pass as undefined is a property typed from a
-  // method signature, so it takes the same host functions a method does.
   /** Order entry. Without it no trade rows are drawn: the engine places no orders itself. */
-  onOrder?: { onOrder(order: OrderRequest): void }['onOrder'] | undefined;
+  onOrder?(order: OrderRequest): void;
   /** Omitted capabilities preserve the host's existing supported order routes. */
   tradingCapabilities?: TradingCapabilitySource | undefined;
   /** Required when the capability declaration limits live or analyzer mode. */
   tradingMode?: TradingCapabilityRequest['mode'];
   /** Host replay selection or workspace transitions that also prevent order entry. */
-  tradingLocked?: { tradingLocked(): boolean }['tradingLocked'] | undefined;
+  tradingLocked?(): boolean;
   /** Extra rows a host appends, built per event. */
   items?(e: ContextMenuEvent): MenuEntry[];
 }

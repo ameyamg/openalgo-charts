@@ -796,19 +796,22 @@ class WidgetImpl implements Widget {
           host.appendChild(content.element);
           return content;
         },
+        // An optional handler is passed only when there is one, so the
+        // public declarations keep their method form.
         // Rows name instruments as setSymbol will chart them, so case cannot split one instrument in two.
-        watchlist: options.watchlist ? host => mountWatchlistPanel(this.context, host, {
+        ...(options.watchlist ? { watchlist: (host: HTMLElement) => mountWatchlistPanel(this.context, host, {
           ...options.watchlist!, onSelect: instrument => this.setSymbol(instrument.symbol, instrument.exchange),
           normalize: instrument => ({ symbol: instrument.symbol.trim().toUpperCase(), exchange: instrument.exchange }),
-        }) : undefined,
-        news: options.news ? host => mountNewsPanel(this.context, host, options.news!) : undefined,
+        }) } : {}),
+        ...(options.news ? { news: (host: HTMLElement) => mountNewsPanel(this.context, host, options.news!) } : {}),
         onChange: () => { this._bus.emit('layout', { reason: 'panels' }); this._scheduleSave(); },
       });
     }
     // The right-click menu is the one dialog nothing in the chrome opens, so
     // the shell subscribes it to the chart itself.
     this._cleanups.push(attachContextMenu(this.context, {
-      onOrder: options.onOrder, tradingCapabilities: options.tradingCapabilities, tradingMode: options.tradingMode, tradingLocked: options.tradingLocked,
+      ...(options.onOrder ? { onOrder: options.onOrder } : {}), tradingCapabilities: options.tradingCapabilities, tradingMode: options.tradingMode,
+      ...(options.tradingLocked ? { tradingLocked: options.tradingLocked } : {}),
     }));
 
     // ── chrome ─────────────────────────────────────────────────────────
@@ -846,11 +849,11 @@ class WidgetImpl implements Widget {
         onSettings: (anchor) => this._openDialog('settings', anchor),
         onIndicators: (anchor) => this._openDialog('indicatorPicker', anchor),
         onObjects: (anchor) => this._openObjects(anchor),
-        onDataWindow: options.panels === false ? undefined : () => this._dock?.toggle('data'),
+        ...(options.panels === false ? {} : { onDataWindow: () => this._dock?.toggle('data') }),
         onAlerts: (anchor) => this._openAlerts(anchor),
-        onWatchlist: this._docked('watchlist') ? () => this._dock?.toggle('watchlist') : undefined,
-        onNews: this._docked('news') ? () => this._dock?.toggle('news') : undefined,
-        onGoTo: barless ? (anchor) => this._openGoTo(anchor) : undefined,
+        ...(this._docked('watchlist') ? { onWatchlist: () => this._dock?.toggle('watchlist') } : {}),
+        ...(this._docked('news') ? { onNews: () => this._dock?.toggle('news') } : {}),
+        ...(barless ? { onGoTo: (anchor: HTMLElement) => this._openGoTo(anchor) } : {}),
         layouts: this._layouts?.controller ?? undefined, onLayouts: (anchor) => this._layouts?.open(anchor),
         settingsAvailable: () => widgetDialog('settings') !== null,
         indicatorsAvailable: () => widgetDialog('indicatorPicker') !== null,
@@ -875,17 +878,17 @@ class WidgetImpl implements Widget {
       onSettings: (anchor) => this._openDialog('settings', anchor),
       onIndicators: (anchor) => this._openDialog('indicatorPicker', anchor),
       onObjects: (anchor) => this._openObjects(anchor),
-      onDataWindow: options.panels === false ? undefined : () => this._dock?.toggle('data'),
+      ...(options.panels === false ? {} : { onDataWindow: () => this._dock?.toggle('data') }),
       onAlerts: (anchor) => this._openAlerts(anchor),
-      onWatchlist: this._docked('watchlist') ? () => this._dock?.open('watchlist') : undefined,
-      onNews: this._docked('news') ? () => this._dock?.open('news') : undefined,
+      ...(this._docked('watchlist') ? { onWatchlist: () => this._dock?.open('watchlist') } : {}),
+      ...(this._docked('news') ? { onNews: () => this._dock?.open('news') } : {}),
       // A grid's bar shows on a phone too, so its Go to is the only one.
-      onGoTo: gridBar ? undefined : (anchor) => this._openGoTo(anchor),
+      ...(gridBar ? {} : { onGoTo: (anchor: HTMLElement) => this._openGoTo(anchor) }),
       onProperties: (anchor) => this._openDialog('drawingProperties', anchor),
       onCapture: (anchor) => this._topbar?.openCapture(anchor),
       // Bottom bar hook: the More sheet stands in for the bar the phone layout hides.
       bottombar: this._bottombar.controls,
-      onLayouts: this._layouts?.controller ? () => this._layouts?.open() : undefined,
+      ...(this._layouts?.controller ? { onLayouts: () => this._layouts?.open() } : {}),
       settingsAvailable: () => widgetDialog('settings') !== null,
       indicatorsAvailable: () => widgetDialog('indicatorPicker') !== null,
     });

@@ -65,16 +65,14 @@ export interface MobileOptions {
   onSettings(anchor: HTMLElement): boolean;
   onIndicators(anchor: HTMLElement): boolean;
   onObjects(anchor: HTMLElement): boolean;
-  // A handler the widget may pass as undefined is a property typed from a
-  // method signature, so it takes the same host functions a method does.
-  onDataWindow?: { onDataWindow(anchor: HTMLElement): void | boolean }['onDataWindow'] | undefined;
+  onDataWindow?(anchor: HTMLElement): void | boolean;
   onAlerts?(anchor: HTMLElement): boolean;
-  onWatchlist?: { onWatchlist(anchor: HTMLElement): void | boolean }['onWatchlist'] | undefined;
-  onNews?: { onNews(anchor: HTMLElement): void | boolean }['onNews'] | undefined;
+  onWatchlist?(anchor: HTMLElement): void | boolean;
+  onNews?(anchor: HTMLElement): void | boolean;
   onCapture?(anchor: HTMLElement): void;
-  onGoTo?: { onGoTo(anchor: HTMLElement): void | boolean }['onGoTo'] | undefined;
+  onGoTo?(anchor: HTMLElement): void | boolean;
   /** Open the Layouts menu, centred. Omitted without a store. Since 2.5.10. */
-  onLayouts?: { onLayouts(anchor: HTMLElement): void | boolean }['onLayouts'] | undefined;
+  onLayouts?(anchor: HTMLElement): void | boolean;
   onProperties(anchor: HTMLElement): boolean;
   settingsAvailable(): boolean;
   indicatorsAvailable(): boolean;
