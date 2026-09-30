@@ -16,10 +16,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { PriceScale } from '../src/scale/price-scale';
 import {
   AXIS_LABEL_PRIORITY, AXIS_TAG_HEIGHT, AXIS_TAG_HEIGHT_COUNTDOWN,
-  barCountdownSeconds, drawLastPriceLabel, drawLeftPriceAxis, drawPriceAxis,
+  barCountdownSeconds, drawLastPriceLine, drawLastPriceTag, drawPriceAxis,
   drawSessionClock, drawTimeAxisPill, formatCountdown, formatUtcOffset,
   lastPriceTagHeight, medianBarInterval, priceTickCount, resolveAxisLabels,
-  type AxisLabelBand, type BarTimeSource, type PlotLayout,
+  type AxisLabelBand, type BarTimeSource, type LastPriceTagOptions, type PlotLayout,
 } from '../src/render/axis';
 import { makeCtx, type Op, type RecordingContext } from './helpers/fake-ctx';
 import { Chart, type AxisChromeOptions } from '../src/core/chart';
@@ -171,9 +171,9 @@ describe('countdown row in the last-price tag', () => {
   const OPEN = utc(2026, 5, 21, 3, 45);
 
   /** Draw the tag only (no price line) so the op stream is just the tag. */
-  function tag(countdown?: Parameters<typeof drawLastPriceLabel>[10]): RecordingContext {
+  function tag(countdown?: LastPriceTagOptions['countdown']): RecordingContext {
     const { ctx, rec } = makeCtx();
-    drawLastPriceLabel(ctx, scale(), 100, true, LAYOUT, 1, undefined, undefined, false, true, countdown);
+    drawLastPriceTag(ctx, scale(), 100, true, LAYOUT, 1, undefined, { countdown });
     return rec;
   }
 
@@ -514,7 +514,7 @@ describe('price-axis label overlap suppression', () => {
     const ps = scale();
     const ticks = labelled(ps);
     const { ctx, rec } = makeCtx();
-    drawLeftPriceAxis(ctx, ps, 60, LAYOUT.plotHeight, 1, undefined, [{
+    drawPriceAxis(ctx, ps, { ...LAYOUT, plotLeft: 60 }, 1, undefined, [{
       y: Math.round(ps.priceToY(ticks[1])),
       height: lastPriceTagHeight(1),
       priority: AXIS_LABEL_PRIORITY.lastPrice,
@@ -538,7 +538,7 @@ describe('a tick label at a pane edge', () => {
   const drawn = (ps: PriceScale, left = false, dpr = 1): (string | undefined)[] => {
     const { ctx, rec } = makeCtx();
     const layout = { ...LAYOUT, plotHeight: 400 };
-    if (left) drawLeftPriceAxis(ctx, ps, 60, 400, dpr);
+    if (left) drawPriceAxis(ctx, ps, { ...layout, plotLeft: 60 }, dpr, undefined, undefined, 'left');
     else drawPriceAxis(ctx, ps, layout, dpr);
     return texts(rec);
   };
@@ -625,7 +625,7 @@ describe('a chart that configures no chrome draws exactly what it drew before', 
   it('draws the left price axis op for op', () => {
     const ps = scale();
     const { ctx, rec } = makeCtx();
-    drawLeftPriceAxis(ctx, ps, 60, LAYOUT.plotHeight, 1);
+    drawPriceAxis(ctx, ps, { ...LAYOUT, plotLeft: 60 }, 1, undefined, undefined, 'left');
     expect(rec.ops).toEqual([
       { type: 'save', args: [] },
       { type: 'beginPath', args: [] },
@@ -645,7 +645,8 @@ describe('a chart that configures no chrome draws exactly what it drew before', 
 
   it('draws the last-price line and tag op for op', () => {
     const { ctx, rec } = makeCtx();
-    drawLastPriceLabel(ctx, scale(), 100, true, LAYOUT, 1);
+    drawLastPriceLine(ctx, scale(), 100, true, LAYOUT, 1);
+    drawLastPriceTag(ctx, scale(), 100, true, LAYOUT, 1);
     expect(rec.ops).toEqual([
       { type: 'save', args: [] },
       { type: 'setLineDash', args: [3, 3] },
@@ -654,6 +655,8 @@ describe('a chart that configures no chrome draws exactly what it drew before', 
       { type: 'lineTo', args: [600, 200.5] },
       { type: 'stroke', args: [], strokeStyle: '#26a69a', lineWidth: 1 },
       { type: 'setLineDash', args: [] },
+      { type: 'restore', args: [] },
+      { type: 'save', args: [] },
       { type: 'fillRect', args: [601, 192, 42, 16], fillStyle: '#26a69a' },
       { type: 'fillText', args: [607, 200], fillStyle: '#0d0e12', text: '100.0', font: AXIS_FONT },
       { type: 'restore', args: [] },
@@ -662,7 +665,7 @@ describe('a chart that configures no chrome draws exactly what it drew before', 
 
   it('draws a down tag in the down colour, unchanged', () => {
     const { ctx, rec } = makeCtx();
-    drawLastPriceLabel(ctx, scale(), 100, false, LAYOUT, 1, undefined, undefined, false, true);
+    drawLastPriceTag(ctx, scale(), 100, false, LAYOUT, 1);
     expect(ofType(rec, 'fillRect')[0].fillStyle).toBe('#ef5350');
   });
 
@@ -677,8 +680,9 @@ describe('a chart that configures no chrome draws exactly what it drew before', 
       const ps = scale();
       const { ctx } = makeCtx();
       drawPriceAxis(ctx, ps, LAYOUT, 1);
-      drawLeftPriceAxis(ctx, ps, 60, LAYOUT.plotHeight, 1);
-      drawLastPriceLabel(ctx, ps, 100, true, LAYOUT, 1);
+      drawPriceAxis(ctx, ps, { ...LAYOUT, plotLeft: 60 }, 1, undefined, undefined, 'left');
+      drawLastPriceLine(ctx, ps, 100, true, LAYOUT, 1);
+      drawLastPriceTag(ctx, ps, 100, true, LAYOUT, 1);
       drawSessionClock(ctx, LAYOUT, 1, { now: () => 0 });
     });
   });

@@ -44,7 +44,7 @@ import { lodActive, lodColumnWidth, lodKind } from '../model/conflation';
 import { createSeriesDrawItems, type LodRequest, type SeriesDrawItems } from '../render/draw-items';
 import { announcingHost, createHitBoxes, inHitBox } from '../render/hit-boxes';
 import {
-  drawPriceAxis, drawLeftPriceAxis, drawTimeAxis, drawLastPriceLabel, drawSessionClock,
+  drawPriceAxis, drawTimeAxis, drawLastPriceLine, drawLastPriceTag, drawSessionClock,
   drawTimeAxisPill, lastPriceTagHeight, AXIS_LABEL_PRIORITY, resolveAxisLabels, drawSeriesValueTag,
   axisTagY,
   type PlotLayout, type TickMarkType, type AxisLabelBand,
@@ -1146,9 +1146,7 @@ export class Pane {
     const slots = this.axisSlots(ctx);
     const colors = { up: ctx.theme.lastPriceUp, down: ctx.theme.lastPriceDown, text: ctx.theme.lastPriceText };
     const last = lastEntry;
-    if (last !== null) {
-      drawLastPriceLabel(g, readout, last.close, last.up, layout, dpr, axisStyle, colors, last.showLine, false);
-    }
+    if (last !== null && last.showLine) drawLastPriceLine(g, readout, last.close, last.up, layout, dpr, colors);
     // The countdown counts to the close of the chart's own bar, so it rides
     // on the tag of the pane that shows the price source. A study pane's tag
     // is the study's value: a clock under it named a bar the pane does not
@@ -1168,8 +1166,8 @@ export class Pane {
     // strip on each side, or with its tag turned off, pays for no second pass.
     for (const slot of slots) {
       if (last === null || !lastTagOn(this._scaleFor(slot.scaleId))) continue;
-      this._inAxisSlot(g, slot, layout, dpr, (scale, columnLayout) => drawLastPriceLabel(g, scale, last.close, last.up, columnLayout, dpr,
-        axisStyle, colors, false, true, countdown, slot.side));
+      this._inAxisSlot(g, slot, layout, dpr, (scale, columnLayout) => drawLastPriceTag(g, scale, last.close, last.up, columnLayout, dpr,
+        axisStyle, { colors, countdown, side: slot.side }));
     }
 
     if (ctx.showTimeAxis) {
@@ -1309,7 +1307,7 @@ export class Pane {
         // same plot-relative coordinates as their source series.
         g.save();
         g.translate(-Math.round(width * dpr), 0);
-        drawLeftPriceAxis(g, scale, width, layout.plotHeight, dpr, axisStyle, reserved);
+        drawPriceAxis(g, scale, columnLayout, dpr, axisStyle, reserved, 'left');
         g.restore();
       } else drawPriceAxis(g, scale, columnLayout, dpr, axisStyle, reserved);
       for (let i = 0; i < tags.length; i++) {
