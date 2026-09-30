@@ -216,6 +216,35 @@ describe('a viewport drawing on screen', () => {
     const { w, h } = size();
     expect(hit(0.5 * w, 0.5 * h)).toBeNull();
   });
+
+  it('keeps a pinned box with fewer anchors than its tool needs unpainted, like any incomplete drawing, without throwing', () => {
+    const { draw, paint, hit, size } = mount();
+    // One corner of a box: a hand-edited save or a host can hand it over, and
+    // both `add` and the migration accept any finite anchors.
+    const r = draw.add({ tool: 'rectangle', paneIndex: 0, style: { color: '#ff00ff' }, points: [], space: 'viewport',
+      viewportPoints: [{ x: 0.8, y: 0.8 }] });
+    viewportRect(draw, { style: { color: '#00ff00' } });
+    expect(() => paint()).not.toThrow();
+    expect(strokeOf(paint(), '#ff00ff')).toBeUndefined();
+    expect(strokeOf(paint(), '#00ff00')).toBeDefined();
+    const { w, h } = size();
+    expect(hit(0.8 * w, 0.8 * h)).toBeNull();
+    const [at] = draw.screenPoints(r.id)!;
+    expect(at.x).toBeCloseTo(0.8 * w, 6);
+    expect(at.y).toBeCloseTo(0.8 * h, 6);
+  });
+
+  it('pins a box with fewer anchors than its tool needs where its one anchor is, without throwing', () => {
+    const { draw, size } = mount();
+    const r = draw.add({ tool: 'rectangle', paneIndex: 0, style: {}, points: [{ time: bars[50].time, price: 100 }] });
+    const before = draw.screenPoints(r.id)!;
+    expect(() => draw.update(r.id, { space: 'viewport' })).not.toThrow();
+    expect(draw.get(r.id)!.space).toBe('viewport');
+    const { w, h } = size();
+    const [p] = draw.get(r.id)!.viewportPoints!;
+    expect(p.x * w).toBeCloseTo(before[0].x, 6);
+    expect(p.y * h).toBeCloseTo(before[0].y, 6);
+  });
 });
 
 describe('adding a viewport drawing', () => {

@@ -39,7 +39,7 @@ import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, Z
 import type { Drawing, DrawingPoint, ScreenPoint, ViewportPoint } from './types';
 import { getDrawingTool, hasDrawingTool } from './tools';
 import { withDrawingTextMetrics } from './text-metrics';
-import { anchorCount, containInPlot, viewportToPlot } from './viewport';
+import { anchorCount, containInPlot, viewportToPlot, type PlotBox } from './viewport';
 import { boundsOf } from './geometry';
 import { createDrawingHitIndex, EVERYWHERE, NOWHERE, inHitBox, spanOf, toolHitBox, type HitBox } from './hit-index';
 
@@ -93,8 +93,18 @@ function runnable(d: Drawing): boolean {
 export function placeViewportAnchors(d: Drawing, points: readonly ViewportPoint[], width: number, height: number): ScreenPoint[] {
   const pts = viewportToPlot(points, width, height);
   if (pts.length === 0) return pts;
-  const box = hasDrawingTool(d.tool) ? getDrawingTool(d.tool).bounds?.(pts, d) : undefined;
-  return containInPlot(pts, box ?? boundsOf(pts), width, height);
+  return containInPlot(pts, toolBounds(d, pts) ?? boundsOf(pts), width, height);
+}
+
+/**
+ * The box a drawing's tool declares at `pts` (`DrawingTool.bounds`), asked
+ * only of a complete anchor set, as `draw` and `distance` are. A box with one
+ * corner (a hand-edited save, a host's patch) has no box of its own: it is
+ * kept and not painted, and its anchors' own bounds place it.
+ */
+export function toolBounds(d: Drawing, pts: readonly ScreenPoint[]): PlotBox | undefined {
+  const tool = hasDrawingTool(d.tool) ? getDrawingTool(d.tool) : undefined;
+  return tool !== undefined && pts.length >= Math.max(1, tool.points) ? tool.bounds?.(pts, d) : undefined;
 }
 
 /**
