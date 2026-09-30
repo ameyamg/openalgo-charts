@@ -241,9 +241,10 @@ const FLAG_ROOTS: ReadonlySet<string> = new Set<FlagRoot>(['locked', 'visible', 
 /** A path split and checked. `null` for anything the model has no home for. */
 function parsePath(path: string): { root: BagRoot; key: string } | { root: FlagRoot; key: null } | null {
   const parts = path.split('.');
-  if (parts.length === 1 && FLAG_ROOTS.has(parts[0])) return { root: parts[0] as FlagRoot, key: null };
-  if (parts.length === 2 && BAG_ROOTS.has(parts[0]) && parts[1] !== '') {
-    return { root: parts[0] as BagRoot, key: parts[1] };
+  // Each part read below is there by the length it is compared with.
+  if (parts.length === 1 && FLAG_ROOTS.has(parts[0]!)) return { root: parts[0] as FlagRoot, key: null };
+  if (parts.length === 2 && BAG_ROOTS.has(parts[0]!) && parts[1] !== '') {
+    return { root: parts[0] as BagRoot, key: parts[1]! };
   }
   return null;
 }

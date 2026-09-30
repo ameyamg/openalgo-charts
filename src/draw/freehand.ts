@@ -37,15 +37,16 @@ export function rdpSimplify(points: ReadonlyArray<ScreenPoint>, epsilonPx: numbe
   while (stack.length > 0) {
     const last = stack.pop() as number;
     const first = stack.pop() as number;
-    const a = points[first];
-    const b = points[last];
+    // Every index on the stack, and every one between two of them, is in 0..n-1.
+    const a = points[first]!;
+    const b = points[last]!;
     let farthest = -1;
     let maxDist = epsilonPx;
     // Measured to the chord as a segment, not the infinite line through its
     // ends: a stroke that doubles back puts its far end beyond the chord,
     // where the line distance is zero and the excursion would be thinned away.
     for (let i = first + 1; i < last; i++) {
-      const d = distToSegment(points[i].x, points[i].y, a, b);
+      const d = distToSegment(points[i]!.x, points[i]!.y, a, b);
       if (d > maxDist) { maxDist = d; farthest = i; }
     }
     if (farthest < 0) continue;
@@ -53,7 +54,7 @@ export function rdpSimplify(points: ReadonlyArray<ScreenPoint>, epsilonPx: numbe
     stack.push(first, farthest, farthest, last);
   }
   const out: ScreenPoint[] = [];
-  for (let i = 0; i < n; i++) if (keep[i] === 1) out.push({ x: points[i].x, y: points[i].y });
+  for (let i = 0; i < n; i++) if (keep[i] === 1) out.push({ x: points[i]!.x, y: points[i]!.y }); // i is in range
   return out;
 }
 
@@ -72,9 +73,10 @@ export function rdpSimplify(points: ReadonlyArray<ScreenPoint>, epsilonPx: numbe
 export function catmullRom(ctx: CanvasRenderingContext2D, points: ReadonlyArray<ScreenPoint>, tension = 0.5): void {
   const n = points.length;
   if (n < 2) return;
-  ctx.moveTo(points[0].x, points[0].y);
+  // Two points or more from here, and every index below is in 0..n-1.
+  ctx.moveTo(points[0]!.x, points[0]!.y);
   if (n === 2) {
-    ctx.lineTo(points[1].x, points[1].y);
+    ctx.lineTo(points[1]!.x, points[1]!.y);
     return;
   }
   // The spline's tangent at a point is `tension * (next - previous)`; a cubic
@@ -85,10 +87,10 @@ export function catmullRom(ctx: CanvasRenderingContext2D, points: ReadonlyArray<
     // The ends have no neighbour beyond them. Doubling the endpoint gives a
     // tangent that runs along the first and last segment, so the curve
     // leaves and arrives the way the stroke did.
-    const p0 = points[i === 0 ? 0 : i - 1];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[i + 2 < n ? i + 2 : n - 1];
+    const p0 = points[i === 0 ? 0 : i - 1]!;
+    const p1 = points[i]!;
+    const p2 = points[i + 1]!;
+    const p3 = points[i + 2 < n ? i + 2 : n - 1]!;
     ctx.bezierCurveTo(
       p1.x + (p2.x - p0.x) * k, p1.y + (p2.y - p0.y) * k,
       p2.x - (p3.x - p1.x) * k, p2.y - (p3.y - p1.y) * k,

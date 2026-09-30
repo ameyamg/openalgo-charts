@@ -1,5 +1,5 @@
 /** Channels, pitchforks and dedicated line tools. Geometry stays in media pixels. */
-import type { DrawContext, DrawingPoint, DrawingTool, FibLevel, HitContext, ScreenPoint } from './types';
+import type { AtLeast, DrawContext, DrawingPoint, DrawingTool, FibLevel, HitContext, ScreenPoint, ToolAnchors } from './types';
 import { channelAlertValue, channelAlertLevels, fibAlertValue, fibAlertLevels, lineAlertValue } from './alert-values';
 import { composeSettings, EXTEND_FIELDS, FILL_FIELDS, FONT_FIELDS, LEVEL_FIELDS, LINE_FIELDS, SHOW_LABELS_FIELD } from './schema';
 import { cloneLevels, formatRatio, levelColor } from './levels';
@@ -15,7 +15,7 @@ const FAN_LEVELS: readonly FibLevel[] = [0, 0.382, 0.5, 0.618, 1].map(ratio => (
 const empty = (): DrawingGeometry => ({ paths: [] });
 const line = (a: ScreenPoint, b: ScreenPoint): GeometryPath => ({ points: [a, b] });
 
-function fillEndpoints(a: ScreenPoint, b: ScreenPoint, c: HitContext): ScreenPoint[] {
+function fillEndpoints(a: ScreenPoint, b: ScreenPoint, c: HitContext): [ScreenPoint, ScreenPoint] {
   const dx = b.x - a.x;
   if (dx === 0) return [a, b];
   const left = c.drawing.style.extendLeft === true ? 0 : Math.min(a.x, b.x);
@@ -24,7 +24,7 @@ function fillEndpoints(a: ScreenPoint, b: ScreenPoint, c: HitContext): ScreenPoi
   return dx > 0 ? [at(left), at(right)] : [at(right), at(left)];
 }
 
-function channel(c: HitContext, lower: ScreenPoint[]): DrawingGeometry {
+function channel(c: HitContext & ToolAnchors<2>, lower: AtLeast<ScreenPoint, 2>): DrawingGeometry {
   const [a, b] = c.pts;
   const upper = extendedLine(a, b, c);
   const bottom = extendedLine(lower[0], lower[1], c);
@@ -41,7 +41,7 @@ const disjoint = geometryTool({
   id: 'disjoint-channel', name: 'Disjoint Channel', points: 4,
   alertValue: channelAlertValue('disjoint'), alertLevels: channelAlertLevels,
   defaultStyle: { fill: true }, settings: CHANNEL_SETTINGS,
-}, c => c.pts.length < 4 ? empty() : channel(c, c.pts.slice(2, 4)));
+}, c => c.pts.length < 4 ? empty() : channel(c, c.pts.slice(2, 4) as AtLeast<ScreenPoint, 2>)); // anchors 3 and 4 of four
 
 const flat = geometryTool({
   id: 'flat-top-bottom', name: 'Flat Top/Bottom', points: 3,
@@ -49,7 +49,7 @@ const flat = geometryTool({
   defaultStyle: { fill: true }, settings: CHANNEL_SETTINGS,
   constrain(points) {
     const out = points.map(p => ({ ...p }));
-    if (out.length >= 3) out[2].time = (out[0].time + out[1].time) / 2;
+    if (out.length >= 3) out[2]!.time = (out[0]!.time + out[1]!.time) / 2; // by the length check
     return out;
   },
 }, c => c.pts.length < 3 ? empty() : channel(c, [{ x: c.pts[0].x, y: c.pts[2].y }, { x: c.pts[1].x, y: c.pts[2].y }]));
@@ -59,7 +59,7 @@ function lowerBound(bars: readonly { time: number }[], time: number, inclusive: 
   let lo = 0, hi = bars.length;
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
-    if (bars[mid].time < time || (inclusive && bars[mid].time === time)) lo = mid + 1;
+    if (bars[mid]!.time < time || (inclusive && bars[mid]!.time === time)) lo = mid + 1; // mid < hi <= length
     else hi = mid;
   }
   return lo;
@@ -81,7 +81,7 @@ const regression = geometryTool({
   // Bars are live and even historical closes can change in place. Recompute
   // exact moments instead of treating array identity as a revision signal.
   for (let i = first; i < last; i++) {
-    const bar = bars[i], y = bar.close;
+    const bar = bars[i]!, y = bar.close; // last <= length
     // Stored times have exact shared indices; the map avoids a binary search
     // per close and still includes timeline entries from secondary series.
     const x = c.rc.dataLayer.timeToIndex?.(bar.time) ?? c.rc.dataLayer.timeToIndexFloat(bar.time);
@@ -124,7 +124,7 @@ function pitchfork(id: string, name: string, variant: 'standard' | 'schiff' | 'm
     const base = variant === 'standard' ? a : projectPoint(shifted, c.rc);
     const origin = variant === 'inside' ? middle : base;
     const delta = variant === 'inside' ? { x: end.x - base.x, y: end.y - base.y } : { x: middle.x - base.x, y: middle.y - base.y };
-    const ray = (start: ScreenPoint): ScreenPoint[] => clippedLine(start, { x: start.x + delta.x, y: start.y + delta.y }, c.rc, 0, Infinity);
+    const ray = (start: ScreenPoint) => clippedLine(start, { x: start.x + delta.x, y: start.y + delta.y }, c.rc, 0, Infinity);
     const paths: GeometryPath[] = [];
     const labels: NonNullable<DrawingGeometry['labels']> = [];
     const levels = activeLevels(c.drawing, FORK_LEVELS);
@@ -196,7 +196,8 @@ const extension = geometryTool({ id: 'fib-extension-two-point', name: 'Fib Exten
     const right = c.drawing.style.extendRight === true ? c.rc.plotWidth : Math.max(a.x, b.x);
     for (let i = 1; i < ys.length; i++) {
       if (ys[i] === ys[i - 1]) continue;
-      paths.push({ points: clipPolygon([{ x: left, y: ys[i - 1] }, { x: right, y: ys[i - 1] }, { x: right, y: ys[i] }, { x: left, y: ys[i] }], c.rc), closed: true, fill: true, stroke: false });
+      // i is in range.
+      paths.push({ points: clipPolygon([{ x: left, y: ys[i - 1]! }, { x: right, y: ys[i - 1]! }, { x: right, y: ys[i]! }, { x: left, y: ys[i]! }], c.rc), closed: true, fill: true, stroke: false });
     }
   }
   paths.push(line(a, b));
@@ -211,7 +212,7 @@ const extension = geometryTool({ id: 'fib-extension-two-point', name: 'Fib Exten
 
 interface FanLabelBox { x: number; y: number; width: number; height: number }
 
-function fanGeometry(c: HitContext, measure?: (text: string) => number): DrawingGeometry {
+function fanGeometry(c: HitContext & ToolAnchors<2>, measure?: (text: string) => number): DrawingGeometry {
   if (c.pts.length < 2) return empty();
   const [a, b] = c.pts, paths: GeometryPath[] = [], labels: NonNullable<DrawingGeometry['labels']> = [];
   // The two far box edges locate the anchors without doubling any fan ray.
@@ -272,7 +273,7 @@ const fan: DrawingTool = {
   ...geometryTool({ id: 'fib-speed-resistance-fan', name: 'Fib Speed Resistance Fan', points: 2,
     defaultStyle: { levels: cloneLevels(FAN_LEVELS), showLabels: true }, settings: composeSettings([LINE_FIELDS, LEVEL_FIELDS, FONT_FIELDS]),
   }, c => fanGeometry(c)),
-  draw(c: DrawContext) {
+  draw(c: DrawContext & ToolAnchors<2>) {
     const { ctx, rc } = c, text = c.drawing.text;
     let geometry: DrawingGeometry;
     ctx.save();
@@ -280,7 +281,7 @@ const fan: DrawingTool = {
       // Match the shared painter's font so collision checks use actual glyph
       // widths, including custom labels and font choices, at this DPR.
       ctx.font = `${text?.italic === true ? 'italic ' : ''}${text?.bold === true ? '700 ' : ''}${(text?.fontSize ?? 11) * rc.dpr}px ${text?.fontFamily || 'ui-sans-serif, system-ui, sans-serif'}`;
-      geometry = fanGeometry({ rc, drawing: { ...c.drawing, style: c.style }, pts: c.pts.map(p => ({ x: p.x / rc.dpr, y: p.y / rc.dpr })) }, value => ctx.measureText(value).width / rc.dpr);
+      geometry = fanGeometry({ rc, drawing: { ...c.drawing, style: c.style }, pts: c.pts.map(p => ({ x: p.x / rc.dpr, y: p.y / rc.dpr })) as typeof c.pts }, value => ctx.measureText(value).width / rc.dpr);
     } finally { ctx.restore(); }
     paintGeometry(c, geometry);
   },
@@ -290,7 +291,7 @@ const STAMP_SHAPES = ['star', 'diamond', 'circle', 'arrow up', 'arrow down', 'ch
 const stamp = geometryTool({ id: 'icon-stamp', name: 'Icon Stamp', points: 1,
   defaultStyle: { fill: true, fillOpacity: 0.8 },
   settings: composeSettings([LINE_FIELDS, FILL_FIELDS,
-    { path: 'props.shape', label: 'Shape', kind: 'select', group: 'behavior', options: STAMP_SHAPES.map(shape => ({ value: shape.replace(' ', '-'), label: shape[0].toUpperCase() + shape.slice(1) })) },
+    { path: 'props.shape', label: 'Shape', kind: 'select', group: 'behavior', options: STAMP_SHAPES.map(shape => ({ value: shape.replace(' ', '-'), label: shape[0]!.toUpperCase() + shape.slice(1) })) }, // no shape name is empty
     { path: 'props.size', label: 'Size', kind: 'number', min: 8, max: 160, step: 2, group: 'behavior' }]),
 }, c => {
   if (c.pts.length < 1) return empty();
@@ -302,11 +303,11 @@ const stamp = geometryTool({ id: 'icon-stamp', name: 'Icon Stamp', points: 1,
   else if (shape === 'circle') points = sampleArc(a, r, r, 0, 2 * Math.PI);
   else if (shape === 'arrow-up' || shape === 'arrow-down') {
     const sign = shape === 'arrow-up' ? 1 : -1;
-    points = [[0, -1], [1, 0], [0.35, 0], [0.35, 1], [-0.35, 1], [-0.35, 0], [-1, 0]].map(([x, y]) => point(x, y * sign));
+    points = ([[0, -1], [1, 0], [0.35, 0], [0.35, 1], [-0.35, 1], [-0.35, 0], [-1, 0]] as const).map(([x, y]) => point(x, y * sign));
   } else if (shape === 'check') {
-    points = [[-1, 0], [-0.65, -0.3], [-0.2, 0.2], [0.75, -0.85], [1, -0.55], [-0.2, 0.85]].map(([x, y]) => point(x, y));
+    points = ([[-1, 0], [-0.65, -0.3], [-0.2, 0.2], [0.75, -0.85], [1, -0.55], [-0.2, 0.85]] as const).map(([x, y]) => point(x, y));
   } else if (shape === 'cross') {
-    points = [[-1, -0.65], [-0.65, -1], [0, -0.35], [0.65, -1], [1, -0.65], [0.35, 0], [1, 0.65], [0.65, 1], [0, 0.35], [-0.65, 1], [-1, 0.65], [-0.35, 0]].map(([x, y]) => point(x, y));
+    points = ([[-1, -0.65], [-0.65, -1], [0, -0.35], [0.65, -1], [1, -0.65], [0.35, 0], [1, 0.65], [0.65, 1], [0, 0.35], [-0.65, 1], [-1, 0.65], [-0.35, 0]] as const).map(([x, y]) => point(x, y));
   } else {
     points = Array.from({ length: 10 }, (_, i) => {
       const theta = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 === 0 ? 1 : 0.45;

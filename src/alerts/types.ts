@@ -87,7 +87,7 @@ export type AlertSource = PriceAlertSource | IndicatorAlertSource | BarCondition
 /** Missing values, an absent anchor or a paused/context-mismatched chart are unavailable. */
 export interface AlertAvailability {
   available: boolean;
-  reason?: string;
+  reason?: string | undefined;
   paneIndex?: number;
 }
 

@@ -1,6 +1,8 @@
 /** Internal drawing geometry in media pixels, shared by paint and hit testing. */
 import type { PrimitiveRenderContext } from 'openalgo-charts';
-import type { DrawContext, Drawing, DrawingPoint, DrawingTool, FibLevel, HitContext, ScreenPoint } from './types';
+import type {
+  AnchoredTool, DrawContext, Drawing, DrawingPoint, DrawingTool, FibLevel, HitContext, ScreenPoint, ToolAnchors,
+} from './types';
 import { distToSegment } from './geometry';
 import { drawingTextWidth } from './text-metrics';
 
@@ -13,7 +15,7 @@ export interface GeometryPath {
   fill?: boolean;
   /** False permits fill polygons without introducing visible end caps. */
   stroke?: boolean;
-  color?: string;
+  color?: string | undefined;
 }
 export interface GeometryArc {
   center: ScreenPoint;
@@ -24,9 +26,10 @@ export interface GeometryArc {
   /** Close a filled arc through its center, for a circular sector. */
   sector?: boolean;
 }
-export interface GeometryLabel { at: ScreenPoint; text: string; color?: string }
+export interface GeometryLabel { at: ScreenPoint; text: string; color?: string | undefined }
 export interface DrawingGeometry { paths: GeometryPath[]; labels?: GeometryLabel[] }
-export type GeometryBuilder = (c: HitContext) => DrawingGeometry;
+/** Builds from media-px anchors, as many as the tool declares (`ToolAnchors`). */
+export type GeometryBuilder<N extends number = number> = (c: HitContext & ToolAnchors<N>) => DrawingGeometry;
 
 export const midpoint = (a: ScreenPoint, b: ScreenPoint): ScreenPoint => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 export const interpolate = (a: ScreenPoint, b: ScreenPoint, t: number): ScreenPoint => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
@@ -46,11 +49,11 @@ export function activeLevels(d: Drawing, fallback: readonly FibLevel[]): readonl
 export function clippedLine(
   a: ScreenPoint, b: ScreenPoint, rc: Pick<PrimitiveRenderContext, 'plotWidth' | 'plotHeight'>,
   from = 0, to = 1,
-): ScreenPoint[] {
+): [] | [ScreenPoint, ScreenPoint] {
   if (!finitePoint(a) || !finitePoint(b)) return [];
   const dx = b.x - a.x, dy = b.y - a.y;
   if (dx === 0 && dy === 0) return a.x >= 0 && a.x <= rc.plotWidth && a.y >= 0 && a.y <= rc.plotHeight ? [a, a] : [];
-  for (const [p, delta, max] of [[a.x, dx, rc.plotWidth], [a.y, dy, rc.plotHeight]]) {
+  for (const [p, delta, max] of [[a.x, dx, rc.plotWidth], [a.y, dy, rc.plotHeight]] as const) {
     if (delta === 0) { if (p < 0 || p > max) return []; continue; }
     const t0 = -p / delta, t1 = (max - p) / delta;
     from = Math.max(from, Math.min(t0, t1));
@@ -78,7 +81,7 @@ export function clipPolygon(points: readonly ScreenPoint[], rc: Pick<PrimitiveRe
     const input = result;
     result = [];
     for (let i = 0; i < input.length; i++) {
-      const a = input[i], b = input[(i + 1) % input.length];
+      const a = input[i]!, b = input[(i + 1) % input.length]!; // both indices are in 0..length-1
       const insideA = (a[axis] - limit) * sign >= 0, insideB = (b[axis] - limit) * sign >= 0;
       if (insideA) result.push(a);
       if (insideA !== insideB) result.push(interpolate(a, b, (limit - a[axis]) / (b[axis] - a[axis])));
@@ -91,7 +94,7 @@ export function clipPolygon(points: readonly ScreenPoint[], rc: Pick<PrimitiveRe
 export function insidePolygon(x: number, y: number, points: readonly ScreenPoint[]): boolean {
   let inside = false;
   for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-    const a = points[i], b = points[j];
+    const a = points[i]!, b = points[j]!; // i and j stay in 0..length-1
     if ((a.y > y) !== (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) inside = !inside;
   }
   return inside;
@@ -188,8 +191,9 @@ export function geometryDistance(x: number, y: number, geometry: DrawingGeometry
     const filled = path.fill === true && drawing.style.fill === true && (drawing.style.fillOpacity ?? 0.12) > 0;
     if (filled && insidePolygon(x, y, p)) return 0;
     if (path.stroke === false) continue;
-    for (let i = 1; i < p.length; i++) best = Math.min(best, distToSegment(x, y, p[i - 1], p[i]));
-    if (path.closed === true) best = Math.min(best, distToSegment(x, y, p[p.length - 1], p[0]));
+    // A renderable path has two points or more, and i is in range.
+    for (let i = 1; i < p.length; i++) best = Math.min(best, distToSegment(x, y, p[i - 1]!, p[i]!));
+    if (path.closed === true) best = Math.min(best, distToSegment(x, y, p[p.length - 1]!, p[0]!));
   }
   return Number.isFinite(best) ? best : null;
 }
@@ -211,8 +215,9 @@ export function paintGeometry(c: DrawContext, geometry: DrawingGeometry): void {
       if (a.rx === a.ry) ctx.arc(a.center.x * dpr, a.center.y * dpr, a.rx * dpr, a.start, a.start + a.sweep, a.sweep < 0);
       else ctx.ellipse(a.center.x * dpr, a.center.y * dpr, a.rx * dpr, a.ry * dpr, 0, a.start, a.start + a.sweep, a.sweep < 0);
     } else {
-      ctx.moveTo(path.points[0].x * dpr, path.points[0].y * dpr);
-      for (let i = 1; i < path.points.length; i++) ctx.lineTo(path.points[i].x * dpr, path.points[i].y * dpr);
+      // A renderable path has two points or more, and i is in range.
+      ctx.moveTo(path.points[0]!.x * dpr, path.points[0]!.y * dpr);
+      for (let i = 1; i < path.points.length; i++) ctx.lineTo(path.points[i]!.x * dpr, path.points[i]!.y * dpr);
     }
     if (path.closed === true) ctx.closePath();
     if (path.fill === true && style.fill === true) {
@@ -258,16 +263,16 @@ export function paintGeometry(c: DrawContext, geometry: DrawingGeometry): void {
 }
 
 /** Wrap a pure media-pixel builder in the existing device-pixel draw contract. */
-export function geometryTool(descriptor: Omit<DrawingTool, 'draw' | 'distance'>, build: GeometryBuilder): DrawingTool {
+export function geometryTool<N extends number>(descriptor: Omit<AnchoredTool<N>, 'draw' | 'distance'>, build: GeometryBuilder<N>): DrawingTool {
   return {
     ...descriptor,
     draw(c) {
-      const pts = c.pts.map(p => ({ x: p.x / c.rc.dpr, y: p.y / c.rc.dpr }));
+      const pts = c.pts.map(p => ({ x: p.x / c.rc.dpr, y: p.y / c.rc.dpr })) as typeof c.pts; // one for one
       paintGeometry(c, build({ pts, drawing: { ...c.drawing, style: c.style }, rc: c.rc }));
     },
     distance(x, y, c) {
       if (x < 0 || y < 0 || x > c.rc.plotWidth || y > c.rc.plotHeight) return null;
       return geometryDistance(x, y, build(c), c.drawing, c.rc.dpr);
     },
-  };
+  } satisfies AnchoredTool<N>;
 }

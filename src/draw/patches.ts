@@ -14,7 +14,7 @@ export function changedAnchor(prev: readonly DrawingPoint[], next: readonly Draw
   if (prev.length !== next.length) return null;
   let found: number | null = null;
   for (let i = 0; i < next.length; i++) {
-    if (prev[i].time === next[i].time && prev[i].price === next[i].price) continue;
+    if (prev[i]!.time === next[i]!.time && prev[i]!.price === next[i]!.price) continue; // equal lengths
     if (found !== null) return null;
     found = i;
   }

@@ -10,8 +10,7 @@
 import type { PlotRect } from 'openalgo-charts';
 import type { Drawing, DrawingPoint, ScreenPoint, ViewportPoint } from './types';
 import type { DrawingChartHost } from './controller-types';
-import { placeViewportAnchors } from './layer';
-import { getDrawingTool, hasDrawingTool } from './tools';
+import { placeViewportAnchors, toolBounds } from './layer';
 import { boundsOf } from './geometry';
 import { rdpSimplify } from './freehand';
 
@@ -194,12 +193,12 @@ export class DrawingScreen {
       || p.point === null || p.point === undefined) {
       return [end];
     }
-    const tail = samples[samples.length - 1];
+    const tail = samples[samples.length - 1]!; // two or more, by the check above
     const shift = p.point.y - tail.y;
     if (!Number.isFinite(shift)) return [end];
     const out: DrawingPoint[] = [];
     for (let i = 0; i < samples.length - 1; i++) {
-      const s = samples[i];
+      const s = samples[i]!; // i is in range
       const time = toTime.call(this._chart, s.x);
       const price = toPrice.call(this._chart, s.y + shift, paneIndex);
       if (price === null || !Number.isFinite(time) || !Number.isFinite(price)) continue;
@@ -233,9 +232,9 @@ export class DrawingScreen {
     const out: DrawingPoint[] = [];
     let j = 0;
     for (const k of kept) {
-      while (j < px.length && (px[j].x !== k.x || px[j].y !== k.y)) j++;
+      while (j < px.length && (px[j]!.x !== k.x || px[j]!.y !== k.y)) j++; // j < length, and pts pairs px
       if (j >= px.length) return pts;   // cannot happen; keep everything rather than lose a sample
-      out.push(pts[j]);
+      out.push(pts[j]!);
       j++;
     }
     return out;
@@ -317,7 +316,7 @@ export class DrawingScreen {
       px.push({ x, y });
     }
     const own = boundsOf(px);
-    const box = (hasDrawingTool(d.tool) ? getDrawingTool(d.tool).bounds?.(px, d) : undefined) ?? own;
+    const box = toolBounds(d, px) ?? own;
     const cutX = cutInto(box.x0, box.x1, own.x0, own.x1, frame.width);
     const cutY = cutInto(box.y0, box.y1, own.y0, own.y1, frame.height);
     return this.pinPlot(d, px.map((p) => ({ x: cutX(p.x), y: cutY(p.y) })), frame);
