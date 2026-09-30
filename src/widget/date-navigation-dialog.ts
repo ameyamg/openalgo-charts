@@ -15,7 +15,7 @@ import { utcSecondsToZonedParts, zonedWallClockToUtcSeconds } from 'openalgo-cha
 import type { WidgetContext } from './context';
 import { timeBuckets, type DateNavigationResult, type DateNavigationTarget } from './date-navigator';
 import { button, dialogFrame, el, openPanel, type PanelHandle } from './form';
-import { widgetText } from './localization';
+import { widgetText, type WidgetTranslationOptions } from './localization';
 import { token as v } from './tokens';
 
 export interface DateNavigationDialogOptions {
@@ -42,6 +42,27 @@ const TIME = /^(\d{2}):(\d{2})$/;
 const pad = (n: number): string => String(n).padStart(2, '0');
 
 let sequence = 0;
+
+/**
+ * The words for what a request came to when it fell short: history that
+ * stops, a range wider than the chart, an interval with no dates, a failed
+ * load. The go-to panel and the bottom bar's ranges both say these, so they
+ * say them the same way; each keeps its own words for a clean placement and
+ * for no data. Null for any other status.
+ */
+export function describeNavigation(ctx: WidgetTranslationOptions, result: DateNavigationResult, span: { from: string; to: string }): string | null {
+  switch (result.status) {
+    case 'partial':
+      if (result.clipped) return widgetText(ctx, 'The range is wider than the chart. Showing {from} to {to}', span);
+      if (result.history === 'exhausted') return widgetText(ctx, 'History starts at {date}', { date: span.from });
+      if (result.history === 'limited') return widgetText(ctx, 'The history limit stops at {date}', { date: span.from });
+      if (result.history === 'empty') return widgetText(ctx, 'No older bars were found before {date}', { date: span.from });
+      return widgetText(ctx, 'Older history cannot load now. Showing from {date}', { date: span.from });
+    case 'unsupported': return widgetText(ctx, 'Go to needs a time-based interval');
+    case 'error': return widgetText(ctx, 'Could not load history: {error}', { error: result.error?.message ?? '' });
+    default: return null;
+  }
+}
 
 /** Open the go-to panel below `anchor`, prefilled with the visible window or the pending request. */
 export function openDateNavigation(ctx: WidgetContext, anchor: HTMLElement | undefined, options: DateNavigationDialogOptions): PanelHandle {
@@ -150,19 +171,11 @@ export function openDateNavigation(ctx: WidgetContext, anchor: HTMLElement | und
     const span = { from: when(result.from ?? target.from), to: when(result.to ?? target.to ?? target.from) };
     switch (result.status) {
       case 'placed': return range ? widgetText(ctx, 'Showing {from} to {to}', span) : widgetText(ctx, 'Showing {date}', { date: span.from });
-      case 'partial':
-        if (result.clipped) return widgetText(ctx, 'The range is wider than the chart. Showing {from} to {to}', span);
-        if (result.history === 'exhausted') return widgetText(ctx, 'History starts at {date}', { date: span.from });
-        if (result.history === 'limited') return widgetText(ctx, 'The history limit stops at {date}', { date: span.from });
-        if (result.history === 'empty') return widgetText(ctx, 'No older bars were found before {date}', { date: span.from });
-        return widgetText(ctx, 'Older history cannot load now. Showing from {date}', { date: span.from });
       case 'no-data': return target.to === undefined
         ? widgetText(ctx, 'No bars at or after {date}', { date: when(target.from) })
         : widgetText(ctx, 'No bars between {from} and {to}', { from: when(target.from), to: when(target.to) });
-      case 'unsupported': return widgetText(ctx, 'Go to needs a time-based interval');
       case 'invalid': return widgetText(ctx, 'Enter a valid date');
-      case 'error': return widgetText(ctx, 'Could not load history: {error}', { error: result.error?.message ?? '' });
-      default: return '';
+      default: return describeNavigation(ctx, result, span) ?? '';
     }
   }
 
