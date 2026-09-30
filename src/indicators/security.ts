@@ -94,8 +94,12 @@ interface Bucket {
 const WEEK = 604800;
 const DAY = 86400;
 
-/** The bucket a bar belongs to, as a number equal for every bar in it. */
-function keyOf(b: Bucketing, time: number, zone: string, sessionStart: number | null): number {
+/**
+ * The bucket a bar belongs to, as a number equal for every bar in it. Shared
+ * with `./timeframe`, whose live tail has to cut a new bar exactly as the fold
+ * that computed the held result cut the history.
+ */
+export function keyOf(b: Bucketing, time: number, zone: string, sessionStart: number | null): number {
   if (b.mode === 'calendar') return bucketStartOf(b, time, zone);
   if (b.mode !== 'interval') return time; // unreachable: refused before the loop
   const s = b.seconds;

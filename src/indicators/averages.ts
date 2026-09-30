@@ -19,6 +19,7 @@ import {
 import type { Bar, IndicatorDescriptor, IndicatorInput, IndicatorSource } from 'openalgo-charts';
 import { sma, rma, nulls, smaSeededEma, vwma, percentileNearestRank } from './calc';
 import { emaOfGapped, smoothingMa } from './smoothing';
+import { withTimeframe } from './timeframe';
 
 const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
   const v = s[k];
@@ -153,7 +154,7 @@ export const MA_CROSS: IndicatorDescriptor = {
  * `close` is hard-coded in the reference (`source = close`), so there is no
  * source setting.
  */
-export const MCGINLEY_DYNAMIC: IndicatorDescriptor = {
+export const MCGINLEY_DYNAMIC: IndicatorDescriptor = withTimeframe({
   id: 'mcginley-dynamic',
   name: 'McGinley Dynamic',
   category: 'Trend',
@@ -187,7 +188,7 @@ export const MCGINLEY_DYNAMIC: IndicatorDescriptor = {
     }
     return { mg: nulls(out) };
   },
-};
+});
 
 /**
  * Median — the nearest-rank 50th percentile of the source, banded by ATR and
@@ -335,7 +336,7 @@ export const MA_RIBBON: IndicatorDescriptor = {
  * digits, and the grouped form can hide an overflowing term. Any absent term, or
  * a sum that is not finite, leaves the bar absent (`nulls`).
  */
-export const TEMA: IndicatorDescriptor = {
+export const TEMA: IndicatorDescriptor = withTimeframe({
   id: 'tema',
   name: 'Triple EMA',
   category: 'Trend',
@@ -356,7 +357,7 @@ export const TEMA: IndicatorDescriptor = {
     const e3 = emaOfGapped(e2, length);
     return { tema: nulls(e1.map((v, i) => 3 * v - 3 * e2[i] + e3[i])) };
   },
-};
+});
 
 /**
  * Time Weighted Average Price — the running mean of the source since the anchor,
@@ -421,7 +422,7 @@ export const TWAP: IndicatorDescriptor = {
  * volume is flat, and `na` on any window whose volume sums to zero, which is
  * what a feed with no volume produces.
  */
-export const VWMA: IndicatorDescriptor = {
+export const VWMA: IndicatorDescriptor = withTimeframe({
   id: 'vwma',
   name: 'Volume Weighted Moving Average',
   category: 'Volume',
@@ -440,7 +441,7 @@ export const VWMA: IndicatorDescriptor = {
     const ma = vwma(sourceValues(bars, src(s)), volumes(bars), int(s, 'length', 20));
     return { vwma: nulls(shift(ma, offsetOf(s, 'offset', 0))) };
   },
-};
+});
 
 /**
  * Williams Alligator — three Wilder-smoothed medians of differing speed, each
@@ -504,7 +505,7 @@ export const ALLIGATOR: IndicatorDescriptor = {
  * the simple average of the first `length` values, so it first prints at
  * `length - 1` and needs no code of its own here.
  */
-export const SMMA: IndicatorDescriptor = {
+export const SMMA: IndicatorDescriptor = withTimeframe({
   id: 'smma',
   name: 'Smoothed Moving Average',
   category: 'Trend',
@@ -519,7 +520,7 @@ export const SMMA: IndicatorDescriptor = {
     style: { color: '#673ab7', lineWidth: 1.5 },
   }],
   calc: (bars, s) => ({ smma: nulls(rma(sourceValues(bars, src(s)), int(s, 'length', 7))) }),
-};
+});
 
 /**
  * One T3 layer: an exponential average pushed past itself by `factor` times the
@@ -556,7 +557,7 @@ function generalizedDouble(values: readonly number[], length: number, factor: nu
  * continuous either way and only its paint changes, so a break in the colour
  * must not become a break in the series.
  */
-export const T3: IndicatorDescriptor = {
+export const T3: IndicatorDescriptor = withTimeframe({
   id: 't3',
   name: 'T3 Average',
   category: 'Trend',
@@ -596,7 +597,7 @@ export const T3: IndicatorDescriptor = {
     const twice = generalizedDouble(once, length, factor);
     return { t3: nulls(generalizedDouble(twice, length, factor)) };
   },
-};
+});
 
 export const AVERAGE_INDICATORS: readonly IndicatorDescriptor[] = [
   MA_CROSS, MCGINLEY_DYNAMIC, MEDIAN, MA_RIBBON, TEMA, TWAP, VWMA, ALLIGATOR, SMMA, T3,

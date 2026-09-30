@@ -17,6 +17,7 @@ import type { IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
 import { sma, wma, highest, lowest, nulls, smaSeededEma, alma, linreg } from './calc';
 import { emaOfGapped } from './smoothing';
 import { withTail, windowTail, whole } from './tail';
+import { withTimeframe } from './timeframe';
 
 const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
   const v = s[k];
@@ -82,7 +83,7 @@ const CHANNEL_FILL_OPACITY = 0.05;
  * The source is hard-coded to `close` in the reference (`source = close`,
  * not an `input`), so there is no source setting to expose.
  */
-export const ALMA: IndicatorDescriptor = {
+export const ALMA: IndicatorDescriptor = withTimeframe({
   id: 'alma',
   name: 'Arnaud Legoux Moving Average',
   category: 'Trend',
@@ -105,14 +106,14 @@ export const ALMA: IndicatorDescriptor = {
       num(s, 'sigma', 6),
     )),
   }),
-};
+});
 
 /**
  * `2 * ema - ema(ema)`. The second pass runs over a series that is already NaN
  * for its own warmup, which is what pushes the first plotted bar out to
  * `2 * length - 2`, see `emaOfGapped`.
  */
-export const DEMA: IndicatorDescriptor = {
+export const DEMA: IndicatorDescriptor = withTimeframe({
   id: 'dema',
   name: 'Double EMA',
   category: 'Trend',
@@ -133,9 +134,9 @@ export const DEMA: IndicatorDescriptor = {
     const e2 = emaOfGapped(e1, length);
     return { dema: nulls(e1.map((v, i) => 2 * v - e2[i])) };
   },
-};
+});
 
-export const HMA: IndicatorDescriptor = {
+export const HMA: IndicatorDescriptor = withTimeframe({
   id: 'hma',
   name: 'Hull Moving Average',
   category: 'Trend',
@@ -154,9 +155,9 @@ export const HMA: IndicatorDescriptor = {
     const length = int(s, 'length', 9);
     return { hma: nulls(hullHma(values, length)) };
   },
-};
+});
 
-export const ENVELOPE: IndicatorDescriptor = {
+export const ENVELOPE: IndicatorDescriptor = withTimeframe({
   id: 'envelope',
   name: 'Envelope',
   category: 'Volatility',
@@ -192,9 +193,9 @@ export const ENVELOPE: IndicatorDescriptor = {
       lower: nulls(basis.map((b) => b * (1 - k))),
     };
   },
-};
+});
 
-export const DONCHIAN: IndicatorDescriptor = withTail({
+export const DONCHIAN: IndicatorDescriptor = withTimeframe(withTail({
   id: 'donchian',
   name: 'Donchian Channels',
   category: 'Volatility',
@@ -236,7 +237,7 @@ export const DONCHIAN: IndicatorDescriptor = withTail({
   const length = int(s, 'length', 20);
   const offset = Math.round(num(s, 'offset', 0));
   return whole(length) && offset >= 0 ? length - 1 + offset : null;
-}));
+})));
 
 /**
  * Two stacked extremes: an ATR-padded high/low band, then the running extreme of

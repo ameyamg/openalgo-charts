@@ -120,6 +120,7 @@ export {
   type Tier2Point,
 } from './external';
 export { securitySeries, securityExpression, type SecuritySeries, type SecurityOptions, type SecurityExpressionOptions } from './security';
+export { withTimeframe } from './timeframe';
 export {
   rollingMedian, rollingMode, rollingVariance, rollingRange, percentileLinear,
   rankCorrelation, centerOfGravity, runningMin, runningMax,

@@ -18,6 +18,7 @@ import { sma, rma, nulls, smaSeededEma, change, roc, rollingSum, linreg } from '
 import { emaOfGapped } from './smoothing';
 import { withTail, machineTail, whole, cell } from './tail';
 import { seeded, smooth, wilder, atrStep, trueRangeAt, meanAt } from './steppers';
+import { withTimeframe } from './timeframe';
 
 const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
   const v = s[k];
@@ -53,7 +54,7 @@ const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSourc
  * earliest bar where both legs of the ratio exist, seeded there on the source
  * itself, because there is no prior average to carry forward.
  */
-export const KAMA: IndicatorDescriptor = {
+export const KAMA: IndicatorDescriptor = withTimeframe({
   id: 'kama',
   name: "Kaufman's Adaptive Moving Average",
   category: 'Trend',
@@ -100,7 +101,7 @@ export const KAMA: IndicatorDescriptor = {
     }
     return { kama: nulls(out) };
   },
-};
+});
 
 /**
  * the reference fills the channel with `color.rgb(33, 150, 243, 95)`, 95 % transparent, so
@@ -123,7 +124,7 @@ const CHANNEL_FILL_OPACITY = 0.05;
  * ignoring gaps entirely. Each has its own warmup, and the plotted band starts at
  * whichever of the rail and the basis is slower.
  */
-export const KELTNER_CHANNEL: IndicatorDescriptor = withTail({
+export const KELTNER_CHANNEL: IndicatorDescriptor = withTimeframe(withTail({
   id: 'keltner-channel',
   name: 'Keltner Channels',
   category: 'Volatility',
@@ -212,7 +213,7 @@ export const KELTNER_CHANNEL: IndicatorDescriptor = withTail({
       row[2] = cell(basis - offset);
     },
   }, bars, from, previous, store);
-});
+}));
 
 /**
  * Least Squares Moving Average: the endpoint of a least-squares line fitted over
@@ -223,7 +224,7 @@ export const KELTNER_CHANNEL: IndicatorDescriptor = withTail({
  * why it can shift the plot without changing its shape. See the x-axis convention
  * on `linreg` in `./calc`: x is 0 at the oldest bar of the window.
  */
-export const LSMA: IndicatorDescriptor = {
+export const LSMA: IndicatorDescriptor = withTimeframe({
   id: 'lsma',
   name: 'Least Squares Moving Average',
   category: 'Trend',
@@ -245,7 +246,7 @@ export const LSMA: IndicatorDescriptor = {
       Math.round(num(s, 'offset', 0)),
     )),
   }),
-};
+});
 
 // the reference hard-codes the Klinger periods; the reference exposes no inputs for them,
 // so neither does this descriptor.
