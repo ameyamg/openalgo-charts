@@ -51,6 +51,19 @@ async function openDataDialog(page: Page, host: 'widget' | 'reference') {
   };
 }
 
+/** One-minute bars from 09:15 IST on 28 September 2026. */
+const T0 = Date.UTC(2026, 8, 28, 3, 45) / 1000;
+const at = (index: number): number => T0 + index * 60;
+/** A time as a datetime field takes it on `zone`'s clock, to the second. */
+function wall(time: number, zone: string): string {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(time * 1000)).map(part => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
+}
+/** What the field shows for it: a browser writes whole minutes without their seconds. */
+const shown = (value: string): RegExp => new RegExp(`^${value.replace(/:00$/, '')}(:00)?$`);
+
 for (const host of ['widget', 'reference'] as const) for (const width of [1100, 390]) {
   test(`${host} selected CSV controls preserve captured choices and shifted replay at ${width}px`, async ({ page }, info) => {
     const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
@@ -62,10 +75,10 @@ for (const host of ['widget', 'reference'] as const) for (const width of [1100, 
       await page.goto(ORIGIN + '/examples/yfinance/index.html?test=1');
       await page.waitForFunction(() => (window as any).__oac?.app.chart && !(window as any).__oac.app.loading);
     }
-    const state = await page.evaluate(host => {
+    const state = await page.evaluate(([host, t0]) => {
       const chart = host === 'widget' ? (window as any).__widget.chart : (window as any).__oac.app.chart;
       chart.indicators().slice().forEach((study: any) => study.remove());
-      const bars = Array.from({ length: 32 }, (_, index) => ({ time: -0.5 + index * 0.25,
+      const bars = Array.from({ length: 32 }, (_, index) => ({ time: t0 + index * 60,
         open: 10 + index, high: 11 + index, low: 9 + index, close: 10 + index, volume: index }));
       chart.primarySeries().setData(bars);
       const first = chart.addIndicator('sma', { length: 1 });
@@ -75,8 +88,10 @@ for (const host of ['widget', 'reference'] as const) for (const width of [1100, 
       const view = chart.getVisibleLogicalRange();
       const visible = bars.filter(bar => { const i = chart.dataLayer.timeToIndex(bar.time); return i >= view.from && i <= view.to; });
       (window as any).__csvFixture = { chart, bars, first, second };
-      return { first: first.id, second: second.id, names: [first.name, second.name], from: visible[0].time, to: visible[visible.length - 1].time };
-    }, host);
+      return { first: first.id, second: second.id, names: [first.name, second.name], from: visible[0].time, to: visible[visible.length - 1].time,
+        zone: chart.timezone() as string };
+    }, [host, T0] as const);
+    const clock = (time: number): string => wall(time, state.zone);
     let controls = await openDataDialog(page, host);
     await expect(controls.studies).toHaveCount(2);
     // Repeated studies are told apart by their place among their name, never by an internal id.
@@ -90,30 +105,35 @@ for (const host of ['widget', 'reference'] as const) for (const width of [1100, 
       fixture.chart.setVisibleLogicalRange({ from: 18, to: 28 });
       fixture.late = fixture.chart.addIndicator('sma', { length: 1 }); return fixture.late.id;
     });
+    // The bounds are a date and a time on the chart's clock, the zone named with them.
+    await expect(controls.dialog).toContainText(`Times are on the chart clock, ${state.zone}.`);
+    await expect(controls.dialog).not.toContainText('UTC seconds');
     await controls.visible.click();
-    await expect(controls.from).toHaveValue(String(state.from)); await expect(controls.to).toHaveValue(String(state.to));
+    await expect(controls.from).toHaveValue(shown(clock(state.from))); await expect(controls.to).toHaveValue(shown(clock(state.to)));
     await expect(controls.studies).toHaveCount(2);
     await controls.studies.nth(0).uncheck();
-    await controls.from.fill('invalid'); await controls.download.click();
-    await expect(controls.error).toContainText('finite'); await expect(controls.dialog).toBeVisible();
-    await controls.from.fill('-0.25'); await controls.to.fill('0');
+    await controls.from.fill(clock(at(20))); await controls.to.fill(clock(at(10))); await controls.download.click();
+    await expect(controls.error).toContainText(/before|later/); await expect(controls.dialog).toBeVisible();
+    // A To written to the minute takes in the bars that open inside it.
+    await controls.from.fill(clock(at(1)).slice(0, 16)); await controls.to.fill(clock(at(2)).slice(0, 16));
     const box = await controls.dialog.boundingBox();
     expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
     expect(await controls.dialog.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
     await page.screenshot({ path: info.outputPath(`${host}-${width}-selected-controls.png`) });
     const source = await downloadRows(page, controls.download);
     expect(source[0]).toEqual(['time', 'open', 'high', 'low', 'close', 'volume', 'oi', `indicator:${state.second}:ma`]);
-    expect(source.slice(1).map(row => [row[0], row[4], row[7]])).toEqual([['-0.25', '11', '11'], ['0', '12', '12']]);
+    expect(source.slice(1).map(row => [row[0], row[4], row[7]])).toEqual([[String(at(1)), '11', '11'], [String(at(2)), '12', '12']]);
     expect(source[0].join(',')).not.toContain(lateId);
 
     controls = await openDataDialog(page, host);
     await controls.studies.nth(0).uncheck(); await controls.studies.nth(2).uncheck();
-    await controls.alignment.selectOption('display'); await controls.from.fill('0'); await controls.to.fill('0.5');
+    // To the second, so the half-bar plot position after the last bar stays out.
+    await controls.alignment.selectOption('display'); await controls.from.fill(clock(at(2))); await controls.to.fill(clock(at(4)));
     const displayed = await downloadRows(page, controls.download);
     expect(displayed[0]).toEqual(['time', 'logical_index', 'time_origin', 'open', 'high', 'low', 'close', 'volume', 'oi', `indicator:${state.second}:ma`]);
     expect(displayed.slice(1).map(row => [row[0], row[2], row[6], row[9]]))
-      .toEqual([['0', 'axis', '12', ''], ['0.125', 'interpolated', '', '11'], ['0.25', 'axis', '13', ''],
-        ['0.375', 'interpolated', '', '12'], ['0.5', 'axis', '14', '']]);
+      .toEqual([[String(at(2)), 'axis', '12', ''], [String(at(2) + 30), 'interpolated', '', '11'], [String(at(3)), 'axis', '13', ''],
+        [String(at(3) + 30), 'interpolated', '', '12'], [String(at(4)), 'axis', '14', '']]);
 
     await page.evaluate(async () => {
       const fixture = (window as any).__csvFixture;
@@ -126,7 +146,7 @@ for (const host of ['widget', 'reference'] as const) for (const width of [1100, 
     await controls.alignment.selectOption('display');
     const replay = await downloadRows(page, controls.download);
     expect(replay.slice(1).map(row => [row[0], row[2], row[6], row[9]]))
-      .toEqual([['-0.5', 'axis', '10', ''], ['-0.25', 'axis', '11', '10'], ['0', 'axis', '12', '11'], ['0.25', 'projected', '', '12']]);
+      .toEqual([[String(at(0)), 'axis', '10', ''], [String(at(1)), 'axis', '11', '10'], [String(at(2)), 'axis', '12', '11'], [String(at(3)), 'projected', '', '12']]);
     await page.evaluate(async () => {
       (window as any).__csvFixture.chart.fitContent();
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));

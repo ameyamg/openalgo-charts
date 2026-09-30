@@ -7,6 +7,7 @@ import { capturePaneTarget } from '../src/pane-target.js';
 import { topOverlay, overlayKeydown } from '../src/ui.js';
 
 let dom, chart, app, downloads, blobs;
+const T0 = Date.UTC(2026, 8, 28, 3, 45) / 1000;
 beforeEach(() => {
   dom = installDom(); vi.stubGlobal('document', dom.doc); vi.stubGlobal('window', dom.win);
   const node = (tag, id, parent = dom.root) => {
@@ -14,7 +15,7 @@ beforeEach(() => {
   };
   node('div', 'status');
   const modal = node('div', 'chartdatamodal'); modal.hidden = true;
-  for (const id of ['csv-source', 'csv-error', 'csv-studies']) node('div', id, modal);
+  for (const id of ['csv-source', 'csv-error', 'csv-studies', 'csv-zone']) node('div', id, modal);
   const list = dom.doc.getElementById('csv-studies');
   list.replaceChildren = (...children) => { list.textContent = ''; children.forEach(child => list.appendChild(child)); };
   for (const id of ['csv-close', 'csv-cancel', 'csv-download', 'csv-visible', 'csv-all-rows', 'csv-all-studies', 'csv-no-studies']) node('button', id, modal);
@@ -23,7 +24,8 @@ beforeEach(() => {
   for (const value of ['source', 'display']) { const option = dom.doc.createElement('option'); option.value = value; alignment.appendChild(option); }
   chart = new Chart(dom.chartEl, { document: dom.doc, shortcuts: false, raf: { schedule: () => 0 } });
   chart.applySize(800, 500);
-  chart.addSeries('line').setData([10, 20, 30].map((time, i) => ({ time, value: i + 1 })));
+  // Three one-minute bars from 09:15 IST on 28 September 2026, the chart's default clock.
+  chart.addSeries('line').setData([0, 1, 2].map(i => ({ time: T0 + i * 60, value: i + 1 })));
   chart.setVisibleLogicalRange({ from: 1, to: 2 });
   vi.spyOn(chart, 'getVisibleLogicalRange').mockReturnValue({ from: 1, to: 2 });
   registerIndicator({ id: 'csv-controls-study', name: 'Repeated study', placement: 'onchart', inputs: [],
@@ -58,20 +60,21 @@ describe('reference chart data controls', () => {
     chart.getVisibleLogicalRange.mockReturnValue({ from: 0, to: 0 });
     chart.addIndicator('csv-controls-study');
     field('csv-visible').click();
-    expect(field('csv-from').value).toBe('20'); expect(field('csv-to').value).toBe('30');
+    expect(field('csv-zone').textContent).toBe('Times are on the chart clock, Asia/Kolkata.');
+    expect(field('csv-from').value).toBe('2026-09-28T09:16:00'); expect(field('csv-to').value).toBe('2026-09-28T09:17:00');
     field('csv-studies').querySelectorAll('input')[0].checked = false;
     field('csv-download').click();
     expect(downloads).toHaveLength(1);
     const text = await blobs[0].text();
     expect(text.split('\r\n')[0]).toBe(`time,open,high,low,close,volume,oi,indicator:${second.id}:value`);
     expect(text.split('\r\n').filter(Boolean)).toHaveLength(3);
-    expect(text).toContain('20,2,2,2,2,,,4');
+    expect(text).toContain(`${T0 + 60},2,2,2,2,,,4`);
     expect(field('chartdatamodal').hidden).toBe(true);
   });
 
-  it('keeps invalid finite or reversed bounds open without creating a download', () => {
+  it('keeps unreadable or reversed bounds open without creating a download', () => {
     openChartDataControls(app);
-    for (const [from, to] of [['Infinity', ''], ['word', '30'], ['30', '20']]) {
+    for (const [from, to] of [[String(T0), ''], ['2026-02-30T09:15', ''], ['word', '2026-09-28T09:17'], ['2026-09-28T09:17', '2026-09-28T09:16']]) {
       field('csv-from').value = from; field('csv-to').value = to; field('csv-download').click();
       expect(field('csv-error').hidden).toBe(false);
       expect(field('chartdatamodal').hidden).toBe(false);
@@ -119,7 +122,7 @@ describe('reference chart data controls', () => {
         return { value: bars.map(bar => bar.close) };
       } });
     chart.addIndicator('csv-controls-reentry'); openChartDataControls(app);
-    chart.primarySeries().update({ time: 30, value: 4 });
+    chart.primarySeries().update({ time: T0 + 120, value: 4 });
     armed = true; const before = calls; field('csv-download').click();
     expect(calls).toBeGreaterThan(before); expect(downloads).toHaveLength(0);
     expect(field('chartdatamodal').hidden).toBe(action === 'cancel');
