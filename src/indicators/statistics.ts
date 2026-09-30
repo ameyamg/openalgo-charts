@@ -35,6 +35,7 @@ function validatePeriod(period: number): void {
   }
 }
 
+/** `evaluate` is handed exactly `period` finite values, so it may read any index below `period`. */
 function rolling(
   values: readonly number[],
   period: number,
@@ -46,9 +47,9 @@ function rolling(
   const out = new Array<number>(values.length).fill(NaN);
   const window: number[] = [];
   for (let i = 0; i < values.length; i++) {
-    const value = values[i];
+    const value = values[i]!;
     if (missing === 'skip' && !Number.isFinite(value)) {
-      if (i > 0) out[i] = out[i - 1];
+      if (i > 0) out[i] = out[i - 1]!;
       continue;
     }
     window.push(value);
@@ -71,9 +72,9 @@ export function rollingMedian(
   return rolling(values, period, options, (window) => {
     const sorted = window.slice().sort((a, b) => a - b);
     const middle = Math.floor(period / 2);
-    if (period % 2 !== 0) return sorted[middle];
-    const lower = sorted[middle - 1];
-    const upper = sorted[middle];
+    if (period % 2 !== 0) return sorted[middle]!;
+    const lower = sorted[middle - 1]!;
+    const upper = sorted[middle]!;
     return lower === upper ? lower : lower / 2 + upper / 2;
   });
 }
@@ -121,7 +122,7 @@ export function rollingVariance(
     if (options.sample && period === 1) return NaN;
     // Subtract a nearby origin before finding the mean to retain small spreads
     // in prices with a large common offset.
-    const origin = window[0];
+    const origin = window[0]!;
     let mean = 0;
     for (const value of window) {
       const delta = value - origin;
@@ -183,8 +184,8 @@ export function percentileLinear(
     const lower = Math.floor(rank);
     const upper = Math.ceil(rank);
     const weight = rank - lower;
-    if (sorted[lower] === sorted[upper]) return sorted[lower];
-    return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+    if (sorted[lower] === sorted[upper]) return sorted[lower]!;
+    return sorted[lower]! * (1 - weight) + sorted[upper]! * weight;
   });
 }
 
@@ -204,9 +205,9 @@ export function rankCorrelation(
     const ranks = new Array<number>(period);
     for (let start = 0; start < period;) {
       let end = start + 1;
-      while (end < period && ordered[end].value === ordered[start].value) end++;
+      while (end < period && ordered[end]!.value === ordered[start]!.value) end++;
       const rank = (start + end - 1) / 2;
-      for (let i = start; i < end; i++) ranks[ordered[i].index] = rank;
+      for (let i = start; i < end; i++) ranks[ordered[i]!.index] = rank;
       start = end;
     }
     const mean = (period - 1) / 2;
@@ -214,7 +215,7 @@ export function rankCorrelation(
     let valueSquares = 0;
     let timeSquares = 0;
     for (let i = 0; i < period; i++) {
-      const value = ranks[i] - mean;
+      const value = ranks[i]! - mean;
       const time = i - mean;
       covariance += value * time;
       valueSquares += value * value;
@@ -229,7 +230,7 @@ function gravitySum(window: readonly number[], scale: number, weighted: boolean)
   let sum = 0;
   let correction = 0;
   for (let i = 0; i < window.length; i++) {
-    const term = (window[i] / scale) * (weighted ? window.length - i : 1);
+    const term = (window[i]! / scale) * (weighted ? window.length - i : 1);
     const next = sum + term;
     correction += Math.abs(sum) >= Math.abs(term) ? (sum - next) + term : (term - next) + sum;
     sum = next;
@@ -280,7 +281,7 @@ function runningExtreme(
   let best = NaN;
   let poisoned = false;
   for (let i = 0; i < values.length; i++) {
-    const value = values[i];
+    const value = values[i]!;
     if (!Number.isFinite(value)) {
       if (missing === 'propagate') poisoned = true;
     } else if (!poisoned) {
@@ -327,11 +328,12 @@ function crossing(
       if (missing === 'propagate') { previousA = NaN; previousB = NaN; }
       continue;
     }
-    const above = a[i] > b[i] && previousA <= previousB;
-    const below = a[i] < b[i] && previousA >= previousB;
+    // `b` was checked above to be as long as `a`.
+    const above = a[i]! > b[i]! && previousA <= previousB;
+    const below = a[i]! < b[i]! && previousA >= previousB;
     out[i] = direction === 'above' ? above : direction === 'below' ? below : above || below;
-    previousA = a[i];
-    previousB = b[i];
+    previousA = a[i]!;
+    previousB = b[i]!;
   }
   return out;
 }
@@ -383,7 +385,7 @@ function beyondHistory(
   const out = new Array<boolean>(values.length).fill(false);
   const history: number[] = [];
   for (let i = 0; i < values.length; i++) {
-    const value = values[i];
+    const value = values[i]!;
     if (Number.isFinite(value) && history.length === period) {
       out[i] = history.every((previous) => Number.isFinite(previous) && (above ? value > previous : value < previous));
     }

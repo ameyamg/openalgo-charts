@@ -48,11 +48,12 @@ function extremeStrict(values: readonly number[], period: number, wantHigh: bool
   const n = values.length;
   const out = new Array<number>(n).fill(NaN);
   if (period <= 0) return out;
+  // The one caller passes a whole period, so each window is [i - period + 1, i].
   for (let i = period - 1; i < n; i++) {
     let best = wantHigh ? -Infinity : Infinity;
     let live = true;
     for (let k = 0; k < period; k++) {
-      const v = values[i - k];
+      const v = values[i - k]!;
       if (!Number.isFinite(v)) { live = false; break; }
       if (wantHigh ? v > best : v < best) best = v;
     }
@@ -65,9 +66,10 @@ function extremeStrict(values: readonly number[], period: number, wantHigh: bool
 function shift(values: readonly number[], k: number): number[] {
   const n = values.length;
   const out = new Array<number>(n).fill(NaN);
+  // Every caller shifts by whole bars, so a `j` inside [0, n) is an index.
   for (let i = 0; i < n; i++) {
     const j = i - k;
-    if (j >= 0 && j < n) out[i] = values[j];
+    if (j >= 0 && j < n) out[i] = values[j]!;
   }
   return out;
 }
@@ -132,7 +134,8 @@ export const DEMA: IndicatorDescriptor = withTimeframe({
     const length = int(s, 'length', 9);
     const e1 = smaSeededEma(values, length);
     const e2 = emaOfGapped(e1, length);
-    return { dema: nulls(e1.map((v, i) => 2 * v - e2[i])) };
+    // Both averages hold one value per bar, as every calc helper returns.
+    return { dema: nulls(e1.map((v, i) => 2 * v - e2[i]!)) };
   },
 });
 
@@ -224,7 +227,7 @@ export const DONCHIAN: IndicatorDescriptor = withTimeframe(withTail({
     const offset = Math.round(num(s, 'offset', 0));
     const upper = highest(highs(bars), length);
     const lower = lowest(lows(bars), length);
-    const basis = upper.map((u, i) => (u + lower[i]) / 2);
+    const basis = upper.map((u, i) => (u + lower[i]!) / 2);
     return {
       upper: nulls(shift(upper, offset)),
       basis: nulls(shift(basis, offset)),
@@ -276,8 +279,8 @@ export const CHANDE_KROLL_STOP: IndicatorDescriptor = {
     const high = highs(bars);
     const low = lows(bars);
     const range = atr(high, low, bars.map((b) => b.close), p);
-    const firstHighStop = highest(high, p).map((v, i) => v - x * range[i]);
-    const firstLowStop = lowest(low, p).map((v, i) => v + x * range[i]);
+    const firstHighStop = highest(high, p).map((v, i) => v - x * range[i]!);
+    const firstLowStop = lowest(low, p).map((v, i) => v + x * range[i]!);
     return {
       stopLong: nulls(extremeStrict(firstLowStop, q, false)),
       stopShort: nulls(extremeStrict(firstHighStop, q, true)),
@@ -313,8 +316,8 @@ export const CHANDELIER_EXIT: IndicatorDescriptor = {
     const low = lows(bars);
     const range = atr(high, low, bars.map((b) => b.close), int(s, 'atrLength', 22));
     return {
-      longExit: nulls(highest(high, length).map((v, i) => v - mult * range[i])),
-      shortExit: nulls(lowest(low, length).map((v, i) => v + mult * range[i])),
+      longExit: nulls(highest(high, length).map((v, i) => v - mult * range[i]!)),
+      shortExit: nulls(lowest(low, length).map((v, i) => v + mult * range[i]!)),
     };
   },
 };
@@ -332,15 +335,16 @@ function standardError(values: readonly number[], period: number): number[] {
   const out = new Array<number>(n).fill(NaN);
   if (period < 3 || n < period) return out;
   const meanX = (period + 1) / 2;
+  // The caller passes a whole period, so each window is [i - period + 1, i].
   for (let i = period - 1; i < n; i++) {
     let sumY = 0;
-    for (let k = 0; k < period; k++) sumY += values[i - k];
+    for (let k = 0; k < period; k++) sumY += values[i - k]!;
     const meanY = sumY / period;
     let syy = 0;
     let sxy = 0;
     let sxx = 0;
     for (let k = 0; k < period; k++) {
-      const dy = meanY - values[i - k];
+      const dy = meanY - values[i - k]!;
       const dx = meanX - k - 1;
       syy += dy * dy;
       sxy += dx * dy;
@@ -407,9 +411,9 @@ export const STANDARD_ERROR_BANDS: IndicatorDescriptor = {
         : s.method === 'Weighted' ? wma(v, avg) : sma(v, avg),
     );
     return {
-      upper: smooth(mid.map((m, i) => m + errors * se[i])),
+      upper: smooth(mid.map((m, i) => m + errors * se[i]!)),
       basis: smooth(mid),
-      lower: smooth(mid.map((m, i) => m - errors * se[i])),
+      lower: smooth(mid.map((m, i) => m - errors * se[i]!)),
     };
   },
 };
@@ -474,7 +478,7 @@ function hullHma(values: readonly number[], n: number): number[] {
   const slow = wma(values, n);
   // Each WMA requires a complete finite window, so the outer pass remains
   // unavailable while its window still contains the raw series' warmup gap.
-  return wma(fast.map((v, i) => 2 * v - slow[i]), rootSpan(n));
+  return wma(fast.map((v, i) => 2 * v - slow[i]!), rootSpan(n));
 }
 
 function hullEhma(values: readonly number[], n: number): number[] {
@@ -482,7 +486,7 @@ function hullEhma(values: readonly number[], n: number): number[] {
   const slow = smaSeededEma(values, n);
   // The difference inherits `slow`'s warmup gap. Keep the outer smoothing
   // pass aligned with that first available difference.
-  return emaOfGapped(fast.map((v, i) => 2 * v - slow[i]), rootSpan(n));
+  return emaOfGapped(fast.map((v, i) => 2 * v - slow[i]!), rootSpan(n));
 }
 
 /**
@@ -494,7 +498,7 @@ function hullThma(values: readonly number[], n: number): number[] {
   const third = wma(values, span(n / 3));
   const half = wma(values, span(n / 2));
   const full = wma(values, n);
-  return wma(third.map((v, i) => v * 3 - half[i] - full[i]), n);
+  return wma(third.map((v, i) => v * 3 - half[i]! - full[i]!), n);
 }
 
 function hullSeries(values: readonly number[], mode: string, len: number): number[] {

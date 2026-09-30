@@ -98,7 +98,8 @@ export const AROON_OSCILLATOR: IndicatorDescriptor = {
     const length = len(s, 'length', 14);
     const upBars = highestBars(bars.map((b) => b.high), length + 1);
     const downBars = lowestBars(bars.map((b) => b.low), length + 1);
-    const osc = upBars.map((o, i) => (100 * (o - downBars[i])) / length);
+    // The calc helpers return one value per input, here and below.
+    const osc = upBars.map((o, i) => (100 * (o - downBars[i]!)) / length);
     return { osc: nulls(osc), zero: osc.map((v) => (Number.isFinite(v) ? 0 : null)) };
   },
   levels: () => [
@@ -150,7 +151,7 @@ export const AWESOME_OSCILLATOR: IndicatorDescriptor = {
     const mid = hl2(bars);
     const fast = sma(mid, 5);
     const slow = sma(mid, 34);
-    return { ao: nulls(fast.map((f, i) => f - slow[i])) };
+    return { ao: nulls(fast.map((f, i) => f - slow[i]!)) };
   },
   levels: () => [{ price: 0, color: '#787b86' }],
 };
@@ -213,8 +214,9 @@ export const CHANDE_MOMENTUM: IndicatorDescriptor = {
     const momm = change(sourceValues(bars, src(s)));
     const gains = new Array<number>(Math.max(0, n - 1));
     const losses = new Array<number>(Math.max(0, n - 1));
+    // The moves and their sums hold n - 1 values, one per bar from bar 1.
     for (let i = 1; i < n; i++) {
-      const m = momm[i];
+      const m = momm[i]!;
       gains[i - 1] = m >= 0 ? m : 0;
       losses[i - 1] = m >= 0 ? 0 : -m;
     }
@@ -222,9 +224,9 @@ export const CHANDE_MOMENTUM: IndicatorDescriptor = {
     const sumDown = rollingSum(losses, length);
     const out = new Array<number>(n).fill(NaN);
     for (let i = 0; i < sumUp.length; i++) {
-      const total = sumUp[i] + sumDown[i];
+      const total = sumUp[i]! + sumDown[i]!;
       // A perfectly flat window is 0/0, which the reference prints as a gap.
-      out[i + 1] = total === 0 ? NaN : (100 * (sumUp[i] - sumDown[i])) / total;
+      out[i + 1] = total === 0 ? NaN : (100 * (sumUp[i]! - sumDown[i]!)) / total;
     }
     return { cmo: nulls(out) };
   },
@@ -252,7 +254,7 @@ export const COPPOCK_CURVE: IndicatorDescriptor = {
     const source = bars.map((b) => b.close);
     const long = roc(source, len(s, 'longRoCLength', 14));
     const short = roc(source, len(s, 'shortRoCLength', 11));
-    return { curve: nulls(wma(long.map((v, i) => v + short[i]), len(s, 'wmaLength', 10))) };
+    return { curve: nulls(wma(long.map((v, i) => v + short[i]!), len(s, 'wmaLength', 10))) };
   },
 };
 
@@ -292,9 +294,9 @@ export const DPO: IndicatorDescriptor = {
     const ma = sma(close, period);
     const out = new Array<number>(n).fill(NaN);
     if (s.isCentered === true) {
-      for (let i = 0; i + barsback < n; i++) out[i] = close[i] - ma[i + barsback];
+      for (let i = 0; i + barsback < n; i++) out[i] = close[i]! - ma[i + barsback]!;
     } else {
-      for (let i = barsback; i < n; i++) out[i] = close[i] - ma[i - barsback];
+      for (let i = barsback; i < n; i++) out[i] = close[i]! - ma[i - barsback]!;
     }
     return { dpo: nulls(out) };
   },
@@ -342,7 +344,7 @@ export const FISHER_TRANSFORM: IndicatorDescriptor = {
     let prevValue = 0;
     let prevFish = 0;
     for (let i = 0; i < n; i++) {
-      const span = hi[i] - lo[i];
+      const span = hi[i]! - lo[i]!;
       // The window extremes skip a missing midpoint, so the span alone can stay
       // finite on a bar that has none; letting that NaN into the two recursions
       // would blank the study for the rest of the history.
@@ -351,7 +353,7 @@ export const FISHER_TRANSFORM: IndicatorDescriptor = {
         prevFish = 0;
         continue;
       }
-      const raw = 0.66 * ((mid[i] - lo[i]) / Math.max(span, 0.001) - 0.5) + 0.67 * prevValue;
+      const raw = 0.66 * ((mid[i]! - lo[i]!) / Math.max(span, 0.001) - 0.5) + 0.67 * prevValue;
       const value = raw > 0.99 ? 0.999 : raw < -0.99 ? -0.999 : raw;
       const fish = 0.5 * Math.log((1 + value) / (1 - value)) + 0.5 * prevFish;
       fisher[i] = fish;
@@ -359,7 +361,7 @@ export const FISHER_TRANSFORM: IndicatorDescriptor = {
       prevFish = fish;
     }
     const trigger = new Array<number>(n).fill(NaN);
-    for (let i = 1; i < n; i++) trigger[i] = fisher[i - 1];
+    for (let i = 1; i < n; i++) trigger[i] = fisher[i - 1]!;
     return { fisher: nulls(fisher), trigger: nulls(trigger) };
   },
   levels: () => [
@@ -387,9 +389,9 @@ export function connorsStreak(values: readonly number[]): number[] {
   const n = values.length;
   const out = new Array<number>(n).fill(0);
   for (let i = 0; i < n; i++) {
-    const prev = i > 0 ? out[i - 1] : 0;
+    const prev = i > 0 ? out[i - 1]! : 0;
     if (i > 0 && values[i] === values[i - 1]) out[i] = 0;
-    else if (i > 0 && values[i] > values[i - 1]) out[i] = prev <= 0 ? 1 : prev + 1;
+    else if (i > 0 && values[i]! > values[i - 1]!) out[i] = prev <= 0 ? 1 : prev + 1;
     else out[i] = prev >= 0 ? -1 : prev - 1;
   }
   return out;
@@ -434,11 +436,11 @@ export const CONNORS_RSI: IndicatorDescriptor = {
     const returns = roc(close, 1);
     const ranked = percentRank(returns.slice(1), len(s, 'lenroc', 100));
     const rank = new Array<number>(n).fill(NaN);
-    for (let i = 0; i < ranked.length; i++) rank[i + 1] = ranked[i];
+    for (let i = 0; i < ranked.length; i++) rank[i + 1] = ranked[i]!;
 
     // `avg` of three values, and `na` in any of them makes the mean `na`.
     const out = new Array<number>(n);
-    for (let i = 0; i < n; i++) out[i] = (priceRsi[i] + streakRsi[i] + rank[i]) / 3;
+    for (let i = 0; i < n; i++) out[i] = (priceRsi[i]! + streakRsi[i]! + rank[i]!) / 3;
     // Never null, not even over the study's 101-bar warmup: the background
     // spans the whole pane, so its edges have to exist where the line does not.
     return { crsi: nulls(out), bandHigh: new Array<number>(n).fill(70), bandLow: new Array<number>(n).fill(30) };

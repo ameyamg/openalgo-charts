@@ -45,8 +45,9 @@ export const VOLUME: IndicatorDescriptor = {
   plots: [
     {
       key: 'volume', type: 'histogram', title: 'Volume', colorKey: 'color', style: { base: 0 },
+      // `calc` below always writes `direction`.
       colorBy: ({ index, values, settings }) => settings.colorByDirection === true
-        ? values.direction[index] === -1 ? str(settings, 'downColor', '#ef5350') : str(settings, 'upColor', '#26a69a')
+        ? values.direction![index] === -1 ? str(settings, 'downColor', '#ef5350') : str(settings, 'upColor', '#26a69a')
         : undefined,
     },
     { key: 'ma', type: 'line', title: 'Volume average', colorKey: 'maColor', style: { lineWidth: 1.5 } },
@@ -78,10 +79,11 @@ function obvSmoothing(
   const band = maType === BOLLINGER_MA
     ? stdev(out, maLength).map((v) => v * mult)
     : new Array<number>(n).fill(NaN);
+  // `ma` and `band` both hold one value per input.
   return {
     ma: nulls(ma),
-    bbUpper: nulls(ma.map((v, i) => v + band[i])),
-    bbLower: nulls(ma.map((v, i) => v - band[i])),
+    bbUpper: nulls(ma.map((v, i) => v + band[i]!)),
+    bbLower: nulls(ma.map((v, i) => v - band[i]!)),
   };
 }
 
@@ -122,9 +124,11 @@ export const OBV: IndicatorDescriptor = withTail({
     let acc = 0;
     for (let i = 0; i < n; i++) {
       if (i > 0) {
-        const v = vol(bars[i]);
-        if (bars[i].close > bars[i - 1].close) acc += v;
-        else if (bars[i].close < bars[i - 1].close) acc -= v;
+        const bar = bars[i]!;
+        const prev = bars[i - 1]!;
+        const v = vol(bar);
+        if (bar.close > prev.close) acc += v;
+        else if (bar.close < prev.close) acc -= v;
       }
       out[i] = acc;
     }
@@ -144,9 +148,11 @@ export const OBV: IndicatorDescriptor = withTail({
     start: () => ({ acc: 0, ma: seeded() }),
     step: (st, i, row) => {
       if (i > 0) {
-        const v = vol(bars[i]);
-        if (bars[i].close > bars[i - 1].close) st.acc += v;
-        else if (bars[i].close < bars[i - 1].close) st.acc -= v;
+        const bar = bars[i]!;
+        const prev = bars[i - 1]!;
+        const v = vol(bar);
+        if (bar.close > prev.close) st.acc += v;
+        else if (bar.close < prev.close) st.acc -= v;
       }
       row[0] = cell(st.acc);
       if (!recursive) return;
@@ -160,10 +166,11 @@ export const OBV: IndicatorDescriptor = withTail({
   const claim = claimOf(store, calc, bars, from);
   if (claim === undefined || held === undefined || held.length < from) return null;
   const start = Math.max(0, from - maLength);
+  // The machine above writes `obv`.
   const run: number[] = [];
-  for (let j = start; j < bars.length; j++) run.push((j < from ? held[j] : tail.obv[j - from]) ?? NaN);
+  for (let j = start; j < bars.length; j++) run.push((j < from ? held[j] : tail.obv![j - from]) ?? NaN);
   const smoothed = settle(claim, obvSmoothing(run, bars.slice(start).map(vol), s), from - start, previous, from);
-  return smoothed === null ? null : { obv: tail.obv, ...smoothed };
+  return smoothed === null ? null : { obv: tail.obv!, ...smoothed };
 });
 
 export const ADL: IndicatorDescriptor = {
@@ -177,7 +184,7 @@ export const ADL: IndicatorDescriptor = {
     const out = new Array<number>(bars.length).fill(NaN);
     let acc = 0;
     for (let i = 0; i < bars.length; i++) {
-      const b = bars[i];
+      const b = bars[i]!;
       // A bar missing its high, low or close, or whose span or term overflows, has
       // no term: it is absent and the total stays where it was. Added in, one NaN
       // would blank the line for the rest of the history, and a missing high used

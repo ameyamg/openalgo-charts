@@ -73,10 +73,11 @@ function seededEma(values: readonly number[], period: number, holdFrom: number):
   const seed = sma(values, period);
   const k = 2 / (period + 1);
   let prev = NaN;
+  // `seed` holds one value per input.
   for (let i = 0; i < n; i++) {
-    const v = values[i];
+    const v = values[i]!;
     if (!Number.isFinite(prev)) {
-      prev = seed[i];
+      prev = seed[i]!;
     } else if (Number.isFinite(v)) {
       prev = v * k + prev * (1 - k);
     } else if (i < holdFrom) {
@@ -102,7 +103,7 @@ function shifted(values: readonly (number | null)[], offset: number): (number | 
   const out = new Array<number | null>(n).fill(null);
   for (let i = 0; i < n; i++) {
     const at = i + offset;
-    if (at >= 0 && at < n) out[at] = values[i];
+    if (at >= 0 && at < n) out[at] = values[i] as number | null;
   }
   return out;
 }
@@ -195,10 +196,11 @@ export const WILLIAMS_PERCENT_R: IndicatorDescriptor = withTimeframe({
     const values = sourceValues(bars, src(s));
     const hi = highest(bars.map((b) => b.high), length);
     const lo = lowest(bars.map((b) => b.low), length);
+    // Both extremes hold one value per bar.
     const out = values.map((v, i) => {
-      const span = hi[i] - lo[i];
+      const span = hi[i]! - lo[i]!;
       // A window with no range at all is 0/0, which the reference draws as a gap.
-      return span === 0 ? NaN : (100 * (v - hi[i])) / span;
+      return span === 0 ? NaN : (100 * (v - hi[i]!)) / span;
     });
     // Never null, warmup included: the background is drawn across the pane, so
     // its edges have to exist on bars where the study prints nothing.
@@ -244,25 +246,26 @@ export const ULTIMATE_OSCILLATOR: IndicatorDescriptor = {
     const m = Math.max(0, n - 1);
     const bp = new Array<number>(m);
     const tr = new Array<number>(m);
+    // The terms and their averages hold n - 1 values, one per bar from bar 1.
     for (let i = 1; i < n; i++) {
-      const prevClose = bars[i - 1].close;
-      const hi = Math.max(bars[i].high, prevClose);
-      const lo = Math.min(bars[i].low, prevClose);
-      bp[i - 1] = bars[i].close - lo;
+      const prevClose = bars[i - 1]!.close;
+      const hi = Math.max(bars[i]!.high, prevClose);
+      const lo = Math.min(bars[i]!.low, prevClose);
+      bp[i - 1] = bars[i]!.close - lo;
       tr[i - 1] = hi - lo;
     }
     const avg = (length: number): number[] => {
       const sumBp = rollingSum(bp, length);
       const sumTr = rollingSum(tr, length);
       // A run of doji bars sums to zero range, which is `na` rather than 0/0.
-      return sumBp.map((v, i) => (sumTr[i] === 0 ? NaN : v / sumTr[i]));
+      return sumBp.map((v, i) => (sumTr[i] === 0 ? NaN : v / sumTr[i]!));
     };
     const fast = avg(int(s, 'length1', 7));
     const middle = avg(int(s, 'length2', 14));
     const slow = avg(int(s, 'length3', 28));
     const out = new Array<number>(n).fill(NaN);
     for (let i = 0; i < m; i++) {
-      out[i + 1] = (100 * (4 * fast[i] + 2 * middle[i] + slow[i])) / 7;
+      out[i + 1] = (100 * (4 * fast[i]! + 2 * middle[i]! + slow[i]!)) / 7;
     }
     return { uo: nulls(out) };
   },
@@ -301,7 +304,7 @@ export const RELATIVE_VIGOR_INDEX: IndicatorDescriptor = {
     const range = swma(bars.map((b) => b.high - b.low));
     const numerator = fromFirstValue(body, (t) => rollingSum(t, length));
     const denominator = fromFirstValue(range, (t) => rollingSum(t, length));
-    const rvgi = numerator.map((v, i) => (denominator[i] === 0 ? NaN : v / denominator[i]));
+    const rvgi = numerator.map((v, i) => (denominator[i] === 0 ? NaN : v / denominator[i]!));
     const signal = fromFirstValue(rvgi, (t) => swma(t));
     const offset = offsetOf(s, 'offset', 0);
     return {
@@ -371,13 +374,14 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
     const emaLength = 14;
     const upSource = new Array<number>(n);
     const downSource = new Array<number>(n);
+    // Every series here holds one value per bar.
     for (let i = 0; i < n; i++) {
-      const d = delta[i];
+      const d = delta[i]!;
       // Bar 0 has no change, and in the reference both `na <= 0` and `na > 0` are false,
       // so it takes the `stddev` branch of both ternaries — where the value is
       // itself `na`.
-      upSource[i] = Number.isFinite(d) && d <= 0 ? 0 : sd[i];
-      downSource[i] = Number.isFinite(d) && d > 0 ? 0 : sd[i];
+      upSource[i] = Number.isFinite(d) && d <= 0 ? 0 : sd[i]!;
+      downSource[i] = Number.isFinite(d) && d > 0 ? 0 : sd[i]!;
     }
     // A missing close after the deviation's first reading leaves the sources
     // absent for a stretch; the averages hold across it. Inside the warmup
@@ -388,8 +392,8 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
     const lower = seededEma(downSource, emaLength, holdFrom);
     const rvi = new Array<number>(n).fill(NaN);
     for (let i = 0; i < n; i++) {
-      const total = upper[i] + lower[i];
-      rvi[i] = total === 0 ? NaN : (upper[i] / total) * 100;
+      const total = upper[i]! + lower[i]!;
+      rvi[i] = total === 0 ? NaN : (upper[i]! / total) * 100;
     }
 
     const maType = str(s, 'maType', 'SMA');
@@ -410,8 +414,8 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
     return {
       rvi: shifted(nulls(rvi), offset),
       ma: nulls(ma),
-      bbUpper: nulls(ma.map((v, i) => v + band[i])),
-      bbLower: nulls(ma.map((v, i) => v - band[i])),
+      bbUpper: nulls(ma.map((v, i) => v + band[i]!)),
+      bbLower: nulls(ma.map((v, i) => v - band[i]!)),
       // Never null and never shifted: reference lines stay put when the plot is
       // offset, and the shading covers the pane through the study's warmup.
       bandHigh: new Array<number>(n).fill(80),
@@ -556,7 +560,7 @@ export const SPECIAL_K: IndicatorDescriptor = {
       const smoothed = fromFirstValue(roc(source, term.roc), (t) => sma(t, term.smooth));
       // NaN in any term makes the total NaN and keeps it there, which is the reference
       // `na` propagation through the sum.
-      for (let i = 0; i < n; i++) out[i] += term.weight * smoothed[i];
+      for (let i = 0; i < n; i++) out[i]! += term.weight * smoothed[i]!;
     }
     const once = fromFirstValue(out, (t) => sma(t, int(s, 'length1', 100)));
     const signal = fromFirstValue(once, (t) => sma(t, int(s, 'length2', 100)));

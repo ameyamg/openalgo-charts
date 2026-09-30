@@ -148,12 +148,12 @@ interface Tier2State {
   subscription: Tier2Subscription | null;
   generation: number;
   lastContext?: Tier2Context;
-  completedContext?: Tier2Context;
-  baseDataRevision?: number;
+  completedContext?: Tier2Context | undefined;
+  baseDataRevision?: number | undefined;
   completedVersion: string | null;
   liveRevision: number;
   liveVersions: Map<number, number>;
-  errorKind?: 'fetch' | 'calc';
+  errorKind?: 'fetch' | 'calc' | undefined;
 }
 
 const STATE = '__tier2';
@@ -176,7 +176,7 @@ function upsert(points: Tier2Point[], point: Tier2Point): void {
   let hi = points.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (points[mid].time < point.time) lo = mid + 1;
+    if (points[mid]!.time < point.time) lo = mid + 1;
     else hi = mid;
   }
   if (points[lo]?.time === point.time) points[lo] = point;
@@ -196,14 +196,15 @@ function align(
   const out: Record<string, (number | null)[]> = {};
   for (const key of keys) out[key] = new Array<number | null>(bars.length).fill(null);
   if (points.length === 0) return out;
+  // `p` only advances to a point that exists, and `out` has a column per key.
   let p = -1;
   for (let i = 0; i < bars.length; i++) {
-    while (p + 1 < points.length && points[p + 1].time <= bars[i].time) p += 1;
+    while (p + 1 < points.length && points[p + 1]!.time <= bars[i]!.time) p += 1;
     if (p < 0) continue;
-    const values = points[p].values;
+    const values = points[p]!.values;
     for (const key of keys) {
       const v = values[key];
-      out[key][i] = typeof v === 'number' && Number.isFinite(v) ? v : null;
+      out[key]![i] = typeof v === 'number' && Number.isFinite(v) ? v : null;
     }
   }
   return out;
@@ -232,6 +233,9 @@ function alignedKeys(d: Tier2Descriptor): string[] {
  */
 export function createTier2Indicator(d: Tier2Descriptor): IndicatorDescriptor {
   const failures = new WeakMap<IndicatorStore, { points: readonly Tier2Point[] | undefined; error: unknown }>();
+  // `category`, `levels` and `range` are copied whether or not `d` sets
+  // them, and the runtime reads a copied undefined as absent. Two of them are
+  // methods, whose type cannot take undefined, hence the assertion at the end.
   return {
     id: d.id,
     name: d.name,
@@ -279,8 +283,11 @@ export function createTier2Indicator(d: Tier2Descriptor): IndicatorDescriptor {
         const bars = ctx.bars();
         const market = ctx.dataContext?.() ?? {
           symbol: ctx.symbol?.(), interval: ctx.interval?.(),
-        };
+        } as Readonly<ChartDataContext>;
         const requestState = ctx.requestState?.();
+        // The context, and the fallback market above, carry an optional member
+        // the runtime lacks as undefined, which a fetch reads as absent. The
+        // public types stay exact for hosts, and `requestBars` is a method.
         return {
           settings: ctx.settings(), bars,
           dataContext: { ...market },
@@ -290,7 +297,7 @@ export function createTier2Indicator(d: Tier2Descriptor): IndicatorDescriptor {
             const variant = request.variant === undefined ? inheritedDataVariant(market.variant) : request.variant;
             return ctx.requestBars!(variant === undefined ? request : { ...request, variant });
           }),
-        };
+        } as Tier2Context;
       };
       const cancel = (): void => {
         const request = state.request;
@@ -515,5 +522,5 @@ export function createTier2Indicator(d: Tier2Descriptor): IndicatorDescriptor {
       refresh(state.status.state === 'error' && state.errorKind !== 'calc');
       return cleanup;
     },
-  };
+  } as IndicatorDescriptor;
 }

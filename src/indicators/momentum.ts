@@ -80,7 +80,7 @@ export const RSI: IndicatorDescriptor = withTimeframe(withTail({
     keys: ['rsi', 'upperLevel', 'lowerLevel'],
     start: rsiState,
     step: (st, i, row) => {
-      row[0] = cell(rsiStep(st, sourceValue(bars[i], source), length));
+      row[0] = cell(rsiStep(st, sourceValue(bars[i]!, source), length));
       row[1] = upper;
       row[2] = lower;
     },
@@ -141,11 +141,12 @@ export const MACD: IndicatorDescriptor = withTimeframe(withTail({
     // materially wrong until the seeds decay away.
     const fast = smaSeededEma(values, num(s, 'fastPeriod', 12));
     const slow = smaSeededEma(values, num(s, 'slowPeriod', 26));
-    const macd = fast.map((f, i) => f - slow[i]);
+    // Every kernel here returns one value per input.
+    const macd = fast.map((f, i) => f - slow[i]!);
     // The difference opens with its own warmup gap, so the signal's window has
     // to start counting at the first real MACD value.
     const signal = fromFirstValue(macd, (t) => smaSeededEma(t, num(s, 'signalPeriod', 9)));
-    const histogram = macd.map((m, i) => m - signal[i]);
+    const histogram = macd.map((m, i) => m - signal[i]!);
     return { macd: nulls(macd), signal: nulls(signal), histogram: nulls(histogram) };
   },
   levels: () => [{ price: 0, color: '#5a6b8c', dashed: true }],
@@ -161,7 +162,7 @@ export const MACD: IndicatorDescriptor = withTimeframe(withTail({
     keys: ['macd', 'signal', 'histogram'],
     start: () => ({ fast: seeded(), slow: seeded(), signal: seeded() }),
     step: (st, i, row) => {
-      const x = sourceValue(bars[i], source);
+      const x = sourceValue(bars[i]!, source);
       const m = smooth(st.fast, x, fast, true) - smooth(st.slow, x, slow, true);
       const sig = smooth(st.signal, m, signal, true);
       row[0] = cell(m);
@@ -201,9 +202,10 @@ export const STOCHASTIC: IndicatorDescriptor = withTimeframe(withTail({
     // that overflows has no reading, where dividing by it printed a flat 0; a
     // scaled distance that overflows leaves an infinity, which the smoothing
     // and `nulls` both drop as absent.
+    // `hi` and `lo` hold one value per bar.
     const raw = bars.map((b, i) => {
-      const span = hi[i] - lo[i];
-      return span > 0 && span < Infinity ? (100 * (b.close - lo[i])) / span : NaN;
+      const span = hi[i]! - lo[i]!;
+      return span > 0 && span < Infinity ? (100 * (b.close - lo[i]!)) / span : NaN;
     });
     const k = sma(raw, num(s, 'kSmoothing', 1));
     const d = sma(k, num(s, 'dPeriod', 3));
@@ -260,11 +262,12 @@ export const ADX: IndicatorDescriptor = withTimeframe(withTail({
     if (n > 0) tr[0] = NaN;
     const plusDm = new Array<number>(n).fill(NaN);
     const minusDm = new Array<number>(n).fill(NaN);
+    // Every column here holds one value per bar.
     for (let i = 1; i < n; i++) {
       if (!Number.isFinite(high[i]) || !Number.isFinite(low[i])
         || !Number.isFinite(high[i - 1]) || !Number.isFinite(low[i - 1])) continue;
-      const up = high[i] - high[i - 1];
-      const down = low[i - 1] - low[i];
+      const up = high[i]! - high[i - 1]!;
+      const down = low[i - 1]! - low[i]!;
       plusDm[i] = up > down && up > 0 ? up : 0;
       minusDm[i] = down > up && down > 0 ? down : 0;
     }
@@ -279,15 +282,15 @@ export const ADX: IndicatorDescriptor = withTimeframe(withTail({
     // A zero or unavailable denominator defines no directional ratio. Emitting
     // a held reading would also advance DX and ADX with an invented observation.
     for (let i = 0; i < n; i++) {
-      const range = trR[i];
+      const range = trR[i]!;
       if (!Number.isFinite(range) || range === 0) continue;
-      const plus = (plusR[i] / range) * 100;
-      const minus = (minusR[i] / range) * 100;
+      const plus = (plusR[i]! / range) * 100;
+      const minus = (minusR[i]! / range) * 100;
       if (Number.isFinite(plus)) plusDi[i] = plus;
       if (Number.isFinite(minus)) minusDi[i] = minus;
       if (!Number.isFinite(plusDi[i]) || !Number.isFinite(minusDi[i])) continue;
-      const sum = plusDi[i] + minusDi[i];
-      dx[i] = sum > 0 ? (Math.abs(plusDi[i] - minusDi[i]) / sum) * 100 : 0;
+      const sum = plusDi[i]! + minusDi[i]!;
+      dx[i] = sum > 0 ? (Math.abs(plusDi[i]! - minusDi[i]!) / sum) * 100 : 0;
     }
     // The DX series is NaN during DI warmup; smooth only the finite tail.
     const adx = fromFirstValue(dx, (tail) => rma(tail, num(s, 'adxPeriod', 14)));
@@ -329,8 +332,8 @@ export const ADX: IndicatorDescriptor = withTimeframe(withTail({
 /** ADX's three inputs at one bar: true range and the two directional moves, all absent on bar 0. */
 function directionalAt(bars: readonly Bar[], i: number): [number, number, number] {
   if (i === 0) return [NaN, NaN, NaN];
-  const b = bars[i];
-  const p = bars[i - 1];
+  const b = bars[i]!;
+  const p = bars[i - 1]!;
   const tr = trueRangeAt(bars, i);
   if (!Number.isFinite(b.high) || !Number.isFinite(b.low) || !Number.isFinite(p.high) || !Number.isFinite(p.low)) {
     return [tr, NaN, NaN];
@@ -389,13 +392,15 @@ export const CCI: IndicatorDescriptor = withTimeframe(withTail({
     const tp = bars.map((b) => (b.high + b.low + b.close) / 3);
     const avg = sma(tp, period);
     const out = new Array<number>(n).fill(NaN);
+    // A whole period reads [i - period + 1, i]. A fractional one reads between
+    // bars, and its NaN deviation leaves those readings absent.
     for (let i = period - 1; i < n; i++) {
       let dev = 0;
-      for (let j = 0; j < period; j++) dev += Math.abs(tp[i - j] - avg[i]);
+      for (let j = 0; j < period; j++) dev += Math.abs(tp[i - j]! - avg[i]!);
       const md = dev / period;
       // A window holding a missing bar, or one whose deviation overflows, has
       // no reading. Only a genuinely flat window (md exactly 0) prints 0.
-      out[i] = !Number.isFinite(md) ? NaN : md > 0 ? (tp[i] - avg[i]) / (k * md) : 0;
+      out[i] = !Number.isFinite(md) ? NaN : md > 0 ? (tp[i]! - avg[i]!) / (k * md) : 0;
     }
 
     const maType = str(s, 'maType', 'SMA');
@@ -414,8 +419,9 @@ export const CCI: IndicatorDescriptor = withTimeframe(withTail({
     return {
       cci: nulls(out),
       ma: nulls(ma),
-      bbUpper: nulls(ma.map((v, i) => v + band[i])),
-      bbLower: nulls(ma.map((v, i) => v - band[i])),
+      // `ma` and `band` both hold one value per bar.
+      bbUpper: nulls(ma.map((v, i) => v + band[i]!)),
+      bbLower: nulls(ma.map((v, i) => v - band[i]!)),
       upperLevel: constant(n, 100),
       lowerLevel: constant(n, -100),
     };
@@ -446,7 +452,8 @@ function cciTail(calc: Calc): Tail {
     const k = num(s, 'constant', 0.015);
     const maLength = int(s, 'maLength', 20);
     if (!whole(period) || !whole(maLength)) return null;
-    const tp = (j: number): number => (bars[j].high + bars[j].low + bars[j].close) / 3;
+    // Read at `i` and the whole window before it, all bars once `i` has warmed up.
+    const tp = (j: number): number => (bars[j]!.high + bars[j]!.low + bars[j]!.close) / 3;
     return machineTail(calc, `${period}|${k}|${maType}|${maLength}`, {
       keys: ['cci', 'ma', 'bbUpper', 'bbLower', 'upperLevel', 'lowerLevel'],
       start: seeded,
@@ -494,25 +501,27 @@ export const MFI: IndicatorDescriptor = {
     const tp = bars.map((b) => (b.high + b.low + b.close) / 3);
     const pos = new Array<number>(n).fill(0);
     const neg = new Array<number>(n).fill(0);
+    // `tp`, `pos` and `neg` hold one value per bar; a whole period's window
+    // is [i - period + 1, i], and a fractional one reads between bars into NaN.
     for (let i = 1; i < n; i++) {
-      const volume = bars[i].volume ?? 0;
+      const volume = bars[i]!.volume ?? 0;
       if (!Number.isFinite(tp[i]) || !Number.isFinite(tp[i - 1]) || !Number.isFinite(volume)) {
         pos[i] = NaN;
         neg[i] = NaN;
         continue;
       }
-      const rawFlow = tp[i] * volume;
+      const rawFlow = tp[i]! * volume;
       const flow = Number.isFinite(rawFlow) ? rawFlow : NaN;
       // A price tie contributes zero even when its unused raw product overflows.
-      if (tp[i] > tp[i - 1]) pos[i] = flow;
-      else if (tp[i] < tp[i - 1]) neg[i] = flow;
+      if (tp[i]! > tp[i - 1]!) pos[i] = flow;
+      else if (tp[i]! < tp[i - 1]!) neg[i] = flow;
     }
     const out = new Array<number>(n).fill(NaN);
     for (let i = period; i < n; i++) {
       let p = 0;
       let q = 0;
       // Chronological sums retain finite rounding order and discard expired gaps.
-      for (let j = i - period + 1; j <= i; j++) { p += pos[j]; q += neg[j]; }
+      for (let j = i - period + 1; j <= i; j++) { p += pos[j]!; q += neg[j]!; }
       if (!Number.isFinite(p) || !Number.isFinite(q)) continue;
       out[i] = q === 0 ? 100 : 100 - 100 / (1 + p / q);
     }
@@ -619,9 +628,10 @@ export const WILLIAMS_VIX_FIX: IndicatorDescriptor = {
 
     const highestClose = highest(closes, pd);
     const wvf = new Array<number>(n);
+    // Every column here holds one value per bar.
     for (let i = 0; i < n; i++) {
-      const hc = highestClose[i];
-      wvf[i] = Number.isFinite(hc) && hc !== 0 ? ((hc - lows[i]) / hc) * 100 : NaN;
+      const hc = highestClose[i]!;
+      wvf[i] = Number.isFinite(hc) && hc !== 0 ? ((hc - lows[i]!) / hc) * 100 : NaN;
     }
 
     const dev = stdev(wvf, bbl);
@@ -639,13 +649,13 @@ export const WILLIAMS_VIX_FIX: IndicatorDescriptor = {
     const plotHigh: (number | null)[] = new Array(n);
     const plotLow: (number | null)[] = new Array(n);
     for (let i = 0; i < n; i++) {
-      const up = mid[i] + mult * dev[i];
-      const rh = highestWvf[i] * ph;
-      const rl = lowestWvf[i] * pl;
+      const up = mid[i]! + mult * dev[i]!;
+      const rh = highestWvf[i]! * ph;
+      const rl = lowestWvf[i]! * pl;
       upper[i] = Number.isFinite(up) ? up : null;
       high[i] = Number.isFinite(rh) ? rh : null;
-      plotUpper[i] = showBand ? upper[i] : null;
-      plotHigh[i] = showRange ? high[i] : null;
+      plotUpper[i] = showBand ? upper[i] as number | null : null;
+      plotHigh[i] = showRange ? high[i] as number | null : null;
       plotLow[i] = showRange && Number.isFinite(rl) ? rl : null;
     }
 

@@ -35,7 +35,7 @@ const vol = (b: Bar): number =>
 function moneyFlow(bars: readonly Bar[]): number[] {
   const out = new Array<number>(bars.length);
   for (let i = 0; i < bars.length; i++) {
-    const b = bars[i];
+    const b = bars[i]!;
     const degenerate = (b.close === b.high && b.close === b.low) || b.high === b.low;
     out[i] = degenerate ? 0 : ((2 * b.close - b.low - b.high) / (b.high - b.low)) * vol(b);
   }
@@ -62,10 +62,11 @@ export const CHAIKIN_MONEY_FLOW: IndicatorDescriptor = {
     const flow = rollingSum(moneyFlow(bars), length);
     const traded = rollingSum(bars.map(vol), length);
     const out = new Array<number>(bars.length).fill(NaN);
+    // Both sums hold one value per bar.
     for (let i = 0; i < bars.length; i++) {
       // A window that traded nothing has no flow to express as a share of it;
       // the reference division by zero yields na, so this stays a gap.
-      if (traded[i] > 0) out[i] = flow[i] / traded[i];
+      if (traded[i]! > 0) out[i] = flow[i]! / traded[i]!;
     }
     return { cmf: nulls(out) };
   },
@@ -95,7 +96,7 @@ export const CHAIKIN_OSCILLATOR: IndicatorDescriptor = {
     const fast = emaOfGapped(accdist, num(s, 'short', 3));
     const slow = emaOfGapped(accdist, num(s, 'long', 10));
     const out = new Array<number>(bars.length);
-    for (let i = 0; i < bars.length; i++) out[i] = fast[i] - slow[i];
+    for (let i = 0; i < bars.length; i++) out[i] = fast[i]! - slow[i]!;
     return { osc: nulls(out) };
   },
   levels: () => [{ price: 0, color: '#787b86', title: 'Zero', dashed: true }],
@@ -121,13 +122,14 @@ export const EASE_OF_MOVEMENT: IndicatorDescriptor = {
     const divisor = num(s, 'divisor', 10000);
     const move = change(bars.map((b) => (b.high + b.low) / 2));
     const term = new Array<number>(bars.length);
+    // `move` holds one value per bar.
     for (let i = 0; i < bars.length; i++) {
-      const b = bars[i];
+      const b = bars[i]!;
       const v = vol(b);
       // No volume means no measure of how easily price moved. the reference divides by
       // zero and gets na; NaN here says the same thing, and `sma` refuses to
       // average a window holding one, which is exactly the reference platform's gap.
-      term[i] = v === 0 ? NaN : (divisor * move[i] * (b.high - b.low)) / v;
+      term[i] = v === 0 ? NaN : (divisor * move[i]! * (b.high - b.low)) / v;
     }
     return { eom: nulls(sma(term, num(s, 'length', 14))) };
   },
@@ -151,7 +153,7 @@ export const ELDER_FORCE_INDEX: IndicatorDescriptor = {
   calc: (bars, s) => {
     const moved = change(bars.map((b) => b.close));
     const force = new Array<number>(bars.length);
-    for (let i = 0; i < bars.length; i++) force[i] = moved[i] * vol(bars[i]);
+    for (let i = 0; i < bars.length; i++) force[i] = moved[i]! * vol(bars[i]!);
     return { efi: nulls(emaOfGapped(force, num(s, 'length', 13))) };
   },
   levels: () => [{ price: 0, color: '#787b86', title: 'Zero', dashed: true }],
@@ -175,8 +177,8 @@ export const NET_VOLUME: IndicatorDescriptor = {
   calc: (bars) => {
     const out = new Array<number>(bars.length).fill(0);
     for (let i = 1; i < bars.length; i++) {
-      const moved = bars[i].close - bars[i - 1].close;
-      out[i] = moved > 0 ? vol(bars[i]) : moved < 0 ? -vol(bars[i]) : 0;
+      const moved = bars[i]!.close - bars[i - 1]!.close;
+      out[i] = moved > 0 ? vol(bars[i]!) : moved < 0 ? -vol(bars[i]!) : 0;
     }
     return { net: nulls(out) };
   },

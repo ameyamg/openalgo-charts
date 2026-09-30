@@ -52,7 +52,7 @@ export function fromFirstValue(
   while (start < n && !Number.isFinite(values[start])) start += 1;
   if (start >= n) return out;
   const tail = smooth(values.slice(start), start);
-  for (let i = 0; i < tail.length && start + i < n; i++) out[start + i] = tail[i];
+  for (let i = 0; i < tail.length && start + i < n; i++) out[start + i] = tail[i]!;
   return out;
 }
 

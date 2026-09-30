@@ -41,10 +41,11 @@ export function supertrend(bars: readonly Bar[], period = 10, multiplier = 3): S
     // the flipped bands would carry into every later bar. The carry forward reads
     // the last close this loop accepted, not the previous bar's, so a skipped
     // bar's close cannot reset a band either. On complete data they are the same.
+    // Every series here has one value per bar.
     if (!Number.isFinite(a[i]) || !Number.isFinite(close[i])) continue;
-    const hl2 = (high[i] + low[i]) / 2;
-    const basicUpper = hl2 + multiplier * a[i];
-    const basicLower = hl2 - multiplier * a[i];
+    const hl2 = (high[i]! + low[i]!) / 2;
+    const basicUpper = hl2 + multiplier * a[i]!;
+    const basicLower = hl2 - multiplier * a[i]!;
 
     // Final bands carry forward unless price broke them (standard Supertrend rule).
     const finalUpper = !started
@@ -58,11 +59,11 @@ export function supertrend(bars: readonly Bar[], period = 10, multiplier = 3): S
     let dir: -1 | 1;
     if (!started || prevST === prevUpper) {
       // previously following the upper band (downtrend) — flip up if close clears it
-      if (close[i] <= finalUpper) { st = finalUpper; dir = 1; }
+      if (close[i]! <= finalUpper) { st = finalUpper; dir = 1; }
       else { st = finalLower; dir = -1; }
     } else {
       // previously following the lower band (uptrend) — flip down if close breaks it
-      if (close[i] >= finalLower) { st = finalLower; dir = -1; }
+      if (close[i]! >= finalLower) { st = finalLower; dir = -1; }
       else { st = finalUpper; dir = 1; }
     }
 
@@ -70,7 +71,7 @@ export function supertrend(bars: readonly Bar[], period = 10, multiplier = 3): S
     prevUpper = finalUpper;
     prevLower = finalLower;
     prevST = st;
-    prevClose = close[i];
+    prevClose = close[i]!;
     started = true;
   }
   return out;
@@ -92,11 +93,12 @@ export function supertrendSeries(
   const point = (time: number, v: number): Bar => ({ time, open: v, high: v, low: v, close: v });
   const up: Bar[] = [];
   const down: Bar[] = [];
+  // `st` has one point per bar.
   for (let i = 0; i < bars.length; i++) {
-    const p = st[i];
+    const p = st[i]!;
     const active = Number.isFinite(p.value);
-    up.push(point(bars[i].time, active && p.direction === -1 ? p.value : NaN));
-    down.push(point(bars[i].time, active && p.direction === 1 ? p.value : NaN));
+    up.push(point(bars[i]!.time, active && p.direction === -1 ? p.value : NaN));
+    down.push(point(bars[i]!.time, active && p.direction === 1 ? p.value : NaN));
   }
   return { up, down };
 }

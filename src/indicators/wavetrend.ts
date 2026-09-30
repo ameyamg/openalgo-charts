@@ -69,14 +69,15 @@ const dim = (hex: string): string => (/^#[0-9a-f]{6}$/i.test(hex) ? `${hex}99` :
 /** The reading `k` bars back, with no value before the series starts. */
 function shift(values: readonly number[], k: number): number[] {
   const out = new Array<number>(values.length).fill(NaN);
-  for (let i = k; i < values.length; i++) out[i] = values[i - k];
+  // Callers shift by a whole `k` of zero or more, so `i - k` is in [0, i].
+  for (let i = k; i < values.length; i++) out[i] = values[i - k]!;
   return out;
 }
 
 /** `shift` for a condition series. An out-of-range flag reads as false. */
 function shiftFlags(flags: readonly boolean[], k: number): boolean[] {
   const out = new Array<boolean>(flags.length).fill(false);
-  for (let i = k; i < flags.length; i++) out[i] = flags[i - k];
+  for (let i = k; i < flags.length; i++) out[i] = flags[i - k]!;
   return out;
 }
 
@@ -178,10 +179,11 @@ export const WAVETREND: IndicatorDescriptor = {
     const hiddenBull: (number | null)[] = new Array(n).fill(null);
     const hiddenBear: (number | null)[] = new Array(n).fill(null);
 
+    // Every series below holds one value per bar.
     const ap = sourceValues(bars, src(s));
     const esa = fromFirstValue(ap, (t) => smaSeededEma(t, n1));
     const absDev = fromFirstValue(
-      ap.map((v, i) => Math.abs(v - esa[i])),
+      ap.map((v, i) => Math.abs(v - esa[i]!)),
       (t) => smaSeededEma(t, n1),
     );
     // A flat stretch has no deviation to divide by, and the reading there is
@@ -189,13 +191,13 @@ export const WAVETREND: IndicatorDescriptor = {
     // is still warming there is no reading at all, which is a different answer
     // from zero and has to stay missing.
     const ci = ap.map((v, i) => {
-      const dv = absDev[i];
+      const dv = absDev[i]!;
       if (!Number.isFinite(dv)) return NaN;
-      return dv === 0 ? 0 : (v - esa[i]) / (0.015 * dv);
+      return dv === 0 ? 0 : (v - esa[i]!) / (0.015 * dv);
     });
     const wt1 = fromFirstValue(ci, (t) => smaSeededEma(t, n2));
     const wt2 = fromFirstValue(wt1, (t) => windowMean(t, sigLen));
-    const mom = wt1.map((v, i) => v - wt2[i]);
+    const mom = wt1.map((v, i) => v - wt2[i]!);
 
     const out = {
       wt1: nulls(wt1),
@@ -221,10 +223,10 @@ export const WAVETREND: IndicatorDescriptor = {
     const obZone = useInner ? obLevel2 : obLevel1;
     const osZone = useInner ? osLevel2 : osLevel1;
     for (let i = 1; i < n; i++) {
-      const prevFast = wt1[i - 1];
-      const prevSlow = wt2[i - 1];
-      const fast = wt1[i];
-      const slow = wt2[i];
+      const prevFast = wt1[i - 1]!;
+      const prevSlow = wt2[i - 1]!;
+      const fast = wt1[i]!;
+      const slow = wt2[i]!;
       // A comparison against a missing value is false in the source definition,
       // which is what stops the warmup from firing a cross on its first print.
       if (!Number.isFinite(prevFast) || !Number.isFinite(prevSlow)) continue;
@@ -263,23 +265,24 @@ export const WAVETREND: IndicatorDescriptor = {
       // The signal belongs to the pivot bar, `lbR` back from its confirmation.
       const at = i - lbR;
       if (at < 0) continue;
+      const oscPivot = oscAt[i]!;
 
       if (plFound[i]) {
-        const inRange = lower <= sincePl[i] && sincePl[i] <= upper;
-        if (wantRegular && inRange && oscAt[i] > prevOscLow[i] && lowAt[i] < prevPriceLow[i]) {
-          bull[at] = oscAt[i];
+        const inRange = lower <= sincePl[i]! && sincePl[i]! <= upper;
+        if (wantRegular && inRange && oscPivot > prevOscLow[i]! && lowAt[i]! < prevPriceLow[i]!) {
+          bull[at] = oscPivot;
         }
-        if (wantHidden && inRange && oscAt[i] < prevOscLow[i] && lowAt[i] > prevPriceLow[i]) {
-          hiddenBull[at] = oscAt[i];
+        if (wantHidden && inRange && oscPivot < prevOscLow[i]! && lowAt[i]! > prevPriceLow[i]!) {
+          hiddenBull[at] = oscPivot;
         }
       }
       if (phFound[i]) {
-        const inRange = lower <= sincePh[i] && sincePh[i] <= upper;
-        if (wantRegular && inRange && oscAt[i] < prevOscHigh[i] && highAt[i] > prevPriceHigh[i]) {
-          bear[at] = oscAt[i];
+        const inRange = lower <= sincePh[i]! && sincePh[i]! <= upper;
+        if (wantRegular && inRange && oscPivot < prevOscHigh[i]! && highAt[i]! > prevPriceHigh[i]!) {
+          bear[at] = oscPivot;
         }
-        if (wantHidden && inRange && oscAt[i] > prevOscHigh[i] && highAt[i] < prevPriceHigh[i]) {
-          hiddenBear[at] = oscAt[i];
+        if (wantHidden && inRange && oscPivot > prevOscHigh[i]! && highAt[i]! < prevPriceHigh[i]!) {
+          hiddenBear[at] = oscPivot;
         }
       }
     }
@@ -315,7 +318,7 @@ export const WAVETREND: IndicatorDescriptor = {
         const v = c.col?.[i];
         if (v === null || v === undefined) continue;
         const marker: SeriesMarker = {
-          time: bars[i].time, position: 'atPrice', price: v,
+          time: bars[i]!.time, position: 'atPrice', price: v,
           shape: c.shape, size: c.size, color: c.color,
         };
         if (c.text !== undefined) marker.text = c.text;

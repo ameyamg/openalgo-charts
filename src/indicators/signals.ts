@@ -43,14 +43,15 @@ const on = (s: Readonly<Record<string, unknown>>, k: string): boolean => s[k] !=
 /** The reading `k` bars back, with no value before the series starts. */
 function shift(values: readonly number[], k: number): number[] {
   const out = new Array<number>(values.length).fill(NaN);
-  for (let i = k; i < values.length; i++) out[i] = values[i - k];
+  // Callers shift by a whole `k` of zero or more, so `i - k` is in [0, i].
+  for (let i = k; i < values.length; i++) out[i] = values[i - k]!;
   return out;
 }
 
 /** `shift` for a condition series. An out-of-range flag reads as false. */
 function shiftFlags(flags: readonly boolean[], k: number): boolean[] {
   const out = new Array<boolean>(flags.length).fill(false);
-  for (let i = k; i < flags.length; i++) out[i] = flags[i - k];
+  for (let i = k; i < flags.length; i++) out[i] = flags[i - k]!;
   return out;
 }
 
@@ -91,9 +92,11 @@ export const VORTEX: IndicatorDescriptor = {
     const close = bars.map((b) => b.close);
     const upTerm = new Array<number>(n - 1);
     const downTerm = new Array<number>(n - 1);
+    // The bar columns and `trSum` hold n values; the terms and their sums hold
+    // n - 1, one per bar from bar 1, so bar `i` reads term `i - 1`.
     for (let i = 1; i < n; i++) {
-      upTerm[i - 1] = Math.abs(high[i] - low[i - 1]);
-      downTerm[i - 1] = Math.abs(low[i] - high[i - 1]);
+      upTerm[i - 1] = Math.abs(high[i]! - low[i - 1]!);
+      downTerm[i - 1] = Math.abs(low[i]! - high[i - 1]!);
     }
     const vmp = rollingSum(upTerm, length);
     const vmm = rollingSum(downTerm, length);
@@ -103,8 +106,8 @@ export const VORTEX: IndicatorDescriptor = {
     const trSum = rollingSum(trueRange(high, low, close), length);
 
     for (let i = 1; i < n; i++) {
-      vip[i] = vmp[i - 1] / trSum[i];
-      vim[i] = vmm[i - 1] / trSum[i];
+      vip[i] = vmp[i - 1]! / trSum[i]!;
+      vim[i] = vmm[i - 1]! / trSum[i]!;
     }
     return { vip: nulls(vip), vim: nulls(vim) };
   },
@@ -168,15 +171,16 @@ export const VOLATILITY_STOP: IndicatorDescriptor = {
     const tr = trueRange(high, low, close);
 
     // The running state is seeded on the first bar: both extremes start at the
-    // first source value and the stop starts unset.
-    let max: number = values[0];
-    let min: number = values[0];
+    // first source value and the stop starts unset. There is a first bar, and
+    // every series here holds one value per bar.
+    let max: number = values[0]!;
+    let min: number = values[0]!;
     let uptrend: boolean = true;
     let stop: number = NaN;
 
     for (let i = 0; i < n; i++) {
-      const v = values[i];
-      const atrM = Number.isFinite(band[i]) ? band[i] * factor : tr[i];
+      const v = values[i]!;
+      const atrM = Number.isFinite(band[i]) ? band[i]! * factor : tr[i]!;
       max = Math.max(max, v);
       min = Math.min(min, v);
       // `uptrend` still holds the previous bar's answer here, which is what
@@ -263,14 +267,16 @@ export const TREND_STRENGTH_INDEX: IndicatorDescriptor = {
  *
  * A bar off either end of the series has no value, and comparisons against it
  * are false, so a missing neighbour fails the variant rather than being skipped.
+ * `at` is a bar's index, and each neighbour is read only once `j` is checked
+ * to be inside the series.
  */
 function isFractal(values: readonly number[], at: number, n: number, wantHigh: boolean): boolean {
-  const v = values[at];
+  const v = values[at]!;
   if (!Number.isFinite(v)) return false;
   const beyond = (j: number): boolean =>
-    j >= 0 && j < values.length && Number.isFinite(values[j]) && (wantHigh ? values[j] < v : values[j] > v);
+    j >= 0 && j < values.length && Number.isFinite(values[j]) && (wantHigh ? values[j]! < v : values[j]! > v);
   const level = (j: number): boolean =>
-    j >= 0 && j < values.length && Number.isFinite(values[j]) && (wantHigh ? values[j] <= v : values[j] >= v);
+    j >= 0 && j < values.length && Number.isFinite(values[j]) && (wantHigh ? values[j]! <= v : values[j]! >= v);
 
   for (let k = 1; k <= n; k++) if (!beyond(at + k)) return false;
 
@@ -327,8 +333,8 @@ export const WILLIAMS_FRACTALS: IndicatorDescriptor = {
     const showUp = on(s, 'showUp');
     const showDown = on(s, 'showDown');
     for (let i = 0; i < n; i++) {
-      if (showUp && isFractal(high, i, periods, true)) upFractal[i] = high[i];
-      if (showDown && isFractal(low, i, periods, false)) downFractal[i] = low[i];
+      if (showUp && isFractal(high, i, periods, true)) upFractal[i] = high[i]!;
+      if (showDown && isFractal(low, i, periods, false)) downFractal[i] = low[i]!;
     }
     return out;
   },
@@ -345,14 +351,14 @@ export const WILLIAMS_FRACTALS: IndicatorDescriptor = {
       const u = up[i];
       if (u !== null && u !== undefined) {
         out.push({
-          time: bars[i].time, position: 'atPrice', price: u,
+          time: bars[i]!.time, position: 'atPrice', price: u,
           shape: 'triangleUp', size: 'small', color: upColor,
         });
       }
       const d = down[i];
       if (d !== null && d !== undefined) {
         out.push({
-          time: bars[i].time, position: 'atPrice', price: d,
+          time: bars[i]!.time, position: 'atPrice', price: d,
           shape: 'triangleDown', size: 'small', color: downColor,
         });
       }
@@ -444,24 +450,26 @@ export const RSI_DIVERGENCE: IndicatorDescriptor = {
     const prevOscHigh = valueWhen(phFound, oscAt, 1);
     const prevPriceHigh = valueWhen(phFound, highAt, 1);
 
+    // Every column read here holds one value per bar.
     for (let i = 0; i < n; i++) {
       // The signal belongs to the pivot bar, `lbR` back from the confirmation.
       const at = i - lbR;
       if (at < 0) continue;
+      const oscPivot = oscAt[i]!;
 
       if (plFound[i]) {
-        const inRange = lower <= sincePl[i] && sincePl[i] <= upper;
-        const oscHigherLow = oscAt[i] > prevOscLow[i] && inRange;
-        const oscLowerLow = oscAt[i] < prevOscLow[i] && inRange;
-        if (wantBull && oscHigherLow && lowAt[i] < prevPriceLow[i]) bull[at] = oscAt[i];
-        if (wantHiddenBull && oscLowerLow && lowAt[i] > prevPriceLow[i]) hiddenBull[at] = oscAt[i];
+        const inRange = lower <= sincePl[i]! && sincePl[i]! <= upper;
+        const oscHigherLow = oscPivot > prevOscLow[i]! && inRange;
+        const oscLowerLow = oscPivot < prevOscLow[i]! && inRange;
+        if (wantBull && oscHigherLow && lowAt[i]! < prevPriceLow[i]!) bull[at] = oscPivot;
+        if (wantHiddenBull && oscLowerLow && lowAt[i]! > prevPriceLow[i]!) hiddenBull[at] = oscPivot;
       }
       if (phFound[i]) {
-        const inRange = lower <= sincePh[i] && sincePh[i] <= upper;
-        const oscLowerHigh = oscAt[i] < prevOscHigh[i] && inRange;
-        const oscHigherHigh = oscAt[i] > prevOscHigh[i] && inRange;
-        if (wantBear && oscLowerHigh && highAt[i] > prevPriceHigh[i]) bear[at] = oscAt[i];
-        if (wantHiddenBear && oscHigherHigh && highAt[i] < prevPriceHigh[i]) hiddenBear[at] = oscAt[i];
+        const inRange = lower <= sincePh[i]! && sincePh[i]! <= upper;
+        const oscLowerHigh = oscPivot < prevOscHigh[i]! && inRange;
+        const oscHigherHigh = oscPivot > prevOscHigh[i]! && inRange;
+        if (wantBear && oscLowerHigh && highAt[i]! > prevPriceHigh[i]!) bear[at] = oscPivot;
+        if (wantHiddenBear && oscHigherHigh && highAt[i]! < prevPriceHigh[i]!) hiddenBear[at] = oscPivot;
       }
     }
     return out;
@@ -486,7 +494,7 @@ export const RSI_DIVERGENCE: IndicatorDescriptor = {
         const v = c.col?.[i];
         if (v === null || v === undefined) continue;
         out.push({
-          time: bars[i].time, position: 'atPrice', price: v,
+          time: bars[i]!.time, position: 'atPrice', price: v,
           shape: c.shape, size: 'small', color: c.color, text: c.text,
         });
       }
@@ -577,13 +585,14 @@ export const CONSOLIDATION_BREAKOUT: IndicatorDescriptor = {
     const breakDown = new Array<number>(n).fill(NaN);
     const insideAge = new Array<number>(n).fill(NaN);
 
+    // `mainIndex` is always a bar at or before `i`.
     let mainIndex = 0;
     for (let i = 0; i < n; i++) {
-      const b = bars[i];
+      const b = bars[i]!;
       const bodyTop = Math.max(b.open, b.close);
       const bodyBottom = Math.min(b.open, b.close);
-      const motherHigh = bars[mainIndex].high;
-      const motherLow = bars[mainIndex].low;
+      const motherHigh = bars[mainIndex]!.high;
+      const motherLow = bars[mainIndex]!.low;
       const age = i - mainIndex;
 
       // Read one: the range the bar is breaking is the one it has not claimed.
@@ -602,8 +611,8 @@ export const CONSOLIDATION_BREAKOUT: IndicatorDescriptor = {
       // the one place where the carried seed and the reassignment agree, so it
       // prints its own high and low and starts the first range.
       if (mainIndex === previous) {
-        rangeHigh[i] = bars[mainIndex].high;
-        rangeLow[i] = bars[mainIndex].low;
+        rangeHigh[i] = bars[mainIndex]!.high;
+        rangeLow[i] = bars[mainIndex]!.low;
       }
       const held = i - mainIndex;
       if (held > 0) insideAge[i] = held;
@@ -627,13 +636,13 @@ export const CONSOLIDATION_BREAKOUT: IndicatorDescriptor = {
     for (let i = 0; i < bars.length; i++) {
       if (up[i] !== null && up[i] !== undefined) {
         out.push({
-          time: bars[i].time, position: 'belowBar',
+          time: bars[i]!.time, position: 'belowBar',
           shape: 'triangleUp', size: 'small', color: upColor,
         });
       }
       if (down[i] !== null && down[i] !== undefined) {
         out.push({
-          time: bars[i].time, position: 'aboveBar',
+          time: bars[i]!.time, position: 'aboveBar',
           shape: 'triangleDown', size: 'small', color: downColor,
         });
       }
