@@ -206,6 +206,12 @@ shared-feed lifetime, replay controls and broker execution.
 See [ARCHITECTURE.md](ARCHITECTURE.md), [project conventions](CLAUDE.md), and
 [host lifecycle guidance](.github/skills/openalgo-charts/references/host-integration.md).
 
+A helper that keeps one object per chart answers a second request by one of two rules.
+An attach helper whose object only draws or arranges (`attachSessionShading`,
+`comparisonController`) returns the existing object with the new options applied. An
+owner that holds state a second owner would fight over (`AlertController`, a
+`ReplayGroup`) throws. A new per-chart helper picks one of the two and says which.
+
 Update the matching [skill reference](.github/skills/README.md) whenever an API, default
 or supported workflow changes. Preserve useful migration guidance, including the
 [2.0 drawing migration](docs/migrating-to-2.md), and remove contradictory older examples.

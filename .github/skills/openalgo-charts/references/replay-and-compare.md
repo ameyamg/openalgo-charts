@@ -224,7 +224,7 @@ comparisonController(chart).setMode('indexed-to-100');
 bn.remove();
 ```
 
-`addComparison(chart, options)` is the free-function front door; `comparisonController(chart, options?)` returns the one controller per chart (held in a `WeakMap`) for chart-wide operations. **A primary series must exist first** or `add` throws.
+`addComparison(chart, options)` is the free-function front door; `comparisonController(chart, options?)` returns the one controller per chart (held in a `WeakMap`) for chart-wide operations; a call after it exists applies the `mode` and `baseline` it passes through `setMode` and `setBaseline` (since 2.6.0; before, they were ignored). **A primary series must exist first** or `add` throws.
 
 ### ComparisonOptions and the handle
 
