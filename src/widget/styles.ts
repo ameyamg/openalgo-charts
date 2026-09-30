@@ -13,10 +13,10 @@
  * The dialog modules mount inside `.oac-widget`, so they inherit all of it.
  */
 
+import { token as v } from './tokens';
+
 /** Id of the injected `<style>`; one per document. */
 export const WIDGET_STYLE_ID = 'oac-widget-css';
-
-const v = (name: string): string => `var(--oac-${name})`;
 
 export const WIDGET_CSS = `
 .oac-widget { position: relative; display: grid; grid-template-rows: auto 1fr auto; width: 100%; height: 100%;

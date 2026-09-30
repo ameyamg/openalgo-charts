@@ -24,7 +24,7 @@ export function alertSourceFields(ctx: WidgetContext, draft: Record<string, unkn
   const controls = [select('kind', widgetText(ctx, 'Source'), kinds.map(item => ({ ...item, label: widgetText(ctx, `schema.alert.kind.${item.value}`, {}, item.label) })))];
   // A host's unlisted studies stay out of these lists, unless the alert being
   // edited already names one, the same rule its unlisted drawings follow.
-  const instances = ctx.chart.indicators().filter(item => (item as Partial<IndicatorApi>).policy?.().listed !== false
+  const instances = ctx.chart.indicators().filter(item => item.policy().listed !== false
     || item.id === draft.instanceId || item.id === draft.inputInstanceId);
   const bars = ctx.chart.primaryBars();
   const at = bars.length - 1;

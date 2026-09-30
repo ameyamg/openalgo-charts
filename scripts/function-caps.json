@@ -42,37 +42,34 @@
       "wire": 156
     },
     "src/widget/bottombar.ts": {
-      "mountBottombar": 376
+      "mountBottombar": 373
     },
     "src/widget/color-picker.ts": {
       "createColorPicker": 186
     },
-    "src/widget/context.ts": {
-      "createOverlayStack": 168
-    },
     "src/widget/date-navigation-dialog.ts": {
-      "openDateNavigation": 166
+      "openDateNavigation": 152
     },
     "src/widget/dialogs/context-menu.ts": {
-      "contextMenuEntries": 172
+      "contextMenuEntries": 171
     },
     "src/widget/dialogs/drawing-coordinates.ts": {
       "mountDrawingCoordinates": 189
     },
     "src/widget/dialogs/drawing-properties.ts": {
-      "mountDrawingProperties": 222
+      "mountDrawingProperties": 211
     },
     "src/widget/dialogs/indicator-picker.ts": {
-      "mountIndicatorPicker": 169
+      "mountIndicatorPicker": 168
     },
     "src/widget/dialogs/indicator-settings.ts": {
       "mountIndicatorSettings": 230
     },
     "src/widget/dialogs/level-editor.ts": {
-      "mountLevelEditor": 195
+      "mountLevelEditor": 192
     },
     "src/widget/drawing-toolbar.ts": {
-      "mountDrawingToolbar": 332
+      "mountDrawingToolbar": 322
     },
     "src/widget/form.ts": {
       "renderForm": 538
@@ -93,16 +90,19 @@
       "createLayoutsController": 387
     },
     "src/widget/mobile.ts": {
-      "mountMobile": 473
+      "mountMobile": 472
     },
     "src/widget/news-panel.ts": {
       "mountNewsPanel": 194
     },
     "src/widget/objects-panel.ts": {
-      "createObjectsPanelContent": 450
+      "createObjectsPanelContent": 445
+    },
+    "src/widget/overlays.ts": {
+      "createOverlayStack": 168
     },
     "src/widget/rail.ts": {
-      "mountRail": 645
+      "mountRail": 613
     },
     "src/widget/statusline.ts": {
       "mountStatusline": 209
@@ -111,13 +111,13 @@
       "mountSymbolPicker": 205
     },
     "src/widget/topbar.ts": {
-      "mountTopbar": 335
+      "mountTopbar": 336
     },
     "src/widget/watchlist-panel.ts": {
-      "mountWatchlistPanel": 572
+      "mountWatchlistPanel": 576
     },
     "src/widget/widget.ts": {
-      "WidgetImpl.constructor": 329
+      "WidgetImpl.constructor": 280
     }
   }
 }

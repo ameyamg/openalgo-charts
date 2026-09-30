@@ -16,6 +16,7 @@
  */
 import { drawingShortcuts, keyToDrawingAction, type DrawingKeyContext } from 'openalgo-charts/draw';
 import { historyPress } from './context';
+import { drawingActionState, runDrawingAction } from './drawing-actions';
 import { KEYMAP_KEY, markListOnly, openShortcutsPanel, type KeyEventLike, type KeyScope } from './keymap';
 import { toolName } from './rail';
 import type { WidgetImpl } from './widget';
@@ -95,7 +96,8 @@ export function installKeys(this: KeysHost): void {
     const action = keyToDrawingAction(e, drawCtx());
     if (action === null) return (e.key === 'Delete' || e.key === 'Backspace') && removeAlert();
     switch (action.type) {
-      case 'delete': draw.removeMany(targets()); break;
+      // A selection whose every drawing is locked stays, as it does on every other surface.
+      case 'delete': runDrawingAction(this.context, 'delete', targets()); break;
       case 'nudge': draw.nudge(targets(), action.dx, action.dy); break;
       case 'cancel': draw.cancel(); if (draw.activeTool() === null) this._rail?.setDrawLock(false); break;
       case 'finish': draw.finish(); break;
@@ -124,12 +126,12 @@ export function installKeys(this: KeysHost): void {
   bind('Mod+Shift+Z', history('redo'), 'Redo', 'redo', { group: 'Widget' });
   bind('Mod+Y', history('redo'), 'Redo', 'redo-alt', { group: 'Widget', hidden: true });
   bind('Mod+C', onTarget((ids) => draw.copy(ids)), 'Copy the selected drawing', 'copy');
-  bind('Mod+X', onTarget((ids) => draw.cut(ids)), 'Cut the selected drawing', 'cut');
+  bind('Mod+X', onTarget((ids) => drawingActionState(this.context, ids).noDelete === null && draw.cut(ids)), 'Cut the selected drawing', 'cut');
   bind('Mod+V', () => { void draw.paste(); return refresh(); }, 'Paste drawings', 'paste');
   bind('Mod+D', onTarget((ids) => draw.duplicate(ids)), 'Duplicate the selected drawing', 'duplicate');
   bind('Delete', () => {
     if (!hasTarget()) return removeAlert();
-    draw.removeMany(targets());
+    runDrawingAction(this.context, 'delete', targets());
     return refresh();
   }, 'Delete the selected drawing', 'delete');
   bind('Backspace', editing, 'Delete, or drop the last anchor while placing', 'delete-back', { fixed: true });

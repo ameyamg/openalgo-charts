@@ -3065,5 +3065,7 @@ subscription unless explicitly invalidated. Native replay requires the explicit
 `loading`, `ready`, `empty`, `unsupported` and `error`, with optional `error` detail.
 Use `subscribeDataStatus(listener)` and release its returned unsubscribe function.
 `retryData()` retries the current source. The widget renders these states and
-Retry automatically. `indicator:data-status` emits `{ id, indicatorId, status }`
+Retry automatically. An error the study's inputs caused (an `IndicatorInputError`, such
+as a timeframe on transformed bars) shows its message instead, with no Retry, since
+the same inputs are refused the same way (since 2.6.0). `indicator:data-status` emits `{ id, indicatorId, status }`
 on the chart event bus. Existing synchronous indicators return null status.

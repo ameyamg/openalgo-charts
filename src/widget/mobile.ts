@@ -1,6 +1,7 @@
 import { widgetText } from './localization';
 import { chartTypeIcon, chromeIconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
-import { h, glyph, editableIds, historyPress, historyReady, type WidgetContext } from './context';
+import { h, glyph, historyPress, historyReady, type WidgetContext } from './context';
+import { drawingActionState, runDrawingAction } from './drawing-actions';
 import type { RailHandle } from './rail';
 import {
   chartTypeChoices, chartTypeLabel, intervalLabel,
@@ -64,16 +65,14 @@ export interface MobileOptions {
   onSettings(anchor: HTMLElement): boolean;
   onIndicators(anchor: HTMLElement): boolean;
   onObjects(anchor: HTMLElement): boolean;
-  // A handler the widget may pass as undefined is a property typed from a
-  // method signature, so it takes the same host functions a method does.
-  onDataWindow?: { onDataWindow(anchor: HTMLElement): void | boolean }['onDataWindow'] | undefined;
+  onDataWindow?(anchor: HTMLElement): void | boolean;
   onAlerts?(anchor: HTMLElement): boolean;
-  onWatchlist?: { onWatchlist(anchor: HTMLElement): void | boolean }['onWatchlist'] | undefined;
-  onNews?: { onNews(anchor: HTMLElement): void | boolean }['onNews'] | undefined;
+  onWatchlist?(anchor: HTMLElement): void | boolean;
+  onNews?(anchor: HTMLElement): void | boolean;
   onCapture?(anchor: HTMLElement): void;
-  onGoTo?: { onGoTo(anchor: HTMLElement): void | boolean }['onGoTo'] | undefined;
+  onGoTo?(anchor: HTMLElement): void | boolean;
   /** Open the Layouts menu, centred. Omitted without a store. Since 2.5.10. */
-  onLayouts?: { onLayouts(anchor: HTMLElement): void | boolean }['onLayouts'] | undefined;
+  onLayouts?(anchor: HTMLElement): void | boolean;
   onProperties(anchor: HTMLElement): boolean;
   settingsAvailable(): boolean;
   indicatorsAvailable(): boolean;
@@ -252,7 +251,8 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
     symbolInput.addEventListener('keydown', (event) => {
       if ((event as KeyboardEvent).key === 'Enter') {
         event.preventDefault();
-        commitSymbol(symbolInput?.value ?? '');
+        // As in the top bar: a search still running decides what Enter picks.
+        if (picker === null || picker.canCommitRaw()) commitSymbol(symbolInput?.value ?? '');
       }
     });
     header.append(symbolInput, intervalButton);
@@ -266,14 +266,13 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
   let deleteButton: HTMLButtonElement | null = null;
   if (opts.rail !== null) {
     propertiesButton = makeAction('properties', widgetText(ctx, 'Properties'), (anchor) => { opts.onProperties(anchor); });
+    // The rules every drawing surface keeps (drawing-actions.ts).
     lockButton = makeAction('lock', widgetText(ctx, 'Lock'), () => {
-      const ids = ctx.draw.selection();
-      const lock = !ids.every((id) => ctx.draw.get(id)?.locked === true);
-      for (const id of ids) ctx.draw.update(id, { locked: lock });
+      runDrawingAction(ctx, 'lock', ctx.draw.selection());
       refresh();
     });
     deleteButton = makeAction('delete', widgetText(ctx, 'Delete'), () => {
-      ctx.draw.removeMany(ctx.draw.selection());
+      runDrawingAction(ctx, 'delete', ctx.draw.selection());
       refresh();
     });
     selection.append(propertiesButton, lockButton, deleteButton);
@@ -478,16 +477,15 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
     if (selection.parentNode !== null) {
       const ids = ctx.draw.selection();
       selection.hidden = ids.length === 0;
-      // Lock and delete have nothing to act on in a read-only selection.
-      const fixed = String(editableIds(ctx.draw, ids).length === 0);
+      // Lock has nothing to act on in a read-only selection, and delete keeps a locked one too.
+      const state = drawingActionState(ctx, ids);
       if (ids.length > 0 && lockButton !== null) {
-        const locked = ids.every((id) => ctx.draw.get(id)?.locked === true);
         // One name; the pressed state says locked.
-        lockButton.setAttribute('aria-pressed', String(locked));
-        lockButton.setAttribute('aria-disabled', fixed);
+        lockButton.setAttribute('aria-pressed', String(state.locked));
+        lockButton.setAttribute('aria-disabled', String(state.editable.length === 0));
       }
       if (propertiesButton !== null) propertiesButton.setAttribute('aria-disabled', String(ids.length === 0));
-      if (deleteButton !== null) deleteButton.setAttribute('aria-disabled', fixed);
+      if (deleteButton !== null) deleteButton.setAttribute('aria-disabled', String(state.noDelete !== null || state.editable.length === 0));
     }
     sheet?.repaint();
   }

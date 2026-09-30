@@ -293,6 +293,11 @@ export function restoreWidgetState(this: PersistHost, state: unknown): WidgetRes
     if (symbol !== this._symbol || exchange !== this._exchange) {
       this._symbol = symbol;
       this._exchange = exchange;
+      // The widget's bus only, where setSymbol and a late store load also
+      // announce on the chart's. A link group and the chart grid follow the
+      // chart's 'symbol' and pass it to every chart linked to this one; a
+      // restore is a saved layout being applied (the grid applies each cell
+      // this way), which that broadcast would overwrite chart by chart.
       this._bus.emit('symbol', { symbol, exchange });
     }
     if (!sameVariant) {

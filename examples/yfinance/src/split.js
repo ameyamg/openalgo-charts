@@ -18,7 +18,7 @@ import { requestVariant, sessionOf } from './session.js';
 import { chartTypeSeries } from './transforms.js';
 import { chartDecorationsForRebuild, normalizeLegendIconSize, restorePrimaryStyle } from './chart-settings.js';
 import { bindIndicatorSource } from './indicator-source.js';
-import { openSettings, renderIndicatorChips } from './indicators.js';
+import { openSettings, renderIndicatorChips, watchStudyStatus } from './indicators.js';
 import { capturePaneTarget } from './pane-target.js';
 import { symbolStatus, exchangeOf, nameOf } from './status.js';
 import { axisMinMove, sessionCalendarFor, tickScheduleFor } from './ticks.js';
@@ -329,6 +329,7 @@ export function buildChart2({ keepView = true, typeChanged = false, state } = {}
   app.chart2.on('indicatorSettings', ({ instanceId }) => openSettings(instanceId, capturePaneTarget(app, 2)));
   bindIndicatorSource(app.chart2, 2);
   app.chart2.on('indicatorRemoved', renderIndicatorChips);
+  watchStudyStatus(app.chart2);
   if (saved) {
     const report = app.chart2.restoreState(typeChanged ? { ...saved, series: [] } : saved);
     if (state && !report.applied) throw new Error('The second chart state could not be restored');

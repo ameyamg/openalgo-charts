@@ -25,7 +25,7 @@ import { INDICATOR_SOURCES, registeredIntervals, parseSessionSpec } from 'openal
 import type { ChartSettingsInput, IndicatorInputPresentation } from 'openalgo-charts';
 import { chromeIconSvg, CHROME_ICON_STROKE } from 'openalgo-charts/draw';
 import type { SettingsField } from 'openalgo-charts/draw';
-import { glyph, type OverlayOptions } from './context';
+import { boxIn, glyph, h, type OverlayOptions } from './context';
 import { widgetText, type WidgetTranslationOptions } from './localization';
 import { createColorPicker, type ColorPickerOptions } from './color-picker';
 import { inputStates } from './input-conditions';
@@ -285,29 +285,6 @@ export function controlsFromFields(fields: readonly SettingsField[], translation
 
 // ── value helpers ─────────────────────────────────────────────────────────
 
-/**
- * A six-digit hex an `<input type=color>` will take, from the forms a theme
- * or a drawing uses. Alpha is dropped: the picker has no channel for it, and
- * the swatch still has to show the colour the chart is drawing. Null for
- * anything else (a named colour), which the caller turns into a fallback.
- */
-export function toHexColor(input: unknown): string | null {
-  if (typeof input !== 'string') return null;
-  const s = input.trim();
-  const hex = /^#([0-9a-f]{3,8})$/i.exec(s);
-  if (hex !== null) {
-    const h = hex[1]!; // the group is not optional, so any match fills it
-    if (h.length === 3 || h.length === 4) return '#' + h.slice(0, 3).split('').map((c) => c + c).join('').toLowerCase();
-    if (h.length === 6 || h.length === 8) return '#' + h.slice(0, 6).toLowerCase();
-    return null;
-  }
-  // See tokens.ts: one unambiguous separator alternation, not `\s*[, ]\s*`.
-  const fn = /^rgba?\(\s*([\d.]+)(?:\s*,\s*|\s+)([\d.]+)(?:\s*,\s*|\s+)([\d.]+)/i.exec(s);
-  if (fn === null) return null;
-  const part = (v: string): string => Math.round(Math.max(0, Math.min(255, Number(v)))).toString(16).padStart(2, '0');
-  return `#${part(fn[1]!)}${part(fn[2]!)}${part(fn[3]!)}`; // three required groups, as above
-}
-
 /** Print a number without float noise: 1.5 stays 1.5, 2.0000000000000004 prints 2. */
 export function formatNumber(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000);
@@ -315,12 +292,11 @@ export function formatNumber(n: number): string {
 
 // ── small DOM kit shared by the dialogs ───────────────────────────────────
 
-/** `doc.createElement` with the class and text most calls want. */
+/** `h` with the text most dialog calls want in place of attributes: one element factory, two call shapes. */
 export function el<K extends keyof HTMLElementTagNameMap>(
   doc: Document, tag: K, className?: string, text?: string,
 ): HTMLElementTagNameMap[K] {
-  const node = doc.createElement(tag);
-  if (className !== undefined && className !== '') node.className = className;
+  const node = h(doc, tag, className);
   if (text !== undefined) node.textContent = text;
   return node;
 }
@@ -429,6 +405,12 @@ export interface DialogFrameSpec extends WidgetTranslationOptions {
   className?: string;
   /** The close affordance top right. Escape and the scrim are the overlay stack's. */
   onClose(): void;
+  /**
+   * The close as the word rather than the icon, for a compact list panel whose
+   * rows act through words too and which carries no glyph (the objects panel,
+   * the alerts list). Default: the icon every form dialog shows.
+   */
+  closeText?: boolean;
 }
 
 let frameSeq = 0;
@@ -450,7 +432,7 @@ export function dialogFrame(doc: Document, spec: DialogFrameSpec): DialogFrame {
   const head = el(doc, 'div', 'oac-dialog__head');
   const title = el(doc, 'span', 'oac-dialog__title', spec.title);
   title.id = titleId;
-  const closeButton = button(doc, { label: widgetText(spec, 'Close'), icon: 'close', iconOnly: true, onClick: () => spec.onClose() });
+  const closeButton = button(doc, { label: widgetText(spec, 'Close'), ...(spec.closeText === true ? {} : { icon: 'close', iconOnly: true }), onClick: () => spec.onClose() });
   head.appendChild(title);
   head.appendChild(closeButton);
 
@@ -486,6 +468,15 @@ export interface PanelHandle {
 /** The slice of the widget context a panel needs to show itself. */
 export interface PanelHost {
   openOverlay(el: HTMLElement, opts?: OverlayOptions): () => void;
+}
+
+/**
+ * A dialog that cannot open says why in a toast, and hands back a handle that
+ * is already closed, so the caller treats it like any other.
+ */
+export function declinedPanel(ctx: { readonly document: Document; toast(message: string, kind?: 'info'): unknown }, why: string): PanelHandle {
+  ctx.toast(why, 'info');
+  return { el: ctx.document.createElement('div'), close: () => {}, isOpen: () => false };
 }
 
 /**
@@ -537,12 +528,6 @@ export function openPanel(host: PanelHost, panel: HTMLElement, opts: OverlayOpti
   return { el: panel, close: finish, isOpen: () => !closed };
 }
 
-/** An element's box in root coordinates, for placing a panel by hand. */
-export function boxInRoot(root: HTMLElement, node: Element): { left: number; top: number; right: number; bottom: number } {
-  const r = root.getBoundingClientRect();
-  const b = node.getBoundingClientRect();
-  return { left: b.left - r.left, top: b.top - r.top, right: b.right - r.left, bottom: b.bottom - r.top };
-}
 
 /** The slice of a chart a popover needs to sit beside a drawing. */
 export interface AnchorChart {
@@ -565,7 +550,7 @@ export function selectionPoint(
   screenOf?: (id: string) => ReadonlyArray<{ x: number; y: number }> | null,
 ): { x: number; y: number } {
   const container = chart.panes()[0]?.element.parentElement ?? null;
-  const off = container === null ? { left: 0, top: 0 } : boxInRoot(root, container);
+  const off = container === null ? { left: 0, top: 0 } : boxIn(root, container);
   let x0 = Infinity;
   let y1 = -Infinity;
   for (const d of drawings) {

@@ -1,4 +1,3 @@
-import { widgetText } from '../localization';
 /**
  * Inline text editing for a drawing: a contentEditable box laid over the
  * painted text so its frame coincides with the frame on the canvas. The
@@ -11,11 +10,12 @@ import { widgetText } from '../localization';
  * event stops at the box, or the chart under it would take the press as a
  * pan and the widget's chords would read a Backspace as "delete the drawing".
  */
-import { drawingSettingsSchema, getDrawingTool } from 'openalgo-charts/draw';
+import { widgetText } from '../localization';
+import { drawingSettingsSchema } from 'openalgo-charts/draw';
 import type { Drawing, DrawingText } from 'openalgo-charts/draw';
 import type { Chart } from 'openalgo-charts';
-import type { WidgetContext } from '../context';
-import { boxInRoot, el, openPanel, type PanelHandle } from '../form';
+import { boxIn, drawingToolOf, type WidgetContext } from '../context';
+import { declinedPanel, el, openPanel, type PanelHandle } from '../form';
 
 export interface TextEditorOptions {
   /** The drawing to edit. Default: the one selected drawing. */
@@ -165,9 +165,9 @@ export function isTextContent(d: Drawing | undefined): d is Drawing {
 }
 
 function declined(ctx: WidgetContext, why: string, onDone?: (committed: boolean) => void): TextEditorHandle {
-  ctx.toast(why, 'info');
+  const handle = declinedPanel(ctx, why);
   onDone?.(false);
-  return { el: ctx.document.createElement('div'), close: () => {}, isOpen: () => false, commit: () => {}, cancel: () => {} };
+  return { ...handle, commit: () => {}, cancel: () => {} };
 }
 
 /**
@@ -183,7 +183,7 @@ export function mountTextEditor(ctx: WidgetContext, _anchor?: HTMLElement, opts:
   if (!isTextContent(d)) return declined(ctx, widgetText(ctx, 'Select a text drawing first'), opts.onDone);
   // A box whose commit the controller would refuse is not offered.
   if (d.policy?.editable === false) return declined(ctx, widgetText(ctx, 'read-only'), opts.onDone);
-  const tool = ((): { defaultText?: DrawingText } | null => { try { return getDrawingTool(d.tool); } catch { return null; } })();
+  const tool = drawingToolOf(d.tool);
   const fallback = tool?.defaultText?.value !== undefined && tool.defaultText.value !== '' ? tool.defaultText.value : widgetText(ctx, 'Text');
   const t: TextLike = d.text ?? { value: '' };
   const size = t.fontSize ?? TEXT_SIZE;
@@ -197,7 +197,7 @@ export function mountTextEditor(ctx: WidgetContext, _anchor?: HTMLElement, opts:
   // Chart coordinates are relative to the chart container; the box lives in
   // the overlay layer, which spans the widget root, and the chart starts
   // further right when the rail is up.
-  const off = boxInRoot(ctx.root, container);
+  const off = boxIn(ctx.root, container);
 
   const box = el(doc, 'div', 'oac-textedit');
   box.setAttribute('contenteditable', 'plaintext-only');

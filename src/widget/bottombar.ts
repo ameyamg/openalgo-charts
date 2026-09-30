@@ -29,15 +29,17 @@ import {
   type Chart, type PriceAxisState, type PriceScaleId,
 } from 'openalgo-charts';
 import { chromeIconSvg } from 'openalgo-charts/draw';
-import { glyph, h, type OverlayOptions, type TipController, type WidgetContext } from './context';
+import { glyph, h, type OverlayOptions, type TipController } from './context';
 import { timeBuckets, type DateNavigationResult } from './date-navigator';
+import { describeNavigation } from './date-navigation-dialog';
 import { errorText, widgetText, type WidgetTranslationOptions } from './localization';
 import {
   MarketStatusHold, PHASE_GLYPHS, clockText, marketStatusReading, sessionStateShown, utcOffsetLabel,
   type MarketStatusReading,
 } from './bottombar-status';
 import { DEFAULT_RANGES, type WidgetRange } from './ranges';
-import { openMenu, type MenuRow } from './topbar';
+import { openMenu, type MenuRow } from './menu';
+import { token as v } from './tokens';
 
 /** The bar's height in CSS px. */
 export const BOTTOMBAR_HEIGHT = 28;
@@ -205,16 +207,9 @@ function describeRange(ctx: BottombarContext, chart: Chart, label: string, resul
   const span = { range: label, from: at(result.from), to: at(result.to) };
   switch (result.status) {
     case 'placed': return widgetText(ctx, 'schema.ui.rangeResult.placed', span, '{range}: {from} to {to}');
-    case 'partial':
-      if (result.clipped) return widgetText(ctx, 'The range is wider than the chart. Showing {from} to {to}', span);
-      if (result.history === 'exhausted') return widgetText(ctx, 'History starts at {date}', { date: span.from });
-      if (result.history === 'limited') return widgetText(ctx, 'The history limit stops at {date}', { date: span.from });
-      if (result.history === 'empty') return widgetText(ctx, 'No older bars were found before {date}', { date: span.from });
-      return widgetText(ctx, 'Older history cannot load now. Showing from {date}', { date: span.from });
     case 'no-data': return widgetText(ctx, 'schema.ui.rangeResult.empty', { range: label }, 'No bars for {range}');
-    case 'unsupported': return widgetText(ctx, 'Go to needs a time-based interval');
-    case 'error': return widgetText(ctx, 'Could not load history: {error}', { error: result.error?.message ?? '' });
-    default: return '';
+    // A range is never typed, so an invalid one has no words of its own here.
+    default: return describeNavigation(ctx, result, span) ?? '';
   }
 }
 
@@ -451,10 +446,7 @@ export function mountBottombar(ctx: BottombarContext, host: HTMLElement, opts: B
     const rest = runtimeZones().filter(zone => !first.includes(zone));
     const rows: Array<MenuRow | string> = [...first.map(row)];
     if (rest.length > 0) rows.push(widgetText(ctx, 'schema.ui.bottombar.allZones', {}, 'All zones'), ...rest.map(row));
-    // openMenu is typed for the widget's context but reads only the document,
-    // the overlay opener and the translations, which every bar context has;
-    // a custom host's context is the rest of a WidgetContext it never needed.
-    closeZones = openMenu(ctx as unknown as WidgetContext, anchor, rows, {
+    closeZones = openMenu(ctx, anchor, rows, {
       find: widgetText(ctx, 'schema.ui.bottombar.findZone', {}, 'Find a zone'),
       ariaLabel: widgetText(ctx, 'schema.ui.bottombar.timezones', {}, 'Timezone'),
     });
@@ -608,7 +600,6 @@ export function mountBottombar(ctx: BottombarContext, host: HTMLElement, opts: B
  * the scale toggles are never cut. The narrowest bar shows the status by its
  * glyph, its reading kept as the status region's name.
  */
-const v = (name: string): string => `var(--oac-${name})`;
 export const BOTTOMBAR_CSS = `
 .oac-widget.has-bottombar { grid-template-rows: auto minmax(0, 1fr) auto auto; }
 .oac-widget.has-bottombar > .oac-bottombar { grid-row: 3; }

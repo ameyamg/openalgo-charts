@@ -25,10 +25,11 @@ function setup(source: unknown = 'close') {
     if (reject) throw new Error('Study dependency would create a cycle');
     settings = { ...settings, ...structuredClone(patch) };
   });
-  const consumer = { id: 'consumer', indicatorId: 'ui-dependency-consumer', name: 'Consumer',
+  // Every study handle has a policy; these allow everything, as a study the host placed without one does.
+  const consumer = { id: 'consumer', indicatorId: 'ui-dependency-consumer', name: 'Consumer', policy: () => ({}),
     settings: () => structuredClone(settings), setSettings } as unknown as IndicatorApi;
   const producers = ['first', 'second'].map((id, index) => ({ id, indicatorId: 'ui-dependency-producer',
-    name: 'Repeated study', paneIndex: index + 2, visible: () => false,
+    name: 'Repeated study', paneIndex: index + 2, visible: () => false, policy: () => ({}),
     settings: () => ({ 'scalar:visible': false }), values: () => { throw new Error('Source choices must not calculate'); },
   }) as unknown as IndicatorApi);
   const instances = [consumer, ...producers];

@@ -54,7 +54,7 @@ import { mountDrawingToolbar, type DrawingToolbarHandle } from './drawing-toolba
 import { createDrawingTemplates, type DrawingTemplates } from './drawing-templates';
 import type { DrawingTemplateStore } from 'openalgo-charts/workspace';
 import { errorText, widgetText, type WidgetTranslator } from './localization';
-import { EventDetailsPopup, type EventDetailsPopupOptions } from './event-details';
+import { EventDetailsPopup, eventDetailsLabels, type EventDetailsPopupOptions } from './event-details';
 import type { ChartEventClick } from 'openalgo-charts';
 import { mountDataWindow } from './data-window';
 import { mountPanelDock, type PanelDockHandle, type PanelDockState } from './panel-dock';
@@ -72,7 +72,7 @@ import {
   ShellBus, applySavedLayout, flushOnPageHide, readSaved, reportStorage, restoreWhenLoaded, restoreWidgetState, saveNow, scheduleSave,
   scopeDrawings, stripView as stripSavedView, type PersistHost,
 } from './widget-persist';
-// Bottom bar hook: the bar, the ranges, the session calendar and the shading live in bottombar-shell.ts.
+// The bar, the ranges, the session calendar and the shading live in bottombar-shell.ts.
 import { attachBottombar, BOTTOMBAR_OPTION_KEYS, type BottombarHost, type ShellBottombar, type WidgetBottombarOptions } from './bottombar-shell';
 // Layouts: the store, the menu and the templates live in layouts-widget.ts.
 import type { WorkspaceStore } from 'openalgo-charts/workspace';
@@ -95,7 +95,7 @@ export const DRAWINGS_KEY_PREFIX = 'drawings:';
 export const WIDGET_STATE_VERSION = 1;
 
 /**
- * Hook (chart grid, 2.5.10): the options of a chart under a grid's own
+ * The options of a chart under a grid's own
  * bottom bar, which carries Go to and the market status for every chart. Such
  * a chart shows neither in its own bars, and opens its go-to panel in the
  * context this gives, over the whole grid. Internal: the tier does not export it.
@@ -201,7 +201,6 @@ export interface WidgetOptions extends Omit<ChartOptions, 'theme'>, WidgetBottom
   layouts?: LayoutsController | false;
   /** The floating toolbar over the selected drawings on a desktop layout. Default: shown with the rail. */
   drawingToolbar?: boolean;
-  // Hook (chart grid, 2.5.10): read by topbar.ts openCapture; the grid fills it.
   /**
    * More rows at the end of the capture menu, read each time it opens; a
    * string starts a group. The chart grid adds its whole-grid capture here.
@@ -217,7 +216,14 @@ export interface WidgetOptions extends Omit<ChartOptions, 'theme'>, WidgetBottom
   symbolSearch?: SymbolSearch;
   /** How many bars a load asks the feed for. Default `DEFAULT_LOOKBACK_BARS`. */
   lookbackBars?: number;
-  /** Clock for the load window and the capture filename. Default `Date.now`. */
+  /**
+   * The widget's wall clock, in epoch milliseconds: the history load window,
+   * the loading controller's clock (unless `loading.now` gives it one, in UTC
+   * seconds), the status line and the bottom bar's clock and ranges. Default
+   * `Date.now`. It shadows `ChartOptions.now`, the chart's animation clock
+   * (monotonic, `performance.now` by default), which the widget does not pass
+   * to its chart: its kinetic animation runs on the real clock.
+   */
   now?: () => number;
   /** Order entry from the right-click menu. Without it the menu draws no trade rows. */
   onOrder?: (order: OrderRequest) => void;
@@ -384,7 +390,7 @@ const WIDGET_ONLY_KEYS: ReadonlyArray<keyof WidgetOptions> = [
   'panels', 'typingNavigation', 'keyboardRoute', 'watchlist', 'news', 'drawingTemplates', 'drawingToolbar',
   'shortcutsEditor',
   'workspaces', 'layouts',
-  // Bottom bar hook: its options are the widget's, not the chart's.
+  // The bottom bar's options are the widget's, not the chart's.
   ...BOTTOMBAR_OPTION_KEYS,
 ];
 
@@ -478,6 +484,81 @@ class WidgetContextImpl implements WidgetContext {
 }
 
 /**
+ * The chart's options from the widget's. Everything the widget does not
+ * consume itself goes to the chart as is, so a host keeps every engine option
+ * it had; the widget adds its default bar spacing, reduced motion when the
+ * user asks for it, and for a routed widget the engine's shortcuts gated by
+ * the same decision as its own chords (`inChart` answers while the route
+ * leaves the choice open).
+ */
+function engineOptions(options: WidgetOptions, doc: Document, inChart: () => boolean): ChartOptions {
+  const chartOpts = { ...options } as Record<string, unknown>;
+  for (const k of WIDGET_ONLY_KEYS) delete chartOpts[k];
+  if (options.navigation?.defaultVisibleBars === undefined && options.navigation?.defaultBarSpacing === undefined) {
+    chartOpts.navigation = { ...options.navigation, defaultBarSpacing: options.timeScale?.barSpacing ?? 8 };
+  }
+  // `movablePrimaryPane` reaches the engine as the host gave it, off unless
+  // set. The widget's own chrome follows the price pane wherever it sits,
+  // but a host's code on `widget.chart` may still pass 0 for the price, and
+  // only the host knows whether it does.
+  const reducedMotion = doc.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+  if (reducedMotion && chartOpts.animZoom === undefined) chartOpts.animZoom = false;
+  if (reducedMotion && chartOpts.animAutoscale === undefined) chartOpts.animAutoscale = false;
+  // A routed widget hands the engine's shortcuts the same decision as its own
+  // chords, so a hovered chart that is not the routed one stays still. A
+  // host's own manager, which a grid shares between its charts, is wrapped
+  // per chart rather than rebuilt, and its scope still decides whenever the
+  // route leaves the choice open.
+  const route = options.keyboardRoute;
+  const given = options.shortcuts;
+  if (route !== undefined && given !== false) {
+    const target = given instanceof ShortcutManager ? given : new ShortcutManager(given);
+    chartOpts.shortcuts = new Proxy(target, {
+      get: (t, key) => {
+        if (key === 'scope') return 'global';
+        if (key === 'resolve') return (e: KeyboardEvent) => ((route() ?? (t.scope === 'global' || inChart())) ? t.resolve(e) : null);
+        const value = Reflect.get(t, key) as unknown;
+        return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(t) : value;
+      },
+    });
+  }
+  return chartOpts as ChartOptions;
+}
+
+/**
+ * The popup chart-owned event markers open, in the widget's language and on
+ * the chart's clock, closed by a context change or new events. Returns the
+ * teardown.
+ */
+function eventDetailsPopup(ctx: WidgetContext, chartEl: HTMLElement, options: WidgetOptions): () => void {
+  const chart = ctx.chart;
+  const own = options.eventDetails === false ? undefined : options.eventDetails;
+  const eventDetails = new EventDetailsPopup(chartEl, {
+    styleNonce: options.styleNonce, overlays: ctx.overlays,
+    formatTime: time => {
+      const date = new Date(time * 1000);
+      return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat(options.locale, {
+        timeZone: chart.timezone(), dateStyle: 'medium', timeStyle: 'short',
+      }).format(date) : String(time);
+    },
+    ...own,
+    // In the widget's language; a host's own labels still win, one by one.
+    labels: { ...eventDetailsLabels(ctx), ...own?.labels },
+    // Reuse the host's shared stylesheet and its preserved CSP nonce.
+    injectStyles: false,
+  });
+  const offs = [
+    chart.on('event:click', payload => {
+      const details = payload as ChartEventClick;
+      eventDetails.open(details, details.point);
+    }),
+    chart.on('data:context', () => eventDetails.close()),
+    chart.on('events:change', () => eventDetails.close()),
+  ];
+  return () => { for (const off of offs) off(); eventDetails.destroy(); };
+}
+
+/**
  * A study legend's eye, gear and cross and the cross on an order or position
  * line are painted on the canvas, with no element to carry a name, so the
  * chart's hover id raises the widget's tip at the pointer saying what a press
@@ -550,7 +631,7 @@ class WidgetImpl implements Widget {
   private _goToPanel: PanelHandle | null = null;
   private _layouts: WidgetLayouts | null = null;
   private readonly _navigator: DateNavigator;
-  /** Bottom bar hook: the ranges, the load window and the bar's controls (bottombar-shell.ts). */
+  /** The ranges, the load window and the bar's controls (bottombar-shell.ts). */
   private readonly _bottombar: ShellBottombar;
   /** Bumped by every go-to request and every context change, so a waiting request knows it lost. */
   private _navigation = 0;
@@ -660,39 +741,7 @@ class WidgetImpl implements Widget {
     container.appendChild(root);
 
     // ── the engine ─────────────────────────────────────────────────────
-    // Everything the widget does not consume itself goes to the chart as is,
-    // so a host keeps every engine option it had.
-    const chartOpts = { ...options } as Record<string, unknown>;
-    for (const k of WIDGET_ONLY_KEYS) delete chartOpts[k];
-    if (options.navigation?.defaultVisibleBars === undefined && options.navigation?.defaultBarSpacing === undefined) {
-      chartOpts.navigation = { ...options.navigation, defaultBarSpacing: options.timeScale?.barSpacing ?? 8 };
-    }
-    // `movablePrimaryPane` reaches the engine as the host gave it, off unless
-    // set. The widget's own chrome follows the price pane wherever it sits,
-    // but a host's code on `widget.chart` may still pass 0 for the price, and
-    // only the host knows whether it does.
-    const reducedMotion = doc.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
-    if (reducedMotion && chartOpts.animZoom === undefined) chartOpts.animZoom = false;
-    if (reducedMotion && chartOpts.animAutoscale === undefined) chartOpts.animAutoscale = false;
-    // A routed widget hands the engine's shortcuts the same decision as its own
-    // chords, so a hovered chart that is not the routed one stays still. A
-    // host's own manager, which a grid shares between its charts, is wrapped
-    // per chart rather than rebuilt, and its scope still decides whenever the
-    // route leaves the choice open.
-    const route = options.keyboardRoute;
-    const given = options.shortcuts;
-    if (route !== undefined && given !== false) {
-      const target = given instanceof ShortcutManager ? given : new ShortcutManager(given);
-      chartOpts.shortcuts = new Proxy(target, {
-        get: (t, key) => {
-          if (key === 'scope') return 'global';
-          if (key === 'resolve') return (e: KeyboardEvent) => ((route() ?? (t.scope === 'global' || this._inChart())) ? t.resolve(e) : null);
-          const value = Reflect.get(t, key) as unknown;
-          return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(t) : value;
-        },
-      });
-    }
-    this.chart = createChart(chartEl, { ...(chartOpts as ChartOptions), theme: this._chartTheme, document: doc });
+    this.chart = createChart(chartEl, { ...engineOptions(options, doc, () => this._inChart()), theme: this._chartTheme, document: doc });
     chartEl.setAttribute('aria-label', options.ariaLabel ?? widgetText(options, 'Price chart'));
     const transform = this._transformFor(this._chartType, options.chartType === undefined ? saved?.chart : undefined);
     this._series = this.chart.addSeries((transform === null ? this._chartType : getSeriesTransform(transform.type).renderer) as SeriesType,
@@ -766,27 +815,7 @@ class WidgetImpl implements Widget {
     });
     this._cleanups.push(() => { tips.destroy(); overlays.destroy(); });
     this._cleanups.push(canvasButtonTips(this.context, chartEl));
-    if (options.eventDetails !== false) {
-      const eventDetails = new EventDetailsPopup(chartEl, {
-        styleNonce: options.styleNonce, overlays: this.context.overlays,
-        formatTime: time => {
-          const date = new Date(time * 1000);
-          return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat(options.locale, {
-            timeZone: this.chart.timezone(), dateStyle: 'medium', timeStyle: 'short',
-          }).format(date) : String(time);
-        },
-        ...options.eventDetails,
-        // Reuse the host's shared stylesheet and its preserved CSP nonce.
-        injectStyles: false,
-      });
-      this._cleanups.push(this.chart.on('event:click', payload => {
-        const details = payload as ChartEventClick;
-        eventDetails.open(details, details.point);
-      }));
-      this._cleanups.push(this.chart.on('data:context', () => eventDetails.close()));
-      this._cleanups.push(this.chart.on('events:change', () => eventDetails.close()));
-      this._cleanups.push(() => eventDetails.destroy());
-    }
+    if (options.eventDetails !== false) this._cleanups.push(eventDetailsPopup(this.context, chartEl, options));
     this._dataStatus = mountDataStatus(this.context, stage, this.dataController, () => { void this.reload(); });
     if (options.panels !== false) {
       this._dock = mountPanelDock(this.context, stage, {
@@ -796,19 +825,22 @@ class WidgetImpl implements Widget {
           host.appendChild(content.element);
           return content;
         },
+        // An optional handler is passed only when there is one, so the
+        // public declarations keep their method form.
         // Rows name instruments as setSymbol will chart them, so case cannot split one instrument in two.
-        watchlist: options.watchlist ? host => mountWatchlistPanel(this.context, host, {
+        ...(options.watchlist ? { watchlist: (host: HTMLElement) => mountWatchlistPanel(this.context, host, {
           ...options.watchlist!, onSelect: instrument => this.setSymbol(instrument.symbol, instrument.exchange),
           normalize: instrument => ({ symbol: instrument.symbol.trim().toUpperCase(), exchange: instrument.exchange }),
-        }) : undefined,
-        news: options.news ? host => mountNewsPanel(this.context, host, options.news!) : undefined,
+        }) } : {}),
+        ...(options.news ? { news: (host: HTMLElement) => mountNewsPanel(this.context, host, options.news!) } : {}),
         onChange: () => { this._bus.emit('layout', { reason: 'panels' }); this._scheduleSave(); },
       });
     }
     // The right-click menu is the one dialog nothing in the chrome opens, so
     // the shell subscribes it to the chart itself.
     this._cleanups.push(attachContextMenu(this.context, {
-      onOrder: options.onOrder, tradingCapabilities: options.tradingCapabilities, tradingMode: options.tradingMode, tradingLocked: options.tradingLocked,
+      ...(options.onOrder ? { onOrder: options.onOrder } : {}), tradingCapabilities: options.tradingCapabilities, tradingMode: options.tradingMode,
+      ...(options.tradingLocked ? { tradingLocked: options.tradingLocked } : {}),
     }));
 
     // ── chrome ─────────────────────────────────────────────────────────
@@ -819,7 +851,7 @@ class WidgetImpl implements Widget {
     this.drawingTemplates = options.drawingTemplates ? createDrawingTemplates(this.context, options.drawingTemplates) : null;
     (this.context as WidgetContextImpl).drawingTemplates = this.drawingTemplates ?? undefined;
     if (options.drawingToolbar ?? options.rail !== false) this._drawbar = mountDrawingToolbar(this.context, stage, { chart: chartEl, templates: this.drawingTemplates });
-    // Bottom bar hook: with no bar, here or under a grid, Go to and the market status stay in the chart's own bars.
+    // With no bottom bar, here or under a grid, Go to and the market status stay in the chart's own bars.
     const gridBar = GRID_BAR_CHARTS.has(options);
     const barless = options.bottombar === false && !gridBar;
     if (options.statusline !== false) {
@@ -830,7 +862,7 @@ class WidgetImpl implements Widget {
         this._cleanups.push(() => summary.destroy());
       }
     }
-    // Bottom bar hook: the calendar, the shading, the ranges and the bar, between the stage and the status line.
+    // The calendar, the shading, the ranges and the bottom bar, between the stage and the status line.
     this._bottombar = attachBottombar.call(this as unknown as BottombarHost, statusEl);
     this._layouts = attachWidgetLayouts(this, options); // Layouts: before the chrome that opens the menu.
     if (options.topbar !== false) {
@@ -846,11 +878,11 @@ class WidgetImpl implements Widget {
         onSettings: (anchor) => this._openDialog('settings', anchor),
         onIndicators: (anchor) => this._openDialog('indicatorPicker', anchor),
         onObjects: (anchor) => this._openObjects(anchor),
-        onDataWindow: options.panels === false ? undefined : () => this._dock?.toggle('data'),
+        ...(options.panels === false ? {} : { onDataWindow: () => this._dock?.toggle('data') }),
         onAlerts: (anchor) => this._openAlerts(anchor),
-        onWatchlist: this._docked('watchlist') ? () => this._dock?.toggle('watchlist') : undefined,
-        onNews: this._docked('news') ? () => this._dock?.toggle('news') : undefined,
-        onGoTo: barless ? (anchor) => this._openGoTo(anchor) : undefined,
+        ...(this._docked('watchlist') ? { onWatchlist: () => this._dock?.toggle('watchlist') } : {}),
+        ...(this._docked('news') ? { onNews: () => this._dock?.toggle('news') } : {}),
+        ...(barless ? { onGoTo: (anchor: HTMLElement) => this._openGoTo(anchor) } : {}),
         layouts: this._layouts?.controller ?? undefined, onLayouts: (anchor) => this._layouts?.open(anchor),
         settingsAvailable: () => widgetDialog('settings') !== null,
         indicatorsAvailable: () => widgetDialog('indicatorPicker') !== null,
@@ -875,17 +907,17 @@ class WidgetImpl implements Widget {
       onSettings: (anchor) => this._openDialog('settings', anchor),
       onIndicators: (anchor) => this._openDialog('indicatorPicker', anchor),
       onObjects: (anchor) => this._openObjects(anchor),
-      onDataWindow: options.panels === false ? undefined : () => this._dock?.toggle('data'),
+      ...(options.panels === false ? {} : { onDataWindow: () => this._dock?.toggle('data') }),
       onAlerts: (anchor) => this._openAlerts(anchor),
-      onWatchlist: this._docked('watchlist') ? () => this._dock?.open('watchlist') : undefined,
-      onNews: this._docked('news') ? () => this._dock?.open('news') : undefined,
+      ...(this._docked('watchlist') ? { onWatchlist: () => this._dock?.open('watchlist') } : {}),
+      ...(this._docked('news') ? { onNews: () => this._dock?.open('news') } : {}),
       // A grid's bar shows on a phone too, so its Go to is the only one.
-      onGoTo: gridBar ? undefined : (anchor) => this._openGoTo(anchor),
+      ...(gridBar ? {} : { onGoTo: (anchor: HTMLElement) => this._openGoTo(anchor) }),
       onProperties: (anchor) => this._openDialog('drawingProperties', anchor),
       onCapture: (anchor) => this._topbar?.openCapture(anchor),
-      // Bottom bar hook: the More sheet stands in for the bar the phone layout hides.
+      // The More sheet stands in for the bottom bar the phone layout hides.
       bottombar: this._bottombar.controls,
-      onLayouts: this._layouts?.controller ? () => this._layouts?.open() : undefined,
+      ...(this._layouts?.controller ? { onLayouts: () => this._layouts?.open() } : {}),
       settingsAvailable: () => widgetDialog('settings') !== null,
       indicatorsAvailable: () => widgetDialog('indicatorPicker') !== null,
     });
@@ -1078,7 +1110,7 @@ class WidgetImpl implements Widget {
     return true;
   }
   public openDateNavigation(): boolean { return this._openGoTo(); }
-  // Bottom bar hook: a range is the widget's, so it works with the bar off.
+  // A range is the widget's, so it works with the bottom bar off.
   public setRange(id: string): Promise<DateNavigationResult> { return this._bottombar.setRange(id); }
   public range(): string | null { return this._bottombar.range(); }
 
@@ -1147,7 +1179,7 @@ class WidgetImpl implements Widget {
     if (same) { await controller.refresh(); return; }
     const nowSec = this._opts.loading?.now?.() ?? Math.floor((this._opts.now ?? Date.now)() / 1000);
     const request: BarsRequest = { symbol: this._symbol, exchange: this._exchange, interval: this._interval,
-      // Bottom bar hook: a range in force widens the window to its sessions.
+      // A range in force widens the window to its sessions.
       ...this._bottombar.fetchWindow(loadWindow(this._interval, this._opts.lookbackBars ?? DEFAULT_LOOKBACK_BARS, nowSec), nowSec),
       ...(this._variant ? { variant: this._variant } : {}) };
     this._initialView = true;

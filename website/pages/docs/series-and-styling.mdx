@@ -194,6 +194,13 @@ are not parsed**, so keep a settings default in one of those forms. `withAlpha` 
 alpha outright rather than multiplying it, and `fromGradient` interpolates the alpha channel
 along with the other three, so a translucent endpoint stays translucent.
 
+The widget tier exports a `withAlpha` of its own, for CSS token values, and the two answer
+the same call differently: this one always writes `rgba(r,g,b,a)` with the alpha as given,
+for a canvas colour, where the widget's writes `#rrggbb` when the result is opaque and
+clamps the alpha to 0..1 (`withAlpha('#26a69a', 1)` is `rgba(38,166,154,1)` here and
+`#26a69a` there). Use this one for anything the chart paints, and alias one of them when
+a module imports both.
+
 Four behaviours worth relying on:
 
 - **Neither throws.** An input they cannot parse comes back untouched from `withAlpha`, and
