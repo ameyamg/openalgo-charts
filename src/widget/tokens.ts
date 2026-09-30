@@ -43,7 +43,7 @@ export function parseColor(input: string): Rgba | null {
   const s = input.trim();
   const hex = /^#([0-9a-f]{3,8})$/i.exec(s);
   if (hex !== null) {
-    const h = hex[1];
+    const h = hex[1]!; // the group is not optional, so any match fills it
     if (h.length === 3 || h.length === 4) {
       const wide = h.split('').map((c) => c + c).join('');
       return parseColor('#' + wide);

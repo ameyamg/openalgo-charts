@@ -326,7 +326,8 @@ export function mountWatchlistPanel(ctx: WidgetContext, host: HTMLElement, optio
       return;
     }
     const at = order.indexOf(keyOf(row.entry));
-    rows.get(order[at + step])?.open.focus();
+    // Past either end there is no key, and a lookup with none finds no row.
+    (rows as ReadonlyMap<string | undefined, Row>).get(order[at + step])?.open.focus();
   }
 
   /**

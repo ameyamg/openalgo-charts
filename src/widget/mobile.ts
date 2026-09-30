@@ -48,14 +48,14 @@ export function resolveMobileMode(mode: MobileMode, width: number, height: numbe
 }
 
 export interface MobileOptions {
-  mode?: MobileMode;
+  mode?: MobileMode | undefined;
   container: HTMLElement;
   intervals: readonly string[];
   topbar: boolean;
   rail: RailHandle | null;
-  tools?: readonly string[];
+  tools?: readonly string[] | undefined;
   indicators: boolean;
-  search?: SymbolSearch;
+  search?: SymbolSearch | undefined;
   state(): TopbarState;
   onSymbol(symbol: string, exchange?: string): void;
   onInterval(code: string): void;
@@ -64,14 +64,16 @@ export interface MobileOptions {
   onSettings(anchor: HTMLElement): boolean;
   onIndicators(anchor: HTMLElement): boolean;
   onObjects(anchor: HTMLElement): boolean;
-  onDataWindow?(anchor: HTMLElement): void | boolean;
+  // A handler the widget may pass as undefined is a property typed from a
+  // method signature, so it takes the same host functions a method does.
+  onDataWindow?: { onDataWindow(anchor: HTMLElement): void | boolean }['onDataWindow'] | undefined;
   onAlerts?(anchor: HTMLElement): boolean;
-  onWatchlist?(anchor: HTMLElement): void | boolean;
-  onNews?(anchor: HTMLElement): void | boolean;
+  onWatchlist?: { onWatchlist(anchor: HTMLElement): void | boolean }['onWatchlist'] | undefined;
+  onNews?: { onNews(anchor: HTMLElement): void | boolean }['onNews'] | undefined;
   onCapture?(anchor: HTMLElement): void;
-  onGoTo?(anchor: HTMLElement): void | boolean;
+  onGoTo?: { onGoTo(anchor: HTMLElement): void | boolean }['onGoTo'] | undefined;
   /** Open the Layouts menu, centred. Omitted without a store. Since 2.5.10. */
-  onLayouts?(anchor: HTMLElement): void | boolean;
+  onLayouts?: { onLayouts(anchor: HTMLElement): void | boolean }['onLayouts'] | undefined;
   onProperties(anchor: HTMLElement): boolean;
   settingsAvailable(): boolean;
   indicatorsAvailable(): boolean;
@@ -80,7 +82,7 @@ export interface MobileOptions {
    * sheet lists them instead: the market status and the clock, the preset
    * ranges, the price scale toggles and the timezone.
    */
-  bottombar?: BottombarControls;
+  bottombar?: BottombarControls | undefined;
 }
 
 export interface MobileHandle {

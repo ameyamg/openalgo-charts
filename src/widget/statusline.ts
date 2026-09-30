@@ -36,7 +36,7 @@ import { MarketStatusHold, marketStatusReading, sessionStateShown } from './bott
 
 export interface StatuslineOptions {
   /** BCP 47 tag for number formatting. Default: the runtime's. */
-  locale?: string;
+  locale?: string | undefined;
   /**
    * Show the market status from the chart's session calendar, while the
    * chart's "Session state" switch is on. Nothing shows without a calendar
@@ -44,7 +44,7 @@ export interface StatuslineOptions {
    */
   marketStatus?: boolean;
   /** Clock for the market status, in milliseconds. Default `Date.now`. */
-  now?: () => number;
+  now?: (() => number) | undefined;
 }
 
 export interface StatuslineHandle {

@@ -183,7 +183,7 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
   const go = (index: number): void => {
     const all = controls();
     if (all.length === 0) return;
-    const next = all[((index % all.length) + all.length) % all.length];
+    const next = all[((index % all.length) + all.length) % all.length]!; // a non-empty list, index wrapped into it
     setRoving(next);
     next.focus();
   };

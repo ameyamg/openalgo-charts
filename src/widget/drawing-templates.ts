@@ -115,7 +115,7 @@ export function createDrawingTemplates(ctx: WidgetContext, store: DrawingTemplat
     placed = null;
     const change = payload as DrawingChangeEvent;
     if (destroyed || change.kind !== 'add' || change.step === undefined || change.linked === true || change.ids.length !== 1) return;
-    const d = draw.get(change.ids[0]);
+    const d = draw.get(change.ids[0]!); // exactly one id, checked above
     if (d === undefined || draw.activeTool() !== d.tool || defaultFor(d.tool) === undefined) return;
     const candidate = d.id;
     placed = candidate;
@@ -192,7 +192,7 @@ export function createDrawingTemplates(ctx: WidgetContext, store: DrawingTemplat
 /** One row of a template menu, in the shape `openMenu` takes. */
 export interface TemplateMenuRow {
   label: string;
-  sub?: string;
+  sub?: string | undefined;
   on?: boolean;
   disabled?: boolean;
   danger?: boolean;
@@ -210,7 +210,7 @@ export function templateMenuRows(
 ): Array<TemplateMenuRow | string> {
   const drawings = ids.map((id) => ctx.draw.get(id)).filter((d): d is Drawing => d !== undefined);
   const tools = new Set(drawings.map((d) => d.tool));
-  const tool = tools.size === 1 ? drawings[0].tool : null;
+  const tool = tools.size === 1 ? drawings[0]!.tool : null; // one tool means at least one drawing
   const primary = drawings[0];
   const editable = editableIds(ctx.draw, ids).length > 0;
   const rows: Array<TemplateMenuRow | string> = [widgetText(ctx, 'Templates')];

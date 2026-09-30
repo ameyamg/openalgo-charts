@@ -62,7 +62,7 @@ export interface RangeWindowOptions {
    * Bars already loaded, oldest first. Without a calendar a `session` range
    * counts the dates they fall on, and `all` starts at the first of them.
    */
-  readonly bars?: readonly { readonly time: number }[];
+  readonly bars?: readonly { readonly time: number }[] | undefined;
 }
 
 const DAY = 86400;
@@ -199,17 +199,18 @@ function weekdaysBack(end: number, zone: string, count: number): number {
 
 /** The first bar of the `count`-th most recent date the bars fall on, in `zone`. */
 function datesBack(bars: readonly { readonly time: number }[], zone: string, count: number): number {
+  // rangeWindow passes loaded bars only, never an empty list; i stays inside them.
   let seen = 0;
   let day = NaN;
-  let from = bars[bars.length - 1].time;
+  let from = bars[bars.length - 1]!.time;
   for (let i = bars.length - 1; i >= 0; i--) {
-    const midnight = midnightBefore(bars[i].time, zone, 0);
+    const midnight = midnightBefore(bars[i]!.time, zone, 0);
     if (midnight !== day) {
       if (seen === count) break;
       seen++;
       day = midnight;
     }
-    from = bars[i].time;
+    from = bars[i]!.time;
   }
   return from;
 }
@@ -257,7 +258,7 @@ export function rangeWindow(range: WidgetRange, options: RangeWindowOptions): Wi
       break;
     }
     default:
-      from = bars !== null ? bars[0].time : monthsBack(end, zone, ALL_YEARS * 12);
+      from = bars !== null ? bars[0]!.time : monthsBack(end, zone, ALL_YEARS * 12); // bars is null when empty
   }
   return { from: Math.min(from, end), to: end };
 }

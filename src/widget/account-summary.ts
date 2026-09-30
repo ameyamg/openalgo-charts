@@ -20,7 +20,7 @@ export interface AccountSummaryOptions {
   /** Usually an `AccountManager` from the trade tier. */
   source: AccountStateSource;
   /** BCP 47 tag for the figures. Default: the widget's. */
-  locale?: string;
+  locale?: string | undefined;
 }
 
 export interface AccountSummaryHandle {

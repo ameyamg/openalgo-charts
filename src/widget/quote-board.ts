@@ -25,11 +25,11 @@ export interface QuoteRow {
 
 export interface QuoteBoardOptions {
   /** Without one, every row is `unavailable`. */
-  feed?: QuoteFeed | null;
+  feed?: QuoteFeed | null | undefined;
   /** A snapshot older than this is stale. Default 60000 ms. */
-  staleAfterMs?: number;
+  staleAfterMs?: number | undefined;
   /** Refresh interval for visible rows when the source cannot stream. 0 disables. Default 15000 ms. */
-  pollMs?: number;
+  pollMs?: number | undefined;
   now?: () => number;
   /** Called after any change a row or the status shows. */
   onChange?(): void;

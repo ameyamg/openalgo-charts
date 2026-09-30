@@ -51,7 +51,7 @@ export const BOTTOMBAR_HEIGHT = 28;
 export interface BottombarContext extends WidgetTranslationOptions {
   readonly document: Document;
   /** BCP 47 tag for weekday names. Default: the runtime's. */
-  readonly locale?: string;
+  readonly locale?: string | undefined;
   readonly tips: TipController;
   openOverlay(el: HTMLElement, opts?: OverlayOptions): () => void;
   /** Report what a control did, and why a range fell short. */
@@ -81,11 +81,11 @@ export interface BottombarOptions {
    */
   target?: () => BottombarTarget | null;
   /** The range buttons. `[]` leaves them out. Default `DEFAULT_RANGES`. */
-  ranges?: readonly WidgetRange[];
+  ranges?: readonly WidgetRange[] | undefined;
   /** Open the go-to panel from the bar's button. Omit to leave the button out. */
   onGoTo?(anchor: HTMLElement): void | boolean;
   /** Clock for the time and the market status, in milliseconds. Default `Date.now`. */
-  now?: () => number;
+  now?: (() => number) | undefined;
   /** Zones the timezone menu lists first. Default: those the settings dialog offers. */
   timezones?: readonly string[];
   /** Called after the bar moves the chart to another zone, for a host that keeps its own copy. */
@@ -197,7 +197,7 @@ function spanText(ctx: WidgetTranslationOptions, range: WidgetRange): string {
 /** What a range did, for the status line, in the dialog's words where they fit. */
 function describeRange(ctx: BottombarContext, chart: Chart, label: string, result: DateNavigationResult): string {
   const zone = chart.timezone();
-  const intraday = chart.primaryBars().length > 1 && chart.primaryBars()[1].time - chart.primaryBars()[0].time < 86400;
+  const intraday = chart.primaryBars().length > 1 && chart.primaryBars()[1]!.time - chart.primaryBars()[0]!.time < 86400; // length checked first
   let format: Intl.DateTimeFormat;
   try { format = new Intl.DateTimeFormat(ctx.locale, { timeZone: zone, dateStyle: 'medium', ...(intraday ? { timeStyle: 'short' } : {}) }); }
   catch { format = new Intl.DateTimeFormat(undefined, { timeZone: zone, dateStyle: 'medium' }); }

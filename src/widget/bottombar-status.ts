@@ -79,7 +79,7 @@ function when(t: number, nowSec: number, zone: string, locale: string | undefine
 
 /** The status as words, the next change on the chart's clock. */
 export function marketStatusReading(
-  ctx: WidgetTranslationOptions & { readonly locale?: string },
+  ctx: WidgetTranslationOptions & { readonly locale?: string | undefined },
   status: MarketStatus, nowSec: number, zone: string,
 ): MarketStatusReading {
   const phase = status.phase;

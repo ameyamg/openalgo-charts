@@ -136,11 +136,11 @@ export function installKeys(this: KeysHost): void {
   bind('Enter', editing, 'Finish the drawing being placed', 'finish', { fixed: true });
   // The arrows are layered: with nothing selected they decline and the
   // engine's pan runs, so they are not a conflict with it.
-  for (const [dir, key] of [['left', 'ArrowLeft'], ['right', 'ArrowRight'], ['up', 'ArrowUp'], ['down', 'ArrowDown']]) {
+  for (const [dir, key] of [['left', 'ArrowLeft'], ['right', 'ArrowRight'], ['up', 'ArrowUp'], ['down', 'ArrowDown']] as const) {
     bind(key, editing, `Nudge the selection ${dir} (Shift: ten pixels)`, `nudge-${dir}`, { layered: true, fixed: true });
   }
   for (const dir of ['left', 'right', 'up', 'down']) {
-    bind(`Shift+Arrow${dir[0].toUpperCase()}${dir.slice(1)}`, editing, 'Nudge ten pixels', `nudge-${dir}-far`, { hidden: true, layered: true, fixed: true });
+    bind(`Shift+Arrow${dir[0]!.toUpperCase()}${dir.slice(1)}`, editing, 'Nudge ten pixels', `nudge-${dir}-far`, { hidden: true, layered: true, fixed: true }); // four non-empty names
   }
   bind('Escape', (e) => {
     if (draw.activeTool() !== null) {

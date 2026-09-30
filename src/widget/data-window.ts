@@ -19,7 +19,7 @@ export interface DataWindowSnapshot {
   timestamp: string;
   sections: DataWindowSection[];
 }
-export interface DataWindowOptions extends WidgetTranslationOptions { locale?: string }
+export interface DataWindowOptions extends WidgetTranslationOptions { locale?: string | undefined }
 export interface DataWindowHandle { el: HTMLElement; refresh(): void; destroy(): void }
 
 /** Read an exact candle, or the latest when time is omitted. Does not change the crosshair. */
@@ -34,7 +34,7 @@ function readSnapshot(chart: Chart, bars: readonly Bar[], time: number | undefin
   let index = bars.length - 1;
   if (time !== undefined) {
     let lo = 0, hi = bars.length;
-    while (lo < hi) { const mid = (lo + hi) >>> 1; if (bars[mid].time < time) lo = mid + 1; else hi = mid; }
+    while (lo < hi) { const mid = (lo + hi) >>> 1; if (bars[mid]!.time < time) lo = mid + 1; else hi = mid; } // mid < hi <= length
     index = bars[lo]?.time === time ? lo : -1;
   }
   const bar = bars[index];
@@ -56,7 +56,7 @@ function readSnapshot(chart: Chart, bars: readonly Bar[], time: number | undefin
     return { key, label, raw: value, value: value === null ? unavailable : format(value, source, price) };
   };
   const priceRows = (['open', 'high', 'low', 'close'] as const).map(key => row(key,
-    text(key, key[0].toUpperCase() + key.slice(1)), bar?.[key], true));
+    text(key, key[0]!.toUpperCase() + key.slice(1)), bar?.[key], true)); // four non-empty names
   priceRows.push(row('volume', text('volume', 'Volume'), bar?.volume));
   const hasOi = chart.hasOpenInterest !== false && (chart.hasOpenInterest === true || historyHasOi);
   if (hasOi) priceRows.push(row('oi', text('oi', 'Open interest'), bar?.oi));

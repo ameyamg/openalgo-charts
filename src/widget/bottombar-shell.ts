@@ -184,7 +184,8 @@ function wire(host: BottombarHost, before: HTMLElement): ShellBottombar {
     // the interval already in force no load came first, and the bars hold
     // only an ordinary lookback.
     const all = range.unit === 'all';
-    const window = rangeWindow(range, { end: bars[bars.length - 1].time, zone: chart.timezone(), calendar: calendar(), bars: all ? undefined : bars });
+    // bars is not empty: checked above.
+    const window = rangeWindow(range, { end: bars[bars.length - 1]!.time, zone: chart.timezone(), calendar: calendar(), bars: all ? undefined : bars });
     let result = await host.goTo(window);
     if (mine !== request || host._destroyed) return result;
     // For All, history that ends is the range itself, not a shortfall to report.

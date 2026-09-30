@@ -276,7 +276,7 @@ export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptio
     refreshControls();
   };
   const cycleMagnet = (): MagnetMode => {
-    const next = MAGNET_MODES[(MAGNET_MODES.indexOf(prefs.magnet) + 1) % MAGNET_MODES.length];
+    const next = MAGNET_MODES[(MAGNET_MODES.indexOf(prefs.magnet) + 1) % MAGNET_MODES.length]!; // wrapped into the three modes
     setMagnetMode(next);
     // The magnet snaps to study values too (draw/snap.ts), not only to O/H/L/C.
     ctx.status(next === 'off' ? widgetText(ctx, 'Magnet off')
@@ -375,7 +375,7 @@ export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptio
     let downOnChevron = false;
     const b = makeBtn({
       cls: 'oac-rail__tool oac-rail__group',
-      glyphEl: toolGlyph(doc, lastOf(g) ?? tools[0]),
+      glyphEl: toolGlyph(doc, lastOf(g) ?? tools[0]!), // the rail builds a group button only for a group with tools
       tip: () => ({
         title: translatedTool(lastOf(g)),
         chord: chordOf(lastOf(g)),
@@ -617,7 +617,7 @@ export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptio
         const all = draw.drawings();
         const picked = all.filter((d) => d.policy?.selectable !== false).length;
         const n = editableIds(draw, all.map((d) => d.id)).length;
-        openRailMenu(ctl.trash, [
+        openRailMenu(ctl.trash!, [ // set by the makeBtn call this handler is part of
           { label: widgetText(ctx, 'Select all ({count})', { count: picked }), icon: 'cursor', disabled: picked === 0, onSelect: () => {
             draw.select(all.map((d) => d.id));
             refreshControls();
@@ -767,7 +767,7 @@ export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptio
   const go = (i: number): void => {
     const all = buttons();
     if (all.length === 0) return;
-    const b = all[((i % all.length) + all.length) % all.length];
+    const b = all[((i % all.length) + all.length) % all.length]!; // a non-empty list, index wrapped into it
     setRoving(b);
     b.focus();
   };
