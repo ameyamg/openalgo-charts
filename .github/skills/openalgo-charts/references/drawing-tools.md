@@ -423,9 +423,10 @@ new DrawingController(chart, {
   historyLimit: 50,         // undo depth
   defaultStyle: {},         // merged UNDER each tool's own defaults
   clipboard: undefined,     // ClipboardPort; defaults to navigator.clipboard, null disables it
+  clipboardFallbackToMemory: true, // a refused write still lands in the in-process clipboard; false makes cut safe
   pasteOffsetBars: 2,       // how far a paste is nudged along time
   pasteOffsetPixels: 16,    // how far a paste is nudged down the price axis
-  inputAnchors: true,       // draw the anchor of every paired study input that declares one
+  inputAnchors: true,       // draw the anchor of every paired study input that declares one (read once, at construction)
   gestures: {},             // DrawingGestureOptions: turn a modifier gesture off, e.g. { snapModifier: false }
 });
 ```
@@ -462,7 +463,7 @@ step nowhere. See
 | `setTool(id \| null, options?)` | Arms a tool; throws on an unregistered id. Also calls `chart.setPlacementMode(true/false)`. `options` is a `DrawingPlacementOptions`: `{ space: 'viewport' }` places the next drawing pinned to the screen, and throws for a tool without `viewport` support. Emits `draw:tool` as `{ tool }`, or `{ tool, space: 'viewport' }` when armed for the viewport. |
 | `activeTool()` / `activeToolSpace()` | Armed id, or `null`; the space it places in (`'data'` unless armed for the viewport). |
 | `screenPoints(id)` | A drawing's anchors in container media px (the space `timeToCoordinate` and `priceToCoordinate` answer in), for either space. What a host places an overlay by. `null` for an unknown id or a pane with no place on screen (collapsed, or hidden by a maximize). |
-| `setOptions(patch)` | Live-patch the options above. |
+| `setOptions(patch)` | Live-patch the options above, all but `inputAnchors`, which is read once when the controller is built. |
 | `drawings()` / `get(id)` | Read the model. `drawings()` is the live array, in **paint order** (creation order until a reorder; `createdAt` keeps the creation time). |
 | `add(drawing)` | `add({ tool, points, style, paneIndex, text?, props?, id?, locked?, visible?, zIndex?, policy? })` (a `DrawingInput`) returns the created `Drawing`, with `zIndex` 0, `createdAt` and a minted id (a supplied id that collides with a restored one is replaced). The tool's `defaultText` merges under `text` the way `defaultStyle` merges under `style`. Adding a drawing whose `policy` sets any flag to false records no undo step: it is the host's. The `policy` object is copied. |
 | `update(id, patch, options?)` / `updateMany(patches, options?)` | Patch `points` \| `style` \| `text` \| `props` \| `locked` \| `visible` \| `zIndex` \| `policy` \| `space` \| `viewportPoints` (a `DrawingPatch`). `space` alone converts the anchors at the view on screen (see Viewport-anchored drawings). `style`, `text`, `props` and `policy` merge; `points` replaces. `updateMany([{ id, patch }])` is one undo step and one `drawing:change`. A read-only drawing is refused (`update` returns false, `updateMany` skips it) unless `options` is `{ force: true }` (`DrawingEditOptions`). `update` also returns false when the patch asks for a `space` the drawing could not be moved to; the rest of that patch still applies. A patch that carries `policy`, and any forced call, records no undo step, and every recorded step takes it as well, so no later undo or redo reverses it. |
@@ -631,7 +632,7 @@ const why = draw.clipboard().lastError();   // set when memory worked but the OS
 if (why !== null) toast('Copied in this tab only');
 ```
 
-Turn the backstop off with `new DrawingClipboard({ fallbackToMemory: false })` when a cut that cannot reach the OS clipboard must not delete the drawing. Pass `clipboard: null` to `DrawingController` to disable the system port entirely (tests, non-browser runtimes), or `clipboard: myPort` to inject one; `setOptions({ clipboard })` swaps the port at runtime, which is how you hand one over after the user grants permission.
+Turn the backstop off with `clipboardFallbackToMemory: false` on the controller (at construction or through `setOptions`), or `new DrawingClipboard({ fallbackToMemory: false })` for a clipboard of your own, when a cut that cannot reach the OS clipboard must not delete the drawing. Pass `clipboard: null` to `DrawingController` to disable the system port entirely (tests, non-browser runtimes), or `clipboard: myPort` to inject one; `setOptions({ clipboard })` swaps the port at runtime, which is how you hand one over after the user grants permission.
 
 ### What a paste actually inserts
 

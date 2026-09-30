@@ -326,8 +326,11 @@ export class DrawingController {
 
   public setOptions(patch: DrawingControllerOptions): void {
     // `clipboard` is a port, not a stored option: it is applied to the live
-    // clipboard so a host can hand one over after the user grants permission.
-    const { clipboard, magnet, gestures, ...rest } = patch;
+    // clipboard so a host can hand one over after the user grants permission,
+    // and the memory fallback goes to the same place. `inputAnchors` is read
+    // once, when the controller is built.
+    const { clipboard, clipboardFallbackToMemory, inputAnchors: _built, magnet, gestures, ...rest } = patch;
+    void _built;
     this._opts = {
       ...this._opts, ...rest,
       defaultStyle: patch.defaultStyle ?? this._opts.defaultStyle,
@@ -335,6 +338,7 @@ export class DrawingController {
       gestures: gesturesOf(this._opts.gestures, gestures),
     };
     if (clipboard !== undefined) this._clipboard.setPort(clipboard);
+    if (clipboardFallbackToMemory !== undefined) this._clipboard.setFallbackToMemory(clipboardFallbackToMemory);
     this._layerSet._syncSnapRing();
   }
 
