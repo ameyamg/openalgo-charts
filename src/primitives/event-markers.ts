@@ -3,10 +3,29 @@ import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, Z
 
 export interface EventDetailField { label: string; value: string }
 
-/** Plain text detail content. No field is interpreted as markup. */
+/** A run of text in a rich block, shown as text: nothing in it is read as markup. */
+export interface EventDetailSpan {
+  text: string;
+  strong?: boolean;
+  em?: boolean;
+  /** Opened in a new tab when it is an absolute http or https URL; any other value shows the text alone. */
+  href?: string;
+}
+
+/** One plain run, or runs with emphasis and links. */
+export type EventDetailInline = string | readonly EventDetailSpan[];
+
+/** Rich detail content as structure, never as markup, so a feed's text cannot run as code. */
+export type EventDetailBlock =
+  | { type: 'heading' | 'paragraph'; text: EventDetailInline }
+  | { type: 'list'; items: readonly EventDetailInline[] };
+
+/** Detail content. Every string is plain text: none is interpreted as markup. */
 export interface ChartEventDetails {
   summary?: string;
   fields?: readonly EventDetailField[];
+  /** Headings, paragraphs and lists shown after the fields. */
+  blocks?: readonly EventDetailBlock[];
 }
 
 export interface ChartEvent {
@@ -50,11 +69,21 @@ const TYPE_COLOR: Record<string, string> = {
   news: '#9aa0b4',
 };
 
+/** Plain data copied all the way down; blocks arrive from feeds in any shape. */
+function copyData<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(copyData) as T;
+  return value !== null && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copyData(v)])) as T : value;
+}
+
 function cloneEvent(event: ChartEvent): ChartEvent {
   return {
     ...event,
     ...(typeof event.details === 'object' && event.details !== null ? {
-      details: { ...event.details, ...(event.details.fields ? { fields: event.details.fields.map(field => ({ ...field })) } : {}) },
+      details: {
+        ...event.details,
+        ...(event.details.fields ? { fields: event.details.fields.map(field => ({ ...field })) } : {}),
+        ...(event.details.blocks ? { blocks: copyData(event.details.blocks) } : {}),
+      },
     } : {}),
   };
 }

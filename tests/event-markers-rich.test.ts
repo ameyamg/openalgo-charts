@@ -61,6 +61,20 @@ describe('rich timeline markers', () => {
     expect(rec.ops.find(op => op.type === 'fillText')?.text).toBe('E');
   });
 
+  it('owns rich detail blocks all the way down, and tolerates malformed ones', () => {
+    const markers = new EventMarkers();
+    const blocks = [{ type: 'paragraph', text: [{ text: 'Original', href: 'https://example.com/a' }] }, { type: 'list', items: ['One', [{ text: 'Two' }]] }];
+    markers.setEvents([{ ...earnings, details: { summary: 'S', blocks } as ChartEvent['details'] }]);
+    blocks[0].text![0].text = 'Changed';
+    (blocks[1].items![1] as Array<{ text: string }>)[0].text = 'Changed';
+    const stored = markers.events()[0].details as { blocks: typeof blocks };
+    expect(stored.blocks).toEqual([{ type: 'paragraph', text: [{ text: 'Original', href: 'https://example.com/a' }] }, { type: 'list', items: ['One', [{ text: 'Two' }]] }]);
+    // A copy handed out is the caller's own.
+    stored.blocks[0].text![0].text = 'Edited';
+    expect((markers.events()[0].details as { blocks: typeof blocks }).blocks[0].text![0].text).toBe('Original');
+    expect(() => markers.setEvents([{ ...earnings, details: { blocks: [null, { type: 'list', items: 'x' }, 3] } as unknown as ChartEvent['details'] }])).not.toThrow();
+  });
+
   it.each([NaN, Infinity, -Infinity])('rejects a nonfinite timestamp atomically: %s', time => {
     const markers = new EventMarkers();
     markers.setEvents([earnings]);

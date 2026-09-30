@@ -236,7 +236,7 @@ export type {
 export { TimeNavigator, DEFAULT_TIME_NAVIGATOR_OPTIONS } from './primitives/time-navigator';
 export type { TimeNavigatorOptions, TimeNavigatorAction } from './primitives/time-navigator';
 export { EventMarkers } from './primitives/event-markers';
-export type { ChartEvent, ChartEventDetails, EventDetailField, EventGroup, EventMarkersOptions, EventMarkerDetails } from './primitives/event-markers';
+export type { ChartEvent, ChartEventDetails, EventDetailField, EventDetailSpan, EventDetailInline, EventDetailBlock, EventGroup, EventMarkersOptions, EventMarkerDetails } from './primitives/event-markers';
 
 // indicators
 export { ema, emaSeries } from './indicators/ema';
