@@ -56,7 +56,7 @@ export function ladderDrawings(ctx: WidgetContext, ids: readonly string[]): { dr
     const d = ctx.draw.get(id);
     if (d !== undefined && d.policy?.editable !== false && drawingSettingsSchema(d.tool).fields.some((f) => f.kind === 'levels')) drawings.push(d);
   }
-  return { drawings, schema: drawings.length === 0 ? null : drawingSettingsSchema(drawings[0].tool) };
+  return { drawings, schema: drawings.length === 0 ? null : drawingSettingsSchema(drawings[0]!.tool) }; // length checked first
 }
 
 function toolOf(id: string): DrawingTool | null {
@@ -75,7 +75,7 @@ export function mountLevelEditor(ctx: WidgetContext, anchor?: HTMLElement, opts:
     ctx.toast(widgetText(ctx, 'Select a drawing with levels first'), 'info');
     return { el: doc.createElement('div'), close: () => {}, isOpen: () => false };
   }
-  const primary = drawings[0];
+  const primary = drawings[0]!; // the schema is null exactly when there are no drawings
   const tool = toolOf(primary.tool);
   const levelsField = schema.fields.find((f) => f.kind === 'levels');
   const labelsField = schema.fields.find((f) => f.path === 'style.showLabels');
@@ -134,6 +134,8 @@ export function mountLevelEditor(ctx: WidgetContext, anchor?: HTMLElement, opts:
   root.appendChild(rows);
   let pickers: ColorPickerHandle[] = [];
 
+  // A row's handlers read list[i] with `!`: whatever changes the list's length
+  // repaints, and a repaint builds every row again with its own index.
   function row(lv: FibLevel, i: number): HTMLElement {
     const r = el(doc, 'div', 'oac-levels__row' + (lv.enabled === false ? ' is-off' : ''));
 
@@ -142,7 +144,7 @@ export function mountLevelEditor(ctx: WidgetContext, anchor?: HTMLElement, opts:
     on.checked = lv.enabled !== false;
     on.addEventListener('change', () => {
       // `true` is the default, so an enabled level carries no flag at all.
-      if (on.checked) delete list[i].enabled; else list[i].enabled = false;
+      if (on.checked) delete list[i]!.enabled; else list[i]!.enabled = false;
       r.classList.toggle('is-off', !on.checked);
       emit();
     });
@@ -156,9 +158,9 @@ export function mountLevelEditor(ctx: WidgetContext, anchor?: HTMLElement, opts:
       const n = Number(ratio.value);
       // A blank or unparseable ratio would drop the level on coercion; keep
       // the last good value on screen instead.
-      if (ratio.value.trim() === '' || !Number.isFinite(n)) { ratio.value = String(list[i].ratio); return; }
-      list[i].ratio = n;
-      if (list[i].label === undefined) label.placeholder = fmt(n);
+      if (ratio.value.trim() === '' || !Number.isFinite(n)) { ratio.value = String(list[i]!.ratio); return; }
+      list[i]!.ratio = n;
+      if (list[i]!.label === undefined) label.placeholder = fmt(n);
       name();
       emit();
     });
@@ -169,7 +171,7 @@ export function mountLevelEditor(ctx: WidgetContext, anchor?: HTMLElement, opts:
       label: widgetText(ctx, 'Level {level} color', { level: fmt(lv.ratio) }),
       value: lv.color ?? primary.style.color ?? levelColor(lv.ratio) ?? LEVEL_NEUTRAL,
       translate: ctx.translate, openOverlay: ctx.openOverlay,
-      onChange: value => { list[i].color = value; emit(); },
+      onChange: value => { list[i]!.color = value; emit(); },
     });
     pickers.push(color);
     r.appendChild(color.el);
@@ -181,7 +183,7 @@ export function mountLevelEditor(ctx: WidgetContext, anchor?: HTMLElement, opts:
     label.setAttribute('spellcheck', 'false');
     label.addEventListener('change', () => {
       const v = label.value.trim();
-      if (v === '') delete list[i].label; else list[i].label = v;
+      if (v === '') delete list[i]!.label; else list[i]!.label = v;
       emit();
     });
     r.appendChild(label);
@@ -193,7 +195,7 @@ export function mountLevelEditor(ctx: WidgetContext, anchor?: HTMLElement, opts:
     r.appendChild(x);
     // Every control names its level, or seven rows would read the same.
     function name(): void {
-      const level = fmt(list[i].ratio);
+      const level = fmt(list[i]!.ratio);
       on.setAttribute('aria-label', widgetText(ctx, 'Level {level} enabled', { level }));
       ratio.setAttribute('aria-label', widgetText(ctx, 'Level {level} ratio', { level }));
       color.trigger.setAttribute('aria-label', widgetText(ctx, 'Level {level} color', { level }));

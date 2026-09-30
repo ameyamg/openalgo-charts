@@ -55,13 +55,13 @@ export interface MenuItem {
   /** Chrome icon id, or inline SVG markup starting with `<svg`. */
   icon?: string;
   /** Chord hint, shown at the right. */
-  chord?: string;
+  chord?: string | undefined;
   /** A switch (tick) or one option of a choice (dot). */
   mark?: 'check' | 'radio';
   on?: boolean;
   disabled?: boolean;
   /** Why a disabled row is disabled; an empty greyed row reads as a bug. */
-  note?: string;
+  note?: string | undefined;
   danger?: boolean;
   /** Keep the menu up after running (a switch the user may flip twice). */
   keepOpen?: boolean;
@@ -73,14 +73,16 @@ export interface MenuItem {
 export type MenuEntry = MenuItem | { kind: 'separator' } | { kind: 'header'; label: string };
 
 export interface ContextMenuHooks {
+  // A handler the widget may pass as undefined is a property typed from a
+  // method signature, so it takes the same host functions a method does.
   /** Order entry. Without it no trade rows are drawn: the engine places no orders itself. */
-  onOrder?(order: OrderRequest): void;
+  onOrder?: { onOrder(order: OrderRequest): void }['onOrder'] | undefined;
   /** Omitted capabilities preserve the host's existing supported order routes. */
-  tradingCapabilities?: TradingCapabilitySource;
+  tradingCapabilities?: TradingCapabilitySource | undefined;
   /** Required when the capability declaration limits live or analyzer mode. */
   tradingMode?: TradingCapabilityRequest['mode'];
   /** Host replay selection or workspace transitions that also prevent order entry. */
-  tradingLocked?(): boolean;
+  tradingLocked?: { tradingLocked(): boolean }['tradingLocked'] | undefined;
   /** Extra rows a host appends, built per event. */
   items?(e: ContextMenuEvent): MenuEntry[];
 }
@@ -247,7 +249,7 @@ export function contextMenuEntries(ctx: WidgetContext, e: ContextMenuEvent, hook
   const { chart, draw } = ctx;
   const target = e.target;
   const out: MenuEntry[] = [];
-  const sep = (): void => { if (out.length > 0 && out[out.length - 1].kind !== 'separator') out.push(SEP); };
+  const sep = (): void => { if (out.length > 0 && out[out.length - 1]!.kind !== 'separator') out.push(SEP); }; // length checked first
 
   if (target.kind === 'price-scale') {
     out.push(...axisEntries(ctx, e.paneIndex, target.scaleId ?? target.side ?? 'right'));
@@ -306,7 +308,7 @@ export function contextMenuEntries(ctx: WidgetContext, e: ContextMenuEvent, hook
       out.push(header(widgetText(ctx, 'Trade')));
       for (const { type } of supported) out.push(order('BUY', type), order('SELL', type));
     } else {
-      const failure = candidates[0].result;
+      const failure = candidates[0]!.result; // both type lists start with MARKET
       out.push({ id: 'trading-unavailable', label: widgetText(ctx, 'Order entry is unavailable'), disabled: true,
         note: failure.supported ? undefined : failure.reason });
     }
@@ -453,7 +455,7 @@ export function mountContextMenu(ctx: WidgetContext, anchor?: HTMLElement, opts:
   const focusRow = (i: number): void => {
     const live = rows.filter((r) => r.getAttribute('aria-disabled') !== 'true');
     if (live.length === 0) return;
-    live[((i % live.length) + live.length) % live.length].focus();
+    live[((i % live.length) + live.length) % live.length]!.focus(); // a non-empty list, index wrapped into it
   };
 
   function paint(focusIndex = -1): void {

@@ -67,7 +67,7 @@ export function resolveInstance(
     const inst = all.find((i) => i.id === id) ?? null;
     return inst === null ? { inst: null, why: widgetText(ctx, 'That indicator is no longer on the chart') } : { inst, why: null };
   }
-  if (all.length === 1) return { inst: all[0], why: null };
+  if (all.length === 1) return { inst: all[0]!, why: null }; // the one there is
   return { inst: null, why: all.length === 0 ? widgetText(ctx, 'No indicator on the chart to configure') : widgetText(ctx, 'Pick an indicator from the legend first') };
 }
 
@@ -99,7 +99,8 @@ export function mountIndicatorSettings(
   // Edits preview live, one write per keystroke or colour drag; the session
   // is one step, and a Cancel that restores every key leaves none.
   const endStep = ctx.history?.group('Study settings') ?? ((): void => {});
-  let activeTab: IndicatorSettingsTab = tabs.some((t) => t.id === opts.tab) ? (opts.tab as IndicatorSettingsTab) : tabs[0].id;
+  // tabs is not empty past the early return above, so tabs[0] is read with `!`.
+  let activeTab: IndicatorSettingsTab = tabs.some((t) => t.id === opts.tab) ? (opts.tab as IndicatorSettingsTab) : tabs[0]!.id;
   let form: FormHandle | null = null;
   let inputControls: IndicatorInputControlsHandle | null = null;
   let writeError: string | null = null;
@@ -149,7 +150,7 @@ export function mountIndicatorSettings(
   function renderPane(): void {
     inputControls?.destroy(); inputControls = null;
     form?.destroy();
-    const tab = tabs.find((t) => t.id === activeTab) ?? tabs[0];
+    const tab = tabs.find((t) => t.id === activeTab) ?? tabs[0]!;
     body.innerHTML = '';
     const controls = controlsFromInputs(tab.inputs, { translate: ctx.translate, scope: `indicator.${descriptor.id}` });
     const sources = new Map<string, Map<string, IndicatorStudySource>>();
@@ -233,7 +234,7 @@ export function mountIndicatorSettings(
   frame.lead.appendChild(button(doc, {
     label: widgetText(ctx, 'Defaults'),
     onClick: () => {
-      const tab = tabs.find((t) => t.id === activeTab) ?? tabs[0];
+      const tab = tabs.find((t) => t.id === activeTab) ?? tabs[0]!;
       if (write(inputDefaults(tab.inputs))) renderPane();
     },
   }));

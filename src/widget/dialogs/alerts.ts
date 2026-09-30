@@ -1,5 +1,5 @@
 import { widgetText } from '../localization';
-import { alertSettingsSchema, dataVariantKey, getBarCondition, utcSecondsToZonedParts, zoneOffsetSeconds, zonedWallClockToUtcSeconds, type Alert, type AlertCondition, type AlertInput, type AlertPatch, type AlertSource, type DataVariant } from 'openalgo-charts';
+import { alertSettingsSchema, dataVariantKey, getBarCondition, utcSecondsToZonedParts, zoneOffsetSeconds, zonedWallClockToUtcSeconds, type Alert, type AlertCondition, type AlertInput, type AlertPatch, type AlertPolicy, type AlertRepeat, type AlertSource, type DataVariant } from 'openalgo-charts';
 import { dataVariantLabel } from '../data-status';
 import type { WidgetContext } from '../context';
 import { button, controlsFromInputs, dialogFrame, el, openPanel, renderForm, type FormControl, type FormHandle, type PanelHandle } from '../form';
@@ -51,10 +51,11 @@ function expiryValue(ctx: WidgetContext, value: unknown, zone: string): number |
   if (value === '') return undefined;
   const wrong = widgetText(ctx, 'Enter an expiry date and time');
   if (typeof value !== 'string' || !EXPIRY_SHAPE.test(value)) throw new Error(wrong);
+  // EXPIRY_SHAPE has matched, so every part below is there.
   const [date, time] = value.split('T');
-  const [year, month, day] = date.split('-').map(Number);
-  const [hour, minute] = time.split(':').map(Number);
-  const seconds = zonedWallClockToUtcSeconds(year, month, day, hour, minute, 0, zone);
+  const [year, month, day] = date!.split('-').map(Number);
+  const [hour, minute] = time!.split(':').map(Number);
+  const seconds = zonedWallClockToUtcSeconds(year!, month!, day!, hour!, minute!, 0, zone);
   if (!Number.isFinite(seconds) || expiryText(seconds, zone) !== value) throw new Error(wrong);
   return seconds;
 }
@@ -204,7 +205,8 @@ export function mountAlertEditor(ctx: WidgetContext, anchor?: HTMLElement, opts:
           : selected;
       const patch: AlertPatch = {
         source: nextSource, condition, title, message: String(draft.message ?? '') || undefined,
-        policy: draft.policy as AlertInput['policy'], repeat: draft.repeat as AlertInput['repeat'],
+        // The schema seeds both into the draft, and a stored alert always has them.
+        policy: draft.policy as AlertPolicy, repeat: draft.repeat as AlertRepeat,
         cooldownSeconds: draft.cooldownSeconds as number,
       };
       if (!existing || draft.expiresAt !== expiryText(existing.expiresAt, expiryZone)) patch.expiresAt = expiryValue(ctx, draft.expiresAt, expiryZone);

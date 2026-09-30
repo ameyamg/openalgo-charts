@@ -58,10 +58,10 @@ export function wrapLines(measure: (s: string) => number, t: TextLike, value: st
   for (const para of paragraphs) {
     const words = para.split(/\s+/).filter((w) => w !== '');
     if (words.length === 0) { out.push(''); continue; }
-    let line = words[0];
+    let line = words[0]!; // not empty, checked above; i below stays inside words
     for (let i = 1; i < words.length; i++) {
       const next = `${line} ${words[i]}`;
-      if (measure(next) > maxWidth) { out.push(line); line = words[i]; }
+      if (measure(next) > maxWidth) { out.push(line); line = words[i]!; }
       else line = next;
     }
     out.push(line);

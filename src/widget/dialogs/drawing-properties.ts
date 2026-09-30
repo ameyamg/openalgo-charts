@@ -50,8 +50,8 @@ export interface DrawingPropertiesOptions {
 export function commonSchema(toolIds: readonly string[]): SettingsSchema {
   const schemas = toolIds.map((t) => drawingSettingsSchema(t));
   if (schemas.length === 0) return { fields: [] };
-  const [first, ...rest] = schemas;
-  const fields = first.fields.filter((f) => rest.every((s) => s.fields.some((g) => g.path === f.path && g.kind === f.kind)));
+  const [first, ...rest] = schemas; // not empty, checked above
+  const fields = first!.fields.filter((f) => rest.every((s) => s.fields.some((g) => g.path === f.path && g.kind === f.kind)));
   return schemas.every((s) => s.textIsContent === true) ? { fields, textIsContent: true } : { fields };
 }
 
@@ -118,21 +118,23 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
   if (opts.ids !== undefined && opts.ids.length > 0 && !sameIds(opts.ids, draw.selection())) draw.select(opts.ids.slice());
   let ids = draw.selection().slice();
   const drawingsOf = (): Drawing[] => ids.map((id) => draw.get(id)).filter((d): d is Drawing => d !== undefined);
+  // Never empty while the dialog is open: every assignment closes it on an
+  // empty selection, so live[0] is read with `!` throughout.
   let live = drawingsOf();
   if (live.length === 0) {
     ctx.toast(widgetText(ctx, 'Select a drawing first'), 'info');
     return { el: doc.createElement('div'), close: () => {}, isOpen: () => false };
   }
   let schema = commonSchema(live.map((d) => d.tool));
-  let tool = toolOf(live[0].tool);
+  let tool = toolOf(live[0]!.tool);
   let form: FormHandle | null = null;
   let shownWhy: string | null = null;
 
-  const titleOf = (): string => (live.length === 1 ? widgetText(ctx, `schema.drawing.${live[0].tool}.name`, {}, tool?.name ?? live[0].tool) : widgetText(ctx, '{count} drawings', { count: live.length }));
+  const titleOf = (): string => (live.length === 1 ? widgetText(ctx, `schema.drawing.${live[0]!.tool}.name`, {}, tool?.name ?? live[0]!.tool) : widgetText(ctx, '{count} drawings', { count: live.length }));
   // A selection the user may not edit opens read-only: every value stays
   // readable, and every control that would change one is greyed with why.
   const lockedOut = (): string | null => editableIds(draw, ids).length === 0 ? widgetText(ctx, 'read-only') : null;
-  const values = (): Record<string, unknown> => resolvedDrawingValues(live[0], schema, tool, ctx.chartTheme.lineColor);
+  const values = (): Record<string, unknown> => resolvedDrawingValues(live[0]!, schema, tool, ctx.chartTheme.lineColor);
 
   /** Write `{ path: value }` to every selected drawing as one undo entry. */
   function apply(patch: Record<string, unknown>): void {
@@ -175,7 +177,7 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
 
   function renderTools(): void {
     tools.innerHTML = '';
-    const primary = live[0];
+    const primary = live[0]!;
     const locked = primary.locked === true;
     const hidden = primary.visible === false;
     // Between studies it is on neither side of the series, so neither toggle is pressed.
@@ -213,7 +215,7 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
   function renderPane(): void {
     form?.destroy();
     pane.innerHTML = '';
-    const controls = controlsFromFields(schema.fields, { translate: ctx.translate, scope: `drawing.${live[0].tool}` });
+    const controls = controlsFromFields(schema.fields, { translate: ctx.translate, scope: `drawing.${live[0]!.tool}` });
     if (controls.length === 0) {
       pane.appendChild(el(doc, 'div', 'oac-empty', widgetText(ctx, 'These drawings share no settings.')));
       form = null;
@@ -238,7 +240,7 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
     if (schema.textIsContent === true && live.length === 1) {
       const row = pane.querySelector('[data-key="text.value"]');
       if (row !== null) {
-        const b = button(doc, { label: widgetText(ctx, 'Edit text'), icon: 'text', onClick: () => { mountTextEditor(ctx, undefined, { id: live[0].id }); } });
+        const b = button(doc, { label: widgetText(ctx, 'Edit text'), icon: 'text', onClick: () => { mountTextEditor(ctx, undefined, { id: live[0]!.id }); } });
         b.dataset.act = 'edit-text';
         b.disabled = why !== null;
         row.appendChild(b);
@@ -298,7 +300,7 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
     live = drawingsOf();
     if (live.length === 0) { handle.close(); return; }
     schema = commonSchema(live.map((d) => d.tool));
-    tool = toolOf(live[0].tool);
+    tool = toolOf(live[0]!.tool);
     frame.setTitle(titleOf());
     renderTools();
     renderPane();
