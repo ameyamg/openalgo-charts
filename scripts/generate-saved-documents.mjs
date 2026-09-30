@@ -5,6 +5,7 @@
  *   node scripts/generate-saved-documents.mjs --check     # this build loads each fixture in a real browser
  *   node scripts/generate-saved-documents.mjs --self      # each release loads the fixtures it wrote
  *   node scripts/generate-saved-documents.mjs --reverse   # this build writes, the previous release loads
+ *   node scripts/generate-saved-documents.mjs --reverse 2.5.1   # or the release named
  *
  * A host keeps what the chart hands it: a chart state with its studies, a
  * drawings document, the widget's persisted layout, a workspace and an alert
@@ -122,7 +123,8 @@ async function main() {
   const browser = await chromium.launch();
   try {
     if (args.includes('--reverse')) {
-      const previous = BASELINES[BASELINES.length - 1].version;
+      const named = args[args.indexOf('--reverse') + 1];
+      const previous = named !== undefined && /^\d+\.\d+\.\d+$/.test(named) ? named : BASELINES[BASELINES.length - 1].version;
       const writer = await openHarness(browser, url, 'current');
       const written = await writer.page.evaluate(() => window.harness.write());
       console.log(`generate-saved-documents: the working tree (version ${written.version}) wrote, ${previous} loaded and saved again:`);
@@ -151,7 +153,8 @@ async function main() {
       console.log(`generate-saved-documents: ${b.version} wrote ${Object.keys(written.documents).length} documents to ${dir}`);
       await writer.page.close();
     }
-    writeFileSync(join(OUT, 'bars.json'), json(bars));
+    // One bar a line: the bars are data the documents sit on, not a document to read field by field.
+    writeFileSync(join(OUT, 'bars.json'), json(bars).replace(/\{\n\s+"time"[^}]*\}/g, (bar) => bar.replace(/\n\s*/g, ' ')));
   } finally {
     await browser.close();
     server.close();
