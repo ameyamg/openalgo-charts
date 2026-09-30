@@ -16,7 +16,14 @@ export function sampleTimelineEvents(bars) {
   return [
     { id: 'sample-results', time: at(0.65), type: 'earnings', label: 'E', group: 'results',
       title: 'Sample results announcement', details: { summary: 'Demonstration data, not a real company announcement.',
-        fields: [{ label: 'Source', value: 'Reference host sample' }] } },
+        fields: [{ label: 'Source', value: 'Reference host sample' }],
+        // Rich content is structure, not markup: the tags in the list stay text.
+        blocks: [
+          { type: 'heading', text: 'Sample highlights' },
+          { type: 'paragraph', text: [{ text: 'Revenue and margins are ' }, { text: 'placeholders', strong: true },
+            { text: ' for this demonstration. ' }, { text: 'How timeline events work', href: 'https://marketcalls.github.io/openalgo-charts/docs/events/' }] },
+          { type: 'list', items: ['Headings, paragraphs and lists', [{ text: 'Emphasis', em: true }, { text: ' and links with http or https only' }], 'Markup such as <b>this</b> stays text'] },
+        ] } },
     { id: 'sample-call', time: at(0.65) + 1, type: 'news', label: 'N', group: 'news',
       title: 'Sample investor call', details: 'Two nearby events share a marker when clustering is enabled.' },
     { id: 'sample-dividend', time: at(0.82), type: 'dividend', label: 'D', group: 'company',
@@ -24,14 +31,30 @@ export function sampleTimelineEvents(bars) {
   ];
 }
 
+/**
+ * The popup's buttons. Mark on chart draws a vertical line at the event on the
+ * chart it was clicked on, and does nothing once that chart shows other data.
+ */
+export function timelineActions(target, entry) {
+  return () => [{ label: 'Mark on chart', run: event => {
+    if (!target.current()) return;
+    const bar = entry.bars.findLast(b => b.time <= event.time) ?? entry.bars[0];
+    if (bar) target.draw.add({ tool: 'vertical-line', paneIndex: 0, points: [{ time: event.time, price: bar.close }] });
+  } }];
+}
+
 export function attachTimeline(app, pane, bars) {
   const target = capturePaneTarget(app, pane);
   if (!target || attachments.has(target.chart)) return;
   const container = el(pane === 2 ? 'chart2' : 'chart');
-  const popup = new EventDetailsPopup(container, { formatTime: time => new Intl.DateTimeFormat(undefined, {
-    timeZone: target.chart.timezone(), dateStyle: 'medium', timeStyle: 'short',
-  }).format(new Date(time * 1000)) });
-  const entry = { popup, bars, app, pane };
+  const entry = { bars, app, pane };
+  const popup = new EventDetailsPopup(container, {
+    formatTime: time => new Intl.DateTimeFormat(undefined, {
+      timeZone: target.chart.timezone(), dateStyle: 'medium', timeStyle: 'short',
+    }).format(new Date(time * 1000)),
+    actions: timelineActions(target, entry),
+  });
+  entry.popup = popup;
   attachments.set(target.chart, entry);
   target.chart.setEventMarkerOptions({ clustering: true });
   target.chart.setEventGroups(GROUPS);
