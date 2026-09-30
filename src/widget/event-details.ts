@@ -76,23 +76,15 @@ const LABELS: EventDetailsLabels = {
   loading: 'Loading details...', empty: 'No additional details.', error: 'Unable to load additional details.',
 };
 
-/** Plain data copied all the way down; blocks arrive from feeds in any shape. */
+/** The event markers' copy: arrays and plain objects all the way down, anything else shared. */
 function copyData<T>(value: T): T {
   if (Array.isArray(value)) return value.map(copyData) as T;
-  return value !== null && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copyData(v)])) as T : value;
+  if (value === null || typeof value !== 'object' || Object.getPrototypeOf(value) !== Object.prototype) return value;
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copyData(v)])) as T;
 }
 
 function copyEvent(event: ChartEvent): ChartEvent {
-  return {
-    ...event,
-    ...(typeof event.details === 'object' && event.details !== null ? {
-      details: {
-        ...event.details,
-        ...(event.details.fields ? { fields: event.details.fields.map(field => ({ ...field })) } : {}),
-        ...(event.details.blocks ? { blocks: copyData(event.details.blocks) } : {}),
-      },
-    } : {}),
-  };
+  return { ...event, ...(typeof event.details === 'object' ? { details: copyData(event.details) } : {}) };
 }
 
 /**

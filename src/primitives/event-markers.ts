@@ -69,23 +69,19 @@ const TYPE_COLOR: Record<string, string> = {
   news: '#9aa0b4',
 };
 
-/** Plain data copied all the way down; blocks arrive from feeds in any shape. */
+/**
+ * Details copied all the way down, so a caller's later edits cannot reach an
+ * installed event: fields and blocks arrive from feeds in any shape. Only
+ * arrays and plain objects are copied; anything else is shared, as before.
+ */
 function copyData<T>(value: T): T {
   if (Array.isArray(value)) return value.map(copyData) as T;
-  return value !== null && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copyData(v)])) as T : value;
+  if (value === null || typeof value !== 'object' || Object.getPrototypeOf(value) !== Object.prototype) return value;
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copyData(v)])) as T;
 }
 
 function cloneEvent(event: ChartEvent): ChartEvent {
-  return {
-    ...event,
-    ...(typeof event.details === 'object' && event.details !== null ? {
-      details: {
-        ...event.details,
-        ...(event.details.fields ? { fields: event.details.fields.map(field => ({ ...field })) } : {}),
-        ...(event.details.blocks ? { blocks: copyData(event.details.blocks) } : {}),
-      },
-    } : {}),
-  };
+  return { ...event, ...(typeof event.details === 'object' ? { details: copyData(event.details) } : {}) };
 }
 
 interface Entry { event: ChartEvent; key: string }

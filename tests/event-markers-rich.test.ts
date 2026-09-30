@@ -73,6 +73,10 @@ describe('rich timeline markers', () => {
     stored.blocks[0].text![0].text = 'Edited';
     expect((markers.events()[0].details as { blocks: typeof blocks }).blocks[0].text![0].text).toBe('Original');
     expect(() => markers.setEvents([{ ...earnings, details: { blocks: [null, { type: 'list', items: 'x' }, 3] } as unknown as ChartEvent['details'] }])).not.toThrow();
+    // Only plain data is copied: anything else a host attached is shared, as before.
+    const when = new Date(0);
+    markers.setEvents([{ ...earnings, details: { summary: 'S', source: when } as unknown as ChartEvent['details'] }]);
+    expect((markers.events()[0].details as unknown as { source: Date }).source).toBe(when);
   });
 
   it.each([NaN, Infinity, -Infinity])('rejects a nonfinite timestamp atomically: %s', time => {
