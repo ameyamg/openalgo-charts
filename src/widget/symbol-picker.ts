@@ -242,8 +242,8 @@ export function mountSymbolPicker(ctx: WidgetContext, input: HTMLInputElement, o
     }
   };
   const onBlur = (event: FocusEvent): void => {
-    const next = event.relatedTarget as Node | null;
-    if (next === null || panel?.contains(next) !== true) close();
+    const next = event.relatedTarget as Node | null | undefined;
+    if (!next || panel?.contains(next) !== true) close();
   };
   input.addEventListener('input', onInput);
   input.addEventListener('keydown', onKey);
