@@ -33,6 +33,10 @@ export interface MenuOptions {
   /** A search box at the top with this placeholder; rows filter as the user types. */
   find?: string;
   ariaLabel?: string;
+  /** Where the menu opens: under the anchor (default), or beside it, as a column of buttons wants. Since 2.6.0. */
+  placement?: 'below' | 'beside';
+  /** Beside only: a wider element the menu clears as well as the anchor (the rail, not one button in it). Since 2.6.0. */
+  edge?: HTMLElement | undefined;
 }
 
 /** A menu row's glyph: the registry's, or an empty slot the stylesheet sizes like one. */
@@ -40,7 +44,7 @@ const rowGlyph = (id: string | undefined): string =>
   id !== undefined && chromeIcon(id) !== undefined ? chromeIconSvg(id) : '<svg aria-hidden="true"></svg>';
 
 /**
- * A popup menu under `anchor`. Rows are buttons; a `{ head }` string starts a
+ * A popup menu under `anchor`, or beside it. Rows are buttons; a `{ head }` string starts a
  * group. Returns the closer. Exported for the dialog tier, whose context menu
  * and pickers want the same shape. It reads only the document, the overlay
  * opener and the translations, so any widget context serves, and so does a
@@ -135,7 +139,7 @@ export function openMenu(ctx: Pick<WidgetContext, 'document' | 'openOverlay' | '
     if (ke.key === 'ArrowDown') { items[(at + 1) % items.length]?.focus(); ke.preventDefault(); ke.stopPropagation(); }
     else if (ke.key === 'ArrowUp') { items[(at - 1 + items.length) % items.length]?.focus(); ke.preventDefault(); ke.stopPropagation(); }
   });
-  close = ctx.openOverlay(m, { anchor, placement: 'below', initialFocus: find ?? (body.querySelector('.oac-menu__row[aria-checked="true"]') as HTMLElement | null) ?? undefined });
+  close = ctx.openOverlay(m, { anchor, placement: opts.placement ?? 'below', edge: opts.edge, initialFocus: find ?? (body.querySelector('.oac-menu__row[aria-checked="true"]') as HTMLElement | null) ?? undefined });
   return close;
 }
 

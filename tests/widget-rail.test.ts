@@ -330,6 +330,22 @@ describe('the controls block', () => {
     expect(w.draw.canUndo()).toBe(true);
     expect(root.querySelector('.oac-statusline__msg')?.textContent).toBe('Removed 2 drawings');
   });
+
+  it('walks its right-click menus with the arrows, as every other menu in the chrome is walked', () => {
+    const { w, rail, root, doc } = make();
+    addLine(w, 100);
+    const trash = rail.querySelectorAll('.oac-rail__ctl .oac-rail__btn')[4];
+    fire(trash, 'contextmenu');
+    const menu = root.querySelector('.oac-menu') as FakeElement;
+    const rows = root.querySelectorAll('.oac-menu .oac-menu__row');
+    expect(doc.activeElement).toBe(rows[0]);
+    fireKey(menu, 'ArrowDown');
+    expect(doc.activeElement).toBe(rows[1]);
+    fireKey(menu, 'ArrowDown');
+    expect(doc.activeElement).toBe(rows[0]);
+    fireKey(menu, 'ArrowUp');
+    expect(doc.activeElement).toBe(rows[1]);
+  });
 });
 
 describe('keyboard', () => {

@@ -22,6 +22,7 @@ import {
 import { h, glyph, editableIds, historyPress, historyReady, TIP_DWELL_MS, type TipSpec, type WidgetContext } from './context';
 import { commandChord } from './keymap';
 import { chromeGlyph } from './form';
+import { openMenu, type MenuRow } from './menu';
 
 export const MAGNET_MODES: readonly MagnetMode[] = ['off', 'weak', 'strong'];
 
@@ -508,28 +509,10 @@ export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptio
   };
 
   // ── small context menu ───────────────────────────────────────────────
-  interface MenuRow { label: string; icon?: string; tool?: string; danger?: boolean; disabled?: boolean; onSelect: () => void }
+  // The chrome's own menu, opened beside the rail rather than under a button.
   const openRailMenu = (anchor: HTMLElement, rows: MenuRow[]): void => {
     ctx.tips.hide();
-    const m = h(doc, 'div', 'oac-menu', { role: 'menu' });
-    let close: () => void = () => {};
-    for (const r of rows) {
-      const b = h(doc, 'button', 'oac-menu__row' + (r.danger ? ' is-danger' : ''), {
-        type: 'button', role: 'menuitem', 'aria-disabled': String(r.disabled === true),
-      });
-      b.appendChild(r.tool !== undefined ? toolGlyph(doc, r.tool) : r.icon !== undefined ? chromeGlyph(doc, r.icon) : h(doc, 'span', 'oac-glyph'));
-      const label = h(doc, 'span', 'oac-menu__label');
-      label.textContent = r.label;
-      b.appendChild(label);
-      b.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (r.disabled) return;
-        close();
-        r.onSelect();
-      });
-      m.appendChild(b);
-    }
-    close = ctx.openOverlay(m, { anchor, placement: 'beside', edge: host });
+    openMenu(ctx, anchor, rows, { placement: 'beside', edge: host });
   };
 
   // ── controls block ───────────────────────────────────────────────────

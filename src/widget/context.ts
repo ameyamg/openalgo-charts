@@ -621,7 +621,7 @@ export interface OverlayOptions {
   /** Where the panel goes relative to the anchor. Default `below`; `center` ignores the anchor. */
   placement?: 'below' | 'beside' | 'center';
   /** A second element the panel should clear when placed beside (the rail, not just the button in it). */
-  edge?: HTMLElement;
+  edge?: HTMLElement | undefined;
   /** Draw a scrim and refuse outside dismissal. Default false; `center` placement implies it. */
   modal?: boolean;
   /** Where focus lands: an element, `null` to leave focus where it is, or the first control (default). */
