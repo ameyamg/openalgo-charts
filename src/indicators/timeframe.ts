@@ -24,7 +24,6 @@ import {
   isTimeBucketed,
   tryResolveInterval,
   utcSecondsToZonedParts,
-  zonedDayIndex,
   type Bar,
   type Bucketing,
   type IndicatorCalcContext,
@@ -34,7 +33,7 @@ import {
   type IndicatorStore,
   type IndicatorValues,
 } from 'openalgo-charts';
-import { keyOf, securityExpression } from './security';
+import { keyOf, localDays, securityExpression } from './security';
 
 /** The settings key the input writes. */
 const KEY = 'timeframe';
@@ -109,9 +108,10 @@ function plan(d: IndicatorDescriptor, s: Readonly<IndicatorSettings>, ctx: Indic
  */
 function sessionOpen(bars: readonly Bar[], zone: string): number | null {
   const votes = new Map<number, number>();
+  const dayOf = localDays(zone);
   let day = NaN;
   for (const bar of bars) {
-    const at = zonedDayIndex(bar.time, zone);
+    const at = dayOf(bar.time).index;
     if (at === day) continue;
     const parts = utcSecondsToZonedParts(bar.time, zone);
     const minute = parts.hour * 60 + parts.minute;

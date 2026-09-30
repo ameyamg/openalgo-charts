@@ -192,9 +192,42 @@ function tickPath(ids, n, ticks) {
   return { calls, ms, perIndicator: calls / ids.length, passes: Object.fromEntries(passes), ticks };
 }
 
+// ── C. a higher timeframe ───────────────────────────────────────────────────
+
+/**
+ * A study on a folded timeframe, on one-minute bars: what a full recompute
+ * costs (the fold, the study on the folded bars, the check that the forming
+ * bucket changes nothing shown), and what a tick inside a bucket costs, which
+ * is the carry of the held value and should not grow with the history.
+ */
+function timeframeCost(n, timeframe) {
+  const data = bars(n).map((b, i) => ({ ...b, time: 1735702200 + i * 60 }));
+  const ctx = { interval: '1m', timezone: 'Asia/Kolkata', now: () => 0, barState: { isNew: false, isConfirmed: false, isRealtime: true, lastIndex: n - 1 } };
+  const prepared = TIMEFRAME.map((id) => [byId.get(id), { ...settingsFor(byId.get(id)), timeframe }]);
+  const stores = prepared.map(() => ({}));
+  const held = prepared.map(([d, s], k) => d.calc(data, s, stores[k], ctx));
+  const iterations = n > 5000 ? 30 : 100;
+  let t0 = performance.now();
+  for (let i = 0; i < iterations; i++) prepared.forEach(([d, s], k) => d.calc(data, s, stores[k], ctx));
+  const full = (performance.now() - t0) / iterations;
+  prepared.forEach(([d, s], k) => { held[k] = d.calc(data, s, stores[k], ctx); });
+  const last = data[n - 1];
+  t0 = performance.now();
+  let carried = 0;
+  for (let i = 0; i < iterations; i++) {
+    data[n - 1] = { ...last, close: last.close + i * 0.01 };
+    prepared.forEach(([d, s], k) => { if (d.calcTail(data, s, n - 1, held[k], stores[k], ctx) !== null) carried++; });
+  }
+  const tick = (performance.now() - t0) / iterations;
+  data[n - 1] = last;
+  return { timeframe, bars: n, fullMs: +full.toFixed(3), tickMs: +tick.toFixed(4), carried: carried / (iterations * prepared.length) };
+}
+
+const TIMEFRAME = ['ema', 'supertrend', 'rsi', 'bollinger'];
+
 // ── run ─────────────────────────────────────────────────────────────────────
 
-const results = { calc: [], tick: [] };
+const results = { calc: [], tick: [], timeframe: [] };
 
 for (const [label, ids] of [['typical', TYPICAL], ['heavy', HEAVY]]) {
   for (const n of [375, 1875, 7500]) {
@@ -207,8 +240,13 @@ for (const [label, ids] of [['typical', TYPICAL], ['heavy', HEAVY]]) {
   results.tick.push({ set: label, ...tickPath(ids, 1875, 50) });
 }
 
+for (const n of [7500, 30000]) for (const tf of ['', '15m', '1h']) results.timeframe.push(timeframeCost(n, tf));
+
 // Budgets: a tenfold guard, not a tight bound.
 const BUDGET_MS = { 'typical:7500': 12, 'heavy:7500': 60 };
+// A folded recompute of the timeframe set on one-minute bars. It was 272 ms at
+// 7500 bars while the fold read the zone once per bar.
+const TIMEFRAME_BUDGET_MS = { 7500: 40, 30000: 160 };
 // A burst of ticks between two frames costs each indicator exactly one pass.
 // At the tick count, recompute is running straight off the data update; above
 // one, some ticks escaped the frame; at zero, the frame never recomputed.
@@ -219,6 +257,11 @@ const failures = [];
 for (const r of results.calc) {
   const limit = BUDGET_MS[`${r.set}:${r.bars}`];
   if (limit && r.ms > limit) failures.push(`calc ${r.set} @ ${r.bars} bars: ${r.ms} ms exceeds ${limit} ms`);
+}
+for (const r of results.timeframe) {
+  const limit = TIMEFRAME_BUDGET_MS[r.bars];
+  if (r.timeframe !== '' && limit && r.fullMs > limit) failures.push(`timeframe ${r.timeframe} @ ${r.bars} bars: ${r.fullMs} ms exceeds ${limit} ms`);
+  if (r.carried < 1) failures.push(`timeframe '${r.timeframe}' @ ${r.bars} bars: a tick inside a bucket did not take the tail`);
 }
 for (const r of results.tick) {
   for (const [id, n] of Object.entries(r.passes)) {
@@ -249,6 +292,11 @@ if (JSON_OUT) {
         ? 'recompute is coalesced: a burst costs one pass per frame'
         : 'recompute is not one pass per indicator per frame'}`,
   );
+  console.log(`\nC. a higher timeframe on one-minute bars: ${TIMEFRAME.join(', ')}\n`);
+  console.log('   timeframe |  bars | full ms | tick ms');
+  for (const r of results.timeframe) {
+    console.log(`   ${(r.timeframe || 'chart').padEnd(9)} | ${String(r.bars).padStart(5)} | ${r.fullMs.toFixed(3).padStart(7)} | ${r.tickMs.toFixed(4).padStart(7)}`);
+  }
 }
 
 if (failures.length) {

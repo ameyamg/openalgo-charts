@@ -12,9 +12,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import '../src/indicators/index';
 import { withTimeframe } from '../src/indicators/timeframe';
+import { bucketKeys, keyOf, securityExpression } from '../src/indicators/security';
 import { Chart } from '../src/core/chart';
 import { CHART_STATE_VERSION } from '../src/model/chart-state';
-import { registerInterval } from '../src/feed/intervals';
+import { registerInterval, resolveInterval } from '../src/feed/intervals';
 import {
   getIndicator, indicatorDefaults, registerIndicator, registeredIndicators, IndicatorInputError,
 } from '../src/model/indicator-registry';
@@ -541,6 +542,54 @@ const SAVED_2510 = [
     bandMult2: 2, showBand3: false, bandMult3: 3, color: '#2962ff', band1Color: '#4caf50', band2Color: '#808000',
     band3Color: '#00bcd4' } },
 ];
+
+// ── what a fold costs ─────────────────────────────────────────────────────────
+
+describe('the fold reads the zone once per day, not once per bar', () => {
+  // A zone lookup costs about 25 times the arithmetic, and a one-minute
+  // history has hundreds of bars a day: per bar, a 15-minute EMA on 7500 bars
+  // took a quarter of a second.
+  it('cuts every bar exactly as keyOf does, across offset changes and odd offsets', () => {
+    const rnd = prng(99);
+    const zones = ['Asia/Kolkata', 'America/New_York', 'Europe/London', 'Australia/Lord_Howe', 'Pacific/Chatham',
+      'America/Sao_Paulo', 'Etc/UTC'];
+    cleanups.push(registerInterval({ code: 'tf-month', bucketing: { mode: 'calendar', unit: 'month' } }));
+    cleanups.push(registerInterval({ code: 'tf-ny-quarter', bucketing: { mode: 'calendar', unit: 'quarter', timezone: 'America/New_York' } }));
+    const codes = ['1m', '15m', '1h', '4h', '75m', '1d', '2d', '1w', '2w', 'tf-month', 'tf-ny-quarter'];
+    for (const zone of zones) {
+      // Ascending instants through both 2018 clock changes of each zone, with
+      // gaps from a minute to a few days.
+      const times: number[] = [];
+      for (let t = Date.UTC(2018, 1, 20) / 1000; t < Date.UTC(2018, 11, 10) / 1000; t += 60 * Math.ceil(rnd() ** 6 * 4000)) times.push(t);
+      for (const code of codes) {
+        const b = resolveInterval(code).bucketing;
+        for (const session of [null, 555, 0, 1350]) {
+          const fast = bucketKeys(b, zone, session);
+          for (const t of times) {
+            const want = keyOf(b, t, zone, session);
+            const got = fast(t);
+            if (got !== want) expect(got, `${zone} ${code} session ${session} at ${t}`).toBe(want);
+          }
+        }
+      }
+    }
+  }, 60_000);
+
+  it('asks the zone a few times a day on a long one-minute history', () => {
+    const bars = nseMinutes(20, 3);
+    const calls = { n: 0 };
+    const original = Intl.DateTimeFormat.prototype.formatToParts;
+    Intl.DateTimeFormat.prototype.formatToParts = function (this: Intl.DateTimeFormat, date?: Date | number) {
+      calls.n++;
+      return original.call(this, date);
+    };
+    cleanups.push(() => { Intl.DateTimeFormat.prototype.formatToParts = original; });
+    const d = getIndicator('ema');
+    d.calc(bars, settingsFor(d, { timeframe: '1h' }), {}, context('1m', bars));
+    securityExpression(bars, '15m', (requested) => ({ c: requested.map((b) => b.close) }), { timezone: 'Asia/Kolkata', session: '0915-1530' });
+    expect(calls.n).toBeLessThan(20 * 12);
+  });
+});
 
 describe('saved state', () => {
   const bars = nseMinutes(2, 40);
