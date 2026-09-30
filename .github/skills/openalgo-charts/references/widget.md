@@ -165,7 +165,7 @@ The sprite is injected once per document on the body (`id="oac-rail-sprite"`), s
 | `downloadText(doc, filename, text, mime)` | function | Hand text to the browser as a file; false when the runtime cannot. |
 | `captureName(symbol, interval, now?)` | function | `SYMBOL-5m-2026-01-31-09-15`, filename-safe. |
 | `SEARCH_DEBOUNCE_MS` | const `150` | Quiet before `symbolSearch` runs. |
-| `TopbarOptions`, `TopbarHandle`, `TopbarState`, `SymbolMatch`, `SymbolSearch`, `MenuRow`, `MenuOptions` | types | (unreleased) `SymbolMatch` is the base package's type, re-exported. The results panel keeps focus in its field while a row is pressed, and a failed lookup shows "Search unavailable" (`schema.ui.symbolSearchFailed`) with typed entry still committing. |
+| `TopbarOptions`, `TopbarHandle`, `TopbarState`, `SymbolMatch`, `SymbolSearch`, `MenuRow`, `MenuOptions` | types | (unreleased) `SymbolMatch` is the base package's type, re-exported. The results panel keeps focus in its field while a row is pressed, and a failed lookup shows "Search unavailable" (`schema.ui.symbolSearchFailed`) with typed entry still committing. (unreleased) Enter in the top bar, the phone header and the watchlist's add box waits for a search that is still running (its debounce or the host lookup), as the typing-navigation box already did, so it picks the result the user was about to see; typed text commits once a search finishes without matches or fails (`SymbolPickerHandle.canCommitRaw`). |
 
 The Capture menu includes **Download chart data (CSV)**, using the base
 `exportChartDataCsv` API. It captures source identity when opened and refuses a

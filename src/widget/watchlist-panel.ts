@@ -596,8 +596,9 @@ export function mountWatchlistPanel(ctx: WidgetContext, host: HTMLElement, optio
     event.preventDefault();
     const symbol = input.value.trim().toUpperCase();
     // A shown result takes Enter in the picker's own listener first; what
-    // reaches here is typed text, committed as the top bar commits it.
-    if (symbol === '') return;
+    // reaches here is typed text, committed as the top bar commits it: once
+    // no search is running that could still find what the user meant.
+    if (symbol === '' || (picker !== null && !picker.canCommitRaw())) return;
     picker?.close();
     input.value = '';
     // Raw text carries no venue: it is saved on the chart's own exchange.

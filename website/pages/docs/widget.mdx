@@ -117,7 +117,9 @@ The lookup receives a second argument, `{ signal }`, which aborts once a newer
 query or a closed picker makes the answer stale; pass it to `fetch` so a
 superseded request is cancelled. A callback that takes only the query still
 works. A lookup that fails shows "Search unavailable" under the box, and Enter
-still commits the typed symbol. Existing results with
+still commits the typed symbol. While a search is still running, Enter waits for it
+rather than charting the half-typed text, in the top bar, the phone header, the
+watchlist's add box and the typing-navigation box alike (since 2.6.0). Existing results with
 `symbol`, `exchange`, and `name` still work. Add `assetClass` to expose category
 filters, `iconUrl` for a symbol image, and `contractGroup` for an explicit list of
 futures contracts. A contract's symbol and exchange come from your lookup; the

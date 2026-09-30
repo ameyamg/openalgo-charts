@@ -217,7 +217,8 @@ export function mountTopbar(ctx: WidgetContext, host: HTMLElement, opts: TopbarO
     const ke = e as KeyboardEvent;
     if (ke.key === 'Enter') {
       ke.preventDefault();
-      commit(symInput.value);
+      // A search still running would have shown what the user meant: wait for it.
+      if (picker === null || picker.canCommitRaw()) commit(symInput.value);
     } else if (ke.key === 'Escape') { refresh(); symInput.blur(); }
   });
   symInput.addEventListener('focus', () => { symInput.select(); });

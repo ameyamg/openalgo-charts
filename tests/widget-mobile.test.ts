@@ -317,7 +317,7 @@ describe('mobile mode', () => {
     expect(withoutSearch.root.querySelector('[data-mobile-action="pick-symbol"]')).toBeNull();
   });
 
-  it('invalidates pending symbol searches when Enter commits or the input blurs', async () => {
+  it('waits for a pending symbol search on Enter, and drops a lookup the input left by blur', async () => {
     vi.useFakeTimers();
     let resolveFirst!: (matches: Array<{ symbol: string }>) => void;
     let resolveSecond!: (matches: Array<{ symbol: string }>) => void;
@@ -326,23 +326,22 @@ describe('mobile mode', () => {
       .mockImplementationOnce(() => new Promise<Array<{ symbol: string }>>((resolve) => { resolveSecond = resolve; }));
     const { w, root } = make({ mobile: 'always', symbolSearch: search });
     const input = root.querySelector('.oac-mobile__symbol') as FakeElement;
+    const before = w.symbol();
 
     input.focus();
     input.value = 'aaa';
     fire(input, 'input');
+    // In the debounce, and with the lookup out, Enter waits for what the search finds.
     fireKey(input, 'Enter');
     await vi.advanceTimersByTimeAsync(150);
-    expect(search).not.toHaveBeenCalled();
-    expect(w.symbol()).toBe('AAA');
-
-    input.focus();
-    input.value = 'bbb';
-    fire(input, 'input');
-    await vi.advanceTimersByTimeAsync(150);
+    expect(search).toHaveBeenCalledTimes(1);
     fireKey(input, 'Enter');
-    resolveFirst([{ symbol: 'BBB-OLD' }]);
+    expect(w.symbol()).toBe(before);
+    // A search that finds nothing leaves the typed text to commit.
+    resolveFirst([]);
     await settle();
-    expect(w.symbol()).toBe('BBB');
+    fireKey(input, 'Enter');
+    expect(w.symbol()).toBe('AAA');
     expect(root.querySelector('[data-mobile-action="pick-symbol"]')).toBeNull();
 
     input.focus();

@@ -253,7 +253,8 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
     symbolInput.addEventListener('keydown', (event) => {
       if ((event as KeyboardEvent).key === 'Enter') {
         event.preventDefault();
-        commitSymbol(symbolInput?.value ?? '');
+        // As in the top bar: a search still running decides what Enter picks.
+        if (picker === null || picker.canCommitRaw()) commitSymbol(symbolInput?.value ?? '');
       }
     });
     header.append(symbolInput, intervalButton);
