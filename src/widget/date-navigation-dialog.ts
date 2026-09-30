@@ -11,12 +11,12 @@
  * time fields: a time could not change which bar a date names. Both choices
  * hold for one interval and one zone, so a change to either closes the panel.
  */
-import { utcSecondsToZonedParts, zonedWallClockToUtcSeconds } from 'openalgo-charts';
 import type { WidgetContext } from './context';
 import { timeBuckets, type DateNavigationResult, type DateNavigationTarget } from './date-navigator';
 import { button, dialogFrame, el, openPanel, type PanelHandle } from './form';
 import { widgetText, type WidgetTranslationOptions } from './localization';
 import { token as v } from './tokens';
+import { formatWallClock, parseWallClock } from './wall-clock';
 
 export interface DateNavigationDialogOptions {
   /** Run one request. The panel reports the result and closes once it is placed. */
@@ -36,10 +36,6 @@ export interface DateNavigationDialogOptions {
   pending?: { target: DateNavigationTarget; result: Promise<DateNavigationResult> };
   onClose?(): void;
 }
-
-const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-const TIME = /^(\d{2}):(\d{2})$/;
-const pad = (n: number): string => String(n).padStart(2, '0');
 
 let sequence = 0;
 
@@ -135,9 +131,9 @@ export function openDateNavigation(ctx: WidgetContext, anchor: HTMLElement | und
     chart.dataLayer.indexToTime(Math.min(chart.dataLayer.length - 1, Math.floor(view.to)))];
   const fill = (fields: { date: HTMLInputElement; time: HTMLInputElement }, time: number | undefined): void => {
     if (time === undefined) return;
-    const p = utcSecondsToZonedParts(time, zone);
-    fields.date.value = `${p.year}-${pad(p.month)}-${pad(p.day)}`;
-    fields.time.value = intraday ? `${pad(p.hour)}:${pad(p.minute)}` : '';
+    const wall = formatWallClock(time, zone, false);
+    fields.date.value = wall.date;
+    fields.time.value = intraday ? wall.time : '';
   };
   const pending = options.pending;
   fill(start, pending?.target.from ?? shown[0]);
@@ -158,13 +154,7 @@ export function openDateNavigation(ctx: WidgetContext, anchor: HTMLElement | und
 
   /** UTC seconds for a typed date and time, or null. A blank end time means the last second of that day. */
   function read(fields: { date: HTMLInputElement; time: HTMLInputElement }, closing: boolean): number | null {
-    const d = DATE.exec(fields.date.value.trim());
-    const text = fields.time.value.trim();
-    const t = text === '' ? null : TIME.exec(text);
-    if (d === null || (text !== '' && t === null)) return null;
-    const [year, month, day] = [Number(d[1]), Number(d[2]), Number(d[3])];
-    if (t === null) return closing ? zonedWallClockToUtcSeconds(year, month, day + 1, 0, 0, 0, zone) - 1 : zonedWallClockToUtcSeconds(year, month, day, 0, 0, 0, zone);
-    return zonedWallClockToUtcSeconds(year, month, day, Number(t[1]), Number(t[2]), closing ? 59 : 0, zone);
+    return parseWallClock(fields.date.value, fields.time.value, zone, closing ? { blank: 'end', end: true } : { blank: 'start' });
   }
 
   function describe(result: DateNavigationResult, target: DateNavigationTarget): string {
