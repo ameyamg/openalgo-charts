@@ -29,7 +29,7 @@ import {
   type Chart, type PriceAxisState, type PriceScaleId,
 } from 'openalgo-charts';
 import { chromeIconSvg } from 'openalgo-charts/draw';
-import { glyph, h, type OverlayOptions, type TipController, type WidgetContext } from './context';
+import { glyph, h, type OverlayOptions, type TipController } from './context';
 import { timeBuckets, type DateNavigationResult } from './date-navigator';
 import { errorText, widgetText, type WidgetTranslationOptions } from './localization';
 import {
@@ -451,10 +451,7 @@ export function mountBottombar(ctx: BottombarContext, host: HTMLElement, opts: B
     const rest = runtimeZones().filter(zone => !first.includes(zone));
     const rows: Array<MenuRow | string> = [...first.map(row)];
     if (rest.length > 0) rows.push(widgetText(ctx, 'schema.ui.bottombar.allZones', {}, 'All zones'), ...rest.map(row));
-    // openMenu is typed for the widget's context but reads only the document,
-    // the overlay opener and the translations, which every bar context has;
-    // a custom host's context is the rest of a WidgetContext it never needed.
-    closeZones = openMenu(ctx as unknown as WidgetContext, anchor, rows, {
+    closeZones = openMenu(ctx, anchor, rows, {
       find: widgetText(ctx, 'schema.ui.bottombar.findZone', {}, 'Find a zone'),
       ariaLabel: widgetText(ctx, 'schema.ui.bottombar.timezones', {}, 'Timezone'),
     });

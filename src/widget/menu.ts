@@ -42,9 +42,11 @@ const rowGlyph = (id: string | undefined): string =>
 /**
  * A popup menu under `anchor`. Rows are buttons; a `{ head }` string starts a
  * group. Returns the closer. Exported for the dialog tier, whose context menu
- * and pickers want the same shape.
+ * and pickers want the same shape. It reads only the document, the overlay
+ * opener and the translations, so any widget context serves, and so does a
+ * bottom bar context.
  */
-export function openMenu(ctx: WidgetContext, anchor: HTMLElement, rows: ReadonlyArray<MenuRow | string>, opts: MenuOptions = {}): () => void {
+export function openMenu(ctx: Pick<WidgetContext, 'document' | 'openOverlay' | 'translate'>, anchor: HTMLElement, rows: ReadonlyArray<MenuRow | string>, opts: MenuOptions = {}): () => void {
   const doc = ctx.document;
   const m = h(doc, 'div', 'oac-menu', { role: 'menu' });
   if (opts.ariaLabel) m.setAttribute('aria-label', opts.ariaLabel);
