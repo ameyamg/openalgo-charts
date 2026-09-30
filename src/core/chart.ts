@@ -14,7 +14,7 @@ import {
   type PlotRect, type ChartEventOptions, type AxisChromeOptions, type ExportSvgOptions,
   type ChartNavigationOptions, type ChartOptions, type AddSeriesOptions, type CrosshairMoveEvent,
   type PointerInfo, type LayoutSetter,
-  type LayoutChangeEvent, type RendererFallbackEvent,
+  type LayoutChangeEvent, type RendererFallbackEvent, type AddIndicatorOptions, type ChartApplyOptions,
 } from './chart-types';
 // The public option and event types live in chart-types.ts. Every name is
 // re-exported here, so an import of './chart' finds what it always found.
@@ -27,6 +27,7 @@ export type {
   AddSeriesOptions, CrosshairMoveEvent, PointerModifiers, PointerKind, PointerSample, PointerInfo,
   ChartEventClick, ChartDragEvent, ChartDragEndEvent, ContextMenuTargetKind,
   ContextMenuTarget, LayoutSetter, LayoutChangeEvent, ContextMenuEvent, RendererFallbackEvent,
+  AddIndicatorOptions, ChartApplyOptions,
 } from './chart-types';
 import type { PriceAxisPlacement, PriceAxisSide, PriceAxisSlot } from '../model/price-axis-layout';
 import { type ChartTheme, DEFAULT_THEME } from '../theme';
@@ -50,7 +51,6 @@ import {
 
 import { type IndicatorInstance, type IndicatorApi, type IndicatorHost } from '../model/indicator-instance';
 import { type IndicatorEditOptions, type IndicatorPolicy } from '../model/indicator-policy';
-import type { IndicatorBarSource } from '../model/indicator-bar-source';
 import type { AlertsDocument } from '../alerts/types';
 import { copyAlert, parseAlertsDocument, validateAlert } from '../alerts/document';
 import type { ChartDataContext } from '../model/indicator-registry';
@@ -871,10 +871,7 @@ export class Chart {
   public addIndicator(
     indicatorId: string,
     settings: Readonly<IndicatorSettings> = {},
-    options: {
-      paneIndex?: number; priceScaleId?: PriceScaleId; plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>;
-      policy?: IndicatorPolicy; instanceId?: string; barSource?: IndicatorBarSource;
-    } = {},
+    options: AddIndicatorOptions = {},
   ): IndicatorApi {
     return this._studies.addIndicator(indicatorId, settings, options);
   }
@@ -1857,19 +1854,7 @@ export class Chart {
    * Apply a subset of chart options at runtime (theme, grid, formatters,
    * crosshair mode) without recreating the chart.
    */
-  public applyOptions(opts: {
-    theme?: ChartTheme;
-    grid?: Partial<GridOptions>;
-    canvas?: CanvasOptions;
-    statusLine?: LegendStatusLineOptions;
-    legendIconSize?: number;
-    priceScale?: Partial<PriceScaleOptions>;
-    priceFormatter?: ((price: number) => string) | null;
-    timeFormatter?: ((utcSeconds: number, tickMark?: TickMarkType) => string) | undefined;
-    timezone?: string;
-    crosshairMode?: CrosshairMode;
-    crosshairSnapToBar?: boolean;
-  }): void {
+  public applyOptions(opts: ChartApplyOptions): void {
     this._appearance.applyOptions(opts);
   }
 

@@ -18,7 +18,7 @@
  */
 import { InvalidationLevel } from './invalidate-mask';
 import type { PaneRenderContext } from './pane';
-import type { ChartWatermarkOptions, ExportSvgOptions } from './chart-types';
+import type { ChartApplyOptions, ChartWatermarkOptions, ExportSvgOptions } from './chart-types';
 import type { Chart } from './chart';
 import { SvgContext } from '../render/svg-export';
 import { LogoWatermark, type LogoWatermarkOptions } from '../primitives/watermark';
@@ -223,7 +223,7 @@ export class ChartAppearance {
     return svg.toString();
   }
 
-  public applyOptions(opts: Parameters<Chart['applyOptions']>[0]): void {
+  public applyOptions(opts: ChartApplyOptions): void {
     this._host._withinLayoutChange(() => {
       if (opts.theme) this._host.setTheme(opts.theme);
       if (opts.grid) this._host.setGridOptions(opts.grid);

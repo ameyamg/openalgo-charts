@@ -20,6 +20,7 @@
  */
 import { InvalidationLevel } from './invalidate-mask';
 import type { Chart } from './chart';
+import type { AddIndicatorOptions } from './chart-types';
 import type { PreservedScaleFormats } from './chart-state';
 import type { Pane } from './pane';
 import type { PriceScale } from '../scale/price-scale';
@@ -32,9 +33,9 @@ import { getIndicator, plotStyleKeys, type IndicatorDescriptor, type IndicatorRe
 import {
   IndicatorInstance, parseIndicatorPlotPriceScales, validateIndicatorScaleAssignment, type IndicatorApi, type IndicatorHost,
 } from '../model/indicator-instance';
-import { parseIndicatorPolicy, type IndicatorEditOptions, type IndicatorPolicy } from '../model/indicator-policy';
+import { parseIndicatorPolicy, type IndicatorEditOptions } from '../model/indicator-policy';
 import { validateIndicatorInputs } from '../model/indicator-inputs';
-import { parseIndicatorBarSource, type IndicatorBarSource } from '../model/indicator-bar-source';
+import { parseIndicatorBarSource } from '../model/indicator-bar-source';
 import type { SeriesStyle } from '../render/series-style';
 import type { Bar } from '../model/bar';
 import type { IPrimitive } from '../primitives/primitive';
@@ -140,10 +141,7 @@ export class ChartStudies {
   public addIndicator(
     indicatorId: string,
     settings: Readonly<IndicatorSettings>,
-    options: {
-      paneIndex?: number; priceScaleId?: PriceScaleId; plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>;
-      policy?: IndicatorPolicy; instanceId?: string; barSource?: IndicatorBarSource;
-    },
+    options: AddIndicatorOptions,
   ): IndicatorApi {
     const instanceId = options.instanceId;
     if (instanceId !== undefined && (typeof instanceId !== 'string' || !instanceId.trim())) throw new TypeError('Invalid indicator instance id');

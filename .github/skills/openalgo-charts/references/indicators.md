@@ -232,9 +232,11 @@ Notes that bite:
 addIndicator(
   indicatorId: string,
   settings?: Readonly<IndicatorSettings>,
-  options?: { paneIndex?: number },
+  options?: AddIndicatorOptions,
 ): IndicatorApi
 ```
+
+`AddIndicatorOptions` (named in 2.6.0; the same fields the method always took) is `{ paneIndex?, priceScaleId?, plotPriceScaleIds?, policy?, instanceId?, barSource? }`: the pane, the scale for the study's plots, a scale per plot key, the `IndicatorPolicy`, the id to bring a removed study back under, and `'underlying'` bars on a transformed chart.
 
 `options.paneIndex` overrides placement entirely: a `pane` indicator can be dropped onto the price pane, or a second indicator onto an existing pane. An instance that did **not** create its own pane never applies `range()`; a shared pane belongs to whoever created it.
 

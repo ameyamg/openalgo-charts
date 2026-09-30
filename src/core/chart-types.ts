@@ -32,6 +32,8 @@ import type { LegendStatusLineOptions } from '../primitives/pane-legend';
 import type { TimeNavigatorOptions } from '../primitives/time-navigator';
 import type { LogoWatermarkOptions } from '../primitives/watermark';
 import type { TextWatermarkOptions } from '../primitives/text-watermark';
+import type { IndicatorPolicy } from '../model/indicator-policy';
+import type { IndicatorBarSource } from '../model/indicator-bar-source';
 
 /** What a wheel zoom holds still. */
 export type ZoomAnchor = 'cursor' | 'right';
@@ -362,6 +364,37 @@ export interface ChartOptions {
    * and `createChartGrid` hand it to their charts as given, off by default too.
    */
   movablePrimaryPane?: boolean;
+}
+
+/** Where `chart.addIndicator` puts a study, and how the host holds it. */
+export interface AddIndicatorOptions {
+  /** The pane: an existing one, or `panes().length` for a new one. Default: the price pane for an overlay, a new pane otherwise. */
+  paneIndex?: number;
+  /** The scale the study's plots map to on that pane. */
+  priceScaleId?: PriceScaleId;
+  /** A scale per plot key, for a study whose plots belong on different scales. */
+  plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>;
+  /** What the user may do with the study; see `IndicatorPolicy`. */
+  policy?: IndicatorPolicy;
+  /** The id to give the study, to bring a removed one back under its own identity. */
+  instanceId?: string;
+  /** On a transformed chart, `'underlying'` computes on the host's bars instead of the elements drawn. */
+  barSource?: IndicatorBarSource;
+}
+
+/** The chart options `chart.applyOptions` changes at runtime, without recreating the chart. */
+export interface ChartApplyOptions {
+  theme?: ChartTheme;
+  grid?: Partial<GridOptions>;
+  canvas?: CanvasOptions;
+  statusLine?: LegendStatusLineOptions;
+  legendIconSize?: number;
+  priceScale?: Partial<PriceScaleOptions>;
+  priceFormatter?: ((price: number) => string) | null;
+  timeFormatter?: ((utcSeconds: number, tickMark?: TickMarkType) => string) | undefined;
+  timezone?: string;
+  crosshairMode?: CrosshairMode;
+  crosshairSnapToBar?: boolean;
 }
 
 export interface AddSeriesOptions {
