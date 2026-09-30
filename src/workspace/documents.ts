@@ -1,5 +1,5 @@
 import type {
-  ChartState, ChartSettingsState, DataVariant, IndicatorPolicy, IndicatorState, LinkMissingPolicy, PaneState, PriceScaleId, SeriesState,
+  ChartState, ChartSettingsState, DataVariant, IndicatorPolicy, IndicatorState, LinkMissingPolicy, PaneState, PriceScaleId, SeriesState, SeriesTransformSpec,
 } from 'openalgo-charts';
 import { normalizeDataVariant, parseAlertsDocument, parseIndicatorPolicy, parsePaneState } from 'openalgo-charts';
 import { boolean, choice, list, number, readJson, record, string, WorkspaceDocumentError, type Json } from './json';
@@ -134,6 +134,7 @@ function indicatorStates(input: Json | undefined, preserveIdentity = true, keepP
       out.studyInputs = keys;
     }
     if (entry.visible !== undefined) out.visible = boolean(entry.visible, 'indicator visibility');
+    if (entry.barSource !== undefined) out.barSource = choice(entry.barSource, 'indicator bar source', ['chart', 'underlying'] as const);
     if (keepPolicy && entry.policy !== undefined) {
       let policy: ReturnType<typeof parseIndicatorPolicy>;
       try { policy = parseIndicatorPolicy(entry.policy); }
@@ -380,9 +381,30 @@ function chartState(input: Json | undefined): WorkspaceChartState {
     const series = record(item, 'series');
     const scaleId = series.priceScaleId;
     if (typeof scaleId !== 'string') throw new WorkspaceDocumentError('priceScaleId must be a string');
-    return { type: string(series.type, 'series type'), style: record(series.style, 'series style'),
+    const out = { type: string(series.type, 'series type'), style: record(series.style, 'series style'),
       paneIndex: number(series.paneIndex, 'series paneIndex', 0, 31, true), priceScaleId: scaleId } as SeriesState;
+    if (series.transform !== undefined) out.transform = seriesTransform(series.transform);
+    return out;
   });
+  return out;
+}
+
+/**
+ * The transform a chart applies to a series, by shape alone: whether this
+ * build registers it, and takes its options, is the applying host's to check,
+ * as it is for a study's descriptor.
+ */
+function seriesTransform(input: Json): SeriesTransformSpec {
+  const source = record(input, 'series transform');
+  const out: SeriesTransformSpec = { type: string(source.type, 'series transform type', 100) };
+  if (source.options === undefined) return out;
+  const options = record(source.options, 'series transform options');
+  for (const value of Object.values(options)) {
+    if (typeof value !== 'string' && (typeof value !== 'number' || !Number.isFinite(value))) {
+      throw new WorkspaceDocumentError('Series transform options must be finite numbers or text');
+    }
+  }
+  out.options = options as Record<string, number | string>;
   return out;
 }
 
