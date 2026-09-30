@@ -116,3 +116,14 @@ describe('the script-tag build is budgeted', () => {
     expect([...(rows[0].path as string[])].sort()).toEqual(scripts.map((c) => c.output.file).sort());
   });
 });
+
+describe('require() reaches the same ESM files, never a CommonJS copy', () => {
+  it('each export resolves require through a default condition to its import file', () => {
+    for (const [spec, entry] of Object.entries(pkg.exports as Record<string, Record<string, string>>)) {
+      expect(Object.keys(entry), spec).toEqual(['types', 'import', 'default']);
+      expect(entry.default, spec).toBe(entry.import);
+    }
+    expect((pkg as { main?: string }).main).toBeUndefined();
+    expect(pkg.type).toBe('module');
+  });
+});
