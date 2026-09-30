@@ -173,7 +173,7 @@ export function registerSeriesTransforms(): void {
     (given, bars) => ({ boxSize: sized(given.boxSize, () => historyBox(bars)) }),
     (o) => new RenkoTransform({ boxSize: num(o, 'boxSize') }));
   // Twice the box, the proportion the reference host always used for both.
-  define('range', 'Range bars', 'candlestick', [historySize('range', 'Range')],
+  define('range-bars', 'Range bars', 'candlestick', [historySize('range', 'Range')],
     (given, bars) => ({ range: sized(given.range, () => historyBox(bars) * 2) }),
     (o) => new RangeBarsTransform({ range: num(o, 'range') }));
   define('line-break', 'Line break', 'candlestick', [{ key: 'lines', type: 'number', label: 'Lines to break', default: 3, min: 1, step: 1 }],

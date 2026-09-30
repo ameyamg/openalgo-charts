@@ -22,7 +22,7 @@ import type { IndicatorInput } from './indicator-registry';
  * saved state carries it as it is.
  */
 export interface SeriesTransformSpec {
-  /** A registered transform: `heikin-ashi`, `renko`, `range`, `line-break`, `point-figure` or `kagi` once the transform tier is imported. */
+  /** A registered transform: `heikin-ashi`, `renko`, `range-bars`, `line-break`, `point-figure` or `kagi` once the transform tier is imported. */
   type: string;
   /**
    * The options the transform declares (`SeriesTransformDefinition.inputs`),

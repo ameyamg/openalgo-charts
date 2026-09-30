@@ -42,7 +42,7 @@ type Case = [type: string, options: Record<string, number | string>, make: () =>
 const CASES: Case[] = [
   ['heikin-ashi', {}, () => new HeikinAshiTransform()],
   ['renko', { boxSize: 0.5 }, () => new RenkoTransform({ boxSize: 0.5 })],
-  ['range', { range: 1.2 }, () => new RangeBarsTransform({ range: 1.2 })],
+  ['range-bars', { range: 1.2 }, () => new RangeBarsTransform({ range: 1.2 })],
   ['line-break', { lines: 3 }, () => new LineBreakTransform({ lines: 3 })],
   ['point-figure', { boxSize: 0.5, reversal: 3 }, () => new PointFigureTransform({ boxSize: 0.5, reversal: 3 })],
   ['point-figure', { mode: 'atr', atrPeriod: 10, reversal: 2, method: 'close' },
@@ -53,8 +53,8 @@ const CASES: Case[] = [
 
 describe('series transform registry', () => {
   it('registers the six in-chart transforms with their renderers on tier import', () => {
-    expect(registeredSeriesTransforms()).toEqual(['heikin-ashi', 'renko', 'range', 'line-break', 'point-figure', 'kagi']);
-    expect(['heikin-ashi', 'renko', 'range', 'line-break'].map(type => getSeriesTransform(type).renderer))
+    expect(registeredSeriesTransforms()).toEqual(['heikin-ashi', 'renko', 'range-bars', 'line-break', 'point-figure', 'kagi']);
+    expect(['heikin-ashi', 'renko', 'range-bars', 'line-break'].map(type => getSeriesTransform(type).renderer))
       .toEqual(['candlestick', 'candlestick', 'candlestick', 'candlestick']);
     expect(getSeriesTransform('point-figure').renderer).toBe('point-figure');
     expect(getSeriesTransform('kagi').renderer).toBe('kagi');
@@ -131,7 +131,7 @@ describe('live transform runs', () => {
     run.setData(other);
     expect(boxOf(run.elements())).toBe(Number((box * 10).toPrecision(2)));
     // Range and Kagi take twice the box, as the reference host always did.
-    const range = getSeriesTransform('range').create({});
+    const range = getSeriesTransform('range-bars').create({});
     range.setData(bars);
     expect(range.elements()).toEqual(runTransform(new RangeBarsTransform({ range: box * 2 }), bars));
     const kagi = getSeriesTransform('kagi').create({ reversal: 0 });
