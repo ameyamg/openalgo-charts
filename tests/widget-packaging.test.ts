@@ -63,7 +63,7 @@ function specifierOfBundle(file: string): string {
 /** `./draw` in `exports` is `openalgo-charts/draw`; `.` is the bare name. */
 const specifierOfExport = (key: string) => (key === '.' ? PKG : `${PKG}/${key.slice(2)}`);
 
-const exportsMap = pkg.exports as Record<string, { types: string; import: string }>;
+const exportsMap = pkg.exports as Record<string, { types: string; import: string; default: string }>;
 const sizeRows = sizeLimit as { name: string; path: string | string[]; limit: string }[];
 const pathsOf = (row: { path: string | string[] }) => (Array.isArray(row.path) ? row.path : [row.path]);
 
@@ -85,7 +85,7 @@ describe('the widget is a tier bundle like the other seven', () => {
       const dts = dtsTiers.find((c) => `./${c.output.file}` === entry.types);
       expect(dts, `${spec} types ${entry.types} are not built`).toBeDefined();
     }
-    expect(exportsMap['./widget']).toEqual({ types: WIDGET_TYPES, import: `./${WIDGET_BUNDLE}` });
+    expect(exportsMap['./widget']).toEqual({ types: WIDGET_TYPES, import: `./${WIDGET_BUNDLE}`, default: `./${WIDGET_BUNDLE}` });
   });
 
   it('typedoc documents every tier entry point', () => {

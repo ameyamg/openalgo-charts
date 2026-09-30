@@ -147,21 +147,56 @@ JavaScript is a key you have given away, whatever the file is called.
 
 ## The no-modules build
 
-If you cannot use `<script type="module">` at all, there is a classic script that
-defines a `OpenAlgoCharts` global:
+If you cannot use `<script type="module">` at all, every tier also ships as a
+classic script. The base file defines an `OpenAlgoCharts` global, and each tier's
+file adds itself to it under the tier's name, so what a module imports from
+`openalgo-charts/draw` a classic script reads from `OpenAlgoCharts.draw`:
 
 ```html
 <script src="https://unpkg.com/openalgo-charts@2.5.10/dist/openalgo-charts.standalone.js"></script>
+<script src="https://unpkg.com/openalgo-charts@2.5.10/dist/openalgo-charts.indicators.standalone.js"></script>
+<script src="https://unpkg.com/openalgo-charts@2.5.10/dist/openalgo-charts.draw.standalone.js"></script>
+<script src="https://unpkg.com/openalgo-charts@2.5.10/dist/openalgo-charts.widget.standalone.js"></script>
 <script>
   const chart = OpenAlgoCharts.createChart(document.getElementById('chart'));
   chart.addSeries('candlestick').setData(bars);
+  chart.addIndicator('rsi');
+
+  const draw = new OpenAlgoCharts.draw.DrawingController(chart);
+
+  const widget = OpenAlgoCharts.widget.createWidget(document.getElementById('terminal'), {
+    feed, symbol: 'RELIANCE', exchange: 'NSE', interval: '5m',
+  });
 </script>
 ```
 
-**It is the base tier only.** There is no `registerBuiltinIndicators` on that
-global, so there are no built-in indicators and no drawing tools in it. It is
-there for a page that cannot load modules, and the module form above is the one
-to reach for otherwise.
+| Tier | Classic script | Global |
+|---|---|---|
+| base | `openalgo-charts.standalone.js` | `OpenAlgoCharts` |
+| indicators | `openalgo-charts.indicators.standalone.js` | `OpenAlgoCharts.indicators` |
+| drawing | `openalgo-charts.draw.standalone.js` | `OpenAlgoCharts.draw` |
+| transforms | `openalgo-charts.transform.standalone.js` | `OpenAlgoCharts.transform` |
+| profiles | `openalgo-charts.profile.standalone.js` | `OpenAlgoCharts.profile` |
+| trading | `openalgo-charts.trade.standalone.js` | `OpenAlgoCharts.trade` |
+| webgl | `openalgo-charts.webgl.standalone.js` | `OpenAlgoCharts.webgl` |
+| widget | `openalgo-charts.widget.standalone.js` | `OpenAlgoCharts.widget` |
+| workspace | `openalgo-charts.workspace.standalone.js` | `OpenAlgoCharts.workspace` |
+
+- **Load the base first.** A tier file reads the engine from the global and
+  registers its indicators, tools or chart types into it, so there is one engine
+  on the page. The widget also reads the drawing tier, so load that before it. A
+  file loaded too early stops at once and names the files it needs first. Load
+  each file once.
+- **Do not mix the two forms.** A tier's `.mjs` module next to the classic base
+  imports an engine of its own, which the classic chart never reads.
+- **The widget's script carries its panels.** The module form fetches a few
+  panels the first time a user opens them; a classic script cannot, so the
+  widget's script has them in it and fetches nothing more. It is somewhat larger
+  than the module for that.
+
+The module form above is still the one to reach for when the page allows it: it
+fetches the widget's panels only when they are used, and a bundler leaves out
+what you never import.
 
 ## What you do not need
 
@@ -174,7 +209,7 @@ steps that do not apply here:
 - **There is nothing else to list for the widget.** A few of its panels load from
   files beside `openalgo-charts.widget.mjs` the first time a user opens them. They
   resolve against the tier's own URL, so the CDN path you import from serves them,
-  provided it pins the exact version.
+  provided it pins the exact version. The widget's classic script has them in it.
 - **There is no separate CDN deployment.** unpkg and jsDelivr mirror npm. A
   release is on both the moment it is published; there is no account to create
   and no upload step.

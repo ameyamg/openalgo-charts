@@ -37,39 +37,48 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/openalgo-charts.mjs"
+      "import": "./dist/openalgo-charts.mjs",
+      "default": "./dist/openalgo-charts.mjs"
     },
     "./trade": {
       "types": "./dist/trade/index.d.ts",
-      "import": "./dist/openalgo-charts.trade.mjs"
+      "import": "./dist/openalgo-charts.trade.mjs",
+      "default": "./dist/openalgo-charts.trade.mjs"
     },
     "./transform": {
       "types": "./dist/transform/index.d.ts",
-      "import": "./dist/openalgo-charts.transform.mjs"
+      "import": "./dist/openalgo-charts.transform.mjs",
+      "default": "./dist/openalgo-charts.transform.mjs"
     },
     "./profile": {
       "types": "./dist/profile/index.d.ts",
-      "import": "./dist/openalgo-charts.profile.mjs"
+      "import": "./dist/openalgo-charts.profile.mjs",
+      "default": "./dist/openalgo-charts.profile.mjs"
     },
     "./indicators": {
       "types": "./dist/indicators/index.d.ts",
-      "import": "./dist/openalgo-charts.indicators.mjs"
+      "import": "./dist/openalgo-charts.indicators.mjs",
+      "default": "./dist/openalgo-charts.indicators.mjs"
     },
     "./draw": {
       "types": "./dist/draw/index.d.ts",
-      "import": "./dist/openalgo-charts.draw.mjs"
+      "import": "./dist/openalgo-charts.draw.mjs",
+      "default": "./dist/openalgo-charts.draw.mjs"
     },
     "./webgl": {
       "types": "./dist/webgl/index.d.ts",
-      "import": "./dist/openalgo-charts.webgl.mjs"
+      "import": "./dist/openalgo-charts.webgl.mjs",
+      "default": "./dist/openalgo-charts.webgl.mjs"
     },
     "./workspace": {
       "types": "./dist/workspace/index.d.ts",
-      "import": "./dist/openalgo-charts.workspace.mjs"
+      "import": "./dist/openalgo-charts.workspace.mjs",
+      "default": "./dist/openalgo-charts.workspace.mjs"
     },
     "./widget": {
       "types": "./dist/widget/index.d.ts",
-      "import": "./dist/openalgo-charts.widget.mjs"
+      "import": "./dist/openalgo-charts.widget.mjs",
+      "default": "./dist/openalgo-charts.widget.mjs"
     }
   },
   "files": [
@@ -111,9 +120,10 @@
     "skills:coverage": "node scripts/check-skills-coverage.mjs",
     "docs": "typedoc",
     "test:demo": "vitest run --config examples/yfinance/vitest.config.ts",
-    "verify": "npm run lint && npm run typecheck && npm run test && npm run test:endurance && npm run build && npm run test:demo && npm run check:dts && npm run size && npm run shake",
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run test:endurance && npm run build && npm run test:demo && npm run check:dts && npm run check:exports && npm run size && npm run shake",
     "prepublishOnly": "npm run verify",
     "check:dts": "node scripts/check-dts.mjs",
+    "check:exports": "node scripts/check-exports.mjs",
     "shake": "node scripts/check-shake.mjs"
   },
   "engines": {

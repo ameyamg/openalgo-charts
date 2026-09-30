@@ -145,8 +145,17 @@ remove them:
 
 ## Runtime boundary
 
-The published package is ESM with a standalone browser bundle and no runtime
-dependencies. The build toolchain requires Node.js 20 or later, as declared in
+The published package is ESM, with a script-tag build of every tier for a page
+that loads no modules, and no runtime dependencies. The script-tag build is one
+`OpenAlgoCharts` global with a key per tier; the global's name, its tier keys and
+the names under them are public in the same way as the export entries they mirror,
+and `npm run check:exports` holds them to the declarations.
+
+There is no CommonJS build: a second copy of the code would carry a second set of
+registries. Each export's `default` condition resolves `require()` to the same ESM
+file instead, so Node.js 20.19 or later and 22.12 or later return from `require()` the
+module `import` returns. Earlier Node.js versions throw `ERR_REQUIRE_ESM` and load the
+package with `import()`. The build toolchain requires Node.js 20 or later, as declared in
 `package.json`. Construct charts only where the required browser canvas/DOM APIs
 exist; rendering on a server needs a host-owned environment and is not implied by
 successful server-side module resolution.

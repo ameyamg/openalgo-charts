@@ -28,7 +28,7 @@ Pick the shape from what you find:
 | `react` without `next` | component with `useRef` + `useEffect` |
 | `vue` | a composable: chart in a `shallowRef`, `onMounted` / `onBeforeUnmount` |
 | a bundler, no framework | plain module |
-| no bundler, HTML only | `dist/openalgo-charts.standalone.js` and the `OpenAlgoCharts` global |
+| no bundler, HTML only | `<script type="module">` from `dist/` or a CDN; with no module support, the script-tag files: `dist/openalgo-charts.standalone.js` (the `OpenAlgoCharts` global), then (unreleased) each tier's `openalgo-charts.<tier>.standalone.js` (`OpenAlgoCharts.<tier>`) |
 
 Read [react-integration](../openalgo-charts/references/react-integration.md) for the React and Next.js shapes, [vue-integration](../openalgo-charts/references/vue-integration.md) for Vue 3 and Nuxt, and [bundling-and-tiers](../openalgo-charts/references/bundling-and-tiers.md) for the no-bundler shape.
 
