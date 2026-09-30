@@ -37,7 +37,7 @@ import {
   type MarketStatusReading,
 } from './bottombar-status';
 import { DEFAULT_RANGES, type WidgetRange } from './ranges';
-import { openMenu, type MenuRow } from './topbar';
+import { openMenu, type MenuRow } from './menu';
 
 /** The bar's height in CSS px. */
 export const BOTTOMBAR_HEIGHT = 28;

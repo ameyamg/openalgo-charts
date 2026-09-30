@@ -27,7 +27,7 @@ import {
   button, controlsFromFields, dialogFrame, el, openPanel, placePanel, renderForm, selectionPoint, tabList,
   type ButtonSpec, type FormHandle, type PanelHandle,
 } from '../form';
-import { openMenu } from '../topbar';
+import { openMenu } from '../menu';
 import { templateMenuRows } from '../drawing-templates';
 import { mountDrawingCoordinates, type DrawingCoordinatesHandle } from './drawing-coordinates';
 import { mountLevelEditor } from './level-editor';

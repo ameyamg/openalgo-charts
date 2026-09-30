@@ -24,7 +24,7 @@ import { commandChord } from './keymap';
 import { createColorPicker } from './color-picker';
 import { boxInRoot, button, chromeGlyph, el } from './form';
 import { widgetText } from './localization';
-import { openMenu, type MenuRow } from './topbar';
+import { openMenu, type MenuRow } from './menu';
 import { commonSchema, mountDrawingProperties, resolvedDrawingValues } from './dialogs/drawing-properties';
 import { chartContainer } from './dialogs/text-editor';
 import { templateMenuRows, type DrawingTemplates } from './drawing-templates';

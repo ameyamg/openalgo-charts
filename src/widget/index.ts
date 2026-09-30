@@ -98,11 +98,10 @@ export type {
 export { mountRail, toolGlyph, toolName, sanitizeRailPrefs, RAIL_GROUPS, MAGNET_MODES, RAIL_PREFS_KEY } from './rail';
 export type { RailOptions, RailHandle, RailPrefs, RailGroup, RailGroupItem } from './rail';
 
-export {
-  mountTopbar, openMenu, chartTypeChoices, chartTypeLabel, intervalLabel, downloadText, captureName,
-  CHART_TYPE_LABELS, SEARCH_DEBOUNCE_MS,
-} from './topbar';
-export type { TopbarOptions, TopbarHandle, TopbarState, SymbolMatch, SymbolSearch, MenuRow, MenuOptions } from './topbar';
+export { mountTopbar, chartTypeChoices, chartTypeLabel, intervalLabel, CHART_TYPE_LABELS, SEARCH_DEBOUNCE_MS } from './topbar';
+export type { TopbarOptions, TopbarHandle, TopbarState, SymbolMatch, SymbolSearch } from './topbar';
+export { openMenu, downloadText, captureName } from './menu';
+export type { MenuRow, MenuOptions } from './menu';
 
 export { mountStatusline, priceDigits, MIN_PRICE_DIGITS } from './statusline';
 export type { StatuslineOptions, StatuslineHandle } from './statusline';
