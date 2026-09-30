@@ -1,5 +1,5 @@
 /**
- * OpenAlgo WebSocket adapter (ARCHITECTURE.md §10, C2). Speaks the documented
+ * OpenAlgo WebSocket adapter (ARCHITECTURE.md §10). Speaks the documented
  * OpenAlgo WS proxy protocol (default port 8765, or wss://host/ws in production):
  *
  *   1. authenticate: { action:'authenticate', api_key }
@@ -59,7 +59,7 @@ export interface WsClientWarning extends WsControlMessage {
   message: string;
 }
 
-/** OpenAlgo numeric data modes (websockets-format.md §Data Modes). */
+/** The number the OpenAlgo proxy expects in a subscribe frame's `mode` field for each data mode. */
 const MODE_NUMBER: Record<WsMode, number> = { LTP: 1, Quote: 2, Depth: 3 };
 
 /** Minimal socket surface (the browser WebSocket satisfies this). */
@@ -464,7 +464,7 @@ export class OpenAlgoWsFeed {
   /**
    * Open the socket. Also the deliberate way back from a refused key or an
    * earlier `close()`: both are user-intent states, and only user intent clears
-   * them (design §5.2, FATAL -> CONNECTING on an explicit connect).
+   * them, so this is the one way out of the fatal state back to connecting.
    */
   public connect(): void {
     if (this._sock !== null) return;

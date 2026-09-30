@@ -1,5 +1,5 @@
 /**
- * Composed OpenAlgo live data feed (resolves audit V2-M1). Implements the full
+ * Composed OpenAlgo live data feed. Implements the full
  * `DataFeed` contract by combining history (REST), live ticks (WS), and a
  * per-subscription aggregator, so `subscribeBars()` actually delivers live
  * interval bars instead of being a no-op trap.

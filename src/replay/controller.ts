@@ -9,9 +9,9 @@
  *
  * The mechanic is deliberately boring. Replay feeds the chart a **prefix** of
  * the full bar array through the ordinary `series.setData` path, and that is
- * what makes indicators free: `Chart._setData` calls `_recomputeIndicators` for
- * the primary series, and `IndicatorInstance.recompute` re-reads the whole
- * history from `sourceBars()`. Shorten that history and every indicator, level,
+ * what makes indicators free: for the primary series that path invalidates and
+ * recomputes every study at once (`ChartSeries._setData`), and
+ * `IndicatorInstance.recompute` re-reads the whole history from `sourceBars()`. Shorten that history and every indicator, level,
  * fill, marker and legend reconstructs itself as it was at that bar, with no
  * replay-aware code anywhere in the indicator tier.
  */

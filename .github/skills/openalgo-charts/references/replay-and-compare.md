@@ -201,7 +201,7 @@ Events on the chart bus, all carrying a `ReplayState`: `replay:start` (first fra
 
 ### Why indicators come free
 
-Every transition funnels through one private `_apply(index)` that hands the driven series a **prefix** of `bars` through the public `series.setData`. That is already the path that calls `_recomputeIndicators`, and `IndicatorInstance.recompute` re-reads the whole history from `sourceBars()`, so each plot, level, fill, marker and legend row rebuilds itself as it stood at that bar. There is no replay-aware code in the indicator tier, and none is needed.
+Every transition funnels through one private `_apply(index)` that hands the driven series a **prefix** of `bars` through the public `series.setData`. For the primary series that path already invalidates and recomputes every study at once, and `IndicatorInstance.recompute` re-reads the whole history from `sourceBars()`, so each plot, level, fill, marker and legend row rebuilds itself as it stood at that bar. There is no replay-aware code in the indicator tier, and none is needed.
 
 `dataLayer.length` shrinks with the prefix, so an indicator's own plot series cannot hold the shared time axis open at future bars.
 

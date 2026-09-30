@@ -367,7 +367,7 @@ Reconciling the fill back onto the chart *is* `refreshBook()`, the filled order 
 
 **Terminal states swallow everything.** After `stale`, a late fill event cannot move the order back; rebuild from a snapshot instead.
 
-**`OpenAlgoTradeFeed` sends `pricetype: req.type` verbatim.** Your `OrderType` strings must be the exact values OpenAlgo expects (`MARKET`, `LIMIT`, `SL`, `SL-M`). `exchange` defaults to `'NSE'`, `product` to `defaultProduct` (default `'MIS'`).
+**`OpenAlgoTradeFeed` sends `pricetype: req.type` verbatim.** Your `OrderType` strings must be the exact values OpenAlgo expects (`MARKET`, `LIMIT`, `SL`, `SL-M`). `exchange` defaults to `'NSE'`, `product` to `defaultProduct` (default `'MIS'`), on `place()` only: `modify()` never guesses either for an order the book does not describe, so pass `exchange` on every order for any other exchange.
 
 ## Deeper
 
