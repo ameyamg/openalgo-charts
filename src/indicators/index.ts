@@ -1,9 +1,10 @@
 /**
  * Indicator tier (opt-in: "openalgo-charts/indicators").
  *
- * 112 Tier-1 built-ins, computed from the chart's own bars, no extra data,
+ * The Tier-1 built-ins, computed from the chart's own bars, no extra data,
  * plus the Tier-2 contract for indicators that own an external fetch/subscribe
- * lifecycle. Importing this module registers every built-in as a side effect.
+ * lifecycle. Importing this module registers every built-in as a side effect;
+ * `registeredIndicators()` counts them.
  *
  * ```ts
  * import { createChart } from 'openalgo-charts';
@@ -15,10 +16,12 @@
  * chart.addIndicator('bollinger', { length: 20, stdDev: 2.5 });
  * ```
  *
- * `registerIndicator` is imported from `../index` (the base entry), never a
- * deep path: each tier is its own bundle, so a deep import would inline a
- * second copy of the registry and `chart.addIndicator` would never find what
- * this tier registers. `../index` is external for tier builds.
+ * `registerIndicator` is imported from the package specifier
+ * `'openalgo-charts'`, never a relative path: each tier is its own bundle, and
+ * rollup.config.js (`tierExternal`) leaves only the package specifiers
+ * external, so a relative import of `../index` or of the registry module
+ * would inline a second copy of the registry and `chart.addIndicator` would
+ * never find what this tier registers.
  */
 import { registerIndicator } from 'openalgo-charts';
 import type { IndicatorDescriptor } from 'openalgo-charts';

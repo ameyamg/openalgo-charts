@@ -2,8 +2,9 @@
  * Tier-1 trend indicators — computed from the chart's own OHLCV, no extra data.
  * Part of the lazy `openalgo-charts/indicators` tier.
  *
- * `ema`, `supertrend`, and the `sourceValues` helper come from the base bundle
- * (`../index`), not deep paths — see the note in `src/indicators/index.ts`.
+ * `supertrend`, `atr` and the `sourceValues` helper come from the base bundle
+ * through the `'openalgo-charts'` specifier, not relative paths; see the note
+ * in `src/indicators/index.ts`.
  */
 import {
   supertrend, atr, sourceValues, sourceValue,
