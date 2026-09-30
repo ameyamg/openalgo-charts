@@ -269,7 +269,8 @@ export interface IndicatorHost {
    * The host's bars under a transformed primary series and the source bar each
    * of `sourceBars` was completed on (null when they are one to one), or null
    * when the chart draws its bars as given. Optional; without it a study on the
-   * underlying bars computes on `sourceBars`.
+   * underlying bars computes on `sourceBars`, and one on the chart's bars is
+   * never told they are transformed (`IndicatorCalcContext.transformed`).
    */
   underlyingBars?(): { bars: readonly Bar[]; sourceIndex: readonly number[] | null } | null;
   /** Optional mutation metadata; absent hosts retain the legacy timestamp heuristic. */
@@ -535,6 +536,8 @@ export class IndicatorInstance implements IndicatorApi {
   private _outputPending = false;
   private _publishedBarColors: readonly (string | null)[] | null = null;
   private _barSource: IndicatorBarSource;
+  /** Rebuilt by a restore, which brings back a study its inputs refuse on this chart as it was saved. */
+  private readonly _restored: boolean;
   /** The bars a pass on the underlying bars computed on, while its values are read across onto the drawn ones. */
   private _sampled: { bars: readonly Bar[]; sourceIndex: readonly number[] } | null = null;
 
@@ -549,7 +552,9 @@ export class IndicatorInstance implements IndicatorApi {
     plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>,
     policy?: IndicatorPolicy,
     barSource?: IndicatorBarSource,
+    restored = false,
   ) {
+    this._restored = restored;
     this._host = host;
     this._d = descriptor;
     this._barSource = barSource === undefined ? 'chart' : parseIndicatorBarSource(barSource);
@@ -1742,7 +1747,8 @@ export class IndicatorInstance implements IndicatorApi {
       this._recompute(refresh, bars, sourceIndex === null ? bars : shown, sourceIndex, source, bindings, current);
     } catch (error) {
       if (!current()) return;
-      if (!this._constructed && !(error instanceof StudyInputUnavailable)) throw error;
+      if (!this._constructed && !(error instanceof StudyInputUnavailable)
+        && !(this._restored && error instanceof IndicatorInputError)) throw error;
       if (error instanceof StudyInputUnavailable) this._clearUnavailableOutput(sourceIndex === null ? bars : shown);
       // One study's bad input must not stall the frame for every other one, and
       // a study that silently stops drawing tells the user nothing. So the
@@ -1794,6 +1800,8 @@ export class IndicatorInstance implements IndicatorApi {
     if (source === undefined && tailOnly) this._live = true;
     const ctx = this._calcContext(calc, appended, source);
     ctx.resolveSource = bindings.resolve;
+    // The chart's own bars on a transformed series are its elements, not time bars.
+    if (this._barSource === 'chart' && (this._host.underlyingBars?.() ?? null) !== null) ctx.transformed = true;
     let usedTail = false;
     if (tailOnly && sourceIndex === null && bindings.canTail && this._d.calcTail !== undefined) {
       const from = this._barCount - 1; // the previously-last bar may have been replaced

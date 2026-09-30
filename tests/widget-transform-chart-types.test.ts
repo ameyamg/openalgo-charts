@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { generateBars, getSeriesTransform, type Bar } from '../src/index';
-import { chartTypeChoices, chartTypeLabel, createWidget, type Widget, type WidgetOptions } from '../src/widget/index';
+import { chartTypeChoices, chartTypeLabel, createWidget, STATE_KEY, type Widget, type WidgetOptions } from '../src/widget/index';
 import { registerTransformChartTypes, runTransform, HeikinAshiTransform } from '../src/transform/index';
 import { mountIndicatorSettings } from '../src/widget/dialogs/index';
 import '../src/indicators/index';
@@ -185,5 +185,25 @@ describe('widget chart types the chart transforms', () => {
     run.setData(recent);
     run.prepend(older);
     expect(widget.chart.primaryBars()).toEqual(run.elements());
+  });
+
+  it('starts from a saved Renko layout with a study a timeframe refuses there, the study in its error status', async () => {
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => { store.set(key, value); }, removeItem: (key: string) => { store.delete(key); },
+    };
+    const first = fed({ persist: true, storage }).widget;
+    await flush();
+    first.chart.addIndicator('ema', { length: 5, timeframe: '15m' });
+    first.setChartType('renko');
+    expect(first.chart.indicators()[0].dataStatus()?.state).toBe('error');
+    first.context.storage.set(STATE_KEY, first.getState());
+    const { widget } = fed({ persist: true, storage });
+    await flush();
+    expect(widget.chartType()).toBe('renko');
+    const ema = widget.chart.indicators()[0];
+    expect(ema.settings().timeframe).toBe('15m');
+    expect(ema.dataStatus()?.state).toBe('error');
   });
 });

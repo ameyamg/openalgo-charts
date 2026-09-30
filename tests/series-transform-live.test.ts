@@ -162,11 +162,18 @@ describe('live transform runs', () => {
 });
 
 describe('Kagi flush', () => {
+  // The last reversal is the fourth bar; the line then climbs to the end.
+  const bars = [10, 13, 11, 14, 15, 16, 17, 18].map((close, i) => ({ time: 1000 + i * 60, open: close, high: close, low: close, close }));
+
   it('dates the vertex still forming at the newest bar rather than at time zero', () => {
-    // The last reversal is the fourth bar; the line then climbs to the end.
-    const bars = [10, 13, 11, 14, 15, 16, 17, 18].map((close, i) => ({ time: 1000 + i * 60, open: close, high: close, low: close, close }));
     const out = runTransform(new KagiTransform({ reversal: 2 }), bars);
     expect(out[out.length - 1]).toMatchObject({ time: 1000 + 7 * 60, close: 18 });
+  });
+
+  it('dates it at the newest bar for a host that pushes and flushes itself, with no batch run to bump the time', () => {
+    const kagi = new KagiTransform({ reversal: 2 });
+    for (const bar of bars) kagi.push(bar);
+    expect(kagi.flush()).toEqual([{ time: 1000 + 7 * 60, open: 18, high: 18, low: 18, close: 18, volume: 1 }]);
   });
 });
 

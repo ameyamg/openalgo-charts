@@ -46,7 +46,7 @@ export class LineBreakTransform implements ISeriesTransform {
       maxHigh = Math.max(maxHigh, l.open, l.close);
       minLow = Math.min(minLow, l.open, l.close);
     }
-    const last = this._lines[this._lines.length - 1];
+    const last = this._lines[this._lines.length - 1]!; // never empty here: that case returned above
     let box: LineBox | null = null;
     if (p > maxHigh) box = { open: last.close, close: p };
     else if (p < minLow) box = { open: last.close, close: p };

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Chart, IndicatorApi } from '../../src/index';
 import type * as Widgets from '../../src/widget/index';
+import type * as Engine from '../../src/index';
 
 // A built-in study on a higher timeframe (issue 22), beside the same study on
 // the chart's own timeframe, and the timeframe select in its settings, listing
@@ -166,3 +167,72 @@ for (const surface of ['widget', 'demo'] as const) {
     expect(errors).toEqual([]);
   });
 }
+
+// On a chart that transforms its bars the chart's own bars are Renko bricks,
+// whose times are no clock: a timeframe set on a study computing on them is
+// refused on the study's status. Moved to the underlying bars, the same study
+// folds them and reads each value at the bar its brick completed on.
+test('widget: a Renko chart refuses a timeframe on its bricks and folds the underlying bars', async ({ page }, info) => {
+  const errors = await mount(page, 'widget');
+  await page.evaluate(async () => {
+    await import('/dist/openalgo-charts.transform.mjs');
+    const { chart, plain, folded } = window.__htf;
+    plain.remove(); folded.remove();
+    chart.setSeriesTransform(chart.primarySeries()!, { type: 'renko' });
+    window.__htf.folded = chart.addIndicator('ema', { length: 9, color: '#ffb300', 'ma:width': 2.5 });
+    const n = chart.primaryBars().length;
+    chart.setVisibleLogicalRange({ from: n - 160, to: n + 5 });
+  });
+  await paint(page);
+
+  await page.evaluate(() => window.__htf.open());
+  const d = dialog(page, 'widget');
+  await d.timeframe.selectOption('15m');
+  await d.accept.click();
+  await expect(d.root).toBeHidden();
+  const refused = await page.evaluate(() => {
+    const status = window.__htf.folded.dataStatus();
+    return { state: status?.state, message: String((status as { error?: unknown } | null)?.error ?? '') };
+  });
+  expect(refused.state).toBe('error');
+  expect(refused.message).toMatch(/transformed bars.*compute the study on the underlying bars/);
+  await expect(page.locator('.oac-data-status')).toContainText('EMA');
+  await paint(page);
+  await page.screenshot({ path: info.outputPath('widget-renko-refused.png') });
+
+  await page.evaluate(() => window.__htf.open());
+  const computeOn = d.root.getByRole('combobox', { name: 'Compute on' });
+  await expect(computeOn).toHaveValue('chart');
+  await computeOn.selectOption('underlying');
+  await d.accept.click();
+  await expect(d.root).toBeHidden();
+  await expect(page.locator('.oac-data-status')).toBeHidden();
+  const check = await page.evaluate(async () => {
+    const base = await import('/dist/openalgo-charts.mjs') as typeof Engine;
+    const { chart, folded: study } = window.__htf;
+    const series = chart.primarySeries()!;
+    const bars = series.getData();
+    const run = base.getSeriesTransform('renko').create(chart.seriesTransform(series)?.options ?? {});
+    run.setData(bars);
+    const d = base.getIndicator('ema');
+    const settings = { ...base.indicatorDefaults(d), ...study.settings() };
+    const ctx = {
+      barState: { isNew: false, isConfirmed: true, isRealtime: false, lastIndex: bars.length - 1 },
+      interval: '1m', timezone: chart.timezone(), now: () => bars[bars.length - 1].time + 60,
+    };
+    const onBars = d.calc(bars, settings, {}, ctx).ma;
+    const expected = run.sourceIndex()!.map(i => onBars[i] ?? null);
+    const shown = study.values().ma;
+    const onBricks = d.calc(chart.primaryBars(), { ...settings, timeframe: '' }, {}).ma;
+    return {
+      status: study.dataStatus()?.state ?? null, barSource: study.barSource(), timeframe: study.settings().timeframe,
+      same: shown.length === expected.length && shown.every((v, i) => Object.is(v ?? null, expected[i])),
+      values: shown.filter(v => v !== null).length, differs: shown.some((v, i) => v !== null && v !== onBricks[i]),
+    };
+  });
+  expect(check).toMatchObject({ status: 'ready', barSource: 'underlying', timeframe: '15m', same: true, differs: true });
+  expect(check.values).toBeGreaterThan(50);
+  await paint(page);
+  await page.screenshot({ path: info.outputPath('widget-renko-underlying-15m.png') });
+  expect(errors).toEqual([]);
+});

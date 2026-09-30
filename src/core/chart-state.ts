@@ -434,7 +434,7 @@ export class ChartPersistence {
         const descriptor = studies.descriptors.get(id)!;
         const instance = new IndicatorInstance(
           this._host._indicatorHost(preservedFormats), descriptor, spec.settings, spec.paneIndex,
-          spec.instanceId, reservedIds, spec.priceScaleId, spec.plotPriceScaleIds, spec.policy, spec.barSource,
+          spec.instanceId, reservedIds, spec.priceScaleId, spec.plotPriceScaleIds, spec.policy, spec.barSource, true,
         );
         reservedIds.add(instance.id);
         this._host._indicators.push(instance);
