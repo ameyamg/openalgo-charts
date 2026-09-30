@@ -25,7 +25,7 @@ import { drawingToolOf, editableIds, type WidgetContext } from '../context';
 import { drawingActionState, runDrawingAction, type DrawingAction } from '../drawing-actions';
 import { commandChord } from '../keymap';
 import {
-  button, controlsFromFields, dialogFrame, el, openPanel, placePanel, renderForm, selectionPoint, tabList,
+  button, controlsFromFields, declinedPanel, dialogFrame, el, openPanel, placePanel, renderForm, selectionPoint, tabList,
   type ButtonSpec, type FormHandle, type PanelHandle,
 } from '../form';
 import { openMenu } from '../menu';
@@ -118,10 +118,7 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
   // Never empty while the dialog is open: every assignment closes it on an
   // empty selection, so live[0] is read with `!` throughout.
   let live = drawingsOf();
-  if (live.length === 0) {
-    ctx.toast(widgetText(ctx, 'Select a drawing first'), 'info');
-    return { el: doc.createElement('div'), close: () => {}, isOpen: () => false };
-  }
+  if (live.length === 0) return declinedPanel(ctx, widgetText(ctx, 'Select a drawing first'));
   let schema = commonSchema(live.map((d) => d.tool));
   let tool = drawingToolOf(live[0]!.tool);
   let form: FormHandle | null = null;

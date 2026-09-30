@@ -15,7 +15,7 @@ import { drawingSettingsSchema } from 'openalgo-charts/draw';
 import type { Drawing, DrawingText } from 'openalgo-charts/draw';
 import type { Chart } from 'openalgo-charts';
 import { boxIn, drawingToolOf, type WidgetContext } from '../context';
-import { el, openPanel, type PanelHandle } from '../form';
+import { declinedPanel, el, openPanel, type PanelHandle } from '../form';
 
 export interface TextEditorOptions {
   /** The drawing to edit. Default: the one selected drawing. */
@@ -165,9 +165,9 @@ export function isTextContent(d: Drawing | undefined): d is Drawing {
 }
 
 function declined(ctx: WidgetContext, why: string, onDone?: (committed: boolean) => void): TextEditorHandle {
-  ctx.toast(why, 'info');
+  const handle = declinedPanel(ctx, why);
   onDone?.(false);
-  return { el: ctx.document.createElement('div'), close: () => {}, isOpen: () => false, commit: () => {}, cancel: () => {} };
+  return { ...handle, commit: () => {}, cancel: () => {} };
 }
 
 /**

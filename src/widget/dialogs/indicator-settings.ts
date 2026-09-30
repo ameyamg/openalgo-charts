@@ -20,7 +20,7 @@ import type { WidgetContext } from '../context';
 import { mountIndicatorInputControls, type IndicatorInputControlsHandle } from '../indicator-input-controls';
 import { studyNames } from '../objects-panel';
 import {
-  button, controlsFromInputs, dialogFrame, el, openPanel, renderForm, tabList,
+  button, controlsFromInputs, declinedPanel as declined, dialogFrame, el, openPanel, renderForm, tabList,
   type FormHandle, type PanelHandle,
 } from '../form';
 
@@ -79,11 +79,6 @@ export function resolveInstance(
 }
 
 /** A handle for a dialog that never opened, so a caller can `close()` it regardless. */
-function declined(ctx: WidgetContext, why: string): PanelHandle {
-  ctx.toast(why, 'info');
-  return { el: ctx.document.createElement('div'), close: () => {}, isOpen: () => false };
-}
-
 export function mountIndicatorSettings(
   ctx: WidgetContext, anchor?: HTMLElement, opts: IndicatorSettingsOptions = {},
 ): PanelHandle {

@@ -465,6 +465,15 @@ export interface PanelHost {
 }
 
 /**
+ * A dialog that cannot open says why in a toast, and hands back a handle that
+ * is already closed, so the caller treats it like any other.
+ */
+export function declinedPanel(ctx: { readonly document: Document; toast(message: string, kind?: 'info'): unknown }, why: string): PanelHandle {
+  ctx.toast(why, 'info');
+  return { el: ctx.document.createElement('div'), close: () => {}, isOpen: () => false };
+}
+
+/**
  * Put `panel` on the shell's overlay stack and return the handle.
  *
  * The stack owns focus, Escape, the outside press and the node's removal, and
