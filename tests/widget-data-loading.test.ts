@@ -123,7 +123,7 @@ describe('widget managed data loading', () => {
 
   it('says why a study its inputs refuse is off, with no Retry that cannot help', async () => {
     registerIndicator({
-      id: 'widget-refused-study', name: 'Session fold', placement: 'overlay',
+      id: 'widget-refused-study', name: 'Session fold', placement: 'onchart',
       inputs: [{ key: 'mode', type: 'select', label: 'Mode', default: 'plain', options: [{ value: 'plain', label: 'Plain' }, { value: 'fold', label: 'Fold' }, { value: 'broken', label: 'Broken' }] }],
       plots: [{ key: 'v', title: 'Value', type: 'line' }],
       calc: (bars, settings) => {
