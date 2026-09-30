@@ -75,7 +75,7 @@ export interface ChartHistoryStep {
  * return of exactly `false`, or a throw, is a failure.
  */
 export interface ChartHistoryCommand {
-  label?: string;
+  label?: string | undefined;
   undo(): unknown;
   redo(): unknown;
 }
@@ -138,8 +138,8 @@ interface AxisShot {
   marginBottom: number;
   // Only in a full capture: a pan, a zoom or an axis drag changes both, and
   // those are views of the chart rather than edits to it.
-  auto?: boolean;
-  lock?: boolean;
+  auto?: boolean | undefined;
+  lock?: boolean | undefined;
 }
 
 /**
@@ -163,7 +163,7 @@ interface Shot {
   studies: StudyShot[];
   panes: PaneShot[];
   defaults: ScaleDefaults;
-  settings?: ChartSettingsValues;
+  settings?: ChartSettingsValues | undefined;
 }
 
 /**
@@ -202,7 +202,7 @@ interface Orphan { pane: number; drawing: Drawing }
 interface Step { id: number; before: DrawingsDocument; after: DrawingsDocument; detached: boolean }
 
 interface Part {
-  label?: string;
+  label?: string | undefined;
   before?: Shot;
   after?: Shot;
   steps?: Step[];
@@ -212,10 +212,10 @@ interface Part {
 }
 
 /** A transaction in progress: what it began from (again after an `ignore` inside it), and what it holds so far. */
-interface Tx { label?: string; before: Shot; steps: Step[]; commands: ChartHistoryCommand[] }
+interface Tx { label?: string | undefined; before: Shot; steps: Step[]; commands: ChartHistoryCommand[] }
 
 /** A group in progress; `redo` and `shifted` are what its entry took away, for a group that ends as no step. */
-interface Group { entry: Entry | null; label?: string; depth: number; redo?: Entry[]; shifted?: Entry }
+interface Group { entry: Entry | null; label?: string | undefined; depth: number; redo?: Entry[]; shifted?: Entry }
 
 /**
  * One stretch of chart changes. `epoch` names the baseline its `before` was
@@ -226,7 +226,7 @@ interface Group { entry: Entry | null; label?: string; depth: number; redo?: Ent
 interface Stretch { before: Shot; after: Shot; epoch: number }
 
 interface Entry {
-  label?: string;
+  label?: string | undefined;
   changes: Stretch[];
   steps: Step[];
   commands: ChartHistoryCommand[];
@@ -384,7 +384,7 @@ function former(study: Former): Former {
 }
 
 class HistoryFailure extends Error {}
-const fail = (why: string): never => { throw new HistoryFailure(why); };
+const fail: (why: string) => never = (why) => { throw new HistoryFailure(why); };
 
 /**
  * The chart-wide undo and redo coordinator. Build one per chart, give it the
@@ -889,7 +889,7 @@ export class ChartHistory {
       // oldest step its entry displaced come back.
       const changes = entry?.changes ?? [];
       if (entry !== null && !entry.steps.length && !entry.commands.length
-        && (!changes.length || empty(diff(changes[0].before, changes[changes.length - 1].after)))) {
+        && (!changes.length || empty(diff(changes[0]!.before, changes[changes.length - 1]!.after)))) { // not empty past the ||
         const at = this._undo.lastIndexOf(entry);
         if (at >= 0) {
           this._undo.splice(at, 1);
@@ -1006,7 +1006,7 @@ export class ChartHistory {
     for (const study of this._chart.indicators()) {
       const name = this._nameOf(study);
       view.order.push(name);
-      view.pane.set(name, this._keys.get(panes[study.paneIndex]) ?? -1);
+      view.pane.set(name, this._keys.get(panes[study.paneIndex]!) ?? -1); // a study sits on one of the chart's panes
     }
     return view;
   }
@@ -1040,7 +1040,7 @@ export class ChartHistory {
         if (full) { axis.auto = state.autoScale; axis.lock = pane.ratioLocked(scaleId); }
         axes[id] = axis;
       }
-      const p: PaneShot = { key: keys[slot], weight: chart.paneWeight(slot), collapsed: chart.paneCollapsed(slot), series: pane.series().length, axes };
+      const p: PaneShot = { key: keys[slot]!, weight: chart.paneWeight(slot), collapsed: chart.paneCollapsed(slot), series: pane.series().length, axes }; // keys is panes, mapped
       if (p.series === 0) {
         p.ranges = {};
         for (const id of Object.keys(axes)) {
@@ -1052,11 +1052,11 @@ export class ChartHistory {
     });
     const live = chart.indicators();
     const names = live.map(study => this._nameOf(study));
-    live.forEach((study, i) => this._lastNames.set(study.id, names[i]));
+    live.forEach((study, i) => this._lastNames.set(study.id, names[i]!)); // names is live, mapped
     // A study-source setting names a study by its id: the one holding it now, or the last one that did.
     const nameOf = (id: string): string => this._lastNames.get(id) ?? id;
     shot.studies = live.map((study, i) => ({
-      id: names[i], indicatorId: study.indicatorId,
+      id: names[i]!, indicatorId: study.indicatorId,
       settings: renameSources(study.settings(), nameOf),
       pane: keys[study.paneIndex] ?? -1, visible: study.visible(),
       scale: study.priceScaleId(), plots: { ...study.plotPriceScaleIds() },
@@ -1079,7 +1079,7 @@ export class ChartHistory {
   // ── applying ─────────────────────────────────────────────────────────
 
   private _peek(stack: Entry[], direction: 'undo' | 'redo'): ChartHistoryStep | null {
-    for (let i = stack.length - 1; i >= 0; i--) if (this._reachable(stack[i], direction)) return this._describe(stack[i], direction);
+    for (let i = stack.length - 1; i >= 0; i--) if (this._reachable(stack[i]!, direction)) return this._describe(stack[i]!, direction);
     return null;
   }
 
@@ -1135,7 +1135,7 @@ export class ChartHistory {
       const plan = this._plan(view, to, p.key);
       if (plan === null || plan.blocked) continue;
       let next = 0;
-      view.order = view.order.map(name => (view.pane.get(name) === p.key ? plan.desired[next++] : name));
+      view.order = view.order.map(name => (view.pane.get(name) === p.key ? plan.desired[next++]! : name)); // one desired row per name on the pane
     }
   }
 
@@ -1151,7 +1151,7 @@ export class ChartHistory {
     const known = to.studies.filter(s => s.pane === key).map(s => s.id).filter(id => now.includes(id));
     const desired = now.slice();
     let next = 0;
-    now.forEach((id, i) => { if (known.includes(id)) desired[i] = known[next++]; });
+    now.forEach((id, i) => { if (known.includes(id)) desired[i] = known[next++]!; }); // known is exactly the ids of now it holds
     if (same(desired, now)) return null;
     const pinned = (id: string): boolean => this._policyOf(id).movable === false;
     return { now, desired, blocked: !same(now.filter(pinned), desired.filter(pinned)) };
@@ -1389,7 +1389,7 @@ export class ChartHistory {
     // in it, unless a host has plotted a series there since.
     for (const key of d.gone) {
       const slot = this._slot(key);
-      if (slot >= 0 && chart.panes()[slot].series().length === 0 && !chart.removePane(slot)) fail('pane');
+      if (slot >= 0 && chart.panes()[slot]!.series().length === 0 && !chart.removePane(slot)) fail('pane'); // _slot: a live slot or -1
     }
     if (d.paneOrder || fresh.size) this._arrange(to);
     for (const p of to.panes) {
@@ -1417,7 +1417,7 @@ export class ChartHistory {
     if (d.settings.length && to.settings) {
       const now = readChartSettings(chart);
       const patch: ChartSettingsValues = {};
-      for (const key of d.settings) if (key in to.settings && !same(now[key], to.settings[key])) patch[key] = to.settings[key];
+      for (const key of d.settings) if (key in to.settings && !same(now[key], to.settings[key])) patch[key] = to.settings[key]!; // every key read has a value
       if (Object.keys(patch).length) applyChartSettings(chart, patch);
     }
     // The defaults a pane added later starts from, written chart wide as the
@@ -1528,9 +1528,9 @@ export class ChartHistory {
     const now = keys();
     const desired = now.slice();
     let next = 0;
-    now.forEach((key, i) => { if (known.includes(key)) desired[i] = known[next++]; });
+    now.forEach((key, i) => { if (known.includes(key)) desired[i] = known[next++]!; }); // known is exactly the keys of now it holds
     for (let i = 0; i < desired.length; i++) {
-      for (let at = keys().indexOf(desired[i]); at > i; at--) if (!chart.movePane(at, -1)) fail('pane order');
+      for (let at = keys().indexOf(desired[i]!); at > i; at--) if (!chart.movePane(at, -1)) fail('pane order');
     }
   }
 
@@ -1548,13 +1548,13 @@ export class ChartHistory {
       const slot = this._slot(p.key);
       const { desired } = plan;
       const ids = (): string[] => chart.indicators().filter(study => study.paneIndex === slot).map(study => this._nameOf(study));
-      for (let i = 0; i < desired.length; i++) {
-        for (let row = ids().indexOf(desired[i]); row > i; row--) {
+      for (let i = 0; i < desired.length; i++) { // i is inside desired, and row - 1 inside the pane's rows
+        for (let row = ids().indexOf(desired[i]!); row > i; row--) {
           // One row up. One that may not move goes by the one above it moving
           // down instead, which is free: two that may not move never trade.
-          const moved = this._policyOf(desired[i]).movable !== false
-            ? chart.reorderIndicator(this._liveId(desired[i]), -1)
-            : chart.reorderIndicator(this._liveId(ids()[row - 1]), 1);
+          const moved = this._policyOf(desired[i]!).movable !== false
+            ? chart.reorderIndicator(this._liveId(desired[i]!), -1)
+            : chart.reorderIndicator(this._liveId(ids()[row - 1]!), 1);
           if (!moved) fail('study order');
         }
       }
@@ -1564,7 +1564,7 @@ export class ChartHistory {
   /** One pane's axes as `p` has them, in the fields `only` names per scale, or every field for a pane brought back. */
   private _axes(slot: number, p: PaneShot, only: Map<string, (keyof AxisShot)[]> | null): void {
     const chart = this._chart;
-    const pane = chart.panes()[slot];
+    const pane = chart.panes()[slot]!; // the one caller passes a slot _slot found
     const live = pane.scaleStates();
     for (const [id, axis] of Object.entries(p.axes)) {
       const state = live[id as PriceScaleId];
