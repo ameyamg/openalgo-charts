@@ -3,6 +3,7 @@ import { DiagnosticBag, VERSION as ENGINE_VERSION, check, emit, isError, parse, 
 import { descriptorFor } from 'script-engine-under-test/adapters/charts';
 import { Chart as PublicChart, registerIndicator as registerPublicIndicator } from 'openalgo-charts';
 import { captureIndicatorTemplate, planIndicatorTemplateState } from 'openalgo-charts/workspace';
+import 'openalgo-charts/transform';
 import { Chart } from '../src/core/chart';
 import { registerIndicator, type IndicatorDescriptor } from '../src/model/indicator-registry';
 import type { Bar } from '../src/model/bar';
@@ -263,6 +264,36 @@ plot(close * 3, "Value")
     expect(restored.values().ma).toEqual([null, 6, 12, 21]);
     series.update(bar(240, 11));
     expect(restored.values().ma).toEqual([null, 6, 12, 21, 30]);
+  });
+
+  it('fires a compiled alert on each brick one source bar completes on a Renko chart', () => {
+    const compiled = compile(`version 1
+study("Brick steps", overlay = true)
+if close > close[1]
+    alert("up brick at " + text(close, 2), id = "up", title = "Up brick")
+plot(close, "Close")
+`);
+    registerPublicIndicator(compiled);
+    const document = fakeDocument();
+    const chart = new PublicChart(document.createElement('div'), {
+      document, timezone: 'Etc/UTC', pixelRatio: () => 1, shortcuts: false,
+      raf: { schedule: () => 1, cancel: () => {} },
+    });
+    try {
+      chart.applySize(800, 600);
+      chart.setDataContext({ symbol: 'SAMPLE', interval: '1m' });
+      const series = chart.addSeries('candlestick', { transform: { type: 'renko', options: { boxSize: 1 } } });
+      // Bricks close at 101 and 102; the next bar closes at 104.3 and completes two more.
+      series.setData([100.2, 101.3, 102.4, 102.6].map((close, i) => bar(i * 60, close)));
+      const events: { time: number; message: string }[] = [];
+      chart.on('indicator:alert', payload => events.push(payload as { time: number; message: string }));
+      const indicator = chart.addIndicator(compiled.id);
+      series.update(bar(240, 104.3)); indicator.values();
+      expect(chart.primaryBars().map(brick => brick.close)).toEqual([101, 102, 103, 104]);
+      expect(events.map(event => [event.time, event.message])).toEqual([[240, 'up brick at 103.00'], [241, 'up brick at 104.00']]);
+    } finally {
+      chart.destroy();
+    }
   });
 
   it('evaluates native close alerts from compiled outputs with provider confirmation', () => {
