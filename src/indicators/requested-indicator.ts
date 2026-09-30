@@ -92,8 +92,10 @@ function checkedRequest(value: Omit<IndicatorSnapshotRequest, 'signal'>, market?
   let variant;
   try { variant = value.variant === undefined ? inheritedDataVariant(market?.variant) : normalizeDataVariant(value.variant); }
   catch { invalid('request variant must be a data variant'); }
+  // An absent `exchange` or `asOf` is copied as undefined, which a provider
+  // reads as absent; the request types keep those members exact for hosts.
   return { symbol: value.symbol, exchange: value.exchange, interval: value.interval, from: value.from, to: value.to, asOf: value.asOf,
-    ...(variant ? { variant } : {}) };
+    ...(variant ? { variant } : {}) } as Omit<IndicatorSnapshotRequest, 'signal'>;
 }
 
 /** Validate every row before truncation, including rows beyond an availability barrier. */
@@ -129,13 +131,18 @@ export function createRequestedIndicator(d: RequestedIndicatorDescriptor): Indic
     ? [plot.key] : [plot.ohlc.open, plot.ohlc.high, plot.ohlc.low, plot.ohlc.close]))];
   // Native hosts can contain calculation errors instead of throwing to attach.
   const failures = new WeakMap<IndicatorStore, { snapshot: RequestedBarsSnapshot | null; error: unknown }>();
+  // As in `createTier2Indicator`: the optional members are copied whether or
+  // not `d` sets them, and `levels` and `range` are methods.
   return {
     id: d.id, name: d.name, category: d.category, placement: d.placement,
     inputs: d.inputs, plots: d.plots, levels: d.levels, range: d.range,
     calc: (bars, settings, store, calculation) => {
       const state = stateOf(store);
       try {
-        const context: RequestedIndicatorContext = { ...state?.context, bars, settings, calculation };
+        // `calculation` is undefined when the runtime passes none, and the
+        // context carries it so, which readers take as absent; as in `refresh`
+        // below, the public type stays exact for hosts.
+        const context = { ...state?.context, bars, settings, calculation } as RequestedIndicatorContext;
         const times = d.targetTimes?.(context) ?? bars.map(bar => bar.time);
         if (!Array.isArray(times) || times.length !== bars.length) invalid('target times must match source length');
         const values = alignRequestedExpression(times, state?.snapshot ?? EMPTY,
@@ -251,10 +258,10 @@ export function createRequestedIndicator(d: RequestedIndicatorDescriptor): Indic
         const previous = state.context?.requestState?.replay;
         const requestState = ctx.requestState?.();
         const replay = requestState?.replay;
-        const context: RequestedIndicatorContext = {
+        const context = {
           bars: ctx.bars(), settings: ctx.settings(),
           dataContext: ctx.dataContext?.(), requestState,
-        };
+        } as RequestedIndicatorContext;
         state.context = context;
         let selected: Omit<IndicatorSnapshotRequest, 'signal'> | null;
         let variant = '';
@@ -313,5 +320,5 @@ export function createRequestedIndicator(d: RequestedIndicatorDescriptor): Indic
       refresh();
       return cleanup;
     },
-  };
+  } as IndicatorDescriptor;
 }
