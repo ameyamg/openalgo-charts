@@ -73,11 +73,6 @@ export function chartTypeChoices(): string[] {
   }), ...transforms];
 }
 
-/** Whether a widget can show this chart type: a registered renderer, or a transform the chart applies. */
-export function isChartTypeChoice(id: unknown): id is string {
-  return typeof id === 'string' && (registeredChartTypes().includes(id) || registeredSeriesTransforms().includes(id));
-}
-
 /**
  * A pill label for an interval code: minutes and hours keep their lower-case
  * unit (`5m`, `1h`), days and weeks read as a capital (`D`, `W`, `2W`), and

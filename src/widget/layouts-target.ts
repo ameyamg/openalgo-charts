@@ -26,7 +26,7 @@
  *   not opened under it.
  */
 import { isKnownInterval, isReplaying, registeredIndicators } from 'openalgo-charts';
-import { isChartTypeChoice } from './topbar';
+import { isChartTypeChoice } from './chart-type-choice';
 import type { WorkspaceChartState, WorkspacePane, WorkspacePayload } from 'openalgo-charts/workspace';
 import type { LayoutApplyReport, LayoutTarget } from './layouts';
 import type { Widget, WidgetChartState, WidgetRestoreReport, WidgetState } from './widget';
