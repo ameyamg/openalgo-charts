@@ -155,7 +155,7 @@ function labelLayout(ctx: CanvasRenderingContext2D, up: boolean, anchorY: number
 
 /**
  * A signal label: rounded plate, contrasting text, and a tail that points at
- * `anchorY`. All coordinates are bitmap px — the caller has already applied dpr.
+ * `anchorY`. All coordinates are bitmap px: the caller has already applied dpr.
  * `up` puts the tail on the top edge and the body below the anchor.
  *
  * `text` may carry `\n`: the plate widens to the longest row and grows

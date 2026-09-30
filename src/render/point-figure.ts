@@ -10,8 +10,8 @@
  * that the box is inferred from the shortest column in view.
  *
  * Glyph rows are walked by **integer box index**, not by accumulating `+= box`
- * — 30 steps of 0.05 lands on 101.49999999999991, which used to drop or
- * duplicate the top glyph of tall columns. Rows outside the plot are culled.
+ * (30 steps of 0.05 lands on 101.49999999999991, which used to drop or
+ * duplicate the top glyph of tall columns). Rows outside the plot are culled.
  */
 import type { DrawItem } from '../model/chart-type-registry';
 import type { SeriesStyle } from './series-style';
@@ -27,7 +27,7 @@ function boxOf(bar: DrawItem['bar'], style: SeriesStyle, inferred: number): numb
   return inferred;
 }
 
-/** Shortest non-zero column height in view — a usable box when nothing declares one. */
+/** Shortest non-zero column height in view: a usable box when nothing declares one. */
 function inferBox(items: readonly DrawItem[]): number {
   let min = Infinity;
   for (const { bar } of items) {

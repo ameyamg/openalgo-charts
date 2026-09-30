@@ -24,7 +24,7 @@ import { roundRectPath } from './pill';
 /**
  * Boundary class of a time-axis label, passed to a custom `timeFormatter` as a
  * hint so a host can render adaptive labels (year at year boundaries, month at
- * month boundaries, day otherwise, clock intraday) — parity with common
+ * month boundaries, day otherwise, clock intraday): parity with common
  * `tickMarkFormatter(time, tickMarkType)` APIs.
  */
 export type TickMarkType = 'year' | 'month' | 'day' | 'time' | 'timeWithSeconds';

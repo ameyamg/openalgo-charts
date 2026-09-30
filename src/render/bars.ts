@@ -39,7 +39,7 @@ export function barGeometry(item: BarDrawItem, toY: (v: number) => number, dpr: 
   };
 }
 
-/** OHLC bars: vertical high→low, left tick = open, right tick = close. */
+/** OHLC bars: vertical high to low, left tick = open, right tick = close. */
 export function drawBars(
   ctx: CanvasRenderingContext2D,
   items: readonly BarDrawItem[],

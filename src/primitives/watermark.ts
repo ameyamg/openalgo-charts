@@ -33,7 +33,7 @@ export interface LogoWatermarkOptions {
   /** Layer order vs the series. Default `top`. */
   zOrder?: ZOrder;
   /**
-   * Text revealed to the right of the mark on hover — "Chart by OpenAlgo".
+   * Text revealed to the right of the mark on hover: "Chart by OpenAlgo".
    * The mark alone is what sits on the chart at rest; the wording is only
    * needed when someone looks at it, so it unrolls rather than occupying the
    * corner permanently. Omit for a plain, non-interactive mark.
@@ -69,7 +69,7 @@ export interface LogoWatermarkOptions {
   padding?: number | { x: number; y: number };
   /**
    * Where the mark points. A canvas cannot hold an anchor, so this only marks
-   * it as clickable — the hit reports a pointer cursor, and the host opens
+   * it as clickable: the hit reports a pointer cursor, and the host opens
    * {@link href} from its own click handler.
    *
    * Given a bare URL, `href()` appends UTM parameters naming the page the chart
@@ -183,7 +183,7 @@ export class LogoWatermark implements IPrimitive {
 
   /**
    * The mark's box, in media px. The label unrolls to its right, so the hit
-   * area is the mark alone — hovering the revealed text keeps it open because
+   * area is the mark alone: hovering the revealed text keeps it open because
    * the pointer is still within the widened box below.
    */
   private _rect(rc: PrimitiveRenderContext): { x: number; y: number; w: number; h: number; logoW: number } | null {
@@ -219,7 +219,7 @@ export class LogoWatermark implements IPrimitive {
       `utm_medium=${encodeURIComponent(this._opts.utmMedium)}`,
       `utm_campaign=${encodeURIComponent(this._opts.utmCampaign)}`,
     ];
-    // The embedding page, host and path only — never the query string, which
+    // The embedding page, host and path only, never the query string, which
     // is the part most likely to carry something private.
     if (loc?.host) parts.push(`utm_source=${loc.host}${loc.pathname}`);
     return `${base}${base.includes('?') ? '&' : '?'}${parts.join('&')}`;
@@ -232,7 +232,7 @@ export class LogoWatermark implements IPrimitive {
     const r = this._rect(rc);
     if (r === null) return null;
     // Match the plate the user can see, but never shrink below the old 4px
-    // slack — a tightly padded mark still needs a forgiving target.
+    // slack: a tightly padded mark still needs a forgiving target.
     const padX = Math.max(this._opts.padding.x, 4, (44 - r.w) / 2);
     const padY = Math.max(this._opts.padding.y, 4, (44 - r.h) / 2);
     const w = Math.min(rc.plotWidth, r.w + 2 * padX);
@@ -277,7 +277,7 @@ export class LogoWatermark implements IPrimitive {
     // candles, so it must not inherit the logo's own transparency.
     //
     // The four edges are snapped, rather than the padding being snapped and
-    // doubled — that way the plate measures exactly `height + 2 * padding.y`
+    // doubled: that way the plate measures exactly `height + 2 * padding.y`
     // media px at every DPR, so a caller asking for a 45x45 square gets one
     // instead of 46 on a non-retina display.
     const pad = o.padding;
@@ -317,7 +317,7 @@ export class LogoWatermark implements IPrimitive {
 
     if (o.label !== undefined && this._reveal > 0.001) {
       // Clip to the revealed width so the text wipes out of the mark rather
-      // than fading in place — the motion is what reads as "attached to it".
+      // than fading in place: the motion is what reads as "attached to it".
       const shown = (r.w - r.logoW) * dpr;
       ctx.beginPath();
       ctx.rect(dx + dw, dy, shown, dh);

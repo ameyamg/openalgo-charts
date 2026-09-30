@@ -91,7 +91,7 @@ export interface PaneRenderContext {
   conflate: boolean;
   /** Columns this many sticks wide (1 = one stick, the default; higher = coarser). */
   conflationFactor: number;
-  /** Active palette — drives chrome, series defaults, and trade colors. */
+  /** Active palette: drives chrome, series defaults, and trade colors. */
   theme: ChartTheme;
   /** Draw the vertical (time) grid lines. */
   showVertGrid: boolean;
@@ -912,8 +912,8 @@ export class Pane {
 
   /**
    * Give every scale on this pane its plot height. Height is a *layout*
-   * property, but it used to be set only inside the autoscale pass — so any
-   * y↔price conversion before the first paint divided by zero and returned
+   * property, but it used to be set only inside the autoscale pass, so any
+   * conversion between y and price before the first paint divided by zero and returned
    * ±Infinity. Layout is when the height is actually known.
    */
   public setScaleHeights(plotHeight: number): void {
@@ -1195,7 +1195,7 @@ export class Pane {
     prc: PrimitiveRenderContext, slotted: Map<IPrimitive, SeriesRecord> | null, target: CanvasRenderingContext2D | undefined,
   ): { readout: PriceScale; lastEntry: LastPriceEntry | null; valueTags: ValueTag[] } {
     const dpr = ctx.dpr;
-    // series (registry-driven — the core never switches on type)
+    // series (registry-driven: the core never switches on type)
     const range = ctx.timeScale.visibleRange();
     // Last-price line/tag follows the pane's readout series (the main one),
     // whichever side its scale is drawn on.

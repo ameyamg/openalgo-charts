@@ -130,7 +130,7 @@ export class OpenAlgoTradeFeed implements OrderFeed {
     this._verifyMode = config.verifyMode ?? 'auto';
     this._modeCacheMs = config.modeCacheMs ?? 5000;
     this._now = config.now ?? Date.now;
-    // Bind to the global object — a stored `this._fetch(...)` of window.fetch
+    // Bind to the global object: a stored `this._fetch(...)` of window.fetch
     // throws "Illegal invocation" in browsers.
     const f = config.fetchImpl ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : undefined);
     if (f === undefined) throw new Error('openalgo-charts: no fetch available; pass config.fetchImpl');
@@ -145,7 +145,7 @@ export class OpenAlgoTradeFeed implements OrderFeed {
     });
     if (!res.ok) {
       // Surface OpenAlgo's own error text (e.g. RMS rules, square-off windows)
-      // instead of a bare status code — the UI shows this to the trader.
+      // instead of a bare status code: the UI shows this to the trader.
       let detail = '';
       try {
         const j = (await res.json()) as { message?: string };
@@ -650,7 +650,7 @@ export function decodeOrder(r: RawOrder, path = 'order'): OrderDecodeResult {
   const status = STATUS_MAP[rawStatus.toLowerCase()];
   const order: DecodedOrder = {
     id, symbol, side, type, qty, filledQty: filled, price,
-    // trigger_price 0 means "no trigger" (a plain LIMIT/MARKET) — keep it undefined
+    // trigger_price 0 means "no trigger" (a plain LIMIT/MARKET): keep it undefined
     // so `triggerPrice ?? price` doesn't render the line at 0 (?? ignores undefined, not 0).
     triggerPrice: trigger > 0 ? trigger : undefined,
     status: status ?? 'unknown',

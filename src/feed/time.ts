@@ -1,15 +1,15 @@
 /**
  * Time conversions (ARCHITECTURE.md §4.0). Internal time is always UTC seconds.
  * Feed adapters convert broker formats here, at the edge:
- *   - REST history → IST date/time strings
- *   - WS feed      → epoch milliseconds
+ *   - REST history: IST date/time strings
+ *   - WS feed: epoch milliseconds
  * India observes no DST, so IST is a fixed UTC+5:30 offset.
  */
 
 /** IST offset in seconds (UTC+5:30). */
 export const IST_OFFSET_SECONDS = 5 * 3600 + 30 * 60;
 
-/** Epoch milliseconds → UTC seconds. */
+/** Epoch milliseconds to UTC seconds. */
 export function epochMsToUtcSeconds(ms: number): number {
   return Math.floor(ms / 1000);
 }
@@ -47,7 +47,7 @@ export interface IstParts {
   weekday: number;
 }
 
-/** UTC seconds → IST calendar parts (for axis labels / tick decisions). */
+/** UTC seconds to IST calendar parts (for axis labels / tick decisions). */
 export function utcSecondsToIstParts(utcSeconds: number): IstParts {
   const d = new Date((utcSeconds + IST_OFFSET_SECONDS) * 1000);
   return {
@@ -260,7 +260,7 @@ function resolveParts(utcSeconds: number, zone: string): CachedParts {
   return parts;
 }
 
-/** UTC seconds → calendar parts in `zone` (for axis labels / tick decisions). */
+/** UTC seconds to calendar parts in `zone` (for axis labels / tick decisions). */
 export function utcSecondsToZonedParts(utcSeconds: number, zone: string = DEFAULT_TIMEZONE): ZonedParts {
   const p = resolveParts(utcSeconds, zone);
   // A copy on purpose: the cached object is handed to every repeat reader of
@@ -369,7 +369,7 @@ export function zonedStringToUtcSeconds(input: string, zone: string = DEFAULT_TI
 }
 
 /**
- * Wall-clock components in `zone` → UTC seconds.
+ * Wall-clock components in `zone` to UTC seconds.
  *
  * Two passes because the offset we need is the one in force at the *answer*,
  * not at the guess: on a DST changeover day the first pass can land an hour out,

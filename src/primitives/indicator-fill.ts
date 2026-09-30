@@ -1,11 +1,11 @@
 /**
- * Shaded band between two indicator plots — the Ichimoku cloud, a Bollinger
+ * Shaded band between two indicator plots: the Ichimoku cloud, a Bollinger
  * channel, a Keltner envelope.
  *
  * A pair of lines is not the same picture as a filled region: the fill is what
  * makes "price is above the cloud" or "the cloud flipped" readable at a glance,
  * and which side is on top is itself the signal. So the band is drawn as two
- * runs — one where A leads, one where B does — and the crossings between them
+ * runs (one where A leads, one where B does) and the crossings between them
  * are split at the exact intersection rather than at the nearest bar, or the
  * colours would bleed a bar past every flip.
  */
@@ -34,7 +34,7 @@ export interface IndicatorFillOptions {
   colorUp: string;
   /** Fill colour where the second is above the first. */
   colorDown: string;
-  /** 0..1. Defaults to 0.12 — a band must not drown the candles it sits behind. */
+  /** 0..1. Defaults to 0.12: a band must not drown the candles it sits behind. */
   opacity?: number;
   /**
    * Set to grade the band instead of flat-filling it, in place of
@@ -145,7 +145,7 @@ export class IndicatorFill implements IPrimitive {
     ctx.globalAlpha = this._opts.opacity ?? 0.12;
 
     // Walk the series accumulating one polygon per constant-sign run. A gap
-    // (either value missing) closes the current run — bridging it would fill
+    // (either value missing) closes the current run: bridging it would fill
     // across a stretch where the indicator has no opinion.
     let run: { up: boolean; color?: string | undefined; gradient?: FillGradient | undefined; top: number[]; bot: number[]; xs: number[] } | null = null;
     const flush = (): void => {

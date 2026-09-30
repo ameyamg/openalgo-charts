@@ -2,10 +2,10 @@
  * Horizontal price line primitive (ARCHITECTURE.md §8). The reusable base for
  * order/SL/TP/alert/indicator-level lines: a line across the plot plus a fixed
  * price-axis tag and an optional broker-style segmented pill group on the
- * line — [badge][qty][label][✕] — with hover / dragging states (the chart
+ * line ([badge][qty][label][close]) with hover / dragging states (the chart
  * passes `hoverId`/`dragId` on the render context) and a drag ghost at the
  * pre-drag price via `setDragGhost`. Interaction semantics are unchanged from
- * the classic tag: the ✕ hit-tests as `${id}::close`, everything else drags.
+ * the classic tag: the close segment hit-tests as `${id}::close`, everything else drags.
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from './primitive';
 import { contrastText, withAlpha, shade, drawPillGroup, type PillSegment } from '../render/pill';
@@ -36,7 +36,7 @@ export interface PriceLineOptions {
   badge?: string;
   /** Quantity segment rendered as a neutral box after the badge. */
   qty?: string | number;
-  /** Info text segment (order type, price, P&L ...) — the classic left tag text. */
+  /** Info text segment (order type, price, P&L ...): the classic left tag text. */
   leftLabel?: string;
   /**
    * Fraction of the plot width the line spans, measured from the right (price)
@@ -44,7 +44,7 @@ export interface PriceLineOptions {
    * partial-width order line. Visible scales also carry a price tag.
    */
   extentFromRight?: number;
-  /** Draw a cancel (✕) segment at the end of the pill group; hit-tests as `${id}::close`. */
+  /** Draw a close (cancel) segment at the end of the pill group; hit-tests as `${id}::close`. */
   closeButton?: boolean;
   /** Stable id returned by hit-test (for click/drag routing). */
   id: string;
@@ -94,7 +94,7 @@ export class PriceLine implements IPrimitive {
 
   /**
    * Restyle in place; repaints. `id` is the hit-test handle the chart routes
-   * clicks and drags through, so it is not patchable — swapping it under a
+   * clicks and drags through, so it is not patchable: swapping it under a
    * live drag would strand the gesture.
    *
    * A last-price line is the case this exists for: it has to follow the tick
@@ -163,7 +163,7 @@ export class PriceLine implements IPrimitive {
       }
     }
 
-    // soft emphasis halo while dragging (no shadowBlur — cheap wide stroke)
+    // soft emphasis halo while dragging (no shadowBlur: cheap wide stroke)
     if (dragging) {
       ctx.strokeStyle = withAlpha(color, 0.18);
       ctx.lineWidth = Math.max(5 * dpr, Math.round(lineWidth * dpr) + 4 * dpr);
@@ -196,7 +196,7 @@ export class PriceLine implements IPrimitive {
     drawAxisTag(ctx, rc, y, this._opts.label ?? rc.priceScale.format(this._opts.price),
       dragging || hovered ? shade(color, 0.12) : color, contrastText(color), boxH, false);
 
-    // segmented pill group on the line: [badge][qty][label][✕]
+    // segmented pill group on the line: [badge][qty][label][close]
     const hasGroup = this._opts.badge !== undefined || this._opts.qty !== undefined ||
       (this._opts.leftLabel !== undefined && this._opts.leftLabel !== '') || this._opts.closeButton === true;
     if (hasGroup) {
@@ -241,7 +241,7 @@ export class PriceLine implements IPrimitive {
     const distance = Math.abs(y - lineY);
     // An unset cursor goes out as undefined below, which the pane reads as no cursor.
     // Inside the pill group (segment boxes are taller than the 4px line zone):
-    // the ✕ segment routes as a click, the rest of the group drags the line.
+    // the close segment routes as a click, the rest of the group drags the line.
     const g = this._group;
     if (g !== null && distance <= TAG_H / 2 + 1 && x >= g.x0 && x <= g.x1) {
       if (this._opts.closeButton && x >= g.closeX0) {

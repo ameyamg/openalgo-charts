@@ -1,5 +1,5 @@
 /**
- * Pane legend (ARCHITECTURE.md §8) — the row at the top-left
+ * Pane legend (ARCHITECTURE.md §8): the row at the top-left
  * of a pane: a color swatch, the source's name, its parameters, the value under
  * the crosshair, and inline action buttons on the right.
  *
@@ -28,7 +28,7 @@ export type PaneLegendAction = 'hide' | 'settings' | 'source' | 'up' | 'down' | 
 
 /**
  * One reading on a legend row. Multi-plot sources show one per plot, each in
- * that plot's own color (an MA ribbon's four averages, MACD's three lines) —
+ * that plot's own color (an MA ribbon's four averages, MACD's three lines):
  * a single string in a single color cannot say which number is which.
  */
 export interface LegendValue {
@@ -136,7 +136,7 @@ export interface PaneLegendOptions {
   /** Swatch color; omitted draws no swatch. */
   color?: string;
   /**
-   * Color for the live value. Defaults to `color`, then the theme's text — so a
+   * Color for the live value. Defaults to `color`, then the theme's text, so a
    * row can tint its reading (an up/down change) without being forced to show a
    * swatch in that same color.
    */
@@ -303,9 +303,9 @@ function fieldOn(s: LegendStatusLineOptions, field: LegendField | undefined, has
 const DEFAULT_ACTIONS: readonly PaneLegendAction[] = ['hide', 'settings', 'close'];
 
 /**
- * Action icons as vector strokes rather than text glyphs — `⛶`, `🗑`, and the
- * arrows render inconsistently (or as emoji) across platforms and font stacks,
- * and a stroked path stays crisp at any DPR.
+ * Action icons as vector strokes rather than text glyphs: the maximize square,
+ * the trash can and the arrows render inconsistently (or as emoji) across
+ * platforms and font stacks, and a stroked path stays crisp at any DPR.
  */
 function drawGlyph(
   ctx: CanvasRenderingContext2D,
