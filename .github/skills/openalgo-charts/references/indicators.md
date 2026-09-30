@@ -1521,7 +1521,8 @@ ema.setSettings({ timeframe: '' });   // the chart's own timeframe again
 - **Refused with `IndicatorInputError`**: an unknown code, a tick or volume interval, a
   chart whose own bars close on trade flow, and another study's output as the `source`
   while folding. `addIndicator` throws; a later `setSettings` puts the study in the
-  `error` data status with the message, and the next good setting clears it.
+  `error` data status with the message, and the next good setting clears it. A layout
+  saved with a study so refused restores it in that status (unreleased).
 - **Live ticks.** A tick inside a bucket carries the held values; the bar that opens a
   new bucket recomputes the fold once. A setting that reads ahead (a negative `offset` on
   `vwma` or `donchian`) shifts a later bucket onto shown bars, so it recomputes in full

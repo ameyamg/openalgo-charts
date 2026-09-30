@@ -639,6 +639,24 @@ describe('saved state', () => {
     expect(firstDifference(values, getIndicator('ema').calc(bars, settingsFor(getIndicator('ema'), { length: 5 }), {}))).not.toBeNull();
   });
 
+  it('a layout restores a study its timeframe is refused on here in its error status, not failing the restore', () => {
+    cleanups.push(registerInterval({ code: 'T100', bucketing: { mode: 'ticks', count: 100 } }));
+    const chart = loaded();
+    chart.addIndicator('ema', { timeframe: '15m', length: 5 });
+    chart.addIndicator('rsi');
+    const state = JSON.parse(JSON.stringify(chart.getState()));
+    const again = makeChart();
+    again.setDataContext({ interval: 'T100' });
+    again.addSeries('candlestick').setData(bars);
+    expect(again.restoreState(state).applied).toBe(true);
+    const [ema, rsi] = again.indicators();
+    expect(ema.dataStatus()?.state).toBe('error');
+    expect(String((ema.dataStatus() as { error: unknown }).error)).toMatch(/trade flow/);
+    expect(rsi.dataStatus()).toBeNull();
+    // Added by the host rather than restored, it is refused outright.
+    expect(() => again.addIndicator('ema', { timeframe: '15m' })).toThrow(/trade flow/);
+  });
+
   it('the legend names the timeframe once one is set, and only then', () => {
     const chart = loaded();
     const ema = chart.addIndicator('ema', { length: 5 });

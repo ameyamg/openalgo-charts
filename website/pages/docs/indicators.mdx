@@ -2030,7 +2030,7 @@ its buckets at 09:30, and a market that trades round the clock at midnight.
 | Case | What happens |
 |---|---|
 | A timeframe no coarser than the chart's interval | The chart's own timeframe: nothing is folded. |
-| An unknown code, a tick or volume interval, or a chart whose bars close on trade flow | Refused. `addIndicator` throws; a later `setSettings` sets the study's data status to `error` with the reason, and the next good setting clears it. |
+| An unknown code, a tick or volume interval, or a chart whose bars close on trade flow | Refused. `addIndicator` throws; a later `setSettings` sets the study's data status to `error` with the reason, and the next good setting clears it. A layout saved that way restores the study in that status. |
 | The `source` set to another study's output | Refused while a timeframe is set: an output is not a bar that can be folded. |
 | A live tick inside a bucket | The held values stand. The bar that opens a new bucket recomputes the fold once. |
 | A negative `offset` on VWMA or Donchian | It shifts a later bucket onto bars already shown, so it recomputes on every tick. |

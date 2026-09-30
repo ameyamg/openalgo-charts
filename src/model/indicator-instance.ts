@@ -535,6 +535,8 @@ export class IndicatorInstance implements IndicatorApi {
   private _outputPending = false;
   private _publishedBarColors: readonly (string | null)[] | null = null;
   private _barSource: IndicatorBarSource;
+  /** Rebuilt by a restore, which brings back a study its inputs refuse on this chart as it was saved. */
+  private readonly _restored: boolean;
   /** The bars a pass on the underlying bars computed on, while its values are read across onto the drawn ones. */
   private _sampled: { bars: readonly Bar[]; sourceIndex: readonly number[] } | null = null;
 
@@ -549,7 +551,9 @@ export class IndicatorInstance implements IndicatorApi {
     plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>,
     policy?: IndicatorPolicy,
     barSource?: IndicatorBarSource,
+    restored = false,
   ) {
+    this._restored = restored;
     this._host = host;
     this._d = descriptor;
     this._barSource = barSource === undefined ? 'chart' : parseIndicatorBarSource(barSource);
@@ -1742,7 +1746,8 @@ export class IndicatorInstance implements IndicatorApi {
       this._recompute(refresh, bars, sourceIndex === null ? bars : shown, sourceIndex, source, bindings, current);
     } catch (error) {
       if (!current()) return;
-      if (!this._constructed && !(error instanceof StudyInputUnavailable)) throw error;
+      if (!this._constructed && !(error instanceof StudyInputUnavailable)
+        && !(this._restored && error instanceof IndicatorInputError)) throw error;
       if (error instanceof StudyInputUnavailable) this._clearUnavailableOutput(sourceIndex === null ? bars : shown);
       // One study's bad input must not stall the frame for every other one, and
       // a study that silently stops drawing tells the user nothing. So the
