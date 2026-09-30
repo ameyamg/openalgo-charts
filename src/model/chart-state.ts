@@ -14,7 +14,7 @@ import type { PriceScaleId } from './series';
 import type { IndicatorSettings } from './indicator-registry';
 import type { PriceScaleMode } from '../scale/price-scale';
 import type { AlertsDocument } from '../alerts/types';
-import type { PriceAxisPlacement } from './price-axis-layout';
+import { isPriceScaleId, type PriceAxisPlacement } from './price-axis-layout';
 import type { IndicatorPolicy } from './indicator-policy';
 import type { SeriesTransformSpec } from './series-transform';
 import type { IndicatorBarSource } from './indicator-bar-source';
@@ -139,7 +139,8 @@ export function parsePaneState(input: unknown, allowLegacyPartial = false): Pane
     const scales = stateRecord(value.scales);
     result.scales = {};
     for (const [id, state] of Object.entries(scales)) {
-      if (id !== 'left' && id !== '' && !id.startsWith('overlay:')) throw new Error('Invalid secondary price scale id');
+      // The right scale is the pane's own `priceScale`, saved above, never a secondary one.
+      if (!isPriceScaleId(id) || id === 'right') throw new Error('Invalid secondary price scale id');
       result.scales[id as PriceScaleId] = scaleState(state, false);
     }
   }

@@ -19,6 +19,7 @@ import type { Chart } from './chart';
 import type { Pane } from './pane';
 import type { PriceScaleOptions } from '../scale/price-scale';
 import type { PriceScaleId } from '../model/series';
+import { isPriceScaleId } from '../model/price-axis-layout';
 import { cloneIndicatorSettings, planIndicatorDependencies } from '../model/indicator-dependencies';
 import { getIndicator, hasIndicator, type IndicatorDescriptor } from '../model/indicator-registry';
 import { IndicatorInstance, parseIndicatorPlotPriceScales, validateIndicatorScaleAssignment } from '../model/indicator-instance';
@@ -105,7 +106,6 @@ export interface PersistenceHost {
   eventOptions: Chart['eventOptions'];
   setEventOptions: Chart['setEventOptions'];
   setTimezone: Chart['setTimezone'];
-  _validPriceScaleId: Chart['_validPriceScaleId'];
   _reserveAlertStudyIds: Chart['_reserveAlertStudyIds'];
   _emit: Chart['_emit'];
   _withinLayoutChange: Chart['_withinLayoutChange'];
@@ -252,7 +252,7 @@ export class ChartPersistence {
         for (let index = 0; index < selectors.length; index++) {
           const selector = properties[index]?.value as unknown;
           if (!plain(selector) || typeof selector.paneIndex !== 'number' || !Number.isInteger(selector.paneIndex) || selector.paneIndex < 0
-            || !this._host._validPriceScaleId(selector.scaleId)) throw new Error('Invalid preserved scale selector');
+            || !isPriceScaleId(selector.scaleId)) throw new Error('Invalid preserved scale selector');
           const pane = this._host._panes[selector.paneIndex];
           if (!pane || !Object.prototype.hasOwnProperty.call(pane.scaleStates(), selector.scaleId)) {
             throw new Error('Preserved scale must already exist');
@@ -289,7 +289,7 @@ export class ChartPersistence {
             const property = Object.getOwnPropertyDescriptor(spec, 'plotPriceScaleIds');
             if (!property?.enumerable || !('value' in property)) throw new Error('Invalid indicator plot price scale map field');
           }
-          if (spec.priceScaleId !== undefined && !this._host._validPriceScaleId(spec.priceScaleId)) throw new Error('Invalid indicator price scale');
+          if (spec.priceScaleId !== undefined && !isPriceScaleId(spec.priceScaleId)) throw new Error('Invalid indicator price scale');
           if (spec.barSource !== undefined) parseIndicatorBarSource(spec.barSource);
           if (spec.instanceId === undefined) continue;
           if (typeof spec.instanceId !== 'string' || !spec.instanceId.trim() || reservedIds.has(spec.instanceId)) {

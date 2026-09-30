@@ -14,6 +14,7 @@ import { cloneIndicatorSettings, planIndicatorDependencies, type IndicatorDepend
 import { validateIndicatorInputs } from './indicator-inputs';
 import { parseIndicatorPolicy, type IndicatorEditOptions, type IndicatorPolicy } from './indicator-policy';
 import type { PriceFormat, PriceScaleId, SeriesApi, SeriesDataState } from './series';
+import { isPriceScaleId } from './price-axis-layout';
 import type { PriceLine } from '../primitives/price-line';
 import type { PaneLegend, LegendValue, PaneLegendOptions } from '../primitives/pane-legend';
 import { SeriesMarkers } from '../primitives/markers';
@@ -58,10 +59,6 @@ import type { LooseOptional } from '../helpers/types';
 
 const num = (v: unknown, fallback: number): number =>
   (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
-
-function isPriceScaleId(value: unknown): value is PriceScaleId {
-  return typeof value === 'string' && (value === 'right' || value === 'left' || value === '' || value.startsWith('overlay:'));
-}
 
 function plotScaleEntries(descriptor: IndicatorDescriptor, input: unknown, clear: boolean): [string, PriceScaleId | null][] {
   if (!input || typeof input !== 'object' || Array.isArray(input)

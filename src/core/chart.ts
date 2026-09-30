@@ -29,7 +29,7 @@ export type {
   ContextMenuTarget, LayoutSetter, LayoutChangeEvent, ContextMenuEvent, RendererFallbackEvent,
   AddIndicatorOptions, ChartApplyOptions,
 } from './chart-types';
-import type { PriceAxisPlacement, PriceAxisSide, PriceAxisSlot } from '../model/price-axis-layout';
+import { isPriceScaleId, type PriceAxisPlacement, type PriceAxisSide, type PriceAxisSlot } from '../model/price-axis-layout';
 import { type ChartTheme, DEFAULT_THEME } from '../theme';
 import { TimeScale } from '../scale/time-scale';
 import type { LogicalRange } from '../scale/time-scale';
@@ -715,8 +715,7 @@ export class Chart {
    * indicator-owned plots, whose pane-bound visuals must move with the whole study.
    */
   public setSeriesPriceScale(series: SeriesApi, scaleId: PriceScaleId): boolean {
-    if (typeof scaleId !== 'string' || (scaleId !== 'right' && scaleId !== 'left' && scaleId !== '' && !scaleId.startsWith('overlay:'))
-      || this.seriesType(series) === null) return false;
+    if (!isPriceScaleId(scaleId) || this.seriesType(series) === null) return false;
     const record = this._seriesRecords.get(series)!, owner = this._seriesOwners.get(series)!;
     if (owner.indicatorOwned || record.scaleId === scaleId) return false;
     const target = owner.pane.scaleFor(scaleId);
@@ -1050,10 +1049,6 @@ export class Chart {
    */
   private _indicatorHost(preservedFormats?: PreservedScaleFormats): IndicatorHost {
     return this._studies._indicatorHost(preservedFormats);
-  }
-
-  private _validPriceScaleId(value: unknown): value is PriceScaleId {
-    return typeof value === 'string' && (value === 'right' || value === 'left' || value === '' || value.startsWith('overlay:'));
   }
 
   /**
@@ -1429,14 +1424,14 @@ export class Chart {
 
   /** Detached visible placement. Hidden named scales retain their independent range. */
   public priceAxisPlacement(paneIndex: number, scaleId: PriceScaleId): PriceAxisPlacement | null {
-    if (!this._validPriceScaleId(scaleId)) return null;
+    if (!isPriceScaleId(scaleId)) return null;
     return this._priceAxisPane(paneIndex)?.axisPlacement(scaleId) ?? null;
   }
 
   /** Move or reorder a scale without changing its ID, sources, formatter or range. */
   public setPriceAxisPlacement(paneIndex: number, scaleId: PriceScaleId, side: PriceAxisSide, order?: number): boolean {
     const pane = this._priceAxisPane(paneIndex);
-    if (!pane || !this._validPriceScaleId(scaleId) || !pane.setAxisPlacement(scaleId, side, order)) return false;
+    if (!pane || !isPriceScaleId(scaleId) || !pane.setAxisPlacement(scaleId, side, order)) return false;
     this._layout._recomputeAxisColumns();
     this.invalidate(m => m.invalidateGlobal(InvalidationLevel.Full));
     this._emit('priceAxisPlacementChanged', { paneIndex, scaleId, ...pane.axisPlacement(scaleId) });
@@ -1461,7 +1456,7 @@ export class Chart {
    */
   public setPriceAxisOptions(paneIndex: number, scaleId: PriceScaleId, patch: Partial<PriceScaleOptions>): void {
     const pane = this._panes[paneIndex];
-    if (pane === undefined) return;
+    if (pane === undefined || !isPriceScaleId(scaleId)) return;
     pane.scaleFor(scaleId).setOptions(patch);
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
     this._layoutChanged('setPriceAxisOptions');
@@ -1474,7 +1469,7 @@ export class Chart {
    */
   public setPriceAxisAutoFit(paneIndex: number, scaleId: PriceScaleId, on: boolean): void {
     const pane = this._panes[paneIndex];
-    if (pane === undefined) return;
+    if (pane === undefined || !isPriceScaleId(scaleId)) return;
     if (on) pane.setRatioLock(scaleId, false, 0, 0);
     pane.scaleFor(scaleId).setAutoScale(on);
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
@@ -1493,7 +1488,7 @@ export class Chart {
    */
   public setPriceAxisLockRatio(paneIndex: number, scaleId: PriceScaleId, on: boolean): boolean {
     const pane = this._panes[paneIndex];
-    if (pane === undefined) return false;
+    if (pane === undefined || !isPriceScaleId(scaleId)) return false;
     if (on) this._scales._ensureScaledFor(paneIndex, scaleId);
     const ok = pane.setRatioLock(scaleId, on, this._timeScale.barSpacing, pane.scaleFor(scaleId).height);
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
@@ -1824,7 +1819,7 @@ export class Chart {
     const priceScaleId = fields.priceScaleId?.value as PickOptions['priceScaleId'];
     if (paneIndex !== undefined && (!Number.isSafeInteger(paneIndex) || paneIndex < 0 || !this._panes[paneIndex])) throw new RangeError('Invalid pick pane');
     const targetPane = paneIndex ?? (priceScaleId !== undefined ? this._layout._firstPaneSlot() : undefined);
-    if (priceScaleId !== undefined && (kind === 'time' || !this._validPriceScaleId(priceScaleId)
+    if (priceScaleId !== undefined && (kind === 'time' || !isPriceScaleId(priceScaleId)
       || !Object.prototype.hasOwnProperty.call(this._panes[targetPane!]?.scaleStates() ?? {}, priceScaleId))) throw new RangeError('Invalid pick scale');
     return beginPickResolved(this, kind, cb as (value: number | PickPoint) => void, payload => {
       const click = payload as Partial<ChartClickEvent>, point = click?.point, index = click?.paneIndex;

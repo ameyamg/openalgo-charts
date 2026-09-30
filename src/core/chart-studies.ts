@@ -25,6 +25,7 @@ import type { PreservedScaleFormats } from './chart-state';
 import type { Pane } from './pane';
 import type { PriceScale } from '../scale/price-scale';
 import type { SeriesApi, PriceScaleId } from '../model/series';
+import { isPriceScaleId } from '../model/price-axis-layout';
 import { replayWindow, observeReplayWindow } from '../model/replay-window';
 import { runAbortable } from '../model/abortable-request';
 import { cloneIndicatorSettings, planIndicatorDependencies } from '../model/indicator-dependencies';
@@ -98,7 +99,6 @@ export interface StudiesHost {
   _wallClock: Chart['_wallClock'];
   _primaryIndex: Chart['_primaryIndex'];
   _readoutIndex: Chart['_readoutIndex'];
-  _validPriceScaleId: Chart['_validPriceScaleId'];
   _policyAllows: Chart['_policyAllows'];
   seriesType: Chart['seriesType'];
   primarySeries: Chart['primarySeries'];
@@ -146,7 +146,7 @@ export class ChartStudies {
     const instanceId = options.instanceId;
     if (instanceId !== undefined && (typeof instanceId !== 'string' || !instanceId.trim())) throw new TypeError('Invalid indicator instance id');
     if (instanceId !== undefined && this._host._indicators.some(item => item.id === instanceId)) throw new Error(`Indicator instance id already in use: ${instanceId}`);
-    if (options.priceScaleId !== undefined && !this._host._validPriceScaleId(options.priceScaleId)) throw new TypeError('Invalid indicator price scale');
+    if (options.priceScaleId !== undefined && !isPriceScaleId(options.priceScaleId)) throw new TypeError('Invalid indicator price scale');
     const policy = options.policy === undefined ? undefined : parseIndicatorPolicy(options.policy);
     const barSource = options.barSource === undefined ? undefined : parseIndicatorBarSource(options.barSource);
     const descriptor = getIndicator(indicatorId);
@@ -541,8 +541,8 @@ export class ChartStudies {
     series: readonly { api: SeriesApi; scaleId: PriceScaleId }[],
     primitives: readonly { primitive: IPrimitive; scaleId: PriceScaleId }[], commit: () => void): boolean {
     if (this._host._destroyed || !this._host._indicators.some(instance => instance.id === id)) return false;
-    for (const item of series) if (!this._host._validPriceScaleId(item.scaleId) || this._host.seriesType(item.api) === null) return false;
-    for (const item of primitives) if (!this._host._validPriceScaleId(item.scaleId) || !this._host._panes.some(pane => pane.hasPrimitive(item.primitive))) return false;
+    for (const item of series) if (!isPriceScaleId(item.scaleId) || this._host.seriesType(item.api) === null) return false;
+    for (const item of primitives) if (!isPriceScaleId(item.scaleId) || !this._host._panes.some(pane => pane.hasPrimitive(item.primitive))) return false;
     this._host._scaleMutationDepth++;
     try {
       for (const { api, scaleId } of series) {

@@ -36,7 +36,7 @@ import { type TimeScale } from '../scale/time-scale';
 import { type DataLayer } from '../model/data-layer';
 import type { SeriesRecord, PriceScaleId } from '../model/series';
 import type { PriceScaleState } from '../model/chart-state';
-import { PriceAxisLayout, type PriceAxisPlacement, type PriceAxisSide, type PriceAxisSlot } from '../model/price-axis-layout';
+import { PriceAxisLayout, isPriceScaleId, type PriceAxisPlacement, type PriceAxisSide, type PriceAxisSlot } from '../model/price-axis-layout';
 import { computeGridLines, drawGrid, resolveGridStyle, resolveScaleStyle, type CanvasOptions } from '../render/grid';
 import { getChartType, registeredChartTypes, type SeriesRenderContext } from '../model/chart-type-registry';
 import type { SeriesStyle } from '../render/series-style';
@@ -666,8 +666,7 @@ export class Pane {
    */
   public bindPrimitiveScale(primitive: IPrimitive, scaleId: PriceScaleId | null): boolean {
     if (this._destroyed || !this.hasPrimitive(primitive)) return false;
-    if (scaleId !== null && (typeof scaleId !== 'string'
-      || (scaleId !== 'left' && scaleId !== 'right' && scaleId !== '' && !scaleId.startsWith('overlay:')))) return false;
+    if (scaleId !== null && !isPriceScaleId(scaleId)) return false;
     if (this.primitiveScaleId(primitive) === scaleId) return false;
     this._hitEpoch++;
     if (scaleId === null) this._primitiveScales.delete(primitive);

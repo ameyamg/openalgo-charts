@@ -1,6 +1,7 @@
 import { parseSessionSpec } from '../feed/time';
 import type { IndicatorInput, IndicatorSettings } from './indicator-registry';
 import { IndicatorInputError } from './indicator-input-error';
+import { isPriceScaleId } from './price-axis-layout';
 
 /** Validate new native kinds without changing established descriptor contracts. */
 export function validateIndicatorInputs(inputs: readonly IndicatorInput[], settings: Readonly<IndicatorSettings>): void {
@@ -28,8 +29,7 @@ export function validateIndicatorInputs(inputs: readonly IndicatorInput[], setti
         const paneIndex = properties.paneIndex?.value as number | undefined;
         const priceScaleId = properties.priceScaleId?.value as string | undefined;
         if (paneIndex !== undefined && (!Number.isSafeInteger(paneIndex) || paneIndex < 0)) fail('invalid pick pane');
-        if (priceScaleId !== undefined && !(priceScaleId === 'right' || priceScaleId === 'left' || priceScaleId === ''
-          || (typeof priceScaleId === 'string' && priceScaleId.startsWith('overlay:')))) fail('invalid pick scale');
+        if (priceScaleId !== undefined && !isPriceScaleId(priceScaleId)) fail('invalid pick scale');
       }
       if (input.type === 'price') {
         // A pair is one point: its time must be a declared absolute instant,
