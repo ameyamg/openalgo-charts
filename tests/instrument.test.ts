@@ -546,7 +546,7 @@ describe('instrument ticks on chart drags', () => {
     const c = chart();
     const drags = vi.spyOn(c, 'subscribeDrag');
     new Instrument(banded()).applyTo(c, '1m');
-    // Applying an instrument must not build the layer: it would take the host's drag subscription.
+    // Applying an instrument must not build the layer: it would make every ns-resize line draggable.
     expect(c.hasTrading()).toBe(false);
     const modify = vi.fn();
     c.trading.on('trading:order_modify', modify);

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { alignToDevicePixels, bitmapSize, CanvasLayer, hairlineHeight, snapToDevicePixel } from '../src/core/canvas';
+import { alignToDevicePixels, CanvasLayer, hairlineHeight } from '../src/core/canvas';
+import { bitmapSize, snapToDevicePixel } from '../src/helpers/math';
 import { fakeDocument } from './helpers/fake-dom';
 
 /** Stacked boxes of the given heights, top to bottom. */

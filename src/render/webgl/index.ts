@@ -1,8 +1,9 @@
 /**
  * The WebGL2 render backend (ARCHITECTURE.md section 3.4). Importing this
- * module registers nothing: call `registerWebGL2Backend()` once, from the
- * host or from the tier entry that ships it, and `renderer: 'auto'` picks
- * the GPU path up wherever WebGL2 is available.
+ * module registers nothing. The `openalgo-charts/webgl` tier entry registers
+ * it on import through `registerWebGL2Backend`, and a host whose bundler drops
+ * that side effect calls `registerWebGL2Renderer()` from the tier; then
+ * `renderer: 'auto'` picks the GPU path up wherever WebGL2 is available.
  */
 export {
   WebGL2Backend, GlDevice, sharedGlDevice, isWebGL2Supported, createWebGL2Backend, registerWebGL2Backend,

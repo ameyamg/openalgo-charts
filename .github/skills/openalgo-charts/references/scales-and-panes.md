@@ -454,7 +454,7 @@ chart.setPriceAxisLockRatio(paneIndex, scaleId, true); // false when it could no
 chart.setPriceAxisPlacement(paneIndex, scaleId, 'left'); // retains the scale ID
 ```
 
-`PriceAxisState` is `{ paneIndex, scaleId, side, active, autoFit, inverted, mode, scaled, lockRatio, movable }`, and `PRICE_SCALE_MODES` lists the four modes in menu order. Use the exact `scaleId` from a `contextmenu` target, including named or empty overlays explicitly exposed as columns. `side` reports right for hidden placement for compatibility; use `priceAxisPlacement` to distinguish hidden state. `movable` describes only the legacy reassignment method and is deprecated with it, removed in 3.0.0; placement needs no such check.
+`PriceAxisState` is `{ paneIndex, scaleId, side, active, autoFit, inverted, mode, scaled, lockRatio, movable }`, and `PRICE_SCALE_MODES` lists the four modes in menu order. Use the exact `scaleId` from a `contextmenu` target, including named or empty overlays explicitly exposed as columns. An id that names no scale (`'Left'`, `'x'`) changes nothing: since 2.6.0 the setters return early (`setPriceAxisLockRatio` returns false) and `priceAxisState` returns null, as `setPriceAxisPlacement` always refused it. Before, they fell through to the right scale. `side` reports right for hidden placement for compatibility; use `priceAxisPlacement` to distinguish hidden state. `movable` describes only the legacy reassignment method and is deprecated with it, removed in 3.0.0; placement needs no such check.
 
 - **Placement preserves identity.** `setPriceAxisPlacement` moves or reorders a column even when other scales use that side. The legacy `movePriceAxis(pane, from, to)` (deprecated, removed in 3.0.0) instead swaps the built-in side scale objects and reassigns their resources to the destination ID. It requires an unused destination ID and resets both placements to their named sides. A `priceAxisMoved` event, deprecated with the method, follows a successful legacy move; placement emits `priceAxisPlacementChanged`.
 - **Whole-axis study moves require one local assignment.** `movePriceAxis` conservatively refuses a study with mixed local scale assignments or explicit price overlays. This is a guard on the legacy operation, not a saved-state limitation. `priceAxisState().movable` reports that restriction. Uniform local studies and primitive-only studies adopt the moved side. Use `study.setPriceScale` for all local resources or `study.setPlotPriceScales` for selected plots.
@@ -512,14 +512,14 @@ Heights are **relative weights**, not pixels: pane height is `chartHeight * weig
 
 | Method | Returns | Notes |
 |---|---|---|
-| `chart.setPaneWeight(index, weight)` | `void` | Clamped to a minimum of `0.05`. Unknown index is a silent no-op. |
+| `chart.setPaneWeight(index, weight)` | `void` | Clamped to a minimum of `0.05`. Unknown index, or a weight that is not a finite number (since 2.6.0), is a silent no-op. |
 | `chart.paneWeight(index)` | `number` | `0` for an unknown index. |
 | `chart.removePane(index)` | `boolean` | Removes its series, data rows and indicators. `false` for the price pane, in any slot. |
 | `chart.movePane(index, -1 \| 1)` | `boolean` | Swaps with the neighbour and re-appends the DOM in order. By default the price pane is pinned: a move that takes it off slot 0 or displaces it is refused. With `movablePrimaryPane` any pane moves, the price pane included. |
 | `chart.primaryPaneIndex()` | `number` | The slot the price pane holds now: always `0` without `movablePrimaryPane`, and `0` until something moves it with it. |
 | `chart.setPrimaryPaneIndex(index)` | `boolean` | Move the price pane to a slot, one `movePane` step at a time (one `paneMoved` per step). `false` for an unknown slot or the one it holds, and always `false` without `movablePrimaryPane`. |
 | `chart.movablePrimaryPane()` | `boolean` | Whether the chart was built with `movablePrimaryPane`. |
-| `chart.maximizePane(index)` | `boolean` | Toggle: one pane takes the whole chart and the rest are **hidden**, not shrunk. Stored weights are untouched, so un-maximizing restores the stack exactly. |
+| `chart.maximizePane(index)` | `boolean` | Toggle: one pane takes the whole chart and the rest are **hidden**, not shrunk. False for an index that names no pane, a fractional one included (since 2.6.0). Stored weights are untouched, so un-maximizing restores the stack exactly. |
 | `chart.maximizedPane()` | `number \| null` | |
 | `chart.setPaneCollapsed(index, collapsed)` | `boolean` | Fold a study pane to its header strip, or open it again. `false` for the price pane in any slot, an unknown index, a non-boolean, or no change. |
 | `chart.paneCollapsed(index)` | `boolean` | The pane's own setting, kept while it is maximized. Always `false` for the price pane. |

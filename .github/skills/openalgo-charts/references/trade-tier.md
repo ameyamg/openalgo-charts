@@ -26,7 +26,7 @@ Separate bundle entry: `import { OrderEngine } from 'openalgo-charts/trade'` -> 
 
 They are independent: `chart.trading` uses `TradingPosition`/`TradingOrder` and `PriceLine`; this tier uses `Order`/`Position` and its own primitives.
 
-**Do not use `chart.trading` and this tier on the same chart.** `chart.subscribeClick` and `chart.subscribeDrag` are single-slot setters. The `TradingController` claims both on first access to `chart.trading`; the trade tier requires you to claim them yourself for drag-modify and cancel. Whoever registers last wins, and the loser goes silently dead.
+**`chart.trading` and this tier both route drag-modify and cancel through `chart.subscribeDrag` and `chart.subscribeClick`**: the `TradingController` subscribes on first access to `chart.trading`, and a host of this tier subscribes itself (below). Since 2.6.0 both methods take several subscribers, so neither silences the other. Before 2.6.0 they were single-slot setters: whoever registered last won and the other went silently dead, so on an older release keep the two off one chart.
 
 ## Data model (`src/trade/types.ts`)
 

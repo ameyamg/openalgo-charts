@@ -1,9 +1,10 @@
 import type {
-  ChartState, ChartSettingsState, DataVariant, IndicatorPolicy, IndicatorState, LinkMissingPolicy, PaneState, PriceScaleId, PriceScaleState,
+  ChartState, ChartSettingsState, DataVariant, IndicatorState, LinkMissingPolicy, PaneState, PriceScaleId, PriceScaleState,
   SeriesState, SeriesTransformSpec,
 } from 'openalgo-charts';
 import { normalizeDataVariant, parseAlertsDocument, parseIndicatorPolicy, parsePaneState } from 'openalgo-charts';
 import { boolean, choice, list, number, readJson, record, string, WorkspaceDocumentError, type Json } from './json';
+import { hostOwnedStudy } from '../model/indicator-policy';
 
 export { WorkspaceDocumentError } from './json';
 export const WORKSPACE_VERSION = 1;
@@ -166,13 +167,8 @@ function indicatorStates(input: Json | undefined, preserveIdentity = true, keepP
 /** Keep repeated/custom descriptor IDs; availability is checked by the applying host. */
 export function parseIndicatorStates(input: unknown): IndicatorState[] { return indicatorStates(readJson(input)); }
 
-/**
- * Whether a study is its host's rather than the user's: one the user may not
- * remove, or cannot see. Internal, shared with the template planners.
- */
-export function hostOwnedStudy(policy: Readonly<IndicatorPolicy> | undefined): boolean {
-  return policy?.removable === false || policy?.listed === false;
-}
+// The template planners import it from here; it is declared in the base.
+export { hostOwnedStudy };
 
 /**
  * A scale whose range owner is leaving lets go of the range. An owner the

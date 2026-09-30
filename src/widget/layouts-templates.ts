@@ -15,11 +15,12 @@
  * then), and Ctrl+Y applies the template again. Steps taken before the apply
  * are gone, because the studies they name were rebuilt.
  */
-import { isReplaying, type ChartRestoreOptions, type ChartState, type IndicatorPolicy } from 'openalgo-charts';
+import { isReplaying, type ChartRestoreOptions, type ChartState } from 'openalgo-charts';
 import type {
   IndicatorTemplateDocument, IndicatorTemplateInput, IndicatorTemplatePlan, WorkspaceStore,
 } from 'openalgo-charts/workspace';
 import type { WidgetContext } from './context';
+import { hostOwnedStudy } from '../model/indicator-policy';
 
 export type IndicatorTemplateApplyMode = 'replace' | 'append';
 
@@ -106,10 +107,10 @@ export function applyIndicatorTemplate(ctx: Pick<WidgetContext, 'chart' | 'histo
 
 /**
  * A study the host keeps from the user (one the user cannot see or remove) is
- * the host's, as the workspace tier's template parser rules: no template
- * holds it. Internal.
+ * the host's: no template holds it. The rule is the workspace tier's template
+ * parser's, taken from the base by path; the menu imports it under this name.
  */
-export const hostKept = (policy: IndicatorPolicy | undefined): boolean => policy?.listed === false || policy?.removable === false;
+export { hostOwnedStudy as hostKept };
 
 /**
  * Save the user's studies on the chart as a template: with their panes and
@@ -120,7 +121,7 @@ export const hostKept = (policy: IndicatorPolicy | undefined): boolean => policy
 export function saveIndicatorTemplate(ctx: Pick<WidgetContext, 'chart'>, store: WorkspaceStore, name: string): Promise<IndicatorTemplateDocument> {
   let input: IndicatorTemplateInput;
   try {
-    input = store.captureIndicatorTemplate?.(ctx.chart) ?? (ctx.chart.getState().indicators ?? []).filter(study => !hostKept(study.policy));
+    input = store.captureIndicatorTemplate?.(ctx.chart) ?? (ctx.chart.getState().indicators ?? []).filter(study => !hostOwnedStudy(study.policy));
   } catch (error) { return Promise.reject(error); }
   const studies = Array.isArray(input) ? input : input.indicators;
   if (studies.length === 0) return Promise.reject(new Error('The chart has no studies of yours to save'));

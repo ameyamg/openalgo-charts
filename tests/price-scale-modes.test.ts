@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { PriceScale, type PriceScaleMode } from '../src/scale/price-scale';
 import { niceTicks, precisionForStep } from '../src/scale/ticks';
-import { drawPriceAxis, drawLeftPriceAxis, priceTickCount, type PlotLayout } from '../src/render/axis';
+import { drawPriceAxis, priceTickCount, type PlotLayout } from '../src/render/axis';
 import { makeCtx, type RecordingContext } from './helpers/fake-ctx';
 
 /**
@@ -437,7 +437,7 @@ describe('the drawn axis reads the scale ladder', () => {
   it('labels the left axis from the same ladder', () => {
     const ps = offBaseline('indexed-to-100');
     const { ctx, rec } = makeCtx();
-    drawLeftPriceAxis(ctx, ps, 60, layout.plotHeight, 1);
+    drawPriceAxis(ctx, ps, { ...layout, plotLeft: 60 }, 1, undefined, undefined, 'left');
     expectRoundLadder(labels(rec));
   });
 

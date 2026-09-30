@@ -19,9 +19,9 @@
  * there.
  *
  * The tabs are our own five, not a reference terminal's seven. Alerts are not
- * here because the feature is not built, and corporate events are not here
- * because nothing in the engine sources them: an empty tab is worse than an
- * absent one.
+ * here because they have a dialog and a saved document of their own, and
+ * corporate events are not here because nothing in the engine sources them:
+ * an empty tab is worse than an absent one.
  *
  * Keys are dotted paths (`symbol.upColor`, `canvas.grid.vertColor`), so a patch
  * is a flat `Record<string, value>` that survives JSON. They are a wire format
@@ -35,10 +35,11 @@ import { getSeriesTransform } from './series-transform';
 import type { SeriesStyle } from '../render/series-style';
 import type { CanvasOptions, CanvasLineStyle, GridOptions, ScaleCanvasOptions } from '../render/grid';
 import { SCALE_FONT_MIN, SCALE_FONT_MAX } from '../render/grid';
+import { HLC_AREA_BAND_COLOR } from '../render/line';
 import type { CrosshairOptions } from '../render/crosshair';
 import type { LegendStatusLineOptions, LegendTitleMode } from '../primitives/pane-legend';
 import type { TradingColors, TradingSettings } from '../core/trading-controller';
-import type { PriceScaleMode } from '../scale/price-scale';
+import { PRICE_SCALE_MODES, type PriceScaleMode } from '../scale/price-scale';
 import { DEFAULT_TIMEZONE, isValidTimezone } from '../feed/time';
 import { filterLinkAppearance } from '../link/appearance';
 import type { LooseOptional } from '../helpers/types';
@@ -405,12 +406,8 @@ function priceControls(chart: Chart): Control[] {
   out.push(...transformControls(chart));
   if (type === 'candlestick' || type === 'hollow-candle' || type === 'volume-candle') {
     out.push(
-      // No switch on Body: a candle with no body is not a candle, and there is
-      // no style flag behind such a checkbox. Borders and wicks have one.
-      // Body carries a switch like its neighbours now that the renderer can
-      // actually skip the fill. Before `bodyVisible` existed this row was
-      // deliberately left without one rather than shipping a checkbox that
-      // toggled nothing.
+      // Body carries a switch like its neighbours: `bodyVisible` skips the fill
+      // and leaves the outline and the wick.
       seriesColorPair('symbol.body', 'Body', 'Candles',
         { key: 'upColor', label: 'Up', def: t.upColor },
         { key: 'downColor', label: 'Down', def: t.downColor },
@@ -465,9 +462,9 @@ function priceControls(chart: Chart): Control[] {
         (c) => sty(c).lineWidth ?? 1.5, (c, v) => setSty(c, { lineWidth: v }),
       ));
     }
-    // Only the plain line renderers honour a dash; area/baseline redraw their
-    // outline through a fixed-style call, so the control would be inert there.
-    if (type === 'line' || type === 'line-markers' || type === 'step') {
+    // The line renderers and the area outline honour a dash; baseline and HLC
+    // area stroke with a fixed style, so the control would be inert there.
+    if (type === 'line' || type === 'line-markers' || type === 'step' || type === 'area') {
       out.push(selectCtl(
         'symbol.lineStyle', 'Line style', 'Line', 'solid', LINE_STYLES,
         (c) => sty(c).lineStyle ?? 'solid',
@@ -489,8 +486,8 @@ function priceControls(chart: Chart): Control[] {
     } else if (type === 'hlc-area') {
       // One band between high and low, so one colour: a pair here would put a
       // second swatch on the row with nothing reading it.
-      out.push(colorCtl('symbol.areaTopColor', 'Band', 'Line', t.areaTopColor,
-        (c) => sty(c).areaTopColor ?? t.areaTopColor, (c, v) => setSty(c, { areaTopColor: v })));
+      out.push(colorCtl('symbol.areaTopColor', 'Band', 'Line', HLC_AREA_BAND_COLOR,
+        (c) => sty(c).areaTopColor ?? HLC_AREA_BAND_COLOR, (c, v) => setSty(c, { areaTopColor: v })));
     }
   }
   return [...out, ...priceShared()];
@@ -561,12 +558,15 @@ function readoutControls(chart: Chart): Control[] {
 
 // ── Axes ──────────────────────────────────────────────────────────────────
 
-const SCALE_MODES: readonly { label: string; value: string }[] = [
-  { label: 'Linear', value: 'linear' },
-  { label: 'Logarithmic', value: 'logarithmic' },
-  { label: 'Percent', value: 'percentage' },
-  { label: 'Indexed to 100', value: 'indexed-to-100' },
-];
+/** Keyed by the mode, so a fifth mode fails to compile here until it has a label. */
+const SCALE_MODE_LABELS: Readonly<Record<PriceScaleMode, string>> = {
+  linear: 'Linear',
+  logarithmic: 'Logarithmic',
+  percentage: 'Percent',
+  'indexed-to-100': 'Indexed to 100',
+};
+const SCALE_MODES: readonly { label: string; value: string }[] =
+  PRICE_SCALE_MODES.map(value => ({ label: SCALE_MODE_LABELS[value], value }));
 
 /**
  * Zones offered by the timezone control, roughly east to west so the list reads

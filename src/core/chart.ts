@@ -1,11 +1,12 @@
 /**
- * Top-level chart orchestrator (ARCHITECTURE.md §3.3). Owns the shared
- * DataLayer + time scale, the panes, the invalidate mask, and the render loop.
- * Phase 2 renders static candlesticks with price/time axes; pan/zoom (Phase 3)
- * and live data (Phase 4) build on this.
+ * The chart (ARCHITECTURE.md §3.3): it owns the shared DataLayer and time
+ * scale, the panes, the invalidate mask and the render loop, and it is the
+ * API a host calls. Most of the work lives in the chart-*.ts collaborators;
+ * this file holds the state they share and the methods that carry the
+ * documented contracts.
  */
 import { InvalidateMask, InvalidationLevel } from './invalidate-mask';
-import { RenderLoop, type RafScheduler, type RafCanceller } from './render-loop';
+import { RenderLoop, resolveRaf, type RafScheduler, type RafCanceller } from './render-loop';
 import { type Pane, type PaneRenderContext } from './pane';
 import { ChartMotion, type MotionHost } from './chart-motion';
 import { ChartPixels, type PixelsHost } from './chart-pixels';
@@ -14,7 +15,7 @@ import {
   type PlotRect, type ChartEventOptions, type AxisChromeOptions, type ExportSvgOptions,
   type ChartNavigationOptions, type ChartOptions, type AddSeriesOptions, type CrosshairMoveEvent,
   type PointerInfo, type LayoutSetter,
-  type LayoutChangeEvent, type RendererFallbackEvent,
+  type LayoutChangeEvent, type RendererFallbackEvent, type AddIndicatorOptions, type ChartApplyOptions,
 } from './chart-types';
 // The public option and event types live in chart-types.ts. Every name is
 // re-exported here, so an import of './chart' finds what it always found.
@@ -27,8 +28,9 @@ export type {
   AddSeriesOptions, CrosshairMoveEvent, PointerModifiers, PointerKind, PointerSample, PointerInfo,
   ChartEventClick, ChartDragEvent, ChartDragEndEvent, ContextMenuTargetKind,
   ContextMenuTarget, LayoutSetter, LayoutChangeEvent, ContextMenuEvent, RendererFallbackEvent,
+  AddIndicatorOptions, ChartApplyOptions,
 } from './chart-types';
-import type { PriceAxisPlacement, PriceAxisSide, PriceAxisSlot } from '../model/price-axis-layout';
+import { isPriceScaleId, type PriceAxisPlacement, type PriceAxisSide, type PriceAxisSlot } from '../model/price-axis-layout';
 import { type ChartTheme, DEFAULT_THEME } from '../theme';
 import { TimeScale } from '../scale/time-scale';
 import type { LogicalRange } from '../scale/time-scale';
@@ -39,7 +41,7 @@ import {
   resolveRenderBackend, type IRenderBackend, type RenderBackendFactory, type RenderBackendKind, type RendererChoice,
   type RendererFallbackReason,
 } from '../render/backend';
-import { DataLayer, type SessionCalendarSource } from '../model/data-layer';
+import { DataLayer, barAtIndex, type SessionCalendarSource } from '../model/data-layer';
 import { type SeriesApi, type SeriesRecord, type PriceScaleId } from '../model/series';
 import { type SeriesProvenance } from '../model/series-provenance';
 import { type SeriesType } from '../model/chart-type-registry';
@@ -50,7 +52,6 @@ import {
 
 import { type IndicatorInstance, type IndicatorApi, type IndicatorHost } from '../model/indicator-instance';
 import { type IndicatorEditOptions, type IndicatorPolicy } from '../model/indicator-policy';
-import type { IndicatorBarSource } from '../model/indicator-bar-source';
 import type { AlertsDocument } from '../alerts/types';
 import { copyAlert, parseAlertsDocument, validateAlert } from '../alerts/document';
 import type { ChartDataContext } from '../model/indicator-registry';
@@ -71,6 +72,8 @@ import { type LogoWatermark, type LogoWatermarkOptions } from '../primitives/wat
 import type { TickSchedule } from '../feed/tick-schedule';
 import { DEFAULT_TIMEZONE, isValidTimezone } from '../feed/time';
 import { roundToTick } from '../helpers/math';
+import { dispatch, subscribe } from '../helpers/dispatch';
+import { hasOnlyDataProperties, isPlainObject } from '../helpers/validate';
 // Last, so the runtime modules imported above still load in the order they did.
 import { ChartPersistence, type PersistenceHost, type PreservedScaleFormats } from './chart-state';
 import { ChartStudies, type StudiesHost } from './chart-studies';
@@ -153,19 +156,15 @@ function defaultPixelRatio(): number {
 }
 
 /**
- * The frame scheduler for the chart's own one-shot callbacks, resolved the same
- * way `RenderLoop` resolves its painting one. It has to be the injected
- * scheduler wherever a host supplies one: a test that drives frames by hand
- * would otherwise be waiting on a browser rAF that never comes.
+ * Whether two data variants name the same bars. A dimension left undefined
+ * reads as absent, as `dataVariantKey` reads it; the values are compared as
+ * given, since the chart stores a context as the host hands it over.
  */
-function resolveRaf(
-  opts?: { schedule: RafScheduler; cancel?: RafCanceller },
-): { schedule: RafScheduler; cancel: RafCanceller } {
-  if (opts) return { schedule: opts.schedule, cancel: opts.cancel ?? ((): void => {}) };
-  if (typeof requestAnimationFrame === 'function') {
-    return { schedule: (cb) => requestAnimationFrame(cb), cancel: (h) => cancelAnimationFrame(h) };
-  }
-  return { schedule: (cb) => setTimeout(cb, 16) as unknown as number, cancel: (h) => clearTimeout(h) };
+function sameVariant(a: object | undefined, b: object | undefined): boolean {
+  if (a === b) return true;
+  const x = a as Record<string, unknown> | undefined, y = b as Record<string, unknown> | undefined;
+  for (const key of new Set([...Object.keys(x ?? {}), ...Object.keys(y ?? {})])) if (x?.[key] !== y?.[key]) return false;
+  return true;
 }
 
 export class Chart {
@@ -392,7 +391,10 @@ export class Chart {
     typeof this._handleLegendAction, typeof this._syncTimeNavPane, typeof this._feedTimeNav,
     typeof this._onPixelRatio, typeof this._checkPixelRatio, typeof this._paintNow, typeof this._onPointerUp,
     typeof this._runShortcut, typeof this._updateAccessibleSummary, typeof this._maybeLoadHistory,
-    typeof this._startKinetic,
+    typeof this._startKinetic, typeof this._onPointerEnter, typeof this._onContextMenu, typeof this._onPointerDown,
+    typeof this._onPointerMove, typeof this._onPointerUpNative, typeof this._onPointerCancel,
+    typeof this._onLostPointerCapture, typeof this._onPointerLeave, typeof this._onWheel, typeof this._onDblClick,
+    typeof this._onKeyDown,
   ];
 
   public constructor(container: HTMLElement, options: ChartOptions = {}) {
@@ -588,7 +590,11 @@ export class Chart {
     return { ...this._navigation };
   }
 
-  /** A new default count or spacing immediately restores that view without dropping history. */
+  /**
+   * A new default count or spacing immediately restores that view without dropping history.
+   * `getState` saves these preferences, so the change is announced with `layout:change`;
+   * a pan or zoom switch also fires `objects:change`, as it always has.
+   */
   public setNavigationOptions(patch: Partial<ChartNavigationOptions>): void {
     const before = this._navigation.defaultVisibleBars;
     const spacing = this._navigation.defaultBarSpacing;
@@ -596,6 +602,7 @@ export class Chart {
     this._input._patchNavigation(patch);
     if (before !== this._navigation.defaultVisibleBars || spacing !== this._navigation.defaultBarSpacing) this.resetScale();
     if (pan !== this._navigation.panEnabled || zoom !== this._navigation.zoomEnabled) this._emit('objects:change', {});
+    this._layoutChanged('setNavigationOptions');
   }
 
   private _fitDefaultView(): boolean {
@@ -635,8 +642,9 @@ export class Chart {
 
   /**
    * Whether the trade layer exists yet. Reading `chart.trading` creates one,
-   * and creating one claims the click/drag subscriptions, so anything that
-   * merely inspects the chart (a settings dialog) asks this first.
+   * which subscribes to clicks and drags and so makes every `ns-resize` price
+   * line draggable, so anything that merely inspects the chart (a settings
+   * dialog) asks this first.
    */
   public hasTrading(): boolean {
     return this._trading !== null;
@@ -708,8 +716,7 @@ export class Chart {
    * indicator-owned plots, whose pane-bound visuals must move with the whole study.
    */
   public setSeriesPriceScale(series: SeriesApi, scaleId: PriceScaleId): boolean {
-    if (typeof scaleId !== 'string' || (scaleId !== 'right' && scaleId !== 'left' && scaleId !== '' && !scaleId.startsWith('overlay:'))
-      || this.seriesType(series) === null) return false;
+    if (!isPriceScaleId(scaleId) || this.seriesType(series) === null) return false;
     const record = this._seriesRecords.get(series)!, owner = this._seriesOwners.get(series)!;
     if (owner.indicatorOwned || record.scaleId === scaleId) return false;
     const target = owner.pane.scaleFor(scaleId);
@@ -864,10 +871,7 @@ export class Chart {
   public addIndicator(
     indicatorId: string,
     settings: Readonly<IndicatorSettings> = {},
-    options: {
-      paneIndex?: number; priceScaleId?: PriceScaleId; plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>;
-      policy?: IndicatorPolicy; instanceId?: string; barSource?: IndicatorBarSource;
-    } = {},
+    options: AddIndicatorOptions = {},
   ): IndicatorApi {
     return this._studies.addIndicator(indicatorId, settings, options);
   }
@@ -960,12 +964,15 @@ export class Chart {
 
   /** Clear the previous source bars before changing context, then load the new source. */
   public setDataContext(context: ChartDataContext | undefined): void {
+    // The variant (session, adjustment, currency, unit) is part of the source,
+    // as the interval is: a series in another session is other bars.
+    const variantChanged = !sameVariant(this._dataContext?.variant, context?.variant);
     if (this._dataContext?.symbol === context?.symbol && this._dataContext?.exchange === context?.exchange
       && this._dataContext?.hasOpenInterest === context?.hasOpenInterest
-      && this._dataContext?.interval === context?.interval && !!this._dataContext === !!context) return;
+      && this._dataContext?.interval === context?.interval && !variantChanged && !!this._dataContext === !!context) return;
     const instrumentChanged = this._dataContext?.symbol !== context?.symbol
       || this._dataContext?.exchange !== context?.exchange;
-    const sourceChanged = instrumentChanged || this._dataContext?.interval !== context?.interval;
+    const sourceChanged = instrumentChanged || variantChanged || this._dataContext?.interval !== context?.interval;
     this._dataContext = context ? Object.freeze({ ...context }) : undefined;
     if (sourceChanged) this._cancelBarsRequests();
     if (sourceChanged) for (const state of this._seriesProvenance.values()) state.contextChanged();
@@ -1048,13 +1055,16 @@ export class Chart {
     return this._studies._indicatorHost(preservedFormats);
   }
 
-  private _validPriceScaleId(value: unknown): value is PriceScaleId {
-    return typeof value === 'string' && (value === 'right' || value === 'left' || value === '' || value.startsWith('overlay:'));
-  }
-
-  /** Subscribe to clicks on hit-testable primitives (markers, events, lines). */
-  public subscribeClick(cb: (externalId: string) => void): void {
-    this._input._clickCb = cb;
+  /**
+   * Subscribe to clicks on hit-testable primitives (markers, events, lines),
+   * with the primitive's `externalId`. Every subscriber hears every click, the
+   * trade layer's among them; the function returned unsubscribes this one.
+   *
+   * Before 2.6.0 each call replaced the previous callback, so a host that
+   * subscribes again on the same chart calls the returned function first.
+   */
+  public subscribeClick(cb: (externalId: string) => void): () => void {
+    return subscribe(this._input._clickCbs, cb);
   }
 
   /**
@@ -1062,9 +1072,11 @@ export class Chart {
    * fires with the hovered bar of the primary price series on every move, and
    * with all-null fields when the pointer leaves the plot. A linked crosshair
    * also updates the readout, with source 'linked' and no pointer coordinates.
+   * Several may subscribe, as with `subscribeClick`; the function returned
+   * unsubscribes this one.
    */
-  public subscribeCrosshairMove(cb: (e: CrosshairMoveEvent) => void): void {
-    this._input._crosshairCb = cb;
+  public subscribeCrosshairMove(cb: (e: CrosshairMoveEvent) => void): () => void {
+    return subscribe(this._input._crosshairCbs, cb);
   }
 
   /**
@@ -1079,10 +1091,10 @@ export class Chart {
     this._input._readoutTime = time;
     for (const indicator of this._indicators) indicator.updateLegendValues(index ?? undefined);
     const bar = index === null || this._firstDataId.value === null ? null
-      : this._dataLayer.visibleBars(this._firstDataId.value, index, index)[0]?.bar ?? null;
+      : barAtIndex(this._dataLayer, this._firstDataId.value, index) ?? null;
     const readout: CrosshairMoveEvent = { source: 'linked', time, index,
       bar, price: null, point: null, paneIndex: null };
-    this._input._crosshairCb?.(readout);
+    dispatch(this._input._crosshairCbs, readout);
     this._emit('crosshair:readout', readout);
   }
 
@@ -1098,13 +1110,19 @@ export class Chart {
    * extrapolated past the right edge — so a two-axis drag (a trendline endpoint,
    * a projection) has a usable time even where the gapless axis has no bar.
    * Price-only consumers can simply ignore it.
+   *
+   * Several may subscribe, as with `subscribeClick`; the function returned
+   * unsubscribes this pair. While any subscription holds, a price line whose
+   * cursor is `ns-resize` drags instead of panning the chart.
    */
   public subscribeDrag(
     onDrag: (externalId: string, price: number, time: number) => void,
     onDragEnd?: (externalId: string, price: number, time: number) => void,
-  ): void {
-    this._input._dragCb = onDrag;
-    this._input._dragEndCb = onDragEnd ?? null;
+  ): () => void {
+    return subscribe(this._input._dragCbs, (d) => {
+      if (!d.end) onDrag(d.id, d.price, d.time);
+      else onDragEnd?.(d.id, d.price, d.time);
+    });
   }
 
   /**
@@ -1410,14 +1428,14 @@ export class Chart {
 
   /** Detached visible placement. Hidden named scales retain their independent range. */
   public priceAxisPlacement(paneIndex: number, scaleId: PriceScaleId): PriceAxisPlacement | null {
-    if (!this._validPriceScaleId(scaleId)) return null;
+    if (!isPriceScaleId(scaleId)) return null;
     return this._priceAxisPane(paneIndex)?.axisPlacement(scaleId) ?? null;
   }
 
   /** Move or reorder a scale without changing its ID, sources, formatter or range. */
   public setPriceAxisPlacement(paneIndex: number, scaleId: PriceScaleId, side: PriceAxisSide, order?: number): boolean {
     const pane = this._priceAxisPane(paneIndex);
-    if (!pane || !this._validPriceScaleId(scaleId) || !pane.setAxisPlacement(scaleId, side, order)) return false;
+    if (!pane || !isPriceScaleId(scaleId) || !pane.setAxisPlacement(scaleId, side, order)) return false;
     this._layout._recomputeAxisColumns();
     this.invalidate(m => m.invalidateGlobal(InvalidationLevel.Full));
     this._emit('priceAxisPlacementChanged', { paneIndex, scaleId, ...pane.axisPlacement(scaleId) });
@@ -1442,7 +1460,7 @@ export class Chart {
    */
   public setPriceAxisOptions(paneIndex: number, scaleId: PriceScaleId, patch: Partial<PriceScaleOptions>): void {
     const pane = this._panes[paneIndex];
-    if (pane === undefined) return;
+    if (pane === undefined || !isPriceScaleId(scaleId)) return;
     pane.scaleFor(scaleId).setOptions(patch);
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
     this._layoutChanged('setPriceAxisOptions');
@@ -1455,7 +1473,7 @@ export class Chart {
    */
   public setPriceAxisAutoFit(paneIndex: number, scaleId: PriceScaleId, on: boolean): void {
     const pane = this._panes[paneIndex];
-    if (pane === undefined) return;
+    if (pane === undefined || !isPriceScaleId(scaleId)) return;
     if (on) pane.setRatioLock(scaleId, false, 0, 0);
     pane.scaleFor(scaleId).setAutoScale(on);
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
@@ -1474,7 +1492,7 @@ export class Chart {
    */
   public setPriceAxisLockRatio(paneIndex: number, scaleId: PriceScaleId, on: boolean): boolean {
     const pane = this._panes[paneIndex];
-    if (pane === undefined) return false;
+    if (pane === undefined || !isPriceScaleId(scaleId)) return false;
     if (on) this._scales._ensureScaledFor(paneIndex, scaleId);
     const ok = pane.setRatioLock(scaleId, on, this._timeScale.barSpacing, pane.scaleFor(scaleId).height);
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
@@ -1741,7 +1759,8 @@ export class Chart {
 
   /**
    * Set a custom time-axis + crosshair label formatter (UTC seconds -> string)
-   * at runtime. Pass undefined to restore the IST default.
+   * at runtime. Pass undefined to go back to the default labels, which follow
+   * the chart's `timezone` (IST unless set).
    */
   public setTimeFormatter(fn: ((utcSeconds: number, tickMark?: TickMarkType) => string) | undefined): void {
     this._timeFormatter = fn;
@@ -1798,14 +1817,13 @@ export class Chart {
   public beginPick(kind: PickKind | 'point', cb: (value: never) => void, options: PickOptions = {}): PickHandle {
     if (this._destroyed || this._destroying) throw new Error('Cannot pick on a destroyed chart');
     if (this._input._placementMode) throw new Error('Finish drawing placement before picking a study value');
-    if (options === null || typeof options !== 'object' || ![Object.prototype, null].includes(Object.getPrototypeOf(options))
-      || Object.values(Object.getOwnPropertyDescriptors(options)).some(item => !('value' in item))) throw new TypeError('Invalid pick options');
+    if (!isPlainObject(options) || !hasOnlyDataProperties(options)) throw new TypeError('Invalid pick options');
     const fields = Object.getOwnPropertyDescriptors(options);
     const paneIndex = fields.paneIndex?.value as PickOptions['paneIndex'];
     const priceScaleId = fields.priceScaleId?.value as PickOptions['priceScaleId'];
     if (paneIndex !== undefined && (!Number.isSafeInteger(paneIndex) || paneIndex < 0 || !this._panes[paneIndex])) throw new RangeError('Invalid pick pane');
     const targetPane = paneIndex ?? (priceScaleId !== undefined ? this._layout._firstPaneSlot() : undefined);
-    if (priceScaleId !== undefined && (kind === 'time' || !this._validPriceScaleId(priceScaleId)
+    if (priceScaleId !== undefined && (kind === 'time' || !isPriceScaleId(priceScaleId)
       || !Object.prototype.hasOwnProperty.call(this._panes[targetPane!]?.scaleStates() ?? {}, priceScaleId))) throw new RangeError('Invalid pick scale');
     return beginPickResolved(this, kind, cb as (value: number | PickPoint) => void, payload => {
       const click = payload as Partial<ChartClickEvent>, point = click?.point, index = click?.paneIndex;
@@ -1835,19 +1853,7 @@ export class Chart {
    * Apply a subset of chart options at runtime (theme, grid, formatters,
    * crosshair mode) without recreating the chart.
    */
-  public applyOptions(opts: {
-    theme?: ChartTheme;
-    grid?: Partial<GridOptions>;
-    canvas?: CanvasOptions;
-    statusLine?: LegendStatusLineOptions;
-    legendIconSize?: number;
-    priceScale?: Partial<PriceScaleOptions>;
-    priceFormatter?: ((price: number) => string) | null;
-    timeFormatter?: ((utcSeconds: number, tickMark?: TickMarkType) => string) | undefined;
-    timezone?: string;
-    crosshairMode?: CrosshairMode;
-    crosshairSnapToBar?: boolean;
-  }): void {
+  public applyOptions(opts: ChartApplyOptions): void {
     this._appearance.applyOptions(opts);
   }
 
@@ -2006,7 +2012,8 @@ export class Chart {
    */
   public setPaneWeight(index: number, weight: number): void {
     const pane = this._panes[index];
-    if (pane === undefined) return;
+    // NaN or an infinity would size every pane from it; a weight is a finite share.
+    if (pane === undefined || !Number.isFinite(weight)) return;
     pane.weight = Math.max(0.05, weight);
     this._layout._relayout();
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
@@ -2295,7 +2302,7 @@ export class Chart {
     const snapSeries = this._firstDataId.value ?? this._primaryPane.series()[0]?.dataId;
     if (this._cursor !== null && this._crosshairSnapToBar && snapSeries !== undefined) {
       const index = Math.round(this._timeScale.xToIndex(crosshairX));
-      if (this._dataLayer.visibleBars(snapSeries, index, index).length > 0) {
+      if (barAtIndex(this._dataLayer, snapSeries, index) !== undefined) {
         crosshairX = this._timeScale.indexToX(index);
       }
     }
@@ -2465,21 +2472,7 @@ export class Chart {
     this._pixels._deviceObserver?.disconnect();
     this._pixels._deviceObserver = null;
     this._pixels._unwatchPixelRatio();
-    if (typeof window !== 'undefined') {
-      const el = this._container;
-      el.removeEventListener('pointerdown', this._onPointerDown);
-      el.removeEventListener('pointermove', this._onPointerMove);
-      el.removeEventListener('pointerup', this._onPointerUpNative);
-      el.removeEventListener('pointercancel', this._onPointerCancel);
-      el.removeEventListener('lostpointercapture', this._onLostPointerCapture);
-      el.removeEventListener('pointerleave', this._onPointerLeave);
-      el.removeEventListener('wheel', this._onWheel);
-      el.removeEventListener('dblclick', this._onDblClick);
-      el.removeEventListener('pointerenter', this._onPointerEnter);
-      el.removeEventListener('contextmenu', this._onContextMenu);
-      this._input._keyTarget?.removeEventListener('keydown', this._onKeyDown as EventListener);
-      this._input._keyTarget = null;
-    }
+    this._input._detachInput();
     this._liveRegion?.remove();
     this._liveRegion = null;
     this._container.style.cursor = ''; // drop any hover cursor hint we applied

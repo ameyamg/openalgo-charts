@@ -1,11 +1,12 @@
-// OpenAlgo Charts — public API surface (base tier).
-// Phase 0: foundation only. createChart and series factories arrive in Phases 1–2.
+// OpenAlgo Charts public API: the base tier, the `openalgo-charts` entry.
+// Every other tier has an entry of its own and imports its base from here.
 
 export { VERSION, version } from './version';
 
 export { createChart, Chart, compactVolume, PRICE_SCALE_MODES } from './core/chart';
 export type {
   ChartOptions, ChartNavigationOptions, ChartWatermarkOptions, BrandingChangedEvent, PlotRect, AddSeriesOptions, CrosshairMoveEvent, ChartEventOptions,
+  AddIndicatorOptions, ChartApplyOptions,
   ContextMenuEvent, ContextMenuTarget, ContextMenuTargetKind, PriceAxisState, LayoutChangeEvent, LayoutSetter,
   AxisChromeOptions, ZoomAnchor, DoubleClickAction, DoubleClickEvent, ExportSvgOptions,
   PointerModifiers, PointerKind, PointerSample, PointerInfo,
@@ -39,8 +40,8 @@ export { ZoomGlide, DEFAULT_ZOOM_GLIDE_OPTIONS } from './input/zoom-glide';
 export type { ZoomGlideOptions } from './input/zoom-glide';
 export { InvalidationLevel } from './core/invalidate-mask';
 export type { PaneInvalidation, TimeScaleOp } from './core/invalidate-mask';
-export { bitmapSize, snapToDevicePixel } from './core/canvas';
-export type { Size } from './core/canvas';
+export { bitmapSize, snapToDevicePixel } from './helpers/math';
+export type { Size } from './helpers/math';
 
 export { PriceScale, autoscaleRange, isRebasing, DEFAULT_PRICE_SCALE_OPTIONS } from './scale/price-scale';
 export type { PriceRange, PriceScaleOptions, PriceScaleMode } from './scale/price-scale';

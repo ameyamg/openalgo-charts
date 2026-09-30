@@ -1,18 +1,12 @@
 {
   "maxLines": 150,
   "caps": {
-    "src/core/chart-input.ts": {
-      "ChartInput._onPointerUp": 157
-    },
     "src/core/chart-state.ts": {
       "ChartPersistence._restoreState": 161,
       "ChartPersistence.restoreState": 155
     },
     "src/core/chart-studies.ts": {
       "ChartStudies._indicatorHost": 210
-    },
-    "src/core/pane.ts": {
-      "Pane.paintBase": 232
     },
     "src/indicators/external.ts": {
       "createTier2Indicator": 298

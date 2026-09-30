@@ -20,44 +20,9 @@
  */
 import type { Bar } from '../model/bar';
 import type { DrawItem } from '../model/chart-type-registry';
-import type { DataLayer, SeriesId } from '../model/data-layer';
+import { visibleSpan, type DataLayer, type SeriesId, type VisibleSpan } from '../model/data-layer';
 import type { TimeScale } from '../scale/time-scale';
 import { createLodColumns, type LodKind } from '../model/conflation';
-
-/** Where the visible bars of one series start, and the last time they may carry. */
-export interface VisibleSpan {
-  start: number;
-  lastTime: number;
-}
-
-/**
- * Find the bars of `bars` whose logical index lies within [from, to], the way
- * `DataLayer.visibleBars` does, without building its list: `out.start` is the
- * first candidate and `out.lastTime` the time past which none is in view.
- * Returns false when nothing can be.
- *
- * A caller walks `bars` from `start` while `time <= lastTime` and keeps the
- * bars `timeToIndex` answers for, which is the list `visibleBars` returns,
- * in the same order.
- */
-export function visibleSpan(layer: DataLayer, bars: readonly Bar[], from: number, to: number, out: VisibleSpan): boolean {
-  const lo = Math.max(0, Math.floor(from));
-  const hi = Math.min(layer.baseIndex, Math.ceil(to));
-  if (hi < lo || bars.length === 0) return false;
-  const loTime = layer.indexToTime(lo);
-  const hiTime = layer.indexToTime(hi);
-  if (loTime === undefined || hiTime === undefined) return false;
-  let start = 0;
-  let end = bars.length;
-  while (start < end) {
-    const mid = (start + end) >> 1;
-    if (bars[mid]!.time < loTime) start = mid + 1; // start <= mid < end <= bars.length
-    else end = mid;
-  }
-  out.start = start;
-  out.lastTime = hiTime;
-  return true;
-}
 
 /** The level of detail a frame asks for: the reduction, and the ratio and factor its columns follow. */
 export interface LodRequest {

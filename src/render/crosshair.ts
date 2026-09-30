@@ -10,6 +10,7 @@
 import { dashPattern } from './grid';
 import type { CanvasLineStyle } from './grid';
 import type { ChartTheme } from '../theme';
+import { DEFAULT_AXIS_STYLE, scaleFont, type AxisStyle } from './axis';
 
 /**
  * The Canvas tab's crosshair controls. Same precedence as the rest of the
@@ -80,8 +81,22 @@ export function drawCrosshair(
 }
 
 /**
+ * Width in device px of the box `drawCrosshairTag` draws for `text` with the
+ * 'right' anchor, from `cx` to its far edge. A tag on a left strip is placed
+ * by it, so it ends at the strip's edge.
+ */
+export function crosshairTagWidth(ctx: CanvasRenderingContext2D, text: string, dpr: number, style: AxisStyle = DEFAULT_AXIS_STYLE): number {
+  ctx.save();
+  ctx.font = scaleFont(style.font, dpr);
+  const w = ctx.measureText(text).width + 12 * dpr + 1;
+  ctx.restore();
+  return w;
+}
+
+/**
  * Draw a filled crosshair value tag (price on the right axis, or time on the
- * bottom axis). All coordinates are device px. `anchor`:
+ * bottom axis), in the axis text style so it reads like the labels beside it.
+ * All coordinates are device px. `anchor`:
  *  - 'right'  → box starts at (cx) and extends right, vertically centred on cy
  *  - 'bottom' → box centred on cx, top edge at cy
  */
@@ -94,9 +109,10 @@ export function drawCrosshairTag(
   bg: string,
   fg: string,
   anchor: 'right' | 'bottom',
+  style: AxisStyle = DEFAULT_AXIS_STYLE,
 ): void {
   ctx.save();
-  ctx.font = `${11 * dpr}px system-ui, sans-serif`;
+  ctx.font = scaleFont(style.font, dpr);
   const padX = 6 * dpr;
   const h = 16 * dpr;
   const tw = ctx.measureText(text).width;

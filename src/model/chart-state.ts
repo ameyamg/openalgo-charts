@@ -12,12 +12,13 @@
 import type { SeriesStyle } from '../render/series-style';
 import type { PriceScaleId } from './series';
 import type { IndicatorSettings } from './indicator-registry';
-import type { PriceScaleMode } from '../scale/price-scale';
+import { PRICE_SCALE_MODES, type PriceScaleMode } from '../scale/price-scale';
 import type { AlertsDocument } from '../alerts/types';
-import type { PriceAxisPlacement } from './price-axis-layout';
+import { isPriceScaleId, type PriceAxisPlacement } from './price-axis-layout';
 import type { IndicatorPolicy } from './indicator-policy';
 import type { SeriesTransformSpec } from './series-transform';
 import type { IndicatorBarSource } from './indicator-bar-source';
+import { hasOnlyDataProperties, isPlainObject } from '../helpers/validate';
 
 /**
  * The newest state version this build reads and writes. Bumped when the shape
@@ -67,12 +68,9 @@ export interface PaneState {
 }
 
 function stateRecord(input: unknown): Record<string, unknown> {
-  if (!input || typeof input !== 'object' || Array.isArray(input)
-    || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw new Error('Invalid pane scale object');
-  if (Object.values(Object.getOwnPropertyDescriptors(input)).some(property => !('value' in property))) {
-    throw new Error('Pane scale accessors are not supported');
-  }
-  return input as Record<string, unknown>;
+  if (!isPlainObject(input)) throw new Error('Invalid pane scale object');
+  if (!hasOnlyDataProperties(input)) throw new Error('Pane scale accessors are not supported');
+  return input;
 }
 
 function stateNumber(value: unknown, label: string, min = -Number.MAX_VALUE, max = Number.MAX_VALUE): number {
@@ -92,7 +90,7 @@ function scaleState(input: unknown, legacy: boolean): PriceScaleState {
   const field = (key: string, fallback: unknown): unknown => value[key] === undefined && legacy ? fallback : value[key];
   const mode = field('mode', 'linear');
   const inverted = field('inverted', false), autoScale = field('autoScale', true);
-  if (!['linear', 'logarithmic', 'percentage', 'indexed-to-100'].includes(mode as string)
+  if (!PRICE_SCALE_MODES.includes(mode as PriceScaleMode)
     || typeof inverted !== 'boolean' || typeof autoScale !== 'boolean') throw new Error('Invalid price scale mode or flags');
   const result: PriceScaleState = {
     marginTop: stateNumber(field('marginTop', 0.1), 'top scale margin'),
@@ -139,7 +137,8 @@ export function parsePaneState(input: unknown, allowLegacyPartial = false): Pane
     const scales = stateRecord(value.scales);
     result.scales = {};
     for (const [id, state] of Object.entries(scales)) {
-      if (id !== 'left' && id !== '' && !id.startsWith('overlay:')) throw new Error('Invalid secondary price scale id');
+      // The right scale is the pane's own `priceScale`, saved above, never a secondary one.
+      if (!isPriceScaleId(id) || id === 'right') throw new Error('Invalid secondary price scale id');
       result.scales[id as PriceScaleId] = scaleState(state, false);
     }
   }

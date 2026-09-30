@@ -24,6 +24,14 @@ export interface PriceRange {
  */
 export type PriceScaleMode = 'linear' | 'logarithmic' | 'percentage' | 'indexed-to-100';
 
+/**
+ * The four price-scale modes, in the order a menu lists them. The one list:
+ * restore, the hit prefilter and the settings schema read it, so a fifth mode
+ * is added here and in the type above.
+ */
+export const PRICE_SCALE_MODES: readonly PriceScaleMode[] =
+  ['linear', 'logarithmic', 'percentage', 'indexed-to-100'];
+
 /** Whether a mode rebases prices against a baseline rather than mapping them directly. */
 export function isRebasing(mode: PriceScaleMode): boolean {
   return mode === 'percentage' || mode === 'indexed-to-100';

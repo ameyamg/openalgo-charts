@@ -137,6 +137,19 @@ describe('chart settings schema', () => {
     expect(new Set([...rowOnly, ...valueKeys]).size).toBe(rowOnly.length + valueKeys.length);
   });
 
+  it('shows the HLC area band in the colour the renderer paints when none is set', () => {
+    const { chart } = mount('hlc-area');
+    const band = allInputs(chart).find((i) => i.key === 'symbol.areaTopColor');
+    const read = readChartSettings(chart)['symbol.areaTopColor'];
+    // The renderer fills the band with this when the style sets none, on both themes.
+    const fills = baseRec(chart).ops.filter((o) => o.type === 'fill').map((o) => o.fillStyle);
+    expect(fills).toContain(read);
+    expect(band?.default).toBe(read);
+    // A colour the user picks is what both the dialog and the band show.
+    applyChartSettings(chart, { 'symbol.areaTopColor': '#8844aa' });
+    expect(readChartSettings(chart)['symbol.areaTopColor']).toBe('#8844aa');
+  });
+
   it('shows the controls the primary series type actually honours', () => {
     const candle = allInputs(mount('candlestick').chart).map((i) => i.key);
     expect(candle).toContain('symbol.wickUpColor');
@@ -146,11 +159,14 @@ describe('chart settings schema', () => {
     expect(line).toContain('symbol.lineStyle');
     expect(line).not.toContain('symbol.wickUpColor');
 
-    // Area redraws its outline through a fixed-style call, so a dash control
-    // there would be inert; the fill colours are not.
+    // Area strokes its outline as a plain line, dash and all, so it offers
+    // the control; baseline and HLC area stroke with a fixed style and do not.
     const area = allInputs(mount('area').chart).map((i) => i.key);
     expect(area).toContain('symbol.areaTopColor');
-    expect(area).not.toContain('symbol.lineStyle');
+    expect(area).toContain('symbol.lineStyle');
+    for (const fixed of ['baseline', 'hlc-area'] as const) {
+      expect(allInputs(mount(fixed).chart).map((i) => i.key), fixed).not.toContain('symbol.lineStyle');
+    }
   });
 });
 

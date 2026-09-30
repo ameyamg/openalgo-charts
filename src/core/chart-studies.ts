@@ -20,10 +20,12 @@
  */
 import { InvalidationLevel } from './invalidate-mask';
 import type { Chart } from './chart';
+import type { AddIndicatorOptions } from './chart-types';
 import type { PreservedScaleFormats } from './chart-state';
 import type { Pane } from './pane';
 import type { PriceScale } from '../scale/price-scale';
 import type { SeriesApi, PriceScaleId } from '../model/series';
+import { isPriceScaleId } from '../model/price-axis-layout';
 import { replayWindow, observeReplayWindow } from '../model/replay-window';
 import { runAbortable } from '../model/abortable-request';
 import { cloneIndicatorSettings, planIndicatorDependencies } from '../model/indicator-dependencies';
@@ -32,9 +34,9 @@ import { getIndicator, plotStyleKeys, type IndicatorDescriptor, type IndicatorRe
 import {
   IndicatorInstance, parseIndicatorPlotPriceScales, validateIndicatorScaleAssignment, type IndicatorApi, type IndicatorHost,
 } from '../model/indicator-instance';
-import { parseIndicatorPolicy, type IndicatorEditOptions, type IndicatorPolicy } from '../model/indicator-policy';
+import { parseIndicatorPolicy, type IndicatorEditOptions } from '../model/indicator-policy';
 import { validateIndicatorInputs } from '../model/indicator-inputs';
-import { parseIndicatorBarSource, type IndicatorBarSource } from '../model/indicator-bar-source';
+import { parseIndicatorBarSource } from '../model/indicator-bar-source';
 import type { SeriesStyle } from '../render/series-style';
 import type { Bar } from '../model/bar';
 import type { IPrimitive } from '../primitives/primitive';
@@ -77,8 +79,6 @@ export interface StudiesHost {
   readonly _legends: Chart['_legends'];
   readonly _legendActions: Chart['_legendActions'];
   readonly _studyLegends: Chart['_studyLegends'];
-  readonly _timeNav: Chart['_timeNav'];
-  readonly _anchored: Chart['_anchored'];
   readonly _timezone: Chart['_timezone'];
   readonly _dataContext: Chart['_dataContext'];
   readonly _barsProvider: Chart['_barsProvider'];
@@ -97,7 +97,6 @@ export interface StudiesHost {
   _wallClock: Chart['_wallClock'];
   _primaryIndex: Chart['_primaryIndex'];
   _readoutIndex: Chart['_readoutIndex'];
-  _validPriceScaleId: Chart['_validPriceScaleId'];
   _policyAllows: Chart['_policyAllows'];
   seriesType: Chart['seriesType'];
   primarySeries: Chart['primarySeries'];
@@ -140,15 +139,12 @@ export class ChartStudies {
   public addIndicator(
     indicatorId: string,
     settings: Readonly<IndicatorSettings>,
-    options: {
-      paneIndex?: number; priceScaleId?: PriceScaleId; plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>;
-      policy?: IndicatorPolicy; instanceId?: string; barSource?: IndicatorBarSource;
-    },
+    options: AddIndicatorOptions,
   ): IndicatorApi {
     const instanceId = options.instanceId;
     if (instanceId !== undefined && (typeof instanceId !== 'string' || !instanceId.trim())) throw new TypeError('Invalid indicator instance id');
     if (instanceId !== undefined && this._host._indicators.some(item => item.id === instanceId)) throw new Error(`Indicator instance id already in use: ${instanceId}`);
-    if (options.priceScaleId !== undefined && !this._host._validPriceScaleId(options.priceScaleId)) throw new TypeError('Invalid indicator price scale');
+    if (options.priceScaleId !== undefined && !isPriceScaleId(options.priceScaleId)) throw new TypeError('Invalid indicator price scale');
     const policy = options.policy === undefined ? undefined : parseIndicatorPolicy(options.policy);
     const barSource = options.barSource === undefined ? undefined : parseIndicatorBarSource(options.barSource);
     const descriptor = getIndicator(indicatorId);
@@ -253,7 +249,7 @@ export class ChartStudies {
     this._host._emit('objects:change', {});
     // Retain a pane holding drawings or host visuals even after its last plot moves.
     const source = this._host._panes[previous]!; // the pane the study was on still stands
-    if (source !== this._host._primaryPane && source.series().length === 0 && source.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive))) this._host.removePane(previous);
+    if (this._host._layout._holdsOnlyFurniture(source)) this._host.removePane(previous);
     this._reorderIndicatorResources();
     this._host._layout._recomputeAxisColumns();
     this._host._layout._relayout();
@@ -307,7 +303,7 @@ export class ChartStudies {
     const i = this._host._indicators.findIndex((x) => x.id === instanceId);
     if (i < 0) {
       const pane = failedOwnedPane === undefined ? undefined : this._host._panes[failedOwnedPane];
-      if (failedOwnedPane !== undefined && pane !== undefined && pane !== this._host._primaryPane && pane.series().length === 0 && pane.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive))) this._host.removePane(failedOwnedPane);
+      if (failedOwnedPane !== undefined && pane !== undefined && this._host._layout._holdsOnlyFurniture(pane)) this._host.removePane(failedOwnedPane);
       return;
     }
     const { indicatorId, paneIndex } = this._host._indicators[i]!;
@@ -324,6 +320,8 @@ export class ChartStudies {
     // `getState` then persisted the orphan, so every reload restored a blank
     // region. Doing it here means every caller behaves the same. The price
     // pane stays whatever emptied it, and it can sit in any slot.
+    // Unlike a move, this does not ask `_holdsOnlyFurniture`: what was placed
+    // on the pane was placed against the study's units, and it goes with it.
     const pane = this._host._panes[paneIndex];
     if (pane !== undefined && pane !== this._host._primaryPane && pane.series().length === 0) this._host.removePane(paneIndex);
   }
@@ -543,8 +541,8 @@ export class ChartStudies {
     series: readonly { api: SeriesApi; scaleId: PriceScaleId }[],
     primitives: readonly { primitive: IPrimitive; scaleId: PriceScaleId }[], commit: () => void): boolean {
     if (this._host._destroyed || !this._host._indicators.some(instance => instance.id === id)) return false;
-    for (const item of series) if (!this._host._validPriceScaleId(item.scaleId) || this._host.seriesType(item.api) === null) return false;
-    for (const item of primitives) if (!this._host._validPriceScaleId(item.scaleId) || !this._host._panes.some(pane => pane.hasPrimitive(item.primitive))) return false;
+    for (const item of series) if (!isPriceScaleId(item.scaleId) || this._host.seriesType(item.api) === null) return false;
+    for (const item of primitives) if (!isPriceScaleId(item.scaleId) || !this._host._panes.some(pane => pane.hasPrimitive(item.primitive))) return false;
     this._host._scaleMutationDepth++;
     try {
       for (const { api, scaleId } of series) {

@@ -14,6 +14,7 @@ import { cloneIndicatorSettings, planIndicatorDependencies, type IndicatorDepend
 import { validateIndicatorInputs } from './indicator-inputs';
 import { parseIndicatorPolicy, type IndicatorEditOptions, type IndicatorPolicy } from './indicator-policy';
 import type { PriceFormat, PriceScaleId, SeriesApi, SeriesDataState } from './series';
+import { isPriceScaleId } from './price-axis-layout';
 import type { PriceLine } from '../primitives/price-line';
 import type { PaneLegend, LegendValue, PaneLegendOptions } from '../primitives/pane-legend';
 import { SeriesMarkers } from '../primitives/markers';
@@ -25,6 +26,7 @@ import { IndicatorDrawings } from '../primitives/indicator-draws';
 import { IndicatorBackground } from '../primitives/indicator-background';
 import { PlotWrites } from './indicator-plot-writes';
 import { drawnTime, parseIndicatorBarSource, sampleIndicatorValues, type IndicatorBarSource } from './indicator-bar-source';
+import { isPlainObject } from '../helpers/validate';
 
 import { isInvisible, withAlpha } from '../render/pill';
 import { DEFAULT_TIMEZONE } from '../feed/time';
@@ -59,13 +61,8 @@ import type { LooseOptional } from '../helpers/types';
 const num = (v: unknown, fallback: number): number =>
   (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 
-function isPriceScaleId(value: unknown): value is PriceScaleId {
-  return typeof value === 'string' && (value === 'right' || value === 'left' || value === '' || value.startsWith('overlay:'));
-}
-
 function plotScaleEntries(descriptor: IndicatorDescriptor, input: unknown, clear: boolean): [string, PriceScaleId | null][] {
-  if (!input || typeof input !== 'object' || Array.isArray(input)
-    || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw new TypeError('Invalid indicator plot price scale map');
+  if (!isPlainObject(input)) throw new TypeError('Invalid indicator plot price scale map');
   const keys = new Set(descriptor.plots.map(plot => plot.key));
   return Reflect.ownKeys(input).map(key => {
     const property = Object.getOwnPropertyDescriptor(input, key)!;

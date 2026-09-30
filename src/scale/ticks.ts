@@ -1,9 +1,12 @@
 /**
- * "Nice number" tick generation (ARCHITECTURE.md §5). Shared by the price axis
- * (and later the time axis). Produces round, human-friendly step sizes.
+ * "Nice number" tick generation for the price axis (ARCHITECTURE.md §5).
+ * Produces round, human-friendly step sizes.
  */
 
-/** Round `x` to a "nice" value (1, 2, 2.5, 5, 10 × 10ⁿ). */
+/**
+ * Round `x` to a "nice" value: 1, 2, 5 or 10 times a power of ten. The 2.5
+ * rung the price axis also uses lives in `nextNiceStep`.
+ */
 export function niceNum(x: number, round: boolean): number {
   if (x <= 0) return 0;
   const exp = Math.floor(Math.log10(x));

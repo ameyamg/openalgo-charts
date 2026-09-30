@@ -215,11 +215,12 @@ describe('on the chart', () => {
     const spy = vi.spyOn(DrawingLayer.prototype, 'setDrawings');
     const seen: (string | null)[] = [];
     chart.on('data:context', () => seen.push(draw.interval()));
-    // A variant alone is no source change to the chart, so the helper passes
-    // through a context with the interval cleared, then sets the real one.
+    // The chart takes a variant alone as a source change, so the helper sets
+    // the context once; nothing passes through a context with the interval
+    // cleared, and the drawings, the selection and the marks stay put.
     publishDataContext(chart, { symbol: 'INFY', interval: 'D', variant: { session: 'extended' } });
     expect(chart.getDataContext()?.variant).toEqual({ session: 'extended' });
-    expect(seen).toEqual(['D', 'D']);
+    expect(seen).toEqual(['D']);
     expect(spy).not.toHaveBeenCalled();
     expect(draw.selection()).toEqual([ranged.id]);
     expect(draw.hiddenOnInterval()).toEqual([ranged.id]);

@@ -172,7 +172,7 @@ describe('what the overlay canvas carries', () => {
     })));
     // The trading layer's own drag path: the chart hands it the callbacks.
     let onDrag: ((id: string, price: number, time: number) => void) | undefined;
-    vi.spyOn(chart, 'subscribeDrag').mockImplementation((drag) => { onDrag = drag; });
+    vi.spyOn(chart, 'subscribeDrag').mockImplementation((drag) => { onDrag = drag; return () => {}; });
     chart.trading.setOrders([{ id: 'o1', type: 'limit', side: 'buy', price: 120, size: 1 }]);
     expect(onDrag).toBeDefined();
     const moved = vi.spyOn(PriceLine.prototype, 'setPrice');
@@ -244,6 +244,9 @@ describe('the invalidation mask', () => {
     const doc = /\/\*\*((?:(?!\*\/)[\s\S])*)\*\/\s*export type TimeScaleOp\b/.exec(maskSource)?.[1] ?? '';
     expect(doc).not.toBe('');
     expect(/applied to the shared time scale/i.test(doc)).toBe(readers.length > 0);
+    // A queue nothing reads is a control with nothing behind it: it is
+    // deprecated for the next major, and the tag says so where editors show it.
+    expect(/@deprecated Removed in \d+\.0\.0/.test(doc)).toBe(readers.length === 0);
   });
 });
 

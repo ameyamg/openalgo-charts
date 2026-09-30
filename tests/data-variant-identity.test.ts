@@ -157,9 +157,9 @@ describe('publishing a variant to a chart', () => {
 
     publishDataContext(chart, { symbol: 'AAPL', exchange: 'US', interval: '1m', variant: { session: 'extended' } });
 
-    // Until the chart compares variants itself, a variant-only change passes
-    // through a context with the interval cleared, and hosts see both.
-    expect(contexts.map(context => context?.interval)).toEqual([undefined, '1m']);
+    // The chart compares variants itself, so a variant-only change is one
+    // context: the detour through a context with the interval cleared never runs.
+    expect(contexts.map(context => [context?.interval, context?.variant])).toEqual([['1m', { session: 'extended' }]]);
     // The library's own studies and alerts wait for the real one: nothing
     // asks a provider for the interval-less context, reports an error for it
     // or saves the alerts twice.
@@ -169,6 +169,25 @@ describe('publishing a variant to a chart', () => {
     expect(statuses).not.toContain('error');
     expect(checkpoints).toBe(1);
     alerts.destroy();
+  });
+
+  it('is a new source to Chart.setDataContext itself, announced once', () => {
+    const chart = mount();
+    chart.setDataContext({ symbol: 'AAPL', exchange: 'US', interval: '1m' });
+    const seen: (ChartDataContext | undefined)[] = [];
+    chart.on('data:context', context => seen.push(context));
+    chart.setDataContext({ symbol: 'AAPL', exchange: 'US', interval: '1m', variant: { session: 'extended' } });
+    expect(chart.getDataContext()?.variant).toEqual({ session: 'extended' });
+    expect(seen).toHaveLength(1);
+    // The same variant in a new object is the same source.
+    chart.setDataContext({ symbol: 'AAPL', exchange: 'US', interval: '1m', variant: { session: 'extended' } });
+    expect(seen).toHaveLength(1);
+    // An unset dimension reads as absent, as dataVariantKey reads it.
+    chart.setDataContext({ symbol: 'AAPL', exchange: 'US', interval: '1m', variant: { session: 'extended', unit: undefined } });
+    expect(seen).toHaveLength(1);
+    chart.setDataContext({ symbol: 'AAPL', exchange: 'US', interval: '1m' });
+    expect(chart.getDataContext()?.variant).toBeUndefined();
+    expect(seen).toHaveLength(2);
   });
 
   it('works for a context without an interval', () => {
