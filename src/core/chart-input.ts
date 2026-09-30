@@ -47,6 +47,13 @@ import type { TimeNavigatorOptions } from '../primitives/time-navigator';
 const KINETIC_VELOCITY_HALFLIFE_MS = 50;
 
 /**
+ * How far a press may travel, in media px along either axis, and still end as
+ * a click. Past it the gesture is a drag, which is what decides whether a
+ * button under the press (an order's cancel box, a legend's hide) fires.
+ */
+const CLICK_SLOP_PX = 3;
+
+/**
  * The slice of a pointer event the payload builders read. Structural so the
  * same builders serve a coalesced sample, and so a field a browser omits
  * degrades to the spec fallback instead of an `undefined` in a host's hands.
@@ -601,13 +608,13 @@ export class ChartInput {
     if (this._pinch !== null) { this._updatePinch(); return; }
     if (this._axisDrag === 'empty') return;
     if (this._indicatorTogglePress !== null) {
-      if (Math.abs(p.x - this._downX) > 3 || Math.abs(p.localY - this._downLocalY) > 3 || p.pane !== this._downPane) {
+      if (this._movedFromPress(p.x, p.localY) || p.pane !== this._downPane) {
         this._indicatorTogglePress.moved = true;
       }
       return;
     }
     if (this._brandingPress !== null) {
-      if (Math.abs(p.x - this._downX) > 3 || Math.abs(p.localY - this._downLocalY) > 3
+      if (this._movedFromPress(p.x, p.localY)
         || p.pane !== this._downPane || (e.pointerType === 'mouse' && (e.buttons & 1) === 0)) {
         this._brandingPress.moved = true;
       }
@@ -653,7 +660,7 @@ export class ChartInput {
     // is normally set. Track the gesture here so pointerup can still tell a
     // click from a drag-to-draw.
     if ((this._placementMode || !this._dragging) && this._pointers.size > 0
-      && (Math.abs(p.x - this._downX) > 3 || Math.abs(p.localY - this._downLocalY) > 3)) {
+      && this._movedFromPress(p.x, p.localY)) {
       this._pointerMoved = true;
     }
     if (this._dragId !== null) { this._movePrimitiveDrag(e, p); return; }
@@ -684,8 +691,8 @@ export class ChartInput {
     if (togglePress) {
       const p = this._localPoint(e);
       this._endedPointers.add(e.pointerId);
-      if (!togglePress.moved && p.pane === this._downPane && Math.abs(p.x - this._downX) <= 3
-        && Math.abs(p.localY - this._downLocalY) <= 3 && this._host._legendStack._indicatorLegendHit(p.pane, p.x, p.localY)) {
+      if (!togglePress.moved && p.pane === this._downPane && Math.abs(p.x - this._downX) <= CLICK_SLOP_PX
+        && Math.abs(p.localY - this._downLocalY) <= CLICK_SLOP_PX && this._host._legendStack._indicatorLegendHit(p.pane, p.x, p.localY)) {
         this._host._handleLegendAction(INDICATOR_LEGEND_TOGGLE);
       }
       return;
@@ -695,7 +702,7 @@ export class ChartInput {
       this._brandingPress = null;
       const p = this._localPoint(e);
       if (!press.moved && press.mark === this._host._branding && p.pane === this._downPane
-        && Math.abs(p.x - this._downX) <= 3 && Math.abs(p.localY - this._downLocalY) <= 3
+        && Math.abs(p.x - this._downX) <= CLICK_SLOP_PX && Math.abs(p.localY - this._downLocalY) <= CLICK_SLOP_PX
         && this._brandingHit(p.pane, p.x, p.localY)) {
         const href = press.mark.href();
         if (href && /^https?:\/\//i.test(href)) this._host._doc.defaultView?.open(href, '_blank', 'noopener,noreferrer');
@@ -734,6 +741,11 @@ export class ChartInput {
     // A mouse or pen release places the viewport precisely; only a touch flick coasts.
     if (wasPanning && this._host._navigation.panEnabled !== false && e.pointerType === 'touch' && e.type !== 'pointercancel'
       && KineticAnimation.shouldAnimate(this._host._dragVelocity)) this._host._startKinetic(this._host._dragVelocity);
+  }
+
+  /** Whether the pointer at (x, pane y) has left the press by more than the click slop. */
+  private _movedFromPress(x: number, localY: number): boolean {
+    return Math.abs(x - this._downX) > CLICK_SLOP_PX || Math.abs(localY - this._downLocalY) > CLICK_SLOP_PX;
   }
 
   /** A press on a pane divider: start moving weight between the two panes. */
@@ -796,7 +808,7 @@ export class ChartInput {
   /** A move while a primitive is held (the caller checks `_dragId`): report the price and time under the pointer. */
   private _movePrimitiveDrag(e: PointerEvent, p: LocalPoint): void {
     const localY = p.y - (this._host._paneLayout()[this._downPane]?.top ?? 0);
-    if (Math.abs(p.x - this._downX) > 3 || Math.abs(localY - this._downLocalY) > 3) this._dragMoved = true;
+    if (this._movedFromPress(p.x, localY)) this._dragMoved = true;
     const price = this._dragPriceScale?.yToPrice(localY) ?? this._host._panes[this._downPane]!.yToPrice(localY); // the press's pane
     const time = this._host._xToTime(p.x);
     dispatch(this._dragCbs, { end: false, id: this._dragId!, price, time });
@@ -816,7 +828,7 @@ export class ChartInput {
   private _movePan(e: PointerEvent, p: LocalPoint): void {
     this._host._motion._beginAutoscaleMotion();
     const dx = p.x - this._dragStartX;
-    if (Math.abs(dx) > 3 || Math.abs(p.y - this._dragStartY) > 3) this._pointerMoved = true;
+    if (Math.abs(dx) > CLICK_SLOP_PX || Math.abs(p.y - this._dragStartY) > CLICK_SLOP_PX) this._pointerMoved = true;
     if (this._pointerMoved && this._hoverId !== null) this._setHover(null);
     // horizontal: scroll time
     this._host._mutateTimeScale(() => this._host._timeScale.setRightOffset(this._dragStartOffset - dx / this._host._timeScale.barSpacing));
