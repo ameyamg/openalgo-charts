@@ -21,24 +21,26 @@
 import type { AlertDrawingValue, AlertDrawingInfo } from 'openalgo-charts';
 import type {
   Drawing, DrawingInput, DrawingPatch, DrawingPoint, DrawingPolicy, DrawingStyle, DrawingTool, DrawingsDocument,
-  MagnetMode, ScreenPoint, DrawingGroup, DrawingSpace, DrawingStackTarget, ViewportPoint,
+  MagnetMode, ScreenPoint, DrawingGroup, DrawingSpace, DrawingStackTarget,
 } from './types';
 import type {
   DrawingChartHost, DrawingControllerOptions, DrawingGestureOptions, DrawingPlacementOptions,
-  DrawingChangeKind, DrawingChangeEvent, DrawingEditOptions, DrawingEvent, DrawingToolEvent,
+  DrawingChangeKind, DrawingChangeEvent, DrawingEditOptions, DrawingToolEvent,
 } from './controller-types';
-import { DrawingLayer, placeViewportAnchors, sortByZIndex, type DrawingPointerKind } from './layer';
+import { placeViewportAnchors, sortByZIndex, type DrawingPointerKind } from './layer';
 import { getDrawingTool, hasDrawingTool, viewportDrawingTool } from './registry';
 import { readViewportPoints } from './viewport';
 import { DrawingClipboard, cloneDrawing } from './clipboard';
 import { migrateDrawings, migrateGroups } from './migrate';
 import { InputAnchors, type InputAnchorHost, type InputAnchorStep } from './input-anchors';
-import { DrawingScreen, within, type PaneProjection, type PointerSample } from './screen';
-import { barAt, magnetModeOf, magnetPoint, type SnapBar } from './snap';
+import { DrawingScreen, type PaneProjection, type PointerSample } from './screen';
+import { magnetModeOf, magnetPoint, type SnapBar } from './snap';
 import { DrawingGestures, type GestureKeys } from './gestures';
-import { GestureLayer } from './gesture-layer';
 import { contextInterval, drawingsDocumentVersion, intervalFilter, passingContext, readIntervalRange } from './intervals';
-import { changedAnchor, historyPatch } from './patches';
+import { changedAnchor } from './patches';
+import { DrawingHistory, pinned, type DrawingHistoryEntry, type HistoryHost } from './drawing-history';
+import { DrawingDrag, type DragHost } from './drawing-drag';
+import { PaneLayerSet, slotOf, type LayerSetHost } from './pane-layers';
 
 export type {
   DrawingChartHost, DrawingControllerOptions, DrawingGestureOptions, DrawingPlacementOptions,
@@ -74,7 +76,7 @@ interface ClickPayload extends PointerFacts {
   metaKey?: boolean;
 }
 
-interface DragPayload extends PointerFacts {
+export interface DragPayload extends PointerFacts {
   id: string;
   price: number;
   time: number;
@@ -102,26 +104,10 @@ interface CrosshairPayload extends PointerFacts {
   samples?: PointerSample[];
 }
 
-/**
- * The layers of one pane: under the series, over it, and one inside the
- * series band for each entry a drawing is placed above.
- */
-interface PaneLayers {
-  bottom: DrawingLayer;
-  top: GestureLayer;
-  series: Map<string, DrawingLayer>;
-}
-
 let nextId = 1;
-// Shared by every controller on the page, so a chart rebuilt with a new
-// controller never hands out a step a history still holds for the old one.
-let nextStep = 1;
 
 const sameIds = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((id, i) => id === b[i]);
-
-/** Read-only to the user: `DrawingPolicy.editable` set to false. */
-const pinned = (d: Drawing | undefined): boolean => d?.policy?.editable === false;
 
 /**
  * Whether a key is held, from either form the payload carries it in. The flat
@@ -147,12 +133,6 @@ const gesturesOf = (base: Required<DrawingGestureOptions>, patch: DrawingGesture
   ({ ...base, ...Object.fromEntries(Object.entries(patch).filter(([key, on]) => key in base && typeof on === 'boolean')) });
 const ALL_GESTURES: Required<DrawingGestureOptions> = { snapModifier: true, measure: true, boxSelect: true, dragCopy: true };
 
-// `external` is a step of the history that is not a drawing edit, a study
-// anchor's drag: its snapshots are the drawings as they stood, unchanged by it.
-// `step` is the chart-wide history's number for the entry, so drawing edits
-// interleave with the chart's own steps in one timeline.
-interface DrawingHistoryEntry { before: string; after: string; step: number; external?: InputAnchorStep }
-
 /** @internal Reserved persistence metadata; a duplicate is a new drawing lineage. */
 export const DRAWING_LINK_METADATA_KEY = 'openalgo-charts/drawing-link';
 
@@ -164,7 +144,8 @@ export class DrawingController {
   private readonly _screen: DrawingScreen;
   /** The gestures that make no drawing: the temporary measure, box select and the eraser. */
   private readonly _gestures: DrawingGestures;
-  private readonly _layers = new Map<number, PaneLayers>();
+  /** Every pane's drawing layers; see pane-layers.ts. */
+  private readonly _layerSet = new PaneLayerSet(this as unknown as LayerSetHost);
   private _drawings: Drawing[] = [];
   private _groups: DrawingGroup[] = [];
   private _nextGroup = 1;
@@ -179,59 +160,20 @@ export class DrawingController {
   private _selection: string[] = [];
   /** The drawing under the pointer, from the chart's own hit-test. */
   private _hovered: string | null = null;
-  /**
-   * Drawings that live under the series but are painted on the top layer for
-   * the length of a drag. The top layer repaints on the cursor tier; the
-   * bottom one costs the series every frame, which is the difference between
-   * a drag that follows the hand and one that stutters through the candles.
-   */
-  private readonly _lifted = new Set<string>();
-  /** The slots the series-band drawings were last listed in; see `_slotSignature`. */
-  private _slotKey = '';
   /** Shift as of the last pointer report: what angle lock reads mid-preview. */
   private _shift = false;
   /** Ctrl or Cmd as of the last pointer report: the strong magnet while held. */
   private _strong = false;
   /** Placement mode as this controller last set it. */
   private _placing = false;
-  /** Drawings an eraser drag has touched: still in the model, left unpainted until it lets go. */
-  private _hidden: ReadonlySet<string> = new Set();
   /** The chart interval drawings are shown for; see `interval()`. */
   private _interval: string | null = null;
-  /** The drawings the chart's interval hid when the layers were last listed; see `_followInterval`. */
-  private _offInterval = '';
   /** The device behind the last pointer report, for target sizing. */
   private _pointerKind: DrawingPointerKind = 'mouse';
-  /** Snapshots for undo/redo; each is a full drawing list (they are small). */
-  private _undo: DrawingHistoryEntry[] = [];
-  private _redo: DrawingHistoryEntry[] = [];
-  private _pendingHistory: DrawingHistoryEntry | null = null;
-  /** Depth of `untracked` runs, and the drawings as they were before the host's edit in progress. */
-  private _untracked = 0;
-  private _hostEdit: string | null = null;
-  /** The host's patches the recorded steps have yet to take, merged per drawing. */
-  private readonly _hostPatches = new Map<string, DrawingPatch>();
-  /**
-   * One gesture's starting state. `items` are ids rather than objects because
-   * an undo mid-drag replaces every drawing object, and a stale reference
-   * would move a shape that is no longer in the model.
-   */
-  private _dragStart: {
-    id: string;
-    handle: number | null;
-    from: DrawingPoint;
-    /** The press on its pane's plot, in media px: what a viewport drawing moves by the pointer from. */
-    origin: ScreenPoint | null;
-    /** For a shape grabbed by its body, the anchor of it the magnet lands. */
-    anchor: number | null;
-    /** The drawing that anchor is on: the one grabbed, or its copy. */
-    lead: string;
-    /** On a drag that copies, the copies it moves and the selection they replaced. */
-    copy?: { ids: string[]; sources: string[] };
-    items: { id: string; paneIndex: number; points: DrawingPoint[]; viewportPoints?: ViewportPoint[] }[];
-    undo: DrawingHistoryEntry[];
-    redo: DrawingHistoryEntry[];
-  } | null = null;
+  /** Undo, redo and the host's own edits; see drawing-history.ts. */
+  private readonly _history = new DrawingHistory(this as unknown as HistoryHost);
+  /** The drag of a drawing or its handle; see drawing-drag.ts. */
+  private readonly _drag = new DrawingDrag(this as unknown as DragHost);
   private readonly _off: (() => void)[] = [];
   private _anchors: InputAnchors | null = null;
   /** The host's timeline an anchor step goes to instead of this history; see `delegateInputAnchorSteps`. */
@@ -252,14 +194,14 @@ export class DrawingController {
       options: () => this._opts.gestures,
       aim: (point, pane) => this._aimPoint(point, pane),
       style: () => this._opts.defaultStyle,
-      preview: () => this._syncPreview(),
+      preview: () => this._layerSet._syncPreview(),
       emit: (event, payload) => this._chart.emit(event, payload),
       // What the interval hides is not on the chart, so no box or sweep reaches it.
       drawings: () => this._drawings.filter(this._shownFilter()),
       selection: () => this._selection,
       select: (ids) => this.select(ids),
-      layer: (pane, make) => make === true ? this._layerFor(pane).top : this._layers.get(pane)?.top,
-      hide: (ids) => { this._hidden = ids; this._syncLayers(); },
+      layer: (pane, make) => make === true ? this._layerSet._layerFor(pane).top : this._layerSet._layers.get(pane)?.top,
+      hide: (ids) => { this._layerSet._hidden = ids; this._layerSet._syncLayers(); },
       erase: (ids) => { this._removeIds(ids, true); },
       plotRect: (pane) => this._chart.plotRect?.(pane) ?? null,
       placement: () => { if (!this._destroyed && this._placementWanted() !== this._placing) this._setPlacementMode(!this._placing); },
@@ -282,8 +224,8 @@ export class DrawingController {
     this._off.push(chart.on('click', (p) => this._onClick(p as ClickPayload)));
     this._off.push(chart.on('crosshair:move', (p) => this._onCrosshair(p as CrosshairPayload)));
     this._off.push(chart.on('hover', (p) => this._onHover(p as { id?: string | null })));
-    this._off.push(chart.on('drag', (p) => this._onDrag(p as DragPayload)));
-    this._off.push(chart.on('drag:end', () => this._onDragEnd()));
+    this._off.push(chart.on('drag', (p) => this._drag._onDrag(p as DragPayload)));
+    this._off.push(chart.on('drag:end', () => this._drag._onDragEnd()));
     this._off.push(chart.on('drag:cancel', () => { this.cancelDrag(); }));
     this._off.push(chart.on('data:context', context => { this.cancelDrag(); this._gestures.reset(); this._followInterval(context); }));
     this._off.push(chart.on('dblclick', () => { this.finish(); }));
@@ -311,13 +253,13 @@ export class DrawingController {
     // layers are re-listed, and only when a slot changed. Writing the chart
     // state here would announce a change of its own and come straight back.
     for (const event of ['objects:change', 'indicatorRemoved']) {
-      this._off.push(chart.on(event, () => { if (this._slotKey !== this._slotSignature()) this._syncLayers(); }));
+      this._off.push(chart.on(event, () => { if (this._layerSet._slotKey !== this._layerSet._slotSignature()) this._layerSet._syncLayers(); }));
     }
     this._interval = contextInterval(chart.getDataContext?.());
     this._sync();
     if (options.inputAnchors !== false && typeof (chart as InputAnchorHost).indicators === 'function') {
       this._anchors = new InputAnchors(chart as InputAnchorHost, {
-        record: (step, outside) => this._recordStep(step, outside),
+        record: (step, outside) => this._history._recordStep(step, outside),
         placing: () => this._tool !== null,
       });
     }
@@ -345,8 +287,8 @@ export class DrawingController {
     this._toolSpace = space;
     this._pending = [];
     this._setPlacementMode(this._placementWanted());
-    this._syncPreview();
-    this._syncSnapRing();
+    this._layerSet._syncPreview();
+    this._layerSet._syncSnapRing();
     this._emitTool();
   }
 
@@ -394,7 +336,7 @@ export class DrawingController {
       gestures: gesturesOf(this._opts.gestures, gestures),
     };
     if (clipboard !== undefined) this._clipboard.setPort(clipboard);
-    this._syncSnapRing();
+    this._layerSet._syncSnapRing();
   }
 
   /** The snap mode in force, after the boolean form has been folded. */
@@ -429,8 +371,8 @@ export class DrawingController {
         this._tool = null;
         this._toolSpace = 'data';
         this._pending = [];
-        this._syncPreview();
-        this._syncSnapRing();
+        this._layerSet._syncPreview();
+        this._layerSet._syncSnapRing();
         this._emitTool();
       }
     }
@@ -474,7 +416,7 @@ export class DrawingController {
     // step would bring its group back over this one. Serialised, a group id
     // is its quoted self; the same text anywhere else only skips a number.
     do { id = `group-${this._nextGroup++}`; } while (this._groups.some(group => group.id === id)
-      || [...this._undo, ...this._redo].some(entry => (entry.before + entry.after).includes(`"${id}"`)));
+      || [...this._history._undo, ...this._history._redo].some(entry => (entry.before + entry.after).includes(`"${id}"`)));
     const group = { id, name: name.trim(), members };
     const moved = new Set(members);
     this._regroup(options.force, groups => groups
@@ -512,9 +454,9 @@ export class DrawingController {
    * recorded step takes it as well, and no undo or redo reverses it.
    */
   private _regroup(force: boolean | undefined, edit: (groups: DrawingGroup[]) => DrawingGroup[]): void {
-    this._begin(!force);
+    this._history._begin(!force);
     this._groups = edit(this._groups);
-    if (force) this._rebase(document => { document.groups = edit(document.groups ?? []); });
+    if (force) this._history._rebase(document => { document.groups = edit(document.groups ?? []); });
   }
 
   /** The live group `id`, unless it holds a read-only drawing and the call is not forced. */
@@ -531,13 +473,13 @@ export class DrawingController {
   public reorder(id: string, direction: -1 | 1): boolean {
     const drawing = this.get(id);
     if (!drawing || this._destroyed || (direction !== -1 && direction !== 1)) return false;
-    const entries = this._entries(drawing.paneIndex), slot = this._slotOf(drawing, entries);
-    const band = this._drawings.filter(item => item.paneIndex === drawing.paneIndex && this._slotOf(item, entries) === slot)
+    const entries = this._entries(drawing.paneIndex), slot = slotOf(drawing, entries);
+    const band = this._drawings.filter(item => item.paneIndex === drawing.paneIndex && slotOf(item, entries) === slot)
       .sort((a, b) => a.zIndex - b.zIndex);
     const index = band.indexOf(drawing);
     const target = index + direction;
     if (target < 0 || target >= band.length) return false;
-    this._pushUndo();
+    this._history._pushUndo();
     [band[index], band[target]] = [band[target]!, band[index]!]; // the drawing is in its band; target is checked
     const members = new Set(band);
     let cursor = 0;
@@ -568,7 +510,7 @@ export class DrawingController {
     if ('drawing' in target) {
       const t = this.get(target.drawing);
       if (t === undefined || t === d || t.paneIndex !== d.paneIndex) return false;
-      slot = this._slotOf(t, entries);
+      slot = slotOf(t, entries);
       index = this._slotMembers(d.paneIndex, slot, entries).filter(m => m !== d).indexOf(t) + (where === 'above' ? 1 : 0);
     } else {
       const at = entries.indexOf((target as { entry: string }).entry);
@@ -577,8 +519,8 @@ export class DrawingController {
       index = where === 'above' ? 0 : this._slotMembers(d.paneIndex, slot, entries).filter(m => m !== d).length;
     }
     const members = this._slotMembers(d.paneIndex, slot, entries);
-    if (this._slotOf(d, entries) === slot && members.indexOf(d) === index) return false;
-    this._pushUndo();
+    if (slotOf(d, entries) === slot && members.indexOf(d) === index) return false;
+    this._history._pushUndo();
     const next = members.filter(m => m !== d);
     next.splice(index, 0, d);
     if (slot.startsWith('entry:')) d.stackAbove = slot.slice('entry:'.length);
@@ -595,30 +537,22 @@ export class DrawingController {
     return this._chart.seriesStack?.(paneIndex) ?? [];
   }
 
-  /**
-   * The slot a drawing paints in: `entry:<id>` while the entry it is placed
-   * above is in its pane's series band, else its side of the series by `zIndex`.
-   */
-  private _slotOf(d: Drawing, entries: readonly string[]): string {
-    return d.stackAbove !== undefined && entries.includes(d.stackAbove) ? 'entry:' + d.stackAbove : d.zIndex < 0 ? 'below' : 'above';
-  }
-
   /** The drawings of one slot of a pane, in paint order. */
   private _slotMembers(paneIndex: number, slot: string, entries: readonly string[]): Drawing[] {
-    return sortByZIndex(this._drawings.filter(d => d.paneIndex === paneIndex && this._slotOf(d, entries) === slot));
+    return sortByZIndex(this._drawings.filter(d => d.paneIndex === paneIndex && slotOf(d, entries) === slot));
   }
 
   private _remapPanes(map: (index: number) => number | null): void {
     // Cancel without syncing to numeric slots which have already shifted.
-    const drag = this._dragStart;
+    const drag = this._drag._dragStart;
     if (drag) {
-      this._dragStart = null;
-      for (const item of drag.items) { const drawing = this.get(item.id); if (drawing) this._restoreAnchors(drawing, item); }
-      this._dropCopies(drag);
-      this._undo = drag.undo;
-      this._redo = drag.redo;
-      this._pendingHistory = null;
-      this._lifted.clear();
+      this._drag._dragStart = null;
+      for (const item of drag.items) { const drawing = this.get(item.id); if (drawing) this._drag._restoreAnchors(drawing, item); }
+      this._drag._dropCopies(drag);
+      this._history._undo = drag.undo;
+      this._history._redo = drag.redo;
+      this._history._pendingHistory = null;
+      this._drag._lifted.clear();
       this._chart.emit('draw:preview-clear', { ids: drag.items.map(item => item.id) });
     }
     this._pending = [];
@@ -636,7 +570,7 @@ export class DrawingController {
       document.groups = migrateGroups(document.groups, document.drawings);
       return JSON.stringify(document);
     };
-    for (const entry of new Set([...this._undo, ...this._redo])) {
+    for (const entry of new Set([...this._history._undo, ...this._history._redo])) {
       entry.before = remapSnapshot(entry.before);
       entry.after = remapSnapshot(entry.after);
     }
@@ -647,11 +581,11 @@ export class DrawingController {
       drawing.paneIndex = pane;
       return true;
     });
-    const layers = [...this._layers.entries()];
-    this._layers.clear();
+    const layers = [...this._layerSet._layers.entries()];
+    this._layerSet._layers.clear();
     for (const [index, pair] of layers) {
       const pane = map(index);
-      if (pane !== null) this._layers.set(pane, pair);
+      if (pane !== null) this._layerSet._layers.set(pane, pair);
     }
     this._pruneSelection();
     this._sync();
@@ -718,9 +652,9 @@ export class DrawingController {
     if (this._destroyed || passingContext(context)) return;
     const read = this._chart.getDataContext;
     this._interval = contextInterval(read === undefined ? context : read.call(this._chart));
-    if (this.hiddenOnInterval().join('\u0000') === this._offInterval) return;
+    if (this.hiddenOnInterval().join('\u0000') === this._layerSet._offInterval) return;
     const shown = this._shownFilter();
-    this._syncLayers();
+    this._layerSet._syncLayers();
     const kept = this._selection.filter(id => { const d = this.get(id); return d !== undefined && shown(d); });
     if (!sameIds(kept, this._selection)) this._setSelection(kept);
     if (this._hovered !== null && !this.shownOnInterval(this._hovered)) this._setHovered(null);
@@ -731,7 +665,7 @@ export class DrawingController {
   /** Apply a linked commit without adding to this chart's local undo history. */
   public applyLinkedDrawing(id: string, drawing: Drawing | null): void {
     if (this._destroyed || this._chart.isDestroyed === true) return;
-    if (this._dragStart?.items.some(item => item.id === id)) this.cancelDrag();
+    if (this._drag._dragStart?.items.some(item => item.id === id)) this.cancelDrag();
     const index = this._drawings.findIndex(item => item.id === id);
     this._linkedPreviews.delete(id);
     if (drawing === null) {
@@ -745,7 +679,7 @@ export class DrawingController {
       else this._drawings[index] = copy;
       // A policy the other chart's host changed holds here too, history included; a removed one is written as undefined.
       if (JSON.stringify(copy.policy) !== was) {
-        this._rebase(document => { for (const d of document.drawings) if (d.id === id) (d as { policy?: DrawingPolicy | undefined }).policy = copy.policy; });
+        this._history._rebase(document => { for (const d of document.drawings) if (d.id === id) (d as { policy?: DrawingPolicy | undefined }).policy = copy.policy; });
       }
     }
     this._sync();
@@ -829,7 +763,7 @@ export class DrawingController {
     if (drawing.space === 'viewport' && (!viewportDrawingTool(drawing.tool) || readViewportPoints(drawing.viewportPoints) === null)) {
       throw new Error(`openalgo-charts: a "${drawing.tool}" drawing cannot be anchored to the viewport with those viewportPoints`);
     }
-    this._begin(!Object.values(drawing.policy ?? {}).includes(false));
+    this._history._begin(!Object.values(drawing.policy ?? {}).includes(false));
     const created = this._insert(drawing);
     this._sync();
     this._chart.emit('draw:add', { drawing: created });
@@ -919,14 +853,14 @@ export class DrawingController {
       .map(({ d, patch }) => ({ d, patch: this._spacePatch(d, patch), asked: Object.keys(patch).length }))
       .filter(({ patch, asked }) => asked === 0 || Object.keys(patch).length > 0);
     if (live.length === 0) return;
-    this._begin(!options.force && live.some(({ patch }) => !patch.policy));
+    this._history._begin(!options.force && live.some(({ patch }) => !patch.policy));
     for (const { d, patch } of live) this._applyPatch(d, patch);
     let rewrite = false;
     for (const { d, patch: { points, ...rest } } of live) {
       if (!options.force && !rest.policy) continue;
       // The host's patch, whole, and the anchors exactly where they landed:
       // a constraint run again on an older shape could put them elsewhere.
-      const held = this._hostPatches.get(d.id) ?? {};
+      const held = this._history._hostPatches.get(d.id) ?? {};
       this._applyPatch(held as Drawing, rest);
       // Data is stored as an absent space, so the held patch names it outright.
       if (rest.space !== undefined) held.space = rest.space;
@@ -935,14 +869,14 @@ export class DrawingController {
       // And a range, cleared or set, as the drawing now holds it.
       if (rest.intervals !== undefined) (held as DrawingPatch).intervals = d.intervals === undefined ? null : { ...d.intervals };
       if (points) held.points = d.points;
-      this._hostPatches.set(d.id, held);
+      this._history._hostPatches.set(d.id, held);
       // History cannot reach a read-only drawing's content until its policy
       // changes, and that change is a rewrite which takes this patch first,
       // so moving one (a trailing level, every tick) costs no rewrite. Its
       // place in the stack is within history's reach.
       rewrite ||= !pinned(d) || !!rest.policy || rest.zIndex !== undefined || rest.stackAbove !== undefined;
     }
-    if (rewrite) this._rebase();
+    if (rewrite) this._history._rebase();
     this._sync();
     for (const { d } of live) this._chart.emit('draw:update', { drawing: d });
     this._emitChange(live.map((p) => p.d.id), 'update');
@@ -1023,10 +957,10 @@ export class DrawingController {
     const wanted = new Set(ids);
     const removed = this._drawings.filter((d) => wanted.has(d.id) && (force || !pinned(d)));
     if (removed.length === 0) return [];
-    if (pushUndo) this._begin(!force);
+    if (pushUndo) this._history._begin(!force);
     const set = new Set(removed.map((d) => d.id));
     this._drawings = this._drawings.filter((d) => !set.has(d.id));
-    if (force) this._rebase(document => { document.drawings = document.drawings.filter((d) => !set.has(d.id)); });
+    if (force) this._history._rebase(document => { document.drawings = document.drawings.filter((d) => !set.has(d.id)); });
     this._selection = this._selection.filter((id) => !set.has(id));
     this._sync();
     for (const d of removed) this._chart.emit('draw:remove', { drawing: d });
@@ -1086,23 +1020,23 @@ export class DrawingController {
   private _setSelection(next: string[]): void {
     const changed = !sameIds(next, this._selection);
     this._selection = next;
-    for (const layer of this._allLayers()) layer.setSelected(next);
+    for (const layer of this._layerSet._allLayers()) layer.setSelected(next);
     if (!changed) return;
     this._chart.emit('draw:select', { id: this.selected() });
     this._chart.emit('drawing:select', { ids: next.slice() });
   }
 
   private _emitChange(ids: readonly string[], kind: DrawingChangeKind): void {
-    const recorded = this._pendingHistory;
+    const recorded = this._history._pendingHistory;
     if (recorded !== null) {
       recorded.after = this._historyText();
-      this._pendingHistory = null;
+      this._history._pendingHistory = null;
     }
-    this._takeInHostEdit();
+    this._history._takeInHostEdit();
     const change: DrawingChangeEvent = { ids: ids.slice(), kind };
     // A trim can push the step out of the branch while it is being recorded,
     // and a step nothing holds is not one to report.
-    if (recorded !== null && this._undo.includes(recorded)) change.step = recorded.step;
+    if (recorded !== null && this._history._undo.includes(recorded)) change.step = recorded.step;
     this._chart.emit('drawing:change', change);
   }
 
@@ -1117,7 +1051,7 @@ export class DrawingController {
   public setZIndex(id: string, z: number): void {
     const d = this.get(id);
     if (d === undefined || !Number.isFinite(z) || d.zIndex === z) return;
-    this._pushUndo();
+    this._history._pushUndo();
     d.zIndex = z;
     this._sync();
     this._chart.emit('draw:update', { drawing: d });
@@ -1149,7 +1083,7 @@ export class DrawingController {
   public sendBehindSeries(id: string): void {
     const d = this.get(id);
     // A placement kept for a study that is gone goes too: the user chose a side.
-    if (d !== undefined && (d.stackAbove !== undefined || this._slotOf(d, this._entries(d.paneIndex)) !== 'below')) this._crossSeries(d, -1);
+    if (d !== undefined && (d.stackAbove !== undefined || slotOf(d, this._entries(d.paneIndex)) !== 'below')) this._crossSeries(d, -1);
   }
 
   /**
@@ -1158,11 +1092,11 @@ export class DrawingController {
    */
   public bringAboveSeries(id: string): void {
     const d = this.get(id);
-    if (d !== undefined && (d.stackAbove !== undefined || this._slotOf(d, this._entries(d.paneIndex)) !== 'above')) this._crossSeries(d, 0);
+    if (d !== undefined && (d.stackAbove !== undefined || slotOf(d, this._entries(d.paneIndex)) !== 'above')) this._crossSeries(d, 0);
   }
 
   private _crossSeries(d: Drawing, z: number): void {
-    this._pushUndo();
+    this._history._pushUndo();
     d.zIndex = z;
     delete d.stackAbove;
     this._sync();
@@ -1172,15 +1106,15 @@ export class DrawingController {
 
   /** The other drawings sharing `d`'s pane and slot. */
   private _band(d: Drawing): Drawing[] {
-    const entries = this._entries(d.paneIndex), slot = this._slotOf(d, entries);
-    return this._drawings.filter((o) => o !== d && o.paneIndex === d.paneIndex && this._slotOf(o, entries) === slot);
+    const entries = this._entries(d.paneIndex), slot = slotOf(d, entries);
+    return this._drawings.filter((o) => o !== d && o.paneIndex === d.paneIndex && slotOf(o, entries) === slot);
   }
 
   private _reorder(d: Drawing, z: number, where: 'start' | 'end'): void {
     const i = this._drawings.indexOf(d);
     const target = where === 'end' ? this._drawings.length - 1 : 0;
     if (i === target && d.zIndex === z) return;
-    this._pushUndo();
+    this._history._pushUndo();
     d.zIndex = z;
     this._drawings.splice(i, 1);
     if (where === 'end') this._drawings.push(d);
@@ -1202,7 +1136,7 @@ export class DrawingController {
     if (dxPx === 0 && dyPx === 0) return;
     const list = this._targets(ids).filter((d) => d.locked !== true && !pinned(d));
     if (list.length === 0) return;
-    this._pushUndo();
+    this._history._pushUndo();
     for (const d of list) {
       if (d.space === 'viewport') {
         const frame = this._screen.plotFrame(d.paneIndex);
@@ -1227,7 +1161,7 @@ export class DrawingController {
   public duplicate(ids: readonly string[]): Drawing[] {
     const sources = this._targets(ids);
     if (sources.length === 0) return [];
-    this._pushUndo();
+    this._history._pushUndo();
     const clones = sources.map((d) => {
       const { id: _id, createdAt: _createdAt, policy: _policy, ...rest } = cloneDrawing(d);
       void _id; void _createdAt; void _policy;
@@ -1306,7 +1240,7 @@ export class DrawingController {
       // would make the paste look like it did nothing, so it is not carried.
       return { ...e, paneIndex, ...this._offsetAnchors(e, paneIndex), ...(shown(e) ? {} : { intervals: undefined }) } as DrawingInput; // `_insert` reads no range there
     });
-    this._pushUndo();
+    this._history._pushUndo();
     const created = prepared.map((p) => this._insert(p));
     this._sync();
     for (const d of created) this._chart.emit('draw:add', { drawing: d });
@@ -1423,106 +1357,11 @@ export class DrawingController {
   // ── history and persistence ─────────────────────────────────────────────
 
   public undo(): boolean {
-    this._onDragEnd();
-    // A step that held nothing but changes to drawings now read-only does
-    // nothing any more, so the press goes on to the step before it.
-    for (let snap = this._undo.pop(); snap !== undefined; snap = this._undo.pop()) {
-      this._redo.push(snap);
-      if (snap.external ? this._external(snap.external.undo(), 'undo') : this._applyHistory(snap.after, snap.before, 'undo')) return true;
-    }
-    return false;
+    return this._history.undo();
   }
 
   public redo(): boolean {
-    this._onDragEnd();
-    for (let snap = this._redo.pop(); snap !== undefined; snap = this._redo.pop()) {
-      this._undo.push(snap);
-      if (snap.external ? this._external(snap.external.redo(), 'redo') : this._applyHistory(snap.before, snap.after, 'redo')) return true;
-    }
-    return false;
-  }
-
-  /**
-   * Move the model from one snapshot to the other; false when the policy left
-   * nothing to move. Without `kind` it only answers, and moves nothing.
-   */
-  private _applyHistory(from: string, to: string, kind?: 'undo' | 'redo'): boolean {
-    const beforeDocument = migrateDrawings(JSON.parse(from));
-    const afterDocument = migrateDrawings(JSON.parse(to));
-    const before = beforeDocument.drawings;
-    const after = afterDocument.drawings;
-    const left = new Map(before.map(d => [d.id, d]));
-    const right = new Map(after.map(d => [d.id, d]));
-    const beforeOrder = before.filter(d => right.has(d.id)).map(d => d.id);
-    const afterOrder = after.filter(d => left.has(d.id)).map(d => d.id);
-    const moved = afterOrder.some(id => beforeOrder.indexOf(id) !== afterOrder.indexOf(id));
-    let held = false;
-    const ids = [...new Set([...left.keys(), ...right.keys()])].filter(id => {
-      const a = left.get(id);
-      const b = right.get(id);
-      if (JSON.stringify(a) === JSON.stringify(b) && beforeOrder.indexOf(id) === afterOrder.indexOf(id)) return false;
-      // History is what the user did, and a read-only drawing is not theirs
-      // to change: its content stays whatever a step says. Its place in the
-      // stack is outside the policy, so a step that only restacked it runs.
-      if ((pinned(a) || pinned(b) || pinned(this.get(id)))
-        && !(a && b && JSON.stringify({ ...a, zIndex: 0 }) === JSON.stringify({ ...b, zIndex: 0 }))) { held = true; return false; }
-      return true;
-    });
-    const changed = new Set(ids);
-    const previous = new Map(this._drawings.map(d => [d.id, d]));
-    const beforeGroups = new Map((beforeDocument.groups ?? []).map(group => [group.id, group]));
-    const afterGroups = new Map((afterDocument.groups ?? []).map(group => [group.id, group]));
-    const fixed = (member: string): boolean => pinned(this.get(member));
-    // Where a step leaves group `id`, the policy allowing: a read-only drawing
-    // stays in the group it is in now, and that group keeps its name. The
-    // `order` form is what is applied; the other puts the read-only members
-    // last, so a step that differs only in them compares as doing nothing.
-    const place = (group: DrawingGroup | undefined, id: string, order?: boolean): DrawingGroup | undefined => {
-      const now = this._groups.find(item => item.id === id);
-      const kept = now?.members.filter(fixed) ?? [];
-      if (!kept.length && !group?.members.some(fixed)) return group;
-      const rest = group?.members.filter(member => !fixed(member) || (order && kept.includes(member))) ?? [];
-      const members = [...new Set([...rest, ...kept])];
-      return members.length ? { id, name: (kept.length ? now : group)!.name, members } : undefined;
-    };
-    const changedGroups = new Set([...beforeGroups.keys(), ...afterGroups.keys()]
-      .filter(id => JSON.stringify(place(beforeGroups.get(id), id)) !== JSON.stringify(place(afterGroups.get(id), id))));
-    // A step with nothing left to do is skipped by a press, and dropped by a
-    // rewrite (`kind` absent), which is where a grouping step the policy has
-    // emptied goes; one that never did anything still runs, as it always has.
-    if (!ids.length && !changedGroups.size && !moved && (held || !kind)) return false;
-    if (!kind) return true;
-    const regrouped = [...changedGroups].map(id => place(afterGroups.get(id), id, true));
-    this._groups = this._groups.filter(group => !changedGroups.has(group.id));
-    for (const group of regrouped) if (group) this._groups.push(group);
-    // Property history patches in place. Removing and reinserting every edited
-    // shape would also undo a later reorder performed on another chart.
-    this._drawings = this._drawings.filter(d => !changed.has(d.id) || right.has(d.id))
-      .map(d => changed.has(d.id) ? historyPatch(d, left.get(d.id), right.get(d.id)) as Drawing : d);
-    for (let i = 0; i < after.length; i++) {
-      const drawing = after[i]!; // i is in range
-      // An edit cannot resurrect somebody else's deletion. Only history which
-      // actually removed an id can restore it here.
-      if (!changed.has(drawing.id) || previous.has(drawing.id) || left.has(drawing.id)) continue;
-      const next = after.slice(i + 1).find(d => this.get(d.id) !== undefined);
-      const at = next === undefined ? this._drawings.length : this._drawings.findIndex(d => d.id === next.id);
-      this._drawings.splice(at, 0, drawing);
-    }
-    const reordered = afterOrder.filter(id => beforeOrder.indexOf(id) !== afterOrder.indexOf(id))
-      .map(id => this.get(id)).filter((d): d is Drawing => d !== undefined);
-    const moving = new Set(reordered.map(d => d.id));
-    let position = 0;
-    this._drawings = this._drawings.map(d => moving.has(d.id) ? reordered[position++]! : d); // one per moving
-    this._pruneSelection();
-    this._sync();
-    for (const id of ids) {
-      const drawing = this.get(id);
-      const old = previous.get(id);
-      if (drawing !== undefined) this._chart.emit(old === undefined ? 'draw:add' : 'draw:update', { drawing, history: true } satisfies DrawingEvent);
-      else if (old !== undefined) this._chart.emit('draw:remove', { drawing: old, history: true } satisfies DrawingEvent);
-    }
-    this._emitChange(ids, kind);
-    return true;
+    return this._history.redo();
   }
 
   /** Drop selected ids the model no longer holds, or that can no longer be selected. */
@@ -1531,8 +1370,8 @@ export class DrawingController {
     if (!sameIds(next, this._selection)) this._setSelection(next);
   }
 
-  public canUndo(): boolean { return this._undo.length > 0; }
-  public canRedo(): boolean { return this._redo.length > 0; }
+  public canUndo(): boolean { return this._history._undo.length > 0; }
+  public canRedo(): boolean { return this._history._redo.length > 0; }
 
   /**
    * The steps each branch holds, oldest first, by the number `drawing:change`
@@ -1543,8 +1382,8 @@ export class DrawingController {
    * recorded, a drag in progress, is not listed until its change closes it.
    */
   public historySteps(): { undo: number[]; redo: number[] } {
-    const closed = (entry: DrawingHistoryEntry): boolean => entry !== this._pendingHistory;
-    return { undo: this._undo.filter(closed).map(entry => entry.step), redo: this._redo.map(entry => entry.step) };
+    const closed = (entry: DrawingHistoryEntry): boolean => entry !== this._history._pendingHistory;
+    return { undo: this._history._undo.filter(closed).map(entry => entry.step), redo: this._history._redo.map(entry => entry.step) };
   }
 
   /**
@@ -1556,36 +1395,7 @@ export class DrawingController {
    * across drawings and its own changes, whose own changes are never steps.
    */
   public untracked<T>(fn: () => T): T {
-    this._untracked++;
-    try { return fn(); }
-    finally {
-      // An edit a throw cut short is still the host's, and must not join the next one.
-      if (--this._untracked === 0) this._takeInHostEdit();
-    }
-  }
-
-  /** Give every recorded step the host's edit, drawing by drawing and group by group. */
-  private _takeInHostEdit(): void {
-    const from = this._hostEdit;
-    if (from === null) return;
-    this._hostEdit = null;
-    const was = migrateDrawings(JSON.parse(from));
-    const now = this._document(this._drawings);
-    const take = <T extends { id: string }>(list: T[], before: readonly T[], after: readonly T[]): T[] => {
-      const left = new Map(before.map(item => [item.id, JSON.stringify(item)]));
-      const right = new Map(after.map(item => [item.id, item]));
-      const changed = new Set([...left.keys(), ...right.keys()]
-        .filter(id => left.get(id) !== (right.has(id) ? JSON.stringify(right.get(id)) : undefined)));
-      // Changed where a step has it, gone everywhere, and made everywhere: a
-      // drawing the host changed is not put into a step from before it existed.
-      const out = list.filter(item => !changed.has(item.id) || right.has(item.id)).map(item => (changed.has(item.id) ? right.get(item.id)! : item));
-      for (const id of changed) if (!left.has(id) && !out.some(item => item.id === id)) out.push(right.get(id)!);
-      return out;
-    };
-    this._rebase(document => {
-      document.drawings = take(document.drawings, was.drawings, now.drawings);
-      document.groups = take(document.groups ?? [], was.groups ?? [], now.groups ?? []);
-    });
+    return this._history.untracked(fn);
   }
 
   /**
@@ -1620,10 +1430,10 @@ export class DrawingController {
     const document = migrateDrawings(data);
     this._drawings = document.drawings;
     this._groups = document.groups ?? [];
-    this._undo = [];
-    this._redo = [];
-    this._hostPatches.clear();
-    this._pendingHistory = null;
+    this._history._undo = [];
+    this._history._redo = [];
+    this._history._hostPatches.clear();
+    this._history._pendingHistory = null;
     this._setSelection([]);
     this._sync();
     this._chart.emit('draw:restore', {});
@@ -1642,18 +1452,13 @@ export class DrawingController {
     this._setPlacementMode(false);   // never leave the chart unable to pan
     for (const off of this._off) off();
     this._off.length = 0;
-    for (const l of this._layers.values()) {
+    for (const l of this._layerSet._layers.values()) {
       l.top.setBelow(null);
       this._chart.removePrimitive(l.top);
       this._chart.removePrimitive(l.bottom);
       for (const layer of l.series.values()) this._chart.removePrimitive(layer);
     }
-    this._layers.clear();
-  }
-
-  /** Every layer of every pane. */
-  private _allLayers(): DrawingLayer[] {
-    return [...this._layers.values()].flatMap(l => [l.bottom, l.top, ...l.series.values()]);
+    this._layerSet._layers.clear();
   }
 
   // ── interaction ─────────────────────────────────────────────────────────
@@ -1681,9 +1486,9 @@ export class DrawingController {
       for (const q of this._screen.coalesced(p, { time, price }, paneIndex)) this._inkPoint(q, paneIndex);
       return;
     }
-    this._syncSnapRing();
+    this._layerSet._syncSnapRing();
     // A tool mid-placement previews against the live cursor, and so does a ruler.
-    if ((this._tool !== null && this._pending.length > 0) || this._gestures.follow(this._lastCursor)) this._syncPreview();
+    if ((this._tool !== null && this._pending.length > 0) || this._gestures.follow(this._lastCursor)) this._layerSet._syncPreview();
   }
 
   /** The chart's hit-test answer for the pointer position, whenever it changes. */
@@ -1698,7 +1503,7 @@ export class DrawingController {
   private _setHovered(id: string | null): void {
     if (id === this._hovered) return;
     this._hovered = id;
-    for (const layer of this._allLayers()) layer.setHovered(id);
+    for (const layer of this._layerSet._allLayers()) layer.setHovered(id);
     this._chart.emit('drawing:hover', { id });
   }
 
@@ -1707,7 +1512,7 @@ export class DrawingController {
     const kind = pointerKindOf(p);
     if (kind === this._pointerKind) return;
     this._pointerKind = kind;
-    for (const layer of this._allLayers()) layer.setPointerType(kind);
+    for (const layer of this._layerSet._allLayers()) layer.setPointerType(kind);
   }
 
   /**
@@ -1754,7 +1559,7 @@ export class DrawingController {
       if (last.time === point.time && last.price === point.price) return;
     }
     this._pending.push(point);
-    this._syncPreview();
+    this._layerSet._syncPreview();
   }
 
   /** Commit `pts` as a drawing of the armed tool and leave placement. */
@@ -1778,8 +1583,8 @@ export class DrawingController {
       this._toolSpace = 'data';
       this._setPlacementMode(this._placementWanted());   // hand panning back to the chart
     }
-    this._syncPreview();
-    this._syncSnapRing();
+    this._layerSet._syncPreview();
+    this._layerSet._syncSnapRing();
     this.select(created.id);
     this._emitTool();
   }
@@ -1796,7 +1601,7 @@ export class DrawingController {
     const pts = this._pending;
     this._pending = [];
     if (pts.length < 2) {           // a tap is not a stroke
-      this._syncPreview();
+      this._layerSet._syncPreview();
       return;
     }
     this._commit(this._screen.thinStroke(pts, this._pendingPane));
@@ -1816,7 +1621,7 @@ export class DrawingController {
     const pts = this._pending;
     if (pts.length < 2) {           // a single vertex is not a shape
       this._pending = [];
-      this._syncPreview();
+      this._layerSet._syncPreview();
       return false;
     }
     this._commit(pts);
@@ -1840,12 +1645,12 @@ export class DrawingController {
       this._tool = null;
       this._toolSpace = 'data';
       this._setPlacementMode(this._placementWanted());
-      this._syncPreview();
-      this._syncSnapRing();
+      this._layerSet._syncPreview();
+      this._layerSet._syncSnapRing();
       this._chart.emit('draw:tool', { tool: null });
       return true;
     }
-    this._syncPreview();
+    this._layerSet._syncPreview();
     return true;
   }
 
@@ -1861,7 +1666,7 @@ export class DrawingController {
     const tool = getDrawingTool(this._tool);
     if (tool.points !== 0 || tool.freehand === true) return false;
     this._pending.pop();
-    this._syncPreview();
+    this._layerSet._syncPreview();
     return true;
   }
 
@@ -1906,7 +1711,7 @@ export class DrawingController {
     if (tool.points > 0 && this._pending.length >= tool.points) {
       this._commit(this._expand(tool, this._pending));
     } else {
-      this._syncPreview();
+      this._layerSet._syncPreview();
     }
   }
 
@@ -1955,216 +1760,9 @@ export class DrawingController {
     this._strong = this._opts.gestures.snapModifier && (held(p, 'ctrl') || held(p, 'meta'));
   }
 
-  /**
-   * The anchor of a grabbed shape the magnet lands: the one nearest the
-   * press, since what the hand is closest to is what it means to put down.
-   */
-  private _grabbedAnchor(d: Drawing, p: DragPayload): number | null {
-    if (d.space === 'viewport' || d.points.length === 0) return null;
-    const press = this._screen.toPixel({ time: p.fromTime ?? p.time, price: p.fromPrice ?? p.price }, d.paneIndex);
-    let best = 0;
-    let bestD = Infinity;
-    d.points.forEach((q, i) => {
-      const at = press === null ? null : this._screen.toPixel(q, d.paneIndex);
-      const dist = at === null || press === null ? i : Math.hypot(at.x - press.x, at.y - press.y);
-      if (dist < bestD) { bestD = dist; best = i; }
-    });
-    return best;
-  }
-
-  /**
-   * A shape's move with the magnet's pull on its grabbed anchor applied, or
-   * null when nothing pulls: the whole shape shifts by what lands that one
-   * anchor on the value, so it keeps its form.
-   */
-  private _pullShape(start: NonNullable<typeof this._dragStart>, dt: number, dp: number): { dt: number; dp: number } | null {
-    const item = start.anchor === null ? undefined : start.items.find((i) => i.id === start.lead);
-    const a = item === undefined || item.viewportPoints !== undefined ? undefined : item.points[start.anchor as number];
-    if (a === undefined) return null;
-    const moved = { time: a.time + dt, price: a.price + dp };
-    const hit = this._snapPoint(moved, item!.paneIndex, barAt(this._chart, moved.time));
-    return hit === null ? null : { dt: hit.time - a.time, dp: hit.price - a.price };
-  }
-
-  private _onDrag(p: DragPayload): void {
-    if (!p.id.startsWith('draw:')) return;
-    const [rawId, handleStr] = p.id.slice('draw:'.length).split('#') as [string, ...string[]]; // a split has a first part
-    const d = this.get(rawId);
-    if (d === undefined || d.locked === true || pinned(d) || !this._selectable(rawId)) return;
-    const handle = handleStr === undefined ? null : Number(handleStr);
-
-    this._notePointer(p);
-    this._noteKeys(p);
-    if (this._dragStart === null || this._dragStart.id !== rawId || this._dragStart.handle !== handle) {
-      // Grabbing the body of an unselected shape selects it first, on its own:
-      // the selection is what moves, and a drag that moved something other than
-      // what it grabbed would be a surprise.
-      if (handle === null && !this._selection.includes(rawId)) this.select(rawId);
-      let moving = handle === null
-        ? this._targets(this._selection).filter((m) => m.locked !== true && !pinned(m))
-        : [d];
-      // Alt on a body moves copies instead, and only once the pointer has
-      // really travelled: a copy dropped by a jitter would sit unseen under
-      // the drawing it copies.
-      const copy = handle === null && this._opts.gestures.dragCopy && p.modifiers?.alt === true;
-      if (copy && !this._travelled(p)) return;
-      // Snapshot once per gesture so undo restores the pre-drag position, not
-      // an intermediate frame.
-      const undo = this._undo.slice();
-      const redo = this._redo.slice();
-      this._pushUndo();
-      const sources = this._selection.slice();
-      const lead = moving.indexOf(d);
-      if (copy) moving = this._copies(moving);
-      this._dragStart = {
-        id: rawId, handle,
-        undo, redo,
-        from: { time: p.fromTime ?? p.time, price: p.fromPrice ?? p.price },
-        origin: this._screen.dragOrigin(p),
-        anchor: handle === null ? this._grabbedAnchor(d, p) : null,
-        lead: moving[lead]?.id ?? rawId,
-        ...(copy ? { copy: { ids: moving.map((m) => m.id), sources } } : {}),
-        items: moving.map((m) => ({
-          id: m.id, paneIndex: m.paneIndex, points: m.points.map((q) => ({ ...q })),
-          ...(m.space === 'viewport' ? { viewportPoints: (m.viewportPoints ?? []).map((q) => ({ ...q })) } : {}),
-        })),
-      };
-      // Anything under the series rides on the top layer for the gesture, so
-      // the frames that follow repaint the overlay alone. Lifting re-lists the
-      // bottom layer once, which is the one series repaint a lifted drag
-      // costs; a drag with nothing to lift never touches it.
-      let lifted = false;
-      for (const m of moving) {
-        if (!this._onTop(m)) { this._lifted.add(m.id); lifted = true; }
-      }
-      this._moveDrag(p, d, handle);
-      if (lifted) this._sync();
-      else this._syncDrag();
-      this._emitDragPreview();
-      return;
-    }
-    this._moveDrag(p, d, handle);
-    this._syncDrag();
-    this._emitDragPreview();
-  }
-
-  /** Whether a drag has left its press by more than the chart's click slop, on screen. */
-  private _travelled(p: DragPayload): boolean {
-    const from = this._screen.toPixel({ time: p.fromTime ?? p.time, price: p.fromPrice ?? p.price }, p.paneIndex);
-    const to = this._screen.toPixel({ time: p.time, price: p.price }, p.paneIndex);
-    return from === null || to === null || Math.hypot(to.x - from.x, to.y - from.y) > 3;
-  }
-
-  /**
-   * Copies of `sources` for a drag to move, in the model and selected. A
-   * copy is the user's own drawing, as a duplicate is: no policy, a fresh
-   * id, and `_insert` drops the link lineage.
-   */
-  private _copies(sources: readonly Drawing[]): Drawing[] {
-    const copies = sources.map((m) => {
-      const { id: _id, createdAt: _createdAt, policy: _policy, ...rest } = cloneDrawing(m);
-      void _id; void _createdAt; void _policy;
-      return this._insert(rest);
-    });
-    this._setSelection(copies.map((c) => c.id));
-    return copies;
-  }
-
-  /** A cancelled copy leaves nothing: its copies go, and the selection is what they were copied from. */
-  private _dropCopies(start: NonNullable<typeof this._dragStart>): void {
-    if (start.copy === undefined) return;
-    const gone = new Set(start.copy.ids);
-    this._drawings = this._drawings.filter((d) => !gone.has(d.id));
-    this._setSelection(start.copy.sources.filter((id) => this._selectable(id)));
-  }
-
-  private _emitDragPreview(): void {
-    const drawings = this._dragStart?.items.map(item => this.get(item.id)).filter((d): d is Drawing => d !== undefined) ?? [];
-    this._chart.emit('draw:preview', { drawings: drawings.map(cloneDrawing) });
-  }
-
   /** Roll back an interrupted drag and leave the pre-gesture undo/redo stacks intact. */
   public cancelDrag(): boolean {
-    const start = this._dragStart;
-    if (start === null) return false;
-    this._dragStart = null;
-    for (const item of start.items) {
-      const drawing = this.get(item.id);
-      if (drawing !== undefined) this._restoreAnchors(drawing, item);
-    }
-    this._dropCopies(start);
-    this._undo = start.undo;
-    this._redo = start.redo;
-    this._pendingHistory = null;
-    this._lifted.clear();
-    if (this._chart.isDestroyed !== true) this._sync();
-    this._chart.emit('draw:preview-clear', { ids: start.items.map(item => item.id) });
-    return true;
-  }
-
-  /** Apply one drag frame to the model, from the gesture's snapshot. */
-  private _moveDrag(p: DragPayload, d: Drawing, handle: number | null): void {
-    const start = this._dragStart as NonNullable<typeof this._dragStart>;
-    if (handle === null) {
-      // Whole shape: translate every anchor of every selected shape by the
-      // cursor delta. A shape on another pane cannot take the price delta (its
-      // scale is a different quantity), so it takes the same screen distance.
-      const pull = this._pullShape(start, p.time - start.from.time, p.price - start.from.price);
-      const dt = pull?.dt ?? p.time - start.from.time;
-      const dp = pull?.dp ?? p.price - start.from.price;
-      const dy = this._screen.pixelDelta(start.from.price, pull === null ? p.price : start.from.price + dp, p.paneIndex);
-      // A pinned shape takes the pointer's travel on screen, as a fraction of
-      // its own pane, so it moves with the hand whatever the scales say.
-      const at = this._screen.gesturePlot(p, p.paneIndex);
-      const travel = at === null || start.origin === null ? null : { x: at.x - start.origin.x, y: at.y - start.origin.y };
-      for (const item of start.items) {
-        const m = this.get(item.id);
-        if (m === undefined) continue;
-        if (item.viewportPoints !== undefined) {
-          const frame = this._screen.plotFrame(item.paneIndex);
-          if (frame !== null && travel !== null) m.viewportPoints = this._screen.shiftPinned(m, item.viewportPoints, travel.x, travel.y, frame);
-          continue;
-        }
-        const samePane = item.paneIndex === p.paneIndex;
-        m.points = item.points.map((q) => ({
-          ...q,
-          time: q.time + dt,
-          price: samePane ? q.price + dp : this._screen.offsetPrice(q.price, item.paneIndex, dy),
-        }));
-      }
-    } else if (d.space === 'viewport') {
-      // A handle lands under the pointer, held on the plot, and then the box
-      // is kept inside it: a note's one handle is its corner, and the rest of
-      // the note has to stay where it can be seen and grabbed again too.
-      const anchors = start.items[0]!.viewportPoints ?? []; // a handle drag carries its one drawing
-      const at = this._screen.gesturePlot(p, d.paneIndex);
-      const frame = this._screen.plotFrame(d.paneIndex);
-      if (handle >= 0 && handle < anchors.length && at !== null && frame !== null) {
-        const { width, height } = frame;
-        const placed = placeViewportAnchors(d, anchors, width, height);
-        placed[handle] = { x: within(at.x, width), y: within(at.y, height) };
-        // Where the box reaches an edge before the handle does (a label above
-        // a box), the handle stops short instead of pushing the other corners
-        // away from the edge it was dragged to.
-        placed[handle] = placeViewportAnchors(d, placed.map((q) => ({ x: q.x / width, y: q.y / height })), width, height)[handle]!;
-        d.viewportPoints = this._screen.pinPlot(d, placed, frame);
-      }
-    } else if (handle >= 0 && handle < d.points.length) {
-      const item = start.items[0]!; // a handle drag carries its one drawing, and handle is one of its anchors
-      const target: DrawingPoint = { time: p.time, price: p.price };
-      // Shift on the handle of a two-anchor line locks it to the 45 degree
-      // step about the other anchor, the same way placement does, and the
-      // lock wins over the magnet there too.
-      const locked = this._shift && item.points.length === 2 && hasDrawingTool(d.tool) && getDrawingTool(d.tool).angleLock === true
-        ? this._screen.lockAngle(item.points[1 - handle]!, target, d.paneIndex) : null;
-      const landed = locked ?? this._snapPoint(target, d.paneIndex, barAt(this._chart, target.time)) ?? target;
-      const moved = item.points.map((q, i) => (i === handle ? { ...q, ...landed } : { ...q }));
-      // A tool with a constraint reads the whole set after the one anchor
-      // moved, from the gesture's snapshot every frame: constraining the
-      // already-constrained previous frame would let a flip feed on itself.
-      const tool = hasDrawingTool(d.tool) ? getDrawingTool(d.tool) : undefined;
-      d.points = tool?.constrain === undefined ? moved : tool.constrain(moved, handle);
-    }
+    return this._drag.cancelDrag();
   }
 
   /**
@@ -2192,62 +1790,12 @@ export class DrawingController {
       .map((p) => ({ x: frame.left + p.x, y: frame.top + p.y }));
   }
 
-  /** Put a drawing's anchors back as a gesture found them. */
-  private _restoreAnchors(d: Drawing, item: { points: readonly DrawingPoint[]; viewportPoints?: readonly ViewportPoint[] }): void {
-    d.points = item.points.map((point) => ({ ...point }));
-    if (item.viewportPoints !== undefined) d.viewportPoints = item.viewportPoints.map((point) => ({ ...point }));
-  }
-
-  private _onDragEnd(): void {
-    if (this._dragStart === null) return;
-    const moved = this._dragStart.items.map((i) => this.get(i.id)).filter((m): m is Drawing => m !== undefined);
-    const copied = this._dragStart.copy !== undefined;
-    this._dragStart = null;
-    this._chart.emit('draw:preview-clear', { ids: moved.map(d => d.id) });
-    // Whatever was lifted for the gesture goes back under the series.
-    if (this._lifted.size > 0) {
-      this._lifted.clear();
-      this._sync();
-    }
-    // A copy is new at the drop: announced once, where it landed, so a link
-    // or an autosave never sees it at the place it was copied from.
-    for (const m of moved) this._chart.emit(copied ? 'draw:add' : 'draw:update', { drawing: m });
-    if (moved.length > 0) this._emitChange(moved.map((m) => m.id), copied ? 'add' : 'update');
-  }
-
   // ── plumbing ────────────────────────────────────────────────────────────
-
-  /**
-   * The pair of layers for a pane, made on first use. The bottom one is added
-   * first so a host that lists primitives sees them in paint order; the top one
-   * adopts it so handles and hit-tests come from one place.
-   */
-  private _layerFor(paneIndex: number): PaneLayers {
-    let pair = this._layers.get(paneIndex);
-    if (pair === undefined) {
-      pair = { bottom: new DrawingLayer('bottom'), top: new GestureLayer(), series: new Map() };
-      this._chart.addPrimitive(pair.bottom, paneIndex);
-      this._chart.addPrimitive(pair.top, paneIndex);
-      pair.top.setBelow(pair.bottom);
-      pair.bottom.setSelected(this._selection);
-      pair.top.setSelected(this._selection);
-      this._layers.set(paneIndex, pair);
-    }
-    return pair;
-  }
-
-  /**
-   * Whether a drawing paints on the top layer: over the series and outside
-   * the series band, or lifted for a drag.
-   */
-  private _onTop(d: Drawing, entries = this._entries(d.paneIndex)): boolean {
-    return this._lifted.has(d.id) || this._slotOf(d, entries) === 'above';
-  }
 
   /** Push the current list into each pane's layers and into the chart state. */
   private _sync(): void {
     this._groups = migrateGroups(this._groups, this._drawings);
-    this._syncLayers();
+    this._layerSet._syncLayers();
     // A hover or a selection on a drawing that has just gone, or has just
     // been made unselectable, would otherwise outlive it until the pointer
     // next moves.
@@ -2256,244 +1804,4 @@ export class DrawingController {
     this._chart.setDrawingState(this.toJSON());
   }
 
-  /** Each drawing placed in the series band, with the slot it resolves to now. */
-  private _slotSignature(): string {
-    const stacks = new Map<number, readonly string[]>();
-    let key = '';
-    for (const d of this._drawings) {
-      if (d.stackAbove === undefined) continue;
-      let entries = stacks.get(d.paneIndex);
-      if (entries === undefined) stacks.set(d.paneIndex, entries = this._entries(d.paneIndex));
-      key += d.id + '\u0000' + this._slotOf(d, entries) + '\u0000';
-    }
-    return key;
-  }
-
-  /** List every drawing on the layer of the slot it paints in. */
-  private _syncLayers(): void {
-    this._slotKey = this._slotSignature();
-    const byPane = new Map<number, { below: Drawing[]; above: Drawing[]; series: Map<string, Drawing[]> }>();
-    const stacks = new Map<number, readonly string[]>();
-    const shown = this._shownFilter();
-    const off: string[] = [];
-    for (const committed of this._drawings) {
-      if (!shown(committed)) { off.push(committed.id); continue; }
-      if (this._hidden.has(committed.id)) continue;
-      const d = this._linkedPreviews.get(committed.id) ?? committed;
-      let lists = byPane.get(d.paneIndex);
-      if (lists === undefined) {
-        lists = { below: [], above: [], series: new Map() };
-        byPane.set(d.paneIndex, lists);
-      }
-      let entries = stacks.get(d.paneIndex);
-      if (entries === undefined) stacks.set(d.paneIndex, entries = this._entries(d.paneIndex));
-      const slot = this._lifted.has(d.id) ? 'above' : this._slotOf(d, entries);
-      if (slot === 'above') lists.above.push(d);
-      else if (slot === 'below') lists.below.push(d);
-      else {
-        const list = lists.series.get(slot.slice('entry:'.length));
-        if (list) list.push(d); else lists.series.set(slot.slice('entry:'.length), [d]);
-      }
-    }
-    for (const [pane, lists] of byPane) {
-      const l = this._layerFor(pane);
-      l.bottom.setDrawings(lists.below);
-      l.top.setDrawings(lists.above);
-      this._syncSeriesLayers(pane, l, lists.series, stacks.get(pane) ?? []);
-    }
-    // Panes that lost their last drawing must be cleared, not left stale.
-    for (const [pane, l] of this._layers) {
-      if (!byPane.has(pane)) {
-        l.bottom.setDrawings([]);
-        l.top.setDrawings([]);
-        this._syncSeriesLayers(pane, l, new Map(), []);
-      }
-      for (const layer of [l.bottom, l.top, ...l.series.values()]) layer.setSelected(this._selection);
-    }
-    this._offInterval = off.join('\u0000');
-  }
-
-  /**
-   * One series-band layer per entry a drawing on this pane is placed above,
-   * made on first use and dropped when its last drawing leaves, each painted
-   * by the chart right after its entry. The top layer answers for them,
-   * front to back, then for the layer under the series.
-   */
-  private _syncSeriesLayers(pane: number, l: PaneLayers, groups: ReadonlyMap<string, Drawing[]>, entries: readonly string[]): void {
-    for (const [entry, layer] of l.series) {
-      if (groups.has(entry)) continue;
-      l.series.delete(entry);
-      this._chart.removePrimitive(layer);
-    }
-    for (const [entry, list] of groups) {
-      let layer = l.series.get(entry);
-      if (layer === undefined) {
-        layer = new DrawingLayer('series');
-        this._chart.addPrimitive(layer, pane);
-        this._chart.setPrimitiveStackAbove?.(layer, entry);
-        layer.setPointerType(this._pointerKind);
-        layer.setHovered(this._hovered);
-        l.series.set(entry, layer);
-      }
-      layer.setDrawings(list);
-    }
-    l.top.setBelow([...entries].reverse().flatMap(entry => l.series.get(entry) ?? []).concat(l.bottom));
-  }
-
-  /**
-   * The per-frame half of a drag: only the top layers of the panes the
-   * gesture touches are re-listed, so the repaint stays on the cursor tier.
-   * Everything moving is on a top layer by then (anything under the series
-   * was lifted when the gesture began), and the bottom layers have not
-   * changed since, so re-listing them would cost a series repaint for
-   * nothing.
-   */
-  private _syncDrag(): void {
-    const start = this._dragStart;
-    if (start === null) return;
-    const panes = new Set(start.items.map((i) => i.paneIndex));
-    const shown = this._shownFilter();
-    for (const pane of panes) {
-      const l = this._layers.get(pane);
-      if (l === undefined) continue;
-      l.top.setDrawings(this._drawings.filter((d) => d.paneIndex === pane && this._onTop(d) && shown(d)));
-    }
-    this._chart.setDrawingState(this.toJSON());
-  }
-
-  /**
-   * Mirror the in-progress anchors (plus the cursor) into the preview slot.
-   * The cursor point goes through the same aim as a click would, so the
-   * preview shows the locked angle or the snapped anchor before it lands.
-   */
-  private _syncPreview(): void {
-    for (const l of this._layers.values()) l.top.setPreview(null);
-    const ruler = this._gestures.ruler();
-    if (ruler !== null) this._layerFor(ruler.paneIndex).top.setPreview(ruler);
-    if (this._tool === null || this._pending.length === 0) return;
-    const cursor = this._lastCursor;
-    const points = cursor === null || cursor.paneIndex !== this._pendingPane
-      ? this._pending
-      : [...this._pending, this._aimPoint({ time: cursor.time, price: cursor.price }, cursor.paneIndex)];
-    this._layerFor(this._pendingPane).top.setPreview({
-      id: '__preview', tool: this._tool, points, style: this._opts.defaultStyle,
-      paneIndex: this._pendingPane, zIndex: 0,
-    });
-  }
-
-  /**
-   * Show where the magnet will land the next click, or nothing. A ring only
-   * while a click would place an anchor: a tool armed, not a brush (which
-   * inks where the pointer is), and the pull actually applying at the cursor.
-   * Angle lock bypasses the magnet, so it hides the ring too.
-   */
-  private _syncSnapRing(): void {
-    const cursor = this._lastCursor;
-    let ring: DrawingPoint | null = null;
-    let pane = cursor?.paneIndex ?? this._pendingPane;
-    if (cursor !== null && this._tool !== null && !this._isFreehand()
-      && this._lockedPoint({ time: cursor.time, price: cursor.price }, cursor.paneIndex) === null) {
-      ring = this._snapPoint({ time: cursor.time, price: cursor.price }, cursor.paneIndex);
-      pane = cursor.paneIndex;
-    }
-    for (const [index, l] of this._layers) l.top.setSnapPoint(index === pane ? ring : null);
-    // The ring's pane may not have layers yet (no drawing there so far); make
-    // them only when there is a ring to paint, since a pair costs a pane repaint.
-    if (ring !== null && !this._layers.has(pane)) this._layerFor(pane).top.setSnapPoint(ring);
-  }
-
-  /**
-   * Record a step that is not a drawing edit, a study anchor's move, in the
-   * same history, so Undo walks it and the drawings in the order they were
-   * made. Like any new edit it clears the redo branch. An `outside` move was
-   * written to the settings by someone else (a settings dialog's Pick point):
-   * it ends no drawing drag, and a host timeline the steps are handed to saw
-   * that write itself, so only this history takes it.
-   */
-  private _recordStep(step: InputAnchorStep, outside = false): void {
-    if (!outside) this._onDragEnd();
-    // The host's own act, like any edit inside `untracked`: a step nowhere.
-    if (this._untracked > 0) return;
-    const owner = this._anchorSteps;
-    if (owner !== null) { if (!outside) owner(step); return; }
-    const text = this._historyText();
-    this._undo.push({ before: text, after: text, step: nextStep++, external: step });
-    if (this._undo.length > this._opts.historyLimit) this._undo.shift();
-    this._redo = [];
-    this._external(true, 'update');
-  }
-
-  /**
-   * Announce a move of the history that changed no drawing, with no ids, so
-   * a host's Undo and Redo controls, which refresh on `drawing:change`,
-   * follow it. Passes `applied` through.
-   */
-  private _external(applied: boolean, kind: DrawingChangeKind): boolean {
-    if (applied) this._chart.emit('drawing:change', { ids: [], kind });
-    return applied;
-  }
-
-  private _pushUndo(): void {
-    this._onDragEnd();
-    const before = this._historyText();
-    // The host's own act: no step, both branches kept, and the recorded
-    // steps take the change in once it is made.
-    if (this._untracked > 0) { this._hostEdit ??= before; return; }
-    this._pendingHistory = { before, after: before, step: nextStep++ };
-    this._undo.push(this._pendingHistory);
-    if (this._undo.length > this._opts.historyLimit) this._undo.shift();
-    this._redo = []; // a new edit invalidates the redo branch
-  }
-
-  /**
-   * Open an edit: recorded, or, for a change the history does not hold (a
-   * host placing or moving a read-only drawing), not recorded and leaving
-   * both branches alone. Either way a drag in progress ends first.
-   */
-  private _begin(record: boolean): void {
-    if (record) this._pushUndo();
-    else this._onDragEnd();
-  }
-
-  /**
-   * What the host does (a policy, a forced call) is its own act and never
-   * history's to reverse: `edit` makes the same change to every recorded
-   * snapshot, as if it had always been so, and a step left with nothing to do
-   * is dropped, so `canUndo` and `canRedo` match what a press would do. The
-   * step still being recorded stays whatever it holds so far. `edit` may
-   * share live objects, since each snapshot is serialised at once. The
-   * host's patches still held back go in first, being older. Both snapshots
-   * of every step are parsed and written, which is why a forced move of a
-   * read-only drawing is held back rather than paying for this.
-   */
-  private _rebase(edit?: (document: DrawingsDocument) => void): void {
-    const rewrite = (text: string): string => {
-      const document = JSON.parse(text) as DrawingsDocument;
-      for (const d of document.drawings) {
-        const { points, ...rest } = this._hostPatches.get(d.id) ?? {};
-        this._applyPatch(d, rest);
-        if (points) d.points = points;
-      }
-      edit?.(document);
-      return JSON.stringify(document);
-    };
-    const keep = (entry: DrawingHistoryEntry): boolean => {
-      entry.before = rewrite(entry.before);
-      entry.after = rewrite(entry.after);
-      // A step outside the drawings keeps whatever the host did to them.
-      return entry === this._pendingHistory || entry.external !== undefined || this._applyHistory(entry.before, entry.after);
-    };
-    // A drag holds the branches as they were when it began, for a cancel to
-    // put back. They share their steps with the live ones, and taking an
-    // edit twice changes nothing, since a snapshot is read through the
-    // migration.
-    const drag = this._dragStart;
-    if (drag) {
-      drag.undo = drag.undo.filter(keep);
-      drag.redo = drag.redo.filter(keep);
-    }
-    this._undo = this._undo.filter(keep);
-    this._redo = this._redo.filter(keep);
-    this._hostPatches.clear();
-  }
 }
