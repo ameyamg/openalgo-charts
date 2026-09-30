@@ -201,8 +201,8 @@ function readHistory(raw: unknown, accountId: string): OrderHistoryEntry | null 
 export class AccountManager implements AccountStateSource {
   private readonly _feed: AccountFeed;
   private readonly _mode: TradeMode;
-  private readonly _hostFeatures: TradingFeatureSource | undefined;
-  private readonly _initial: string | undefined;
+  private readonly _hostFeatures?: TradingFeatureSource | undefined;
+  private readonly _initial?: string | undefined;
   private readonly _listeners = new Set<(state: AccountState) => void>();
   /** Aborted together whenever the generation moves on. */
   private _aborts = new Set<AbortController>();

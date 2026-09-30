@@ -400,19 +400,19 @@ const MAX_HELD_ENTRIES = 64;
 
 export class OrderEngine {
   private readonly _feed: OrderFeed;
-  private readonly _capabilities: TradingCapabilitySource | undefined;
-  private readonly _features: TradingFeatureSource | undefined;
+  private readonly _capabilities?: TradingCapabilitySource | undefined;
+  private readonly _features?: TradingFeatureSource | undefined;
   private readonly _selectedAccount?: OrderEngineOptions['selectedAccount'];
-  private readonly _confirmCommand: ((command: TradingCommand) => boolean | Promise<boolean>) | undefined;
+  private readonly _confirmCommand?: ((command: TradingCommand) => boolean | Promise<boolean>) | undefined;
   private readonly _clock: () => number;
   private readonly _constraints: OrderConstraints;
   private readonly _mode: TradeMode;
   private readonly _armed: boolean;
-  private readonly _gate: GateFn | undefined;
+  private readonly _gate?: GateFn | undefined;
   private readonly _minModifyMs: number;
   private readonly _now: () => number;
   private readonly _idGen: () => string;
-  private readonly _onValidationError: ((reason: string) => void) | undefined;
+  private readonly _onValidationError?: ((reason: string) => void) | undefined;
   private readonly _maxSettled: number;
 
   private readonly _orders = new Map<string, Tracked>();

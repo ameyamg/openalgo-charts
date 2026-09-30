@@ -132,7 +132,7 @@ export class FakeBroker implements OrderFeed, AccountFeed {
   private readonly _meta = new Map<string, Meta>();
   private readonly _marks = new Map<string, number>();
   private readonly _accountMode: boolean;
-  private readonly _features: TradingFeatureSource | undefined;
+  private readonly _features?: TradingFeatureSource | undefined;
   private readonly _clock: () => number;
   private readonly _latency?: FakeBrokerOptions['latency'];
   private _failures: Array<{ operation: FakeBrokerOperation; failure: FakeBrokerFailure; reason: string | undefined }> = [];
