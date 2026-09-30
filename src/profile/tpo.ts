@@ -8,6 +8,12 @@ import type { Bar } from '../model/bar';
 import type { TpoResult } from './profile-model';
 import { priceBuckets, valueArea } from './profile-model';
 
+/**
+ * One TPO profile over all of `bars`, a period every `periodBars` bars. A
+ * `periodBars` below 1 counts as 1; otherwise the arguments are taken as
+ * given: a `tickSize` that is not a positive finite number gives an empty
+ * profile, and `valueAreaPercent` is a fraction that is not clamped.
+ */
 export function computeTpo(
   bars: readonly Bar[],
   periodBars: number,

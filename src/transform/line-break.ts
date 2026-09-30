@@ -7,6 +7,7 @@ import type { Bar } from '../model/bar';
 import { copyState, type ISeriesTransform } from './transform';
 
 export interface LineBreakOptions {
+  /** Prior lines a close must break to draw a new one. Below 1 counts as 1. */
   lines: number;
 }
 

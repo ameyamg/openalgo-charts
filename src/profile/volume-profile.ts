@@ -20,6 +20,13 @@ export interface VolumeProfileOptions {
   valueAreaPercent: number;
 }
 
+/**
+ * One volume profile over all of `bars`, each bar's volume spread evenly
+ * across the rows its range spans. Arguments are taken as given, not repaired:
+ * a `tickSize` that is not a positive finite number gives an empty profile,
+ * and `valueAreaPercent` is a fraction that is not clamped, so 1 or more puts
+ * every row in the value area.
+ */
 export function computeVolumeProfile(
   bars: readonly Bar[],
   tickSize: number,

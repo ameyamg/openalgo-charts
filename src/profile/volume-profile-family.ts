@@ -78,6 +78,11 @@ interface Acc {
   sell: number;
 }
 
+/**
+ * Volume profiles for `bars`, one per session. Out-of-range options are
+ * repaired rather than refused: a `tickSize` not above 0 falls back to the
+ * default, and `valueAreaPercent` is clamped to 0..1.
+ */
 export function computeVolumeProfileSessions(
   bars: readonly Bar[],
   options: Partial<VolumeProfileFamilyOptions> = {},

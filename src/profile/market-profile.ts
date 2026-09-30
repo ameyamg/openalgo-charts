@@ -68,7 +68,10 @@ export const TRADING_HOURS: Record<string, SessionWindow> = {
 };
 
 export interface MarketProfileOptions {
-  /** Instrument tick size — the finest price increment (Nifty: 0.1). */
+  /**
+   * Instrument tick size: the finest price increment (Nifty: 0.1). One that
+   * is not above 0 falls back to the default, 0.05.
+   */
   tickSize: number;
   /**
    * Ticks per TPO row, so row height is `tickSize * rowTicks`. This is the
@@ -377,6 +380,15 @@ function classifyOpen(
   return 'auction';
 }
 
+/**
+ * Market profiles for `bars`, one per session (see {@link MarketProfileOptions}).
+ * Out-of-range options are repaired rather than refused: a `tickSize` not
+ * above 0 falls back to 0.05; `rowTicks`, `initialBalancePeriods` and
+ * `compositeSessions` are floored to a whole number of at least 1;
+ * `blockMinutes` is rounded to whole seconds, at least one; and
+ * `valueAreaPercent` is clamped to 0..1. `result.options` echoes the repaired
+ * `rowTicks`. The footprint, which shares `rowTicks`, throws instead.
+ */
 export function computeMarketProfile(
   bars: readonly Bar[],
   options: Partial<MarketProfileOptions> = {},

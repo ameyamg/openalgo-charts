@@ -8,6 +8,7 @@ import type { Bar } from '../model/bar';
 import { copyState, type ISeriesTransform } from './transform';
 
 export interface RenkoOptions {
+  /** Brick height in price. The constructor throws unless it is above 0. */
   boxSize: number;
 }
 
