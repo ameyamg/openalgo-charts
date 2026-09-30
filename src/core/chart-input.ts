@@ -268,6 +268,24 @@ export class ChartInput {
     this._keyTarget = keyTarget;
   }
 
+  /** Take off what `_attachInput` put on, by the same function identities. */
+  public _detachInput(): void {
+    if (typeof window === 'undefined') return;
+    const el = this._host._container;
+    el.removeEventListener('pointerdown', this._host._onPointerDown);
+    el.removeEventListener('pointermove', this._host._onPointerMove);
+    el.removeEventListener('pointerup', this._host._onPointerUpNative);
+    el.removeEventListener('pointercancel', this._host._onPointerCancel);
+    el.removeEventListener('lostpointercapture', this._host._onLostPointerCapture);
+    el.removeEventListener('pointerleave', this._host._onPointerLeave);
+    el.removeEventListener('wheel', this._host._onWheel);
+    el.removeEventListener('dblclick', this._host._onDblClick);
+    el.removeEventListener('pointerenter', this._host._onPointerEnter);
+    el.removeEventListener('contextmenu', this._host._onContextMenu);
+    this._keyTarget?.removeEventListener('keydown', this._host._onKeyDown as EventListener);
+    this._keyTarget = null;
+  }
+
   public _onPointerEnter(): void { this._pointerInside = true; }
 
   /**
@@ -1082,7 +1100,7 @@ export class ChartInput {
       ? this._host._timeScale.width : Math.max(0, Math.min(this._host._timeScale.width, p.x - this._host._leftAxisWidth));
     // Carry the unpainted distance across device changes and cursor movement.
     // Bound the target now so input at a limit cannot accumulate invisible debt.
-    const remaining = this._host._motion._zoomGlide === null ? 0 : this._host._motion._zoomGlide.totalLogFactor - this._host._motion._zoomGlideApplied;
+    const remaining = this._host._motion._remainingZoom();
     const spacing = this._host._timeScale.barSpacing;
     const target = this._host._timeScale.constrainBarSpacing(spacing * Math.exp(remaining + wheelLogFactor(delta.y)));
     const logFactor = Math.log(target / spacing);

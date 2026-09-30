@@ -93,6 +93,11 @@ export class ChartMotion {
     this._host._emitViewport('zoom');
   }
 
+  /** The part of the running zoom glide not painted yet, as a log factor; 0 with no glide. */
+  public _remainingZoom(): number {
+    return this._zoomGlide === null ? 0 : this._zoomGlide.totalLogFactor - this._zoomGlideApplied;
+  }
+
   public _startZoomGlide(focusX: number, logFactor: number): void {
     if (this._host._navigation.zoomEnabled === false) return;
     this._zoomGlide = new ZoomGlide(logFactor);

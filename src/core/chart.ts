@@ -378,7 +378,10 @@ export class Chart {
     typeof this._handleLegendAction, typeof this._syncTimeNavPane, typeof this._feedTimeNav,
     typeof this._onPixelRatio, typeof this._checkPixelRatio, typeof this._paintNow, typeof this._onPointerUp,
     typeof this._runShortcut, typeof this._updateAccessibleSummary, typeof this._maybeLoadHistory,
-    typeof this._startKinetic,
+    typeof this._startKinetic, typeof this._onPointerEnter, typeof this._onContextMenu, typeof this._onPointerDown,
+    typeof this._onPointerMove, typeof this._onPointerUpNative, typeof this._onPointerCancel,
+    typeof this._onLostPointerCapture, typeof this._onPointerLeave, typeof this._onWheel, typeof this._onDblClick,
+    typeof this._onKeyDown,
   ];
 
   public constructor(container: HTMLElement, options: ChartOptions = {}) {
@@ -2454,21 +2457,7 @@ export class Chart {
     this._pixels._deviceObserver?.disconnect();
     this._pixels._deviceObserver = null;
     this._pixels._unwatchPixelRatio();
-    if (typeof window !== 'undefined') {
-      const el = this._container;
-      el.removeEventListener('pointerdown', this._onPointerDown);
-      el.removeEventListener('pointermove', this._onPointerMove);
-      el.removeEventListener('pointerup', this._onPointerUpNative);
-      el.removeEventListener('pointercancel', this._onPointerCancel);
-      el.removeEventListener('lostpointercapture', this._onLostPointerCapture);
-      el.removeEventListener('pointerleave', this._onPointerLeave);
-      el.removeEventListener('wheel', this._onWheel);
-      el.removeEventListener('dblclick', this._onDblClick);
-      el.removeEventListener('pointerenter', this._onPointerEnter);
-      el.removeEventListener('contextmenu', this._onContextMenu);
-      this._input._keyTarget?.removeEventListener('keydown', this._onKeyDown as EventListener);
-      this._input._keyTarget = null;
-    }
+    this._input._detachInput();
     this._liveRegion?.remove();
     this._liveRegion = null;
     this._container.style.cursor = ''; // drop any hover cursor hint we applied
