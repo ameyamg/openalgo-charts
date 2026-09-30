@@ -3,9 +3,10 @@
  *
  * A single global level is too coarse for multi-pane indicators and trade
  * overlays, so the mask carries a **global level + a per-pane map**. Multiple
- * invalidations within one frame coalesce via {@link InvalidateMask.merge}. It
- * also keeps a queue of time-scale operations that nothing in the chart reads
- * (see {@link TimeScaleOp}).
+ * invalidations within one frame raise the same mask, each level only ever
+ * going up. It also keeps a queue of time-scale operations that nothing in the
+ * chart reads, deprecated with the methods that fill and fold it (see
+ * {@link TimeScaleOp}).
  */
 
 /** How much of a pane (or the whole chart) must be repainted this frame. */
@@ -33,6 +34,9 @@ export interface PaneInvalidation {
  * zoom, fit and reset change the shared time scale directly, and the kinetic
  * and wheel-zoom glides are stepped at the top of the render loop's frame
  * (ARCHITECTURE.md §3.2).
+ *
+ * @deprecated Removed in 3.0.0. A queued operation does nothing; change the time scale directly with
+ * `chart.timeScale`, `chart.fitContent` or `chart.setVisibleLogicalRange`.
  */
 export type TimeScaleOp =
   | { type: 'fitContent' }
@@ -79,11 +83,20 @@ export class InvalidateMask {
     return this._panes;
   }
 
-  /** Queue an operation. The chart never reads the queue; see {@link TimeScaleOp}. */
+  /**
+   * Queue an operation. The chart never reads the queue; see {@link TimeScaleOp}.
+   *
+   * @deprecated Removed in 3.0.0. The operation does nothing; change the time scale directly.
+   */
   public addTimeScaleOp(op: TimeScaleOp): void {
     this._timeScaleOps.push(op);
   }
 
+  /**
+   * The operations queued so far, which nothing in the chart reads.
+   *
+   * @deprecated Removed in 3.0.0 with {@link TimeScaleOp}.
+   */
   public timeScaleOps(): readonly TimeScaleOp[] {
     return this._timeScaleOps;
   }
@@ -96,7 +109,12 @@ export class InvalidateMask {
     );
   }
 
-  /** Fold another mask into this one (coalescing multiple invalidations per frame). */
+  /**
+   * Fold another mask into this one.
+   *
+   * @deprecated Removed in 3.0.0. The chart raises one mask per frame and never folds two, and a
+   * host holds only the mask `chart.invalidate` hands it; raise levels on that one.
+   */
   public merge(other: InvalidateMask): void {
     this.invalidateGlobal(other._globalLevel);
     for (const [index, inv] of other._panes) {

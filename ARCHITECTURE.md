@@ -358,7 +358,7 @@ What the chart does with it:
 - **A write that moves the shared index or the time scale repaints every pane.** An appended bar grows the index, and with the view at the right edge it scrolls every pane by a bar, so every pane and the time axis repaint. A host's own `setData` and `prependData` repaint every pane as well, and so does a study that opens a pane, because making room resizes every pane's canvases.
 - **`autoScale` flag per pane**: separates "rescale this pane's price axis" from "repaint at current scale". A `Full` level autoscales every pane it reaches, all of them when it is global.
 - **Glides step inside the frame.** Kinetic scroll and the eased wheel zoom schedule no animation frames of their own (`input/kinetic.ts` and `input/zoom-glide.ts` hold the maths). The frame steps them (`ChartMotion._step`) before it takes the mask, so each frame paints the step it made, and a glide asks for one animation frame per frame.
-- **No time-scale operation queue.** Fit, bar spacing, right offset, scroll-to-realtime and both glides change the time scale directly, and the repaint goes through the ordinary invalidation. The public mask keeps `addTimeScaleOp` and `timeScaleOps` for compatibility, but `addTimeScaleOp` has no caller in the chart and the frame never reads the queue.
+- **No time-scale operation queue.** Fit, bar spacing, right offset, scroll-to-realtime and both glides change the time scale directly, and the repaint goes through the ordinary invalidation. The public mask keeps `addTimeScaleOp` and `timeScaleOps` for compatibility, deprecated and removed in 3.0.0, but `addTimeScaleOp` has no caller in the chart and the frame never reads the queue.
 - `chart.invalidate(mask)` merges into the pending mask and schedules one rAF; multiple calls per frame coalesce. What the frame's own first steps invalidate, a glide step or a study recompute, lands in that frame's mask and asks for no frame after it.
 
 ```
@@ -1117,7 +1117,7 @@ The current implementation keeps these boundaries in 2.5.10:
 - **Separate price/time axis-widget canvases** - axes draw within the pane
   canvas by design (small-engine simplification).
 - **The time-scale operation queue** - `InvalidateMask` keeps
-  `addTimeScaleOp` for compatibility, and nothing in the chart queues an
+  `addTimeScaleOp` for compatibility (deprecated, removed in 3.0.0), and nothing in the chart queues an
   operation or reads the queue; the time scale is changed directly (§3.2).
 - **A tick that does not grow with the history** - the render bench enforces
   frame budgets per bar count (`npm run bench:render`,
