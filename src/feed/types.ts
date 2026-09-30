@@ -14,7 +14,7 @@ export interface BarsRequest {
   /** Fetch authoritative history instead of a cached snapshot, when supported. */
   noCache?: boolean;
   /** Cancel this consumer's request. Existing feeds may ignore cancellation. */
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
   /** Deadline in milliseconds, including response-body reading. */
   timeoutMs?: number;
   /** Preferred number of bars; a date-range feed may return a different count. */
@@ -111,7 +111,7 @@ export interface SymbolSearchRequest {
   /** What the user typed. */
   query: string;
   /** Cancels this lookup once a newer query replaces it. */
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
 }
 
 export interface DepthLevel {

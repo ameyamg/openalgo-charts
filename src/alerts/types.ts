@@ -57,7 +57,7 @@ export type AlertState = 'armed' | 'triggered' | 'expired' | 'disabled';
 export interface PriceAlertSource {
   kind: 'price';
   price: number;
-  upperPrice?: number;
+  upperPrice?: number | undefined;
 }
 
 /** A threshold in plot units, anchored to one specific study instance. */
@@ -66,7 +66,7 @@ export interface IndicatorAlertSource {
   instanceId: string;
   plotKey: string;
   value: number;
-  upperValue?: number;
+  upperValue?: number | undefined;
 }
 
 export interface BarConditionAlertSource {
@@ -149,10 +149,10 @@ export interface AlertInput {
   repeat?: AlertRepeat;
   state?: 'armed' | 'disabled';
   title?: string;
-  message?: string;
+  message?: string | undefined;
   cooldownSeconds?: number;
   /** UTC seconds. At this instant the alert expires before it can trigger. */
-  expiresAt?: number;
+  expiresAt?: number | undefined;
   /** Opaque host routing data. The controller never interprets or delivers it. */
   payload?: unknown;
 }

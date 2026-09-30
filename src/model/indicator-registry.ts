@@ -887,7 +887,7 @@ export interface IndicatorDescriptor {
   /** Display name, e.g. `'MACD'`. */
   name: string;
   /** Grouping for a picker UI ('Trend', 'Momentum', 'Volume', 'Volatility'). */
-  category?: string;
+  category?: string | undefined;
   /** `'onchart'` overlays the price pane; `'pane'` gets its own pane. */
   placement: 'onchart' | 'pane';
   /**

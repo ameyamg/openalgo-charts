@@ -21,7 +21,7 @@ export interface WorkspacePane {
   variant?: DataVariant;
   chart: WorkspaceChartState; settings: WorkspaceSettings;
   volume: boolean; magnet: 'off' | 'weak' | 'strong'; stay: boolean;
-  comparisons: WorkspaceComparison[]; comparisonMode: 'price' | 'percent'; historyPeriod?: string;
+  comparisons: WorkspaceComparison[]; comparisonMode: 'price' | 'percent'; historyPeriod?: string | undefined;
   /**
    * The id of the named link group this chart is in, one of `sync.groups`.
    * Absent: in no group when the desk declares groups, and in the desk's one

@@ -181,8 +181,8 @@ export interface IndicatorState {
 export interface ChartState {
   version: number;
   /** Visible logical range at save time. */
-  viewport?: { from: number; to: number };
-  barSpacing?: number;
+  viewport?: { from: number; to: number } | undefined;
+  barSpacing?: number | undefined;
   grid?: { vertLines: boolean; horzLines: boolean };
   crosshairMode?: 'normal' | 'magnet';
   crosshairSnapToBar?: boolean;
@@ -190,7 +190,7 @@ export interface ChartState {
   priceOnlyAutoScale?: boolean;
   /** Collapse only study legend rows. Omission preserves the current preference. */
   indicatorLegendCollapsed?: boolean;
-  panes?: PaneState[];
+  panes?: PaneState[] | undefined;
   /**
    * Slot in `panes` of the primary price pane, present only when it is not the
    * first (version 2). Every `paneIndex` in the state, of a pane, a series, a
@@ -216,7 +216,7 @@ export interface ChartState {
    * tier is loaded.
    */
   drawings?: unknown;
-  alerts?: AlertsDocument;
+  alerts?: AlertsDocument | undefined;
 }
 
 /** Runtime choices for restoring configuration without serializing callbacks. */

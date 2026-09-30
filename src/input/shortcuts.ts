@@ -47,12 +47,12 @@ export interface ShortcutTriggerEvent {
 }
 
 interface KeyLike {
-  code?: string;
+  code?: string | undefined;
   key?: string;
-  ctrlKey?: boolean;
-  metaKey?: boolean;
-  altKey?: boolean;
-  shiftKey?: boolean;
+  ctrlKey?: boolean | undefined;
+  metaKey?: boolean | undefined;
+  altKey?: boolean | undefined;
+  shiftKey?: boolean | undefined;
 }
 
 const MOD_ORDER = ['Mod', 'Ctrl', 'Meta', 'Alt', 'Shift'];
