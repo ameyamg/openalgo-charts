@@ -48,7 +48,7 @@ import {
   drawTimeAxisPill, lastPriceTagHeight, AXIS_LABEL_PRIORITY, resolveAxisLabels, drawSeriesValueTag,
   axisTagY,
   type PlotLayout, type TickMarkType, type AxisLabelBand,
-  type SessionClockOptions, type BarCountdownOptions,
+  type SessionClockOptions, type BarCountdownOptions, type AxisStyle,
 } from '../render/axis';
 import { drawCrosshair, drawCrosshairTag, resolveCrosshairStyle } from '../render/crosshair';
 import { isInvisible } from '../render/pill';
@@ -166,6 +166,12 @@ const HIT_RANK: Record<ZOrder, number> = { bottom: 0, normal: 2, top: 3 };
  */
 const SPAN: VisibleSpan = { start: 0, lastTime: 0 };
 const LOD: LodRequest = { kind: 'ohlc', dpr: 1, factor: 1 };
+
+/** The instrument's last bar, for the last-price line and its axis tag. */
+interface LastPriceEntry { close: number; up: boolean; showLine: boolean; showTag: boolean }
+
+/** Another series' last value, tagged on the strip its scale is drawn in. */
+interface ValueTag { price: number; color: string; scaleId: PriceScaleId }
 
 /**
  * The renderers the level of detail may hand merged bars to: the built-in ones,
@@ -1127,6 +1133,71 @@ export class Pane {
     const slotted = this._slotted(live, ctx);
     for (const p of live) if (p.zOrder() === 'bottom' && !slotted?.has(p)) p.draw(g, this._boundPrimitiveContext(p, prc, ctx));
 
+    const { readout, lastEntry, valueTags } = this._paintSeriesPass(g, ctx, layout, open, prc, slotted, target);
+    // Still inside the clip and before the normal-layer primitives: a backend
+    // that batched the series has to land them under the price lines and
+    // markers, not over them.
+    if (target === undefined) this._backend.endFrame();
+
+    // End of the plot clip. Everything below draws into the axis strip on
+    // purpose: the ladder, the last-price tag, the trading pills. Restoring here
+    // and not at the end of the frame is the whole point.
+    g.restore();
+
+    const slots = this.axisSlots(ctx);
+    const colors = { up: ctx.theme.lastPriceUp, down: ctx.theme.lastPriceDown, text: ctx.theme.lastPriceText };
+    const last = lastEntry;
+    if (last !== null) {
+      drawLastPriceLabel(g, readout, last.close, last.up, layout, dpr, axisStyle, colors, last.showLine, false);
+    }
+    // The countdown counts to the close of the chart's own bar, so it rides
+    // on the tag of the pane that shows the price source. A study pane's tag
+    // is the study's value: a clock under it named a bar the pane does not
+    // draw, and doubled the tag's height into the study's level tags.
+    const countdown = this._source !== null && this._series.includes(this._source) ? ctx.barCountdown : undefined;
+    const lastTagOn = (scale: PriceScale): boolean => last !== null && last.showTag && readout === scale;
+    this._paintAxisLadders(g, layout, dpr, slots, valueTags, last, lastTagOn, countdown, axisStyle);
+
+    // normal-layer primitives (price lines, markers, events) draw over series
+    for (const p of live) if (p.zOrder() === 'normal' && !slotted?.has(p)) p.draw(g, this._boundPrimitiveContext(p, prc, ctx));
+
+    // The readout tag goes on after them: where the market is now outranks a
+    // level's tag (AXIS_LABEL_PRIORITY), so a price line crossing it, a
+    // study's 70 or an order at the touch, does not cover the one number that
+    // moves.
+    // Only the strip that carries the tag is clipped again: a pane with a
+    // strip on each side, or with its tag turned off, pays for no second pass.
+    for (const slot of slots) {
+      if (last === null || !lastTagOn(this._scaleFor(slot.scaleId))) continue;
+      this._inAxisSlot(g, slot, layout, dpr, (scale, columnLayout) => drawLastPriceLabel(g, scale, last.close, last.up, columnLayout, dpr,
+        axisStyle, colors, false, true, countdown, slot.side));
+    }
+
+    if (ctx.showTimeAxis) {
+      // The zone goes to the axis rather than being pre-baked into a formatter
+      // here: the axis is what decides date-versus-clock and what computes the
+      // `tickMark` hint, so a host formatter and the default one only agree on
+      // where the day turns over if both are decided on the same calendar.
+      drawTimeAxis(g, ctx.timeScale, ctx.dataLayer, layout, dpr, axisStyle, ctx.timeFormatter, ctx.timezone);
+      // The corner the two strips meet in, which no tick, tag or series ever
+      // occupies. Drawn last so it sits over the time axis's own row.
+      if (ctx.sessionClock !== undefined) drawSessionClock(g,
+        { ...layout, priceAxisWidth: Math.min(layout.priceAxisWidth, ctx.axisColumnWidth ?? layout.priceAxisWidth) },
+        dpr, ctx.sessionClock, axisStyle);
+    }
+    g.restore(); // end plot shift
+    if (target === undefined) this._paintedHitBoxes(ctx);
+  }
+
+  /**
+   * The series pass of `paintBase`, inside the plot clip: every series at the
+   * frame's level of detail, each followed by the primitives slotted above it.
+   * It hands back what the axis strips draw afterwards.
+   */
+  private _paintSeriesPass(g: CanvasRenderingContext2D, ctx: PaneRenderContext, layout: PlotLayout, open: boolean,
+    prc: PrimitiveRenderContext, slotted: Map<IPrimitive, SeriesRecord> | null, target: CanvasRenderingContext2D | undefined,
+  ): { readout: PriceScale; lastEntry: LastPriceEntry | null; valueTags: ValueTag[] } {
+    const dpr = ctx.dpr;
     // series (registry-driven — the core never switches on type)
     const range = ctx.timeScale.visibleRange();
     // Last-price line/tag follows the pane's readout series (the main one),
@@ -1137,10 +1208,10 @@ export class Pane {
     const source = this._shownSource();
     const instrument = source !== undefined && this._scaleFor(source.scaleId) === readout ? source
       : this._series.find(s => s.style.visible !== false && getChartType(s.type).isPriceSeries && this._scaleFor(s.scaleId) === readout);
-    let lastEntry: { close: number; up: boolean; showLine: boolean; showTag: boolean } | null = null;
+    let lastEntry: LastPriceEntry | null = null;
     // Every visible axis describes its own sources, even when the pane's main
     // readout belongs to the other side or a hidden scale.
-    const valueTags: { price: number; color: string; scaleId: PriceScaleId }[] = [];
+    const valueTags: ValueTag[] = [];
     // The level of detail is decided once for the frame: every series shares
     // the time scale, so they all cross the threshold together.
     const spacing = ctx.timeScale.barSpacing;
@@ -1208,42 +1279,16 @@ export class Pane {
       }
       this._paintSlot(slotted, s, g, prc, ctx, target);
     }
-    // Still inside the clip and before the normal-layer primitives: a backend
-    // that batched the series has to land them under the price lines and
-    // markers, not over them.
-    if (target === undefined) this._backend.endFrame();
+    return { readout, lastEntry, valueTags };
+  }
 
-    // End of the plot clip. Everything below draws into the axis strip on
-    // purpose: the ladder, the last-price tag, the trading pills. Restoring here
-    // and not at the end of the frame is the whole point.
-    g.restore();
-
-    const slots = this.axisSlots(ctx);
-    const colors = { up: ctx.theme.lastPriceUp, down: ctx.theme.lastPriceDown, text: ctx.theme.lastPriceText };
-    const last = lastEntry;
-    if (last !== null) {
-      drawLastPriceLabel(g, readout, last.close, last.up, layout, dpr, axisStyle, colors, last.showLine, false);
-    }
-    // The countdown counts to the close of the chart's own bar, so it rides
-    // on the tag of the pane that shows the price source. A study pane's tag
-    // is the study's value: a clock under it named a bar the pane does not
-    // draw, and doubled the tag's height into the study's level tags.
-    const countdown = this._source !== null && this._series.includes(this._source) ? ctx.barCountdown : undefined;
-    const lastTagOn = (scale: PriceScale): boolean => last !== null && last.showTag && readout === scale;
-    /** Paint into one axis strip, clipped to it, in the coordinates its tags use. */
-    const inSlot = (slot: PriceAxisSlot, paint: (scale: PriceScale, columnLayout: PlotLayout) => void): void => {
-      const { side, width } = slot, scale = this._scaleFor(slot.scaleId);
-      if (!scale.scaled) return;
-      g.save();
-      const outer = Math.round(slot.x * dpr), end = Math.round((slot.x + width) * dpr);
-      g.beginPath(); g.rect(outer, 0, end - outer, Math.round(layout.plotHeight * dpr)); g.clip();
-      g.translate(side === 'left' ? end : outer - Math.round(layout.plotWidth * dpr), 0);
-      paint(scale, { ...layout, priceAxisWidth: width, plotLeft: width });
-      g.restore();
-    };
+  /** The tick ladder of each axis strip, with the value tags that fit beside the readout tag. */
+  private _paintAxisLadders(g: CanvasRenderingContext2D, layout: PlotLayout, dpr: number, slots: readonly PriceAxisSlot[],
+    valueTags: readonly ValueTag[], last: LastPriceEntry | null, lastTagOn: (scale: PriceScale) => boolean,
+    countdown: BarCountdownOptions | undefined, axisStyle: AxisStyle): void {
     // Resolve each strip independently: equal prices on opposite scales do not
     // overlap. The readout tag outranks series tags, which outrank axis ticks.
-    for (const slot of slots) inSlot(slot, (scale, columnLayout) => {
+    for (const slot of slots) this._inAxisSlot(g, slot, layout, dpr, (scale, columnLayout) => {
       const { side, width, scaleId } = slot;
       const tags = valueTags.filter(tag => tag.scaleId === scaleId);
       const bands: AxisLabelBand[] = [];
@@ -1272,36 +1317,19 @@ export class Pane {
         if (allowed[tagBase + i]) drawSeriesValueTag(g, scale, tags[i]!.price, tags[i]!.color, columnLayout, dpr, axisStyle, side);
       }
     });
+  }
 
-    // normal-layer primitives (price lines, markers, events) draw over series
-    for (const p of live) if (p.zOrder() === 'normal' && !slotted?.has(p)) p.draw(g, this._boundPrimitiveContext(p, prc, ctx));
-
-    // The readout tag goes on after them: where the market is now outranks a
-    // level's tag (AXIS_LABEL_PRIORITY), so a price line crossing it, a
-    // study's 70 or an order at the touch, does not cover the one number that
-    // moves.
-    // Only the strip that carries the tag is clipped again: a pane with a
-    // strip on each side, or with its tag turned off, pays for no second pass.
-    for (const slot of slots) {
-      if (last === null || !lastTagOn(this._scaleFor(slot.scaleId))) continue;
-      inSlot(slot, (scale, columnLayout) => drawLastPriceLabel(g, scale, last.close, last.up, columnLayout, dpr,
-        axisStyle, colors, false, true, countdown, slot.side));
-    }
-
-    if (ctx.showTimeAxis) {
-      // The zone goes to the axis rather than being pre-baked into a formatter
-      // here: the axis is what decides date-versus-clock and what computes the
-      // `tickMark` hint, so a host formatter and the default one only agree on
-      // where the day turns over if both are decided on the same calendar.
-      drawTimeAxis(g, ctx.timeScale, ctx.dataLayer, layout, dpr, axisStyle, ctx.timeFormatter, ctx.timezone);
-      // The corner the two strips meet in, which no tick, tag or series ever
-      // occupies. Drawn last so it sits over the time axis's own row.
-      if (ctx.sessionClock !== undefined) drawSessionClock(g,
-        { ...layout, priceAxisWidth: Math.min(layout.priceAxisWidth, ctx.axisColumnWidth ?? layout.priceAxisWidth) },
-        dpr, ctx.sessionClock, axisStyle);
-    }
-    g.restore(); // end plot shift
-    if (target === undefined) this._paintedHitBoxes(ctx);
+  /** Paint into one axis strip, clipped to it, in the coordinates its tags use. */
+  private _inAxisSlot(g: CanvasRenderingContext2D, slot: PriceAxisSlot, layout: PlotLayout, dpr: number,
+    paint: (scale: PriceScale, columnLayout: PlotLayout) => void): void {
+    const { side, width } = slot, scale = this._scaleFor(slot.scaleId);
+    if (!scale.scaled) return;
+    g.save();
+    const outer = Math.round(slot.x * dpr), end = Math.round((slot.x + width) * dpr);
+    g.beginPath(); g.rect(outer, 0, end - outer, Math.round(layout.plotHeight * dpr)); g.clip();
+    g.translate(side === 'left' ? end : outer - Math.round(layout.plotWidth * dpr), 0);
+    paint(scale, { ...layout, priceAxisWidth: width, plotLeft: width });
+    g.restore();
   }
 
   /**

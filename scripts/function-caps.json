@@ -11,9 +11,6 @@
     "src/core/chart-studies.ts": {
       "ChartStudies._indicatorHost": 210
     },
-    "src/core/pane.ts": {
-      "Pane.paintBase": 232
-    },
     "src/indicators/external.ts": {
       "createTier2Indicator": 293
     },
