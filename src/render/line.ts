@@ -458,6 +458,13 @@ export function drawBaseline(
   ctx.restore();
 }
 
+/**
+ * The HLC area band when the style sets no `areaTopColor`. It is its own
+ * colour on every theme, not the theme's area colour, so a settings dialog
+ * shows it as the default to report what is drawn.
+ */
+export const HLC_AREA_BAND_COLOR = 'rgba(79,140,255,0.15)';
+
 export function drawHlcArea(
   ctx: CanvasRenderingContext2D,
   items: readonly LineDrawItem[],
@@ -481,7 +488,7 @@ export function drawHlcArea(
   for (let i = s; i < n; i++) ctx.lineTo(highs.xs[i]! * dpr, highs.ys[i]! * dpr);
   for (let i = lows.n - 1; i >= lows.s; i--) ctx.lineTo(lows.xs[i]! * dpr, lows.ys[i]! * dpr);
   ctx.closePath();
-  ctx.fillStyle = style.areaTopColor ?? 'rgba(79,140,255,0.15)';
+  ctx.fillStyle = style.areaTopColor ?? HLC_AREA_BAND_COLOR;
   ctx.fill();
   ctx.restore();
   // The two edges of the band, each drawn only when the caller named a colour

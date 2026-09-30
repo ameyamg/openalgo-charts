@@ -50,7 +50,7 @@ import {
 } from '../candles';
 import { barGeometry } from '../bars';
 import {
-  project, projectSteps, trimToView, dashPeriod, polyline, CLOSE, HIGH, LOW, EDGE_PAD, type Polyline,
+  project, projectSteps, trimToView, dashPeriod, polyline, CLOSE, HIGH, LOW, EDGE_PAD, HLC_AREA_BAND_COLOR, type Polyline,
 } from '../line';
 import { VertexBatch } from './batch';
 import { ColorCache, TRANSPARENT, lerpPremultiplied, normaliseWith2d, type PremultipliedRgba } from './color';
@@ -674,7 +674,7 @@ function emitHlcArea(
   // from the same items, so each holds a point at every index under highs.n.
   trimToView(highs, items, false, 0, pad);
   trimToView(lows, items, false, 0, pad);
-  const band = color(style.areaTopColor ?? 'rgba(79,140,255,0.15)');
+  const band = color(style.areaTopColor ?? HLC_AREA_BAND_COLOR);
   const hx = highs.xs, hy = highs.ys, lx = lows.xs, ly = lows.ys;
   let prev = -1;
   for (let i = highs.s; i < highs.n; i++) {

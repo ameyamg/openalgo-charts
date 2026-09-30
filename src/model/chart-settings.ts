@@ -35,6 +35,7 @@ import { getSeriesTransform } from './series-transform';
 import type { SeriesStyle } from '../render/series-style';
 import type { CanvasOptions, CanvasLineStyle, GridOptions, ScaleCanvasOptions } from '../render/grid';
 import { SCALE_FONT_MIN, SCALE_FONT_MAX } from '../render/grid';
+import { HLC_AREA_BAND_COLOR } from '../render/line';
 import type { CrosshairOptions } from '../render/crosshair';
 import type { LegendStatusLineOptions, LegendTitleMode } from '../primitives/pane-legend';
 import type { TradingColors, TradingSettings } from '../core/trading-controller';
@@ -485,8 +486,8 @@ function priceControls(chart: Chart): Control[] {
     } else if (type === 'hlc-area') {
       // One band between high and low, so one colour: a pair here would put a
       // second swatch on the row with nothing reading it.
-      out.push(colorCtl('symbol.areaTopColor', 'Band', 'Line', t.areaTopColor,
-        (c) => sty(c).areaTopColor ?? t.areaTopColor, (c, v) => setSty(c, { areaTopColor: v })));
+      out.push(colorCtl('symbol.areaTopColor', 'Band', 'Line', HLC_AREA_BAND_COLOR,
+        (c) => sty(c).areaTopColor ?? HLC_AREA_BAND_COLOR, (c, v) => setSty(c, { areaTopColor: v })));
     }
   }
   return [...out, ...priceShared()];
