@@ -35,7 +35,7 @@ controls configure the line. Turning the average off leaves gaps, not zeroes.
 
 ```ts
 import { createChart } from 'openalgo-charts';
-import 'openalgo-charts/indicators'; // side effect: registers all 105 built-ins
+import 'openalgo-charts/indicators'; // side effect: registers all 112 built-ins
 ```
 
 - The base bundle ships **only** the registry (`registerIndicator`, `getIndicator`, ...) and the runtime (`IndicatorInstance`). The catalog lives in the lazy `openalgo-charts/indicators` tier.
@@ -45,15 +45,15 @@ import 'openalgo-charts/indicators'; // side effect: registers all 105 built-ins
 
 **A tier must import the registry from the package entry (`'openalgo-charts'`), never a deep path.** Each tier is its own rollup bundle with `openalgo-charts` marked external (`rollup.config.js`, `tierExternal`). A deep import is *inlined* instead (a second, private `Map`), so the tier registers into a registry `createChart` never reads. This applies to any tier bundle you build yourself.
 
-## The 105 built-ins
+## The 112 built-ins
 
 `onchart` overlays the price pane (slot 0 unless the host moved it; `chart.primaryPaneIndex()`); `pane` claims a fresh pane. Defaults shown are the descriptor's declared `input.default`.
 
 **Colour inputs are omitted from these tables on purpose.** Every descriptor declares its own colour keys (`color`, `upColor`, `macdColor`, `bandColor`, ...), and the only safe way to read one is `plotStyleKeys(plot).color`. Hand-composing `` `${plotKey}:color` `` is the single most common way to write an indicator patch that is silently ignored. See the settings model below.
 
-`category` is one of exactly four strings, used only to group a picker UI: Trend (36), Momentum (29), Volatility (22), Volume (18).
+`category` is one of exactly four strings, used only to group a picker UI: Trend (40), Momentum (31), Volatility (23), Volume (18).
 
-### Trend (36)
+### Trend (40)
 
 | id | Name | Placement | Plot keys | Inputs (defaults) |
 |---|---|---|---|---|
@@ -93,8 +93,12 @@ import 'openalgo-charts/indicators'; // side effect: registers all 105 built-ins
 | `trend-strength-index` | Trend Strength Index | pane | `tsi` | `length` 14 |
 | `williams-fractals` | Williams Fractals | onchart | `fractals` | `periods` 2, `showUp` `true`, `showDown` `true` |
 | `consolidation-breakout` | Consolidation and Breakout | onchart | `rangeHigh`, `rangeLow` | `markbreakout` `true`, `colorinside` `true` |
+| `zigzag` | ZigZag (unreleased) | onchart | `zigzag` (swing points only; the legs are `draws` lines) | `deviation` 5 |
+| `zlema` | Zero Lag EMA (unreleased) | onchart | `zlema` | `length` 20, `source` `'close'` |
+| `vidya` | Variable Index Dynamic Average (unreleased) | onchart | `vidya` | `length` 9, `cmoLength` 9, `source` `'close'` |
+| `high-low-52-week` | 52 Week High/Low (unreleased) | onchart | `high`, `low` | (none besides appearance) |
 
-### Momentum (29)
+### Momentum (31)
 
 | id | Name | Placement | Plot keys | Inputs (defaults) |
 |---|---|---|---|---|
@@ -127,8 +131,10 @@ import 'openalgo-charts/indicators'; // side effect: registers all 105 built-ins
 | `woodies-cci` | Woodies CCI | pane | `hist`, `turbo`, `cci14` | `cciTurboLength` 6, `cci14Length` 14 |
 | `special-k` | Pring's Special K | pane | `specialK`, `signal` | `source` `'close'`, `length1` 100, `length2` 100 |
 | `rsi-divergence` | RSI Divergence Indicator | pane | `rsi` | `length` 14, `source` `'close'`, `lbR` 5, `lbL` 5, `rangeUpper` 60, `rangeLower` 5, `plotBull` `true`, `plotHiddenBull` `false`, `plotBear` `true`, `plotHiddenBear` `false` |
+| `schaff-trend-cycle` | Schaff Trend Cycle (unreleased) | pane | `stc` | `fastLength` 23, `slowLength` 50, `cycleLength` 10, `factor` 0.5, `source` `'close'` |
+| `elder-ray` | Elder-Ray Index (unreleased) | pane | `bull`, `bear` | `length` 13 |
 
-### Volatility (22)
+### Volatility (23)
 
 | id | Name | Placement | Plot keys | Inputs (defaults) |
 |---|---|---|---|---|
@@ -154,6 +160,7 @@ import 'openalgo-charts/indicators'; // side effect: registers all 105 built-ins
 | `ulcer-index` | Ulcer Index | pane | `ui` | `source` `'close'`, `length` 14 |
 | `range-analysis` | Range Analysis | pane | `range`, `avgRange` | `showAverage` `false`, `avgLength` 3 |
 | `relative-volatility-index` | Relative Volatility Index | pane | `rvi`, `ma`, `bbUpper`, `bbLower` | `length` 10, `offset` 0, `maType` `'SMA'`, `maLength` 14, `bbMult` 2 |
+| `volatility-squeeze` | Volatility Squeeze (unreleased) | pane | `momentum`, `squeeze`, plus an unplotted `state` | `length` 20, `bbMult` 2, `kcMult` 1.5 |
 
 ### Volume (18)
 
@@ -197,7 +204,7 @@ Notes that bite:
 - The other calendar-anchored built-ins follow the same rule: `cpr`'s Daily frame comes from the bar gaps while its Weekly and Monthly frames are calendar boundaries in the chart's zone, and `seasonality` attributes a bar's close to the month it closed in **in that zone**, which is why the last ninety minutes of a 30 April New York session count as April on `America/New_York` and as May on the IST default.
 - `supertrend` splits one band into two plots. Each carries `null` while the other is active so the line renderer breaks at flips. Direction convention: `-1` = uptrend (`up` plot), `+1` = downtrend (`down` plot). `halftrend` and `volatility-stop` use the same two-plot split.
 - **A `calc` result may carry columns that no plot names.** `williams-vix-fix` returns `alertUpper`/`alertHigh` so `colorBy` keeps working when `sd`/`hp` hide the bands; `supertrend` returns `bodyMid`; `consolidation-breakout` returns `breakUp`, `breakDown` and `insideAge` for its markers and its bar tint to read; the shaded-band indicators return constant `upperLevel`/`lowerLevel`/`bandHigh`/`bandLow`/`zero` columns purely so a fill has something to reference. They appear in `values()` and are never drawn.
-- Twelve plots use `colorBy` for per-bar colour: `macd:histogram`, `williams-vix-fix:wvf`, `wavetrend:mom`, `woodies-cci:hist`, `awesome-oscillator:ao`, `bb-trend:bbtrend`, `chop-zone:chopZone`, `ppo:hist`, `pvo:hist`, `t3:t3`, `hull-suite:mhull`, `hull-suite:shull`. **Line plots honour it too**, not only `histogram` and `column`: the colour reaches the renderer as the point's `color` and the line is stroked in same-colour runs, which is how `t3` and `hull-suite` recolour a *continuous* line instead of splitting into two series with a gap at every flip. `colorBy` is called only on finite slots, and returning `undefined` falls back to the plot's declared colour.
+- Sixteen plots use `colorBy` for per-bar colour: `macd:histogram`, `williams-vix-fix:wvf`, `volume:volume`, `open-interest-change:change`, `wavetrend:mom`, `woodies-cci:hist`, `awesome-oscillator:ao`, `bb-trend:bbtrend`, `chop-zone:chopZone`, `ppo:hist`, `pvo:hist`, `t3:t3`, `hull-suite:mhull`, `hull-suite:shull`, and (unreleased) `volatility-squeeze:momentum` and `volatility-squeeze:squeeze`. **Line plots honour it too**, not only `histogram` and `column`: the colour reaches the renderer as the point's `color` and the line is stroked in same-colour runs, which is how `t3` and `hull-suite` recolour a *continuous* line instead of splitting into two series with a gap at every flip. `colorBy` is called only on finite slots, and returning `undefined` falls back to the plot's declared colour.
 - **Ten input defaults moved in 1.8.3 to match the standard definitions.** `sma`, `ema` and `wma` `length` 20 to 9; `stochastic` `kSmoothing` 3 to 1; `cci` `maLength` 14 to 20; `obv` `maLength` 14 to 9; `ma-cross` `longLength` 21 to 26; `alligator` `jawLength` / `teethLength` / `lipsLength` 13 / 8 / 5 to 21 / 13 / 8. A host that persisted a user's settings keeps the stored value, so only a fresh instance picks up the new default. Read `indicatorDefaults(descriptor)` rather than hard-coding a number the release can move.
 - **`net-volume` has no warmup gap at all: bar 0 is `0`, not `null`.** It signs the bar's own volume by the sign of the close change, and bar 0 has no previous close, so neither the up nor the down arm holds and the value falls through to zero. Code that assumes every indicator opens with a run of nulls, or that trims leading nulls to find the first real reading, gets bar 0 wrong here.
 - `standard-error` and `standard-error-bands` fit a least-squares line and divide by `length - 2`, so their length input is floored at 3, not 1. `standard-deviation` is the population form (divide by `n`), which is why it reads lower than a sample standard deviation over the same window.
@@ -206,10 +213,18 @@ Notes that bite:
 - **`consolidation-breakout` is a state machine, not a formula, and it has no warmup.** A carried "mother" bar defines the range; every later bar whose *body* (open to close, wicks ignored) sits inside that range extends the consolidation, and the first body to escape it fires a marker and becomes the new mother on the same bar. `rangeHigh` and `rangeLow` are `null` wherever no consolidation is running, so the two rails break between one range and the next instead of joining them, and that gap is the reading. A range is breakable only from the second bar after its mother and only for 250 bars: both are constants of the definition, not inputs, because neither has a setting a user would tune. Bar 0 prints its own high and low and opens the first range.
 - **`hull-suite` and `consolidation-breakout` are the only built-ins that recolour the price candles.** See `barColors` below. `hull-suite` claims them only when `candleCol` is exactly `true`, so an absent key never repaints someone else's candles; `consolidation-breakout` tints every inside bar unless `colorinside` is off, and leaves the mother bar its own colour because the mother is the range, not something inside it. Only one indicator's colours can be on the candles at a time, so these two fight each other.
 - `ma-channel` is a mean of the highs and a mean of the lows, each with its own length and its own plot-time offset, not a mean of the close with a spread. Its two legs therefore warm up independently: at `upperLength` 34 and `lowerLength` 13 the lower plot prints 21 bars before the upper one does.
-- **Sixteen built-ins implement `calcTail` (since 2.5.8):** `sma`, `ema`, `wma`, `rsi`, `atr`, `adx`, `macd`, `bollinger`, `vwap`, `supertrend`, `stochastic`, `obv`, `cci`, `keltner-channel`, `donchian` and `parabolic-sar`. A tick on the forming bar, or one appended bar, costs them a step or one window instead of a pass over the loaded history, and the spliced result equals a full `calc` of the same bars value for value, NaN and negative zero included; `tests/indicator-tail.test.ts` checks that after every tick and every appended bar on random histories with session breaks, missing prices and missing volume. The ones that carry state from bar to bar rebuild it once after each full `calc` (a load, a history change, a settings change), so the first tick after one costs about a full pass. Their tail returns `null`, and the runtime runs `calc`, for a length that is not a positive whole number, a negative Donchian `offset`, any VWAP `offset`, and a VWAP bar whose arrival changes how the history's sessions are read (the first overnight gap in a history, or a new median bar gap). Every other built-in recomputes over the loaded history; window helpers can add a period-dependent cost. **Since 1.8.4 that is paid once per animation frame, not once per tick**: a data update marks the indicators stale and the flush runs before the next paint, so a burst of ticks between two frames costs one pass rather than one per tick. Measured on a 1875-bar chart with 50 ticks between frames, that took a ten-indicator pane from 643 ms of blocked main thread to 21 ms. Cost is now bounded by the display refresh and by how much history is loaded, not by how fast the feed ticks.
+- **Twenty-three built-ins implement `calcTail`:** `sma`, `ema`, `wma`, `rsi`, `atr`, `adx`, `macd`, `bollinger`, `vwap`, `supertrend`, `stochastic`, `obv`, `cci`, `keltner-channel`, `donchian` and `parabolic-sar` since 2.5.8, and (unreleased) `zlema`, `vidya`, `elder-ray`, `schaff-trend-cycle`, `volatility-squeeze`, `zigzag` and `high-low-52-week`. A tick on the forming bar, or one appended bar, costs them a step or one window instead of a pass over the loaded history, and the spliced result equals a full `calc` of the same bars value for value, NaN and negative zero included; `tests/indicator-tail.test.ts` checks that after every tick and every appended bar on random histories with session breaks, missing prices and missing volume. The ones that carry state from bar to bar rebuild it once after each full `calc` (a load, a history change, a settings change), so the first tick after one costs about a full pass. Their tail returns `null`, and the runtime runs `calc`, for a length that is not a positive whole number, a negative Donchian `offset`, any VWAP `offset`, a VWAP bar whose arrival changes how the history's sessions are read (the first overnight gap in a history, or a new median bar gap), and a `zigzag` tick that changes a bar before the tail (see the note on the seven below). Every other built-in recomputes over the loaded history; window helpers can add a period-dependent cost. **Since 1.8.4 that is paid once per animation frame, not once per tick**: a data update marks the indicators stale and the flush runs before the next paint, so a burst of ticks between two frames costs one pass rather than one per tick. Measured on a 1875-bar chart with 50 ticks between frames, that took a ten-indicator pane from 643 ms of blocked main thread to 21 ms. Cost is now bounded by the display refresh and by how much history is loaded, not by how fast the feed ticks.
 - **Since 2.5.8 a recompute writes each plot in place.** A pass whose bars begin with the times the last pass wrote compares every point it computed (colours included) with what the plot's series holds, and sends only the points that differ, and the last point, through `SeriesApi.update`; the chart's shared time index is rebuilt only when the set of times changes. New or older history, a filled gap, a plot the previous pass did not write, or more than eight moved points still go through one `setData`. The plot's content is identical either way, key order included. The render bench (`docs/performance-notes.md`) measured a ten-study tick at 50,000 bars at a p95 of 49.2 ms on `canvas2d`, against 1166.3 ms on 2.5.7. Two consequences: a custom `IndicatorHost` needs a working `update` on the series `addIndicatorSeries` returns, corrections to older points included (see [Custom hosts](#custom-hosts)); and `indicator.series(key)` stays a styling handle, since the study must be the only writer of its plot series and data written into it is now kept wherever the study did not move a point.
+- **Seven built-ins added after 2.5.10 (unreleased).** Each follows a published formula, written out in its source comment, and pins its first bar and its zero-denominator rule:
+  - `zigzag` is the percent-reversal definition. While a swing rises its end is the highest high since it began; a bar whose low is at least `deviation` percent below that high confirms it as a swing point and starts a falling swing at the bar's low, and a falling swing is the mirror. A move of exactly the deviation reverses, a bar that makes a new extreme extends the swing even when its other end would reverse it, and a tie keeps the earlier bar. Before the first reversal the highest high and lowest low are both open, and the earlier of the two becomes the first swing point once they lie the deviation apart. The `zigzag` column holds each swing point's price on its own bar, the running end of the last leg included, and `null` everywhere else. The legs are `draws` lines, not a plot, so they stay straight on a logarithmic scale; they take the plot's colour, opacity, thickness and line style through `plotStyleKeys`, and the last leg is dashed (dotted when the chosen style is dashed). **Only the last leg repaints.** On a live tick with a new extreme its end moves onto the forming bar and the bar it left reads `null` again; a tick that retraces by the deviation confirms the end and starts a new last leg on the forming bar; a corrected bar can move the end back. Confirmed swing points never move. Its `calcTail` resumes the walk and returns exactly what a full `calc` does, declining when a tick changes a bar before the tail (the first tick of a bar that extends the leg, or a correction), which is the study revising its own past, not a disagreement.
+  - `high-low-52-week` is the highest high and lowest low of the 364 calendar days, counted in the chart's zone, that end on the bar's own day: on daily bars a high made on a Friday leaves the window on the Friday 52 weeks later. A bar prints only once the loaded history begins before its window, so a chart with less than a year loaded draws nothing rather than a shorter range under a 52 week name, on every interval. A bar with no high or low is skipped.
+  - `zlema` is `ema(source + (source - source[lag]), length)` with `lag = floor((length - 1) / 2)` and an SMA-seeded EMA, first printing at `lag + length - 1`. On a straight ramp with an odd length it sits on the source exactly.
+  - `vidya` steps an EMA (`alpha = 2 / (length + 1)`) with its weight scaled by `|CMO(source, cmoLength)| / 100`. The seed is the source itself at bar `cmoLength`, not zero; a window that did not move has no momentum and holds the line; a missing close leaves the bars whose window holds it absent, and the line resumes from the value it held.
+  - `elder-ray` is `high - ema(close, length)` (`bull`) and `low - ema(close, length)` (`bear`), two histograms from bar `length - 1`. Bear never exceeds bull, so where both share a sign one column stands inside the other; read both from the legend.
+  - `schaff-trend-cycle` is a stochastic of `ema(fastLength) - ema(slowLength)` over `cycleLength`, smoothed by `factor`, then the same stochastic and smoothing again, 0 to 100 with 25/75 levels, first printing at `slowLength + 2 * cycleLength - 3` (bar 67 at the defaults). A window with no range repeats the previous reading; before the first reading it is absent, so a series whose MACD never moves (or `fastLength` equal to `slowLength`) prints nothing.
+  - `volatility-squeeze` compares Bollinger Bands (`bbMult` population standard deviations) with a Keltner Channel (`kcMult` times the simple average true range), both on one SMA basis over one `length`. `state` is 1 while the bands sit inside the channel and 0 otherwise, drawn as dots on zero (`squeeze`) from bar `length - 1`; `momentum` is `linreg(close - ((highest(high) + lowest(low)) / 2 + sma(close)) / 2, length)` from bar `2 * length - 2`, coloured by sign and by direction against the previous bar (a missing previous bar reads as zero).
 - Source values: `'open' | 'high' | 'low' | 'close' | 'hl2' | 'hlc3' | 'ohlc4' | 'volume'`. `INDICATOR_SOURCES` is the option list for a UI and deliberately omits `'volume'`.
-- The descriptors implement published mathematical formulas with explicit initialization and missing-value conventions. Check those conventions when comparing outputs. They live in `src/indicators/` split by family: `trend.ts`, `momentum.ts`, `volume.ts`, `overlay.ts`, `oscillators.ts`, `volatility.ts`, `flow.ts`, `adaptive.ts`, `averages.ts`, `strength.ts`, `indices.ts`, `ranges.ts`, `signals.ts`, plus `external.ts` for the Tier-2 contract and `calc.ts` for the shared math. `index.ts` is a manifest that concatenates them into `BUILTIN_INDICATORS`.
+- The descriptors implement published mathematical formulas with explicit initialization and missing-value conventions. Check those conventions when comparing outputs. They live in `src/indicators/` split by family: `trend.ts`, `momentum.ts`, `volume.ts`, `overlay.ts`, `oscillators.ts`, `volatility.ts`, `flow.ts`, `adaptive.ts`, `averages.ts`, `strength.ts`, `indices.ts`, `ranges.ts`, `signals.ts`, `exponential.ts`, `swings.ts`, plus `external.ts` for the Tier-2 contract and `calc.ts` for the shared math. `index.ts` is a manifest that concatenates them into `BUILTIN_INDICATORS`.
 
 ## `chart.addIndicator`
 
@@ -503,7 +518,7 @@ chart.on('indicatorSettings', (p) => {
 
 `levels(ctx)` returns horizontal reference lines drawn as `PriceLine`s in the indicator's pane (`{ price, color?, title?, dashed?, lineWidth?, lineStyle? }`, defaults `#8892a6` and dashed; `lineStyle` is `'solid' | 'dashed' | 'dotted'` and overrides `dashed`). `range(settings)` pins the pane's price scale.
 
-**Since 1.7.1** `ctx` carries the settings keys directly (so every existing `levels(settings)` descriptor is unchanged) plus `ctx.bars` and `ctx.values`, and levels recompute after each `calc` rather than only on a settings change. That is what lets a level be derived from the data: a previous-day high, an anchored VWAP band, the last close. Write `ctx.bars ?? []`, since both are optional. 39 built-ins declare `levels`, 12 declare `range`, and levels are computed from the live settings, so `rsi`'s are `overbought` / 50 / `oversold`, not the literals below.
+**Since 1.7.1** `ctx` carries the settings keys directly (so every existing `levels(settings)` descriptor is unchanged) plus `ctx.bars` and `ctx.values`, and levels recompute after each `calc` rather than only on a settings change. That is what lets a level be derived from the data: a previous-day high, an anchored VWAP band, the last close. Write `ctx.bars ?? []`, since both are optional. 41 built-ins declare `levels`, 13 declare `range`, and levels are computed from the live settings, so `rsi`'s are `overbought` / 50 / `oversold`, not the literals below.
 
 | id | Levels (at default settings) | Fixed range |
 |---|---|---|
@@ -547,6 +562,8 @@ chart.on('indicatorSettings', (p) => {
 | `linreg-slope` | 0 | none |
 | `trend-strength-index` | 1, 0, -1 | -1..1 |
 | `rsi-divergence` | 70, 50, 30 | 0..100 |
+| `schaff-trend-cycle` (unreleased) | 75, 25 | 0..100 |
+| `elder-ray` (unreleased) | 0 | none |
 
 **`range()` is applied only when the instance created its own pane.** Two indicators sharing a pane would otherwise fight over it, so an RSI added with `{ paneIndex: 1 }` onto someone else's pane will not pin 0..100.
 
@@ -948,11 +965,11 @@ single `table` hook is unchanged; when both hooks exist, `tables` takes preceden
 
 **`colorBy` now reaches line, area and step** as well as histogram and column (1.7.1). Return `undefined` to fall back to the plot colour. A uniform column still strokes once, so an ordinary series pays nothing.
 
-**`calcTail` is worth far less since 1.8.4 than it used to be.** It existed because a recompute ran on every tick; recompute is now scheduled with the frame, so a full `calc` is paid once per paint however fast the feed ticks. Reach for `calcTail` when one pass over the loaded history is itself slow, which means deep history rather than a busy symbol, and not by default. Sixteen built-ins implement it (since 2.5.8), listed in the catalog notes above. Return values for `[fromIndex, bars.length)` and the runtime splices them onto the previous result; return `null` to fall back. Since 1.7.1 the tail path is gated on **times**, not on a bar count: the first bar's time must be unchanged, and the last bar must be either that same bar replaced in place or one appended directly after it. A symbol change landing on a matching count, or one older bar paged in at the left edge, falls back to a full `calc` instead of splicing onto a history that no longer exists. `fromIndex` is `previousCount - 1` because the previously-last bar may have been replaced. Any settings change or external-data arrival resets the tail state to force a full recompute.
+**`calcTail` is worth far less since 1.8.4 than it used to be.** It existed because a recompute ran on every tick; recompute is now scheduled with the frame, so a full `calc` is paid once per paint however fast the feed ticks. Reach for `calcTail` when one pass over the loaded history is itself slow, which means deep history rather than a busy symbol, and not by default. Twenty-three built-ins implement it, listed in the catalog notes above. Return values for `[fromIndex, bars.length)` and the runtime splices them onto the previous result; return `null` to fall back. Since 1.7.1 the tail path is gated on **times**, not on a bar count: the first bar's time must be unchanged, and the last bar must be either that same bar replaced in place or one appended directly after it. A symbol change landing on a matching count, or one older bar paged in at the left edge, falls back to a full `calc` instead of splicing onto a history that no longer exists. `fromIndex` is `previousCount - 1` because the previously-last bar may have been replaced. Any settings change or external-data arrival resets the tail state to force a full recompute.
 
 **Spreading a built-in does not carry its `calcTail` (since 2.5.8).** The built-ins hold `calcTail` as a property that is not enumerable, so `{ ...getIndicator('ema'), id: 'my-ema', calc: myCalc }` has none and recomputes in full on every tick, through `myCalc`, exactly as it did before the built-ins had tails. That is deliberate: the runtime keeps only the columns a tail returns and never calls your `calc` on a tail, so an inherited tail would drop a column you add, fill a forming bar you blank, and ignore settings you rewrite. To keep the tail, copy it by name, `calcTail: getIndicator('ema').calcTail`, and only when your `calc` returns the built-in's result unchanged for the settings it is given. A copied tail still resumes only from a store the built-in's own `calc` ran on, declines when the held result has a column it does not write, and compares the bar before the tail with what the runtime holds, giving up for that instance after three disagreements in a row; those checks catch most reshaping, not all of it.
 
-`registerIndicator` overwrites an existing id, later registration wins. With 105 built-ins the id space is crowded, so namespace a custom id (`my-momentum`, `acme-vwap`) unless you intend to replace a built-in. Register before `addIndicator`.
+`registerIndicator` overwrites an existing id, later registration wins. With 112 built-ins the id space is crowded, so namespace a custom id (`my-momentum`, `acme-vwap`) unless you intend to replace a built-in. Register before `addIndicator`.
 
 ## The calculation context (1.8.1, extended 1.8.2)
 
@@ -1784,14 +1801,14 @@ import { ema, emaSeries, rsi, rsiSeries, atr, trueRange, supertrend, supertrendS
 
 The tier exports the pure helpers from `src/indicators/calc.ts`, including `sma`, `wma`, `rma`, `stdev`, `highest`, `lowest`, `nulls`, `connorsStreak`, `rollingSum`, `correlation`, `pivotHigh`, `pivotLow`, `barsSince` and `valueWhen`. Read each signature before composing it; these helpers do not all return the same shape. `nulls` converts `NaN` to `null` for a plot column. Default scalar `sma` sums each finite current window independently, so expired gaps or overflow cannot poison later windows. `correlation` takes two passes over each window, oldest first, finishing both means before any deviation, so it keeps its precision at high price levels where a single-pass sum of squares cancels; a window with a missing value or an overflowing step is `NaN`, and so is a flat window whose deviations are all exactly zero (three bars of 5). A flat window whose mean is inexact reads what the arithmetic gives, as in the companion scripting language: three bars of 0.1 average to slightly more than 0.1, so the reading is exactly 0 against a bar index (Trend Strength Index) and within rounding of 0 against another series. Do not treat a finite `correlation` as proof that a window moved.
 
-The tier also exports every descriptor by name in SCREAMING_SNAKE form (`RSI`, `MACD`, `HALFTREND`, ...), the per-family arrays (`OVERLAY_INDICATORS`, `OSCILLATOR_INDICATORS`, `VOLATILITY_INDICATORS`, `FLOW_INDICATORS`, `ADAPTIVE_INDICATORS`, `AVERAGE_INDICATORS`, `STRENGTH_INDICATORS`, `INDEX_INDICATORS`, `RANGE_INDICATORS`, `SIGNAL_INDICATORS`), and the flat `BUILTIN_INDICATORS`. Read `BUILTIN_INDICATORS` rather than hard-coding a list of ids.
+The tier also exports every descriptor by name in SCREAMING_SNAKE form (`RSI`, `MACD`, `HALFTREND`, ...), the per-family arrays (`OVERLAY_INDICATORS`, `OSCILLATOR_INDICATORS`, `VOLATILITY_INDICATORS`, `FLOW_INDICATORS`, `ADAPTIVE_INDICATORS`, `AVERAGE_INDICATORS`, `STRENGTH_INDICATORS`, `INDEX_INDICATORS`, `RANGE_INDICATORS`, `SIGNAL_INDICATORS`, and (unreleased) `EXPONENTIAL_INDICATORS` and `SWING_INDICATORS`), and the flat `BUILTIN_INDICATORS`. Read `BUILTIN_INDICATORS` rather than hard-coding a list of ids.
 
 Related: [core-api](./core-api.md), [chart-types](./chart-types.md), [scales-and-panes](./scales-and-panes.md), [events-and-state](./events-and-state.md), [bundling-and-tiers](./bundling-and-tiers.md), [transforms](./transforms.md), [pitfalls](./pitfalls.md).
 
 ## Every built-in is also a named export
 
-The tier's import side effect registers all 105. You do not have to take all
-105. Each descriptor is exported individually under the UPPER_SNAKE form of its
+The tier's import side effect registers all 112. You do not have to take all
+112. Each descriptor is exported individually under the UPPER_SNAKE form of its
 id, so a bundle can register only what it draws:
 
 ```ts
@@ -1827,29 +1844,33 @@ the version the user has on the chart, and the plot keys are the built-in's, not
 | `CONNORS_RSI` &rarr; `connors-rsi` | `CONSOLIDATION_BREAKOUT` &rarr; `consolidation-breakout` | `COPPOCK_CURVE` &rarr; `coppock-curve` |
 | `CPR` &rarr; `cpr` | `DEMA` &rarr; `dema` | `DONCHIAN` &rarr; `donchian` |
 | `DPO` &rarr; `dpo` | `EASE_OF_MOVEMENT` &rarr; `ease-of-movement` | `ELDER_FORCE_INDEX` &rarr; `elder-force-index` |
-| `EMA` &rarr; `ema` | `ENVELOPE` &rarr; `envelope` | `FISHER_TRANSFORM` &rarr; `fisher-transform` |
-| `HALFTREND` &rarr; `halftrend` | `HISTORICAL_VOLATILITY` &rarr; `historical-volatility` | `HMA` &rarr; `hma` |
-| `HULL_SUITE` &rarr; `hull-suite` | `ICHIMOKU` &rarr; `ichimoku` | `KAMA` &rarr; `kama` |
-| `KELTNER_CHANNEL` &rarr; `keltner-channel` | `KLINGER_OSCILLATOR` &rarr; `klinger-oscillator` | `KNOW_SURE_THING` &rarr; `know-sure-thing` |
-| `LINREG_SLOPE` &rarr; `linreg-slope` | `LSMA` &rarr; `lsma` | `MACD` &rarr; `macd` |
-| `MASS_INDEX` &rarr; `mass-index` | `MA_CHANNEL` &rarr; `ma-channel` | `MA_CROSS` &rarr; `ma-cross` |
-| `MA_RIBBON` &rarr; `ma-ribbon` | `MCGINLEY_DYNAMIC` &rarr; `mcginley-dynamic` | `MEDIAN` &rarr; `median` |
-| `MFI` &rarr; `mfi` | `MOMENTUM` &rarr; `momentum` | `NET_VOLUME` &rarr; `net-volume` |
-| `NVI` &rarr; `nvi` | `OBV` &rarr; `obv` | `PARABOLIC_SAR` &rarr; `parabolic-sar` |
-| `PPO` &rarr; `ppo` | `PVI` &rarr; `pvi` | `PVO` &rarr; `pvo` |
-| `PVT` &rarr; `pvt` | `RANGE_ANALYSIS` &rarr; `range-analysis` | `RELATIVE_VIGOR_INDEX` &rarr; `relative-vigor-index` |
-| `RELATIVE_VOLATILITY_INDEX` &rarr; `relative-volatility-index` | `ROC` &rarr; `roc` | `RSI` &rarr; `rsi` |
-| `RSI_DIVERGENCE` &rarr; `rsi-divergence` | `SEASONALITY` &rarr; `seasonality` | `SMA` &rarr; `sma` |
+| `ELDER_RAY` &rarr; `elder-ray` | `EMA` &rarr; `ema` | `ENVELOPE` &rarr; `envelope` |
+| `FISHER_TRANSFORM` &rarr; `fisher-transform` | `HALFTREND` &rarr; `halftrend` | `HIGH_LOW_52_WEEK` &rarr; `high-low-52-week` |
+| `HISTORICAL_VOLATILITY` &rarr; `historical-volatility` | `HMA` &rarr; `hma` | `HULL_SUITE` &rarr; `hull-suite` |
+| `ICHIMOKU` &rarr; `ichimoku` | `KAMA` &rarr; `kama` | `KELTNER_CHANNEL` &rarr; `keltner-channel` |
+| `KLINGER_OSCILLATOR` &rarr; `klinger-oscillator` | `KNOW_SURE_THING` &rarr; `know-sure-thing` | `LINREG_SLOPE` &rarr; `linreg-slope` |
+| `LSMA` &rarr; `lsma` | `MACD` &rarr; `macd` | `MASS_INDEX` &rarr; `mass-index` |
+| `MA_CHANNEL` &rarr; `ma-channel` | `MA_CROSS` &rarr; `ma-cross` | `MA_RIBBON` &rarr; `ma-ribbon` |
+| `MCGINLEY_DYNAMIC` &rarr; `mcginley-dynamic` | `MEDIAN` &rarr; `median` | `MFI` &rarr; `mfi` |
+| `MOMENTUM` &rarr; `momentum` | `NET_VOLUME` &rarr; `net-volume` | `NVI` &rarr; `nvi` |
+| `OBV` &rarr; `obv` | `OPEN_INTEREST` &rarr; `open-interest` | `OPEN_INTEREST_BUILDUP` &rarr; `open-interest-buildup` |
+| `OPEN_INTEREST_CHANGE` &rarr; `open-interest-change` | `PARABOLIC_SAR` &rarr; `parabolic-sar` | `PPO` &rarr; `ppo` |
+| `PVI` &rarr; `pvi` | `PVO` &rarr; `pvo` | `PVT` &rarr; `pvt` |
+| `RANGE_ANALYSIS` &rarr; `range-analysis` | `RELATIVE_VIGOR_INDEX` &rarr; `relative-vigor-index` | `RELATIVE_VOLATILITY_INDEX` &rarr; `relative-volatility-index` |
+| `ROC` &rarr; `roc` | `RSI` &rarr; `rsi` | `RSI_DIVERGENCE` &rarr; `rsi-divergence` |
+| `SCHAFF_TREND_CYCLE` &rarr; `schaff-trend-cycle` | `SEASONALITY` &rarr; `seasonality` | `SMA` &rarr; `sma` |
 | `SMI` &rarr; `smi` | `SMI_ERGODIC_INDICATOR` &rarr; `smi-ergodic-indicator` | `SMI_ERGODIC_OSCILLATOR` &rarr; `smi-ergodic-oscillator` |
 | `SMMA` &rarr; `smma` | `SPECIAL_K` &rarr; `special-k` | `STANDARD_DEVIATION` &rarr; `standard-deviation` |
 | `STANDARD_ERROR` &rarr; `standard-error` | `STANDARD_ERROR_BANDS` &rarr; `standard-error-bands` | `STOCHASTIC` &rarr; `stochastic` |
 | `STOCHASTIC_RSI` &rarr; `stochastic-rsi` | `SUPERTREND` &rarr; `supertrend` | `T3` &rarr; `t3` |
 | `TEMA` &rarr; `tema` | `TREND_STRENGTH_INDEX` &rarr; `trend-strength-index` | `TRIX` &rarr; `trix` |
 | `TSI` &rarr; `tsi` | `TWAP` &rarr; `twap` | `ULCER_INDEX` &rarr; `ulcer-index` |
-| `ULTIMATE_OSCILLATOR` &rarr; `ultimate-oscillator` | `VOLATILITY_STOP` &rarr; `volatility-stop` | `VOLUME` &rarr; `volume` |
-| `VORTEX` &rarr; `vortex` | `VWAP` &rarr; `vwap` | `VWMA` &rarr; `vwma` |
-| `WAVETREND` &rarr; `wavetrend` | `WILLIAMS_FRACTALS` &rarr; `williams-fractals` | `WILLIAMS_PERCENT_R` &rarr; `williams-percent-r` |
-| `WILLIAMS_VIX_FIX` &rarr; `williams-vix-fix` | `WMA` &rarr; `wma` | `WOODIES_CCI` &rarr; `woodies-cci` |
+| `ULTIMATE_OSCILLATOR` &rarr; `ultimate-oscillator` | `VIDYA` &rarr; `vidya` | `VOLATILITY_SQUEEZE` &rarr; `volatility-squeeze` |
+| `VOLATILITY_STOP` &rarr; `volatility-stop` | `VOLUME` &rarr; `volume` | `VORTEX` &rarr; `vortex` |
+| `VWAP` &rarr; `vwap` | `VWMA` &rarr; `vwma` | `WAVETREND` &rarr; `wavetrend` |
+| `WILLIAMS_FRACTALS` &rarr; `williams-fractals` | `WILLIAMS_PERCENT_R` &rarr; `williams-percent-r` | `WILLIAMS_VIX_FIX` &rarr; `williams-vix-fix` |
+| `WMA` &rarr; `wma` | `WOODIES_CCI` &rarr; `woodies-cci` | `ZIGZAG` &rarr; `zigzag` |
+| `ZLEMA` &rarr; `zlema` |  |  |
 
 `INDICATORS_TIER` is the tier's identity constant (`'indicators'`), for feature
 detection without a bare string.
@@ -1949,7 +1970,7 @@ unparseable feed volume to `undefined` before it reaches the chart.
 
 ## Grouped descriptor exports
 
-Three subsets are exported as arrays, for registering a family without naming each
+Five subsets are exported as arrays, for registering a family without naming each
 member. They are already included in the tier's own registration.
 
 | Export | Contents |
@@ -1957,6 +1978,8 @@ member. They are already included in the tier's own registration.
 | `STUDY_INDICATORS` | `cpr`, `alphatrend`, `range-analysis` |
 | `SEASONALITY_INDICATORS` | `seasonality` |
 | `WAVETREND_INDICATORS` | `wavetrend` |
+| `EXPONENTIAL_INDICATORS` (unreleased) | `zlema`, `vidya`, `elder-ray`, `schaff-trend-cycle` |
+| `SWING_INDICATORS` (unreleased) | `zigzag`, `high-low-52-week` |
 
 ## Managed source status (2.1.6)
 
