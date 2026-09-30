@@ -12,7 +12,7 @@
 import type { SeriesStyle } from '../render/series-style';
 import type { PriceScaleId } from './series';
 import type { IndicatorSettings } from './indicator-registry';
-import type { PriceScaleMode } from '../scale/price-scale';
+import { PRICE_SCALE_MODES, type PriceScaleMode } from '../scale/price-scale';
 import type { AlertsDocument } from '../alerts/types';
 import { isPriceScaleId, type PriceAxisPlacement } from './price-axis-layout';
 import type { IndicatorPolicy } from './indicator-policy';
@@ -90,7 +90,7 @@ function scaleState(input: unknown, legacy: boolean): PriceScaleState {
   const field = (key: string, fallback: unknown): unknown => value[key] === undefined && legacy ? fallback : value[key];
   const mode = field('mode', 'linear');
   const inverted = field('inverted', false), autoScale = field('autoScale', true);
-  if (!['linear', 'logarithmic', 'percentage', 'indexed-to-100'].includes(mode as string)
+  if (!PRICE_SCALE_MODES.includes(mode as PriceScaleMode)
     || typeof inverted !== 'boolean' || typeof autoScale !== 'boolean') throw new Error('Invalid price scale mode or flags');
   const result: PriceScaleState = {
     marginTop: stateNumber(field('marginTop', 0.1), 'top scale margin'),

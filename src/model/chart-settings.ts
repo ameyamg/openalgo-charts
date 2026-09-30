@@ -39,7 +39,7 @@ import { HLC_AREA_BAND_COLOR } from '../render/line';
 import type { CrosshairOptions } from '../render/crosshair';
 import type { LegendStatusLineOptions, LegendTitleMode } from '../primitives/pane-legend';
 import type { TradingColors, TradingSettings } from '../core/trading-controller';
-import type { PriceScaleMode } from '../scale/price-scale';
+import { PRICE_SCALE_MODES, type PriceScaleMode } from '../scale/price-scale';
 import { DEFAULT_TIMEZONE, isValidTimezone } from '../feed/time';
 import { filterLinkAppearance } from '../link/appearance';
 import type { LooseOptional } from '../helpers/types';
@@ -558,12 +558,15 @@ function readoutControls(chart: Chart): Control[] {
 
 // ── Axes ──────────────────────────────────────────────────────────────────
 
-const SCALE_MODES: readonly { label: string; value: string }[] = [
-  { label: 'Linear', value: 'linear' },
-  { label: 'Logarithmic', value: 'logarithmic' },
-  { label: 'Percent', value: 'percentage' },
-  { label: 'Indexed to 100', value: 'indexed-to-100' },
-];
+/** Keyed by the mode, so a fifth mode fails to compile here until it has a label. */
+const SCALE_MODE_LABELS: Readonly<Record<PriceScaleMode, string>> = {
+  linear: 'Linear',
+  logarithmic: 'Logarithmic',
+  percentage: 'Percent',
+  'indexed-to-100': 'Indexed to 100',
+};
+const SCALE_MODES: readonly { label: string; value: string }[] =
+  PRICE_SCALE_MODES.map(value => ({ label: SCALE_MODE_LABELS[value], value }));
 
 /**
  * Zones offered by the timezone control, roughly east to west so the list reads

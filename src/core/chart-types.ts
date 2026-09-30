@@ -13,7 +13,7 @@
 import type { RafScheduler, RafCanceller } from './render-loop';
 import type { ChartTheme } from '../theme';
 import type { TimeScaleOptions } from '../scale/time-scale';
-import type { PriceScaleOptions, PriceScaleMode } from '../scale/price-scale';
+import type { PriceScaleOptions } from '../scale/price-scale';
 import type { TickMarkType } from '../render/axis';
 import type { CanvasOptions, GridOptions } from '../render/grid';
 import type {
@@ -589,9 +589,8 @@ export interface ContextMenuTarget {
   scaleId?: PriceScaleId;
 }
 
-/** The four price-scale modes, in the order a menu lists them. */
-export const PRICE_SCALE_MODES: readonly PriceScaleMode[] =
-  ['linear', 'logarithmic', 'percentage', 'indexed-to-100'];
+// Declared beside PriceScaleMode; published from here, where it always was.
+export { PRICE_SCALE_MODES } from '../scale/price-scale';
 
 /**
  * The setters that change what `getState` saves without an event of their
