@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Chart, generateBars, type Bar } from '../src/index';
+import { Chart, applyChartSettings, chartSettingsSchema, generateBars, readChartSettings, type Bar } from '../src/index';
 import {
   registerTransformChartTypes, runTransform, HeikinAshiTransform, RenkoTransform, PointFigureTransform, KagiTransform,
 } from '../src/transform/index';
@@ -192,5 +192,60 @@ describe('in-chart transforms', () => {
     expect(report.applied).toBe(true);
     expect(report.series).toEqual(legacy.series);
     expect(chart.restoreState(saved).series[0].transform).toEqual({ type: 'point-figure', options: { mode: 'atr', reversal: 2 } });
+  });
+});
+
+describe('transform settings', () => {
+  const settingsChart = (): { chart: Chart; series: ReturnType<Chart['addSeries']> } => {
+    const chart = makeChart();
+    const series = chart.addSeries('candlestick');
+    series.setData(walk(200));
+    return { chart, series };
+  };
+  const priceInputs = (chart: Chart) => chartSettingsSchema(chart).find(tab => tab.id === 'price')!.inputs;
+
+  it('offers the transform options on the Price tab and writes them to the spec', () => {
+    const { chart, series } = settingsChart();
+    expect(priceInputs(chart).some(input => input.key.startsWith('transform.'))).toBe(false);
+    chart.setSeriesTransform(series, { type: 'renko' });
+    const box = priceInputs(chart).find(input => input.key === 'transform.boxSize')!;
+    expect(box).toMatchObject({ type: 'number', group: 'Renko', default: 0, min: 0 });
+    expect(priceInputs(chart)[0].key).toBe('transform.boxSize');
+    expect(readChartSettings(chart)['transform.boxSize']).toBe(0);
+    applyChartSettings(chart, { 'transform.boxSize': 2 });
+    expect(chart.seriesTransform(series)).toEqual({ type: 'renko', options: { boxSize: 2 } });
+    expect(readChartSettings(chart)['transform.boxSize']).toBe(2);
+    expect(Math.abs(chart.primaryBars()[0].close - chart.primaryBars()[0].open)).toBe(2);
+    // An option the transform refuses changes nothing; the default drops it.
+    applyChartSettings(chart, { 'transform.boxSize': -1 });
+    expect(chart.seriesTransform(series)).toEqual({ type: 'renko', options: { boxSize: 2 } });
+    applyChartSettings(chart, { 'transform.boxSize': 0 });
+    expect(chart.seriesTransform(series)).toEqual({ type: 'renko' });
+  });
+
+  it('keeps each point and figure option to the box mode it belongs to', () => {
+    const { chart, series } = settingsChart();
+    chart.setSeriesTransform(series, { type: 'point-figure' });
+    const inputs = priceInputs(chart);
+    expect(inputs.filter(input => input.key.startsWith('transform.')).map(input => input.key)).toEqual([
+      'transform.mode', 'transform.boxSize', 'transform.percent', 'transform.atrPeriod', 'transform.atrMultiplier',
+      'transform.reversal', 'transform.method']);
+    expect(inputs.find(input => input.key === 'transform.percent')!.visibleWhen).toEqual({ key: 'transform.mode', is: 'percent' });
+    applyChartSettings(chart, { 'transform.mode': 'percent', 'transform.percent': 0.5, 'transform.reversal': 2 });
+    expect(chart.seriesTransform(series)).toEqual({ type: 'point-figure', options: { mode: 'percent', percent: 0.5, reversal: 2 } });
+    expect(chart.primaryBars()).toEqual(runTransform(new PointFigureTransform({ mode: 'percent', percent: 0.5, reversal: 2 }), series.getData()));
+    // The X and O colours are the rows that renderer reads; a line colour it ignores is not offered.
+    expect(inputs.find(input => input.key === 'symbol.body')).toMatchObject({ type: 'colorPair', up: { key: 'symbol.upColor' } });
+    expect(inputs.some(input => input.key === 'symbol.color' || input.key === 'symbol.lineWidth')).toBe(false);
+  });
+
+  it('offers the Kagi thick and thin colours the renderer draws with', () => {
+    const { chart, series } = settingsChart();
+    chart.setSeriesTransform(series, { type: 'kagi' });
+    expect(priceInputs(chart).find(input => input.key === 'symbol.kagi')).toMatchObject({
+      type: 'colorPair', up: { key: 'symbol.thickColor', default: '#26a69a' }, down: { key: 'symbol.thinColor', default: '#ef5350' } });
+    applyChartSettings(chart, { 'symbol.thinColor': '#123456' });
+    expect(chart.primarySeriesInfo()?.style.thinColor).toBe('#123456');
+    expect(priceInputs(chart).some(input => input.key === 'symbol.color')).toBe(false);
   });
 });

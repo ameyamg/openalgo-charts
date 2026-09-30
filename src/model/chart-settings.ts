@@ -29,8 +29,9 @@
  * changes: a key names the option it writes, not the tab it is shown on.
  */
 import type { AxisChromeOptions, Chart, ChartEventOptions, ChartNavigationOptions, ChartWatermarkOptions } from '../core/chart';
-import type { IndicatorInput, IndicatorInputPresentation } from './indicator-registry';
+import type { IndicatorInput, IndicatorInputCondition, IndicatorInputPresentation } from './indicator-registry';
 import { getChartType } from './chart-type-registry';
+import { getSeriesTransform } from './series-transform';
 import type { SeriesStyle } from '../render/series-style';
 import type { CanvasOptions, CanvasLineStyle, GridOptions, ScaleCanvasOptions } from '../render/grid';
 import { SCALE_FONT_MIN, SCALE_FONT_MAX } from '../render/grid';
@@ -254,6 +255,7 @@ type StyleColorKey =
   | 'areaTopColor' | 'areaBottomColor'
   | 'topColor' | 'bottomColor'
   | 'closeColor'
+  | 'thickColor' | 'thinColor'
   | 'color';
 
 /** Style fields a pair's switch writes. */
@@ -333,6 +335,55 @@ const prevCloseCtl = (group: string): Control => boolCtl(
   (c, v) => setSty(c, { colorByPreviousClose: v }),
 );
 
+/** A condition over a transform's option keys, read over the settings keys they are shown under. */
+function underKey(condition: IndicatorInputCondition, prefix: string): IndicatorInputCondition {
+  if ('all' in condition) return { all: condition.all.map(item => underKey(item, prefix)) };
+  if ('any' in condition) return { any: condition.any.map(item => underKey(item, prefix)) };
+  return { ...condition, key: prefix + condition.key };
+}
+
+/**
+ * The options of the primary series' transform (`Chart.setSeriesTransform`),
+ * one control each as the transform declares it, keyed `transform.<option>`
+ * under the transform's name. None without a transform. A write that puts an
+ * option back to its default drops it from the spec, so the saved state
+ * carries only what was chosen and a size left at 0 keeps following the
+ * history. An option the transform refuses is skipped, as a stale zone is.
+ */
+function transformControls(chart: Chart): Control[] {
+  const series = chart.primarySeries();
+  const spec = series === null ? null : chart.seriesTransform(series);
+  if (spec === null) return [];
+  const { name, inputs } = getSeriesTransform(spec.type);
+  const prefix = 'transform.';
+  return inputs.map((option): Control => {
+    const key = prefix + option.key;
+    const input = { ...option, key, group: name } as IndicatorInput;
+    if (option.visibleWhen) input.visibleWhen = underKey(option.visibleWhen, prefix);
+    if (option.activeWhen) input.activeWhen = underKey(option.activeWhen, prefix);
+    const current = (c: Chart): ReturnType<Chart['seriesTransform']> => {
+      const primary = c.primarySeries();
+      const now = primary === null ? null : c.seriesTransform(primary);
+      return now?.type === spec.type ? now : null;
+    };
+    return {
+      input,
+      fields: [{
+        key,
+        read: (c) => current(c)?.options?.[option.key] ?? (option.default as number | string),
+        write: (c, v) => {
+          const now = current(c);
+          if (now === null) return;
+          const options = { ...now.options };
+          if (v === option.default) delete options[option.key];
+          else options[option.key] = v as number | string;
+          try { c.setSeriesTransform(c.primarySeries()!, { type: now.type, options }); } catch { /* refused, as validation says */ }
+        },
+      }],
+    };
+  });
+}
+
 /**
  * Type-dependent Price controls. Only what the primary series' renderer
  * actually reads: a candle has borders and wicks, a line has a dash, and a
@@ -349,6 +400,8 @@ function priceControls(chart: Chart): Control[] {
   // (a bare volume histogram or column). An empty tab is the host's to hide; a
   // tab of controls that do nothing is a lie.
   if (type === undefined) return [];
+  // What the chart derives its elements from comes before how they are painted.
+  out.push(...transformControls(chart));
   if (type === 'candlestick' || type === 'hollow-candle' || type === 'volume-candle') {
     out.push(
       // No switch on Body: a candle with no body is not a candle, and there is
@@ -379,6 +432,15 @@ function priceControls(chart: Chart): Control[] {
     // A column is drawn from a base value, not open to close, so it has no
     // previous-close verdict to take: only the two true bar renderers get it.
     if (type !== 'column') out.push(prevCloseCtl(group));
+  } else if (type === 'point-figure') {
+    // A column of Xs rises and one of Os falls: the renderer's up and down colours.
+    out.push(seriesColorPair('symbol.body', 'Boxes', 'Columns',
+      { key: 'upColor', label: 'X', def: '#26a69a' },
+      { key: 'downColor', label: 'O', def: '#ef5350' }));
+  } else if (type === 'kagi') {
+    out.push(seriesColorPair('symbol.kagi', 'Line', 'Kagi',
+      { key: 'thickColor', label: 'Thick', def: '#26a69a' },
+      { key: 'thinColor', label: 'Thin', def: '#ef5350' }));
   } else {
     // Which colour a line-family renderer actually reads is not the same field
     // across the family, and offering the wrong one ships a swatch that moves
