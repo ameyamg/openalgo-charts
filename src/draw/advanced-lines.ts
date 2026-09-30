@@ -2,11 +2,13 @@
 import type { AtLeast, DrawContext, DrawingPoint, DrawingTool, FibLevel, HitContext, ScreenPoint, ToolAnchors } from './types';
 import { channelAlertValue, channelAlertLevels, fibAlertValue, fibAlertLevels, lineAlertValue } from './alert-values';
 import { composeSettings, EXTEND_FIELDS, FILL_FIELDS, FONT_FIELDS, LEVEL_FIELDS, LINE_FIELDS, SHOW_LABELS_FIELD } from './schema';
-import { cloneLevels, formatRatio, levelColor } from './levels';
+import { activeLevels, cloneLevels, formatRatio, levelColor } from './levels';
+import { timeBound } from './analysis';
 import {
-  activeLevels, clippedLine, clipPolygon, extendedLine, geometryTool, interpolate, midpoint, numericProp,
-  paintGeometry, projectPoint, sampleArc, type DrawingGeometry, type GeometryPath,
+  clippedLine, clipPolygon, extendedLine, geometryTool, interpolate, midpoint, numericProp,
+  paintGeometry, sampleArc, type DrawingGeometry, type GeometryPath,
 } from './advanced-shared';
+import { fontOf, projectPoint, textOf } from './tool-paint';
 
 const CHANNEL_SETTINGS = composeSettings([LINE_FIELDS, FILL_FIELDS, EXTEND_FIELDS]);
 const FORK_LEVELS: readonly FibLevel[] = [{ ratio: 0 }, { ratio: 0.5 }, { ratio: 1 }];
@@ -54,17 +56,6 @@ const flat = geometryTool({
   },
 }, c => c.pts.length < 3 ? empty() : channel(c, [{ x: c.pts[0].x, y: c.pts[2].y }, { x: c.pts[1].x, y: c.pts[2].y }]));
 
-/** Inclusive time bounds avoid scanning unrelated loaded history. */
-function lowerBound(bars: readonly { time: number }[], time: number, inclusive: boolean): number {
-  let lo = 0, hi = bars.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (bars[mid]!.time < time || (inclusive && bars[mid]!.time === time)) lo = mid + 1; // mid < hi <= length
-    else hi = mid;
-  }
-  return lo;
-}
-
 const regression = geometryTool({
   id: 'regression-channel', name: 'Regression Channel', points: 2,
   defaultStyle: { fill: true, showLabels: true },
@@ -74,8 +65,8 @@ const regression = geometryTool({
   if (c.pts.length < 2) return empty();
   const bars = c.rc.bars?.() ?? [];
   const [a, b] = c.drawing.points;
-  const first = lowerBound(bars, Math.min(a.time, b.time), false);
-  const last = lowerBound(bars, Math.max(a.time, b.time), true);
+  const first = timeBound(bars, Math.min(a.time, b.time));
+  const last = timeBound(bars, Math.max(a.time, b.time), true);
   let n = 0, meanX = 0, meanY = 0, xx = 0, xy = 0, yy = 0;
   let firstTime = 0, lastTime = 0, firstIndex = 0, lastIndex = 0;
   // Bars are live and even historical closes can change in place. Recompute
@@ -98,7 +89,7 @@ const regression = geometryTool({
   const value = (x: number): number => meanY + slope * (x - meanX);
   const deviation = Math.sqrt(Math.max(0, yy - slope * xy) / n) * numericProp(c.drawing, 'deviation', 2, 0.01, 20);
   const r2 = yy > 0 ? Math.max(0, Math.min(1, slope * xy / yy)) : 1;
-  const endpoint = (time: number, index: number, offset: number) => projectPoint({ time, price: value(index) + offset }, c.rc);
+  const endpoint = (time: number, index: number, offset: number) => projectPoint(c.rc, { time, price: value(index) + offset });
   const paths: GeometryPath[] = [0, deviation, -deviation].map(offset => ({ points: extendedLine(endpoint(firstTime, firstIndex, offset), endpoint(lastTime, lastIndex, offset), c) }));
   if (c.drawing.style.fill === true) {
     const upper = fillEndpoints(endpoint(firstTime, firstIndex, deviation), endpoint(lastTime, lastIndex, deviation), c);
@@ -121,13 +112,13 @@ function pitchfork(id: string, name: string, variant: 'standard' | 'schiff' | 'm
       time: variant === 'schiff' ? p0.time : (p0.time + p1.time) / 2,
       price: (p0.price + p1.price) / 2,
     };
-    const base = variant === 'standard' ? a : projectPoint(shifted, c.rc);
+    const base = variant === 'standard' ? a : projectPoint(c.rc, shifted);
     const origin = variant === 'inside' ? middle : base;
     const delta = variant === 'inside' ? { x: end.x - base.x, y: end.y - base.y } : { x: middle.x - base.x, y: middle.y - base.y };
     const ray = (start: ScreenPoint) => clippedLine(start, { x: start.x + delta.x, y: start.y + delta.y }, c.rc, 0, Infinity);
     const paths: GeometryPath[] = [];
     const labels: NonNullable<DrawingGeometry['labels']> = [];
-    const levels = activeLevels(c.drawing, FORK_LEVELS);
+    const levels = activeLevels(c.drawing.style.levels, FORK_LEVELS);
     for (const level of levels) {
       const color = level.color;
       const starts = level.ratio === 0 ? [origin] : [interpolate(middle, b, level.ratio), interpolate(middle, end, level.ratio)];
@@ -189,7 +180,7 @@ const extension = geometryTool({ id: 'fib-extension-two-point', name: 'Fib Exten
   if (c.pts.length < 2) return empty();
   const [a, b] = c.pts, [p0, p1] = c.drawing.points;
   const paths: GeometryPath[] = [], labels: NonNullable<DrawingGeometry['labels']> = [];
-  const levels = activeLevels(c.drawing, EXTENSION_LEVELS);
+  const levels = activeLevels(c.drawing.style.levels, EXTENSION_LEVELS);
   if (c.drawing.style.fill === true && a.x !== b.x) {
     const ys = levels.map(lv => c.rc.priceScale.priceToY(p0.price + (p1.price - p0.price) * lv.ratio)).filter(Number.isFinite).sort((x, y) => x - y);
     const left = c.drawing.style.extendLeft === true ? 0 : Math.min(a.x, b.x);
@@ -248,7 +239,7 @@ function fanGeometry(c: HitContext & ToolAnchors<2>, measure?: (text: string) =>
       return;
     }
   };
-  for (const lv of activeLevels(c.drawing, FAN_LEVELS)) {
+  for (const lv of activeLevels(c.drawing.style.levels, FAN_LEVELS)) {
     const targets = [{ x: b.x, y: a.y + (b.y - a.y) * lv.ratio }];
     if (lv.ratio !== 1) targets.push({ x: a.x + (b.x - a.x) * lv.ratio, y: b.y });
     targets.forEach((target, i) => {
@@ -280,7 +271,7 @@ const fan: DrawingTool = {
     try {
       // Match the shared painter's font so collision checks use actual glyph
       // widths, including custom labels and font choices, at this DPR.
-      ctx.font = `${text?.italic === true ? 'italic ' : ''}${text?.bold === true ? '700 ' : ''}${(text?.fontSize ?? 11) * rc.dpr}px ${text?.fontFamily || 'ui-sans-serif, system-ui, sans-serif'}`;
+      ctx.font = fontOf(textOf(c.drawing), (text?.fontSize ?? 11) * rc.dpr);
       geometry = fanGeometry({ rc, drawing: { ...c.drawing, style: c.style }, pts: c.pts.map(p => ({ x: p.x / rc.dpr, y: p.y / rc.dpr })) as typeof c.pts }, value => ctx.measureText(value).width / rc.dpr);
     } finally { ctx.restore(); }
     paintGeometry(c, geometry);

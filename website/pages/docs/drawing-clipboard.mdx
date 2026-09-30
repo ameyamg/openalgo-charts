@@ -276,7 +276,9 @@ A copy that found nothing to copy, or could not store the payload anywhere, emit
 ## Moving drawings over your own transport
 
 The payload format, the parser and the sanitiser are exported, so a host syncing drawings
-over a websocket, or saving them as a template, gets exactly the validation a paste gets:
+over a websocket, or saving them as a template, decodes them with exactly the validation a
+paste gets. `sanitizeDrawing` is the per-entry gate alone, without the migration a paste
+runs after it, so it keeps a style key this build does not declare, where a paste drops it:
 
 ```ts
 import {

@@ -37,10 +37,11 @@
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from 'openalgo-charts';
 import type { Drawing, DrawingPoint, ScreenPoint, ViewportPoint } from './types';
-import { getDrawingTool, hasDrawingTool } from './tools';
+import { getDrawingTool, hasDrawingTool } from './registry';
 import { withDrawingTextMetrics } from './text-metrics';
 import { anchorCount, containInPlot, viewportToPlot, type PlotBox } from './viewport';
 import { boundsOf } from './geometry';
+import { projectPoint } from './tool-paint';
 import { createDrawingHitIndex, EVERYWHERE, NOWHERE, inHitBox, spanOf, toolHitBox, type HitBox } from './hit-index';
 
 /** Grab radius for a shape, in media px. */
@@ -69,7 +70,7 @@ export type DrawingPointerKind = 'mouse' | 'touch' | 'pen';
 const zOf = (d: Drawing): number => (Number.isFinite(d.zIndex) ? d.zIndex : 0);
 
 /** Read-only to the user (`policy.editable` false): selectable, never grabbed. */
-const readOnly = (d: Drawing): boolean => d.policy?.editable === false;
+export const readOnly = (d: Drawing | undefined): boolean => d?.policy?.editable === false;
 
 /**
  * Whether the layer can run this drawing's tool at all. A viewport drawing
@@ -113,10 +114,7 @@ export function toolBounds(d: Drawing, pts: readonly ScreenPoint[]): PlotBox | u
  */
 export function projectAnchors(rc: PrimitiveRenderContext, d: Drawing): ScreenPoint[] {
   if (d.space === 'viewport') return placeViewportAnchors(d, d.viewportPoints ?? [], rc.plotWidth, rc.plotHeight);
-  return d.points.map((p) => ({
-    x: rc.timeScale.indexToX(rc.dataLayer.timeToIndexFloat(p.time)),
-    y: rc.priceScale.priceToY(p.price),
-  }));
+  return d.points.map((p) => projectPoint(rc, p));
 }
 
 /**
@@ -284,14 +282,6 @@ export class DrawingLayer implements IPrimitive {
     return this._isTouch(rc) ? HANDLE * TOUCH_SCALE : HANDLE;
   }
 
-  /** Map an anchor to media px on this pane. */
-  private _project(rc: PrimitiveRenderContext, time: number, price: number): ScreenPoint {
-    return {
-      x: rc.timeScale.indexToX(rc.dataLayer.timeToIndexFloat(time)),
-      y: rc.priceScale.priceToY(price),
-    };
-  }
-
   private _points(rc: PrimitiveRenderContext, d: Drawing): ScreenPoint[] {
     return projectAnchors(rc, d);
   }
@@ -375,7 +365,7 @@ export class DrawingLayer implements IPrimitive {
     for (const layer of layers) {
       for (const d of layer._handled()) this._drawHandles(ctx, rc, this._points(rc, d), d.tool, readOnly(d));
     }
-    if (this._snap !== null) this._drawSnapRing(ctx, rc, this._project(rc, this._snap.time, this._snap.price));
+    if (this._snap !== null) this._drawSnapRing(ctx, rc, projectPoint(rc, this._snap));
   }
 
   private _drawPlacementGuide(

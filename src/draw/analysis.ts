@@ -46,7 +46,12 @@ export function analysisNumber(value: unknown, fallback: number, min: number, ma
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
 }
 
-function bound(bars: readonly Bar[], time: number, upper = false): number {
+/**
+ * In time-sorted `bars`, the index of the first bar at or after `time`, or
+ * with `upper` the first after it: a window found without scanning the
+ * loaded history around it.
+ */
+export function timeBound(bars: readonly { time: number }[], time: number, upper = false): number {
   let lo = 0, hi = bars.length;
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
@@ -81,7 +86,7 @@ export function anchoredVwapAnalysis(
   const result: AnchoredVwapResult = { status: 'empty', historyPartial: false, points: [], missingVolumeBars: 0, invalidPriceBars: 0 };
   if (!Number.isFinite(anchorTime)) return result;
   result.historyPartial = bars.length > 0 && anchorTime < bars[0]!.time;
-  const start = bound(bars, anchorTime);
+  const start = timeBound(bars, anchorTime);
   let weight = 0, scale = 0, origin = 0, mean = 0, m2 = 0, gap = false;
   for (let i = start; i < bars.length; i++) {
     const bar = bars[i]!, volume = bar.volume; // i is in range
@@ -131,7 +136,7 @@ export function fixedRangeVolumeProfileAnalysis(
   };
   if (!Number.isFinite(fromTime) || !Number.isFinite(toTime)) return result;
   result.historyPartial = bars.length > 0 && Math.min(fromTime, toTime) < bars[0]!.time;
-  const start = bound(bars, Math.min(fromTime, toTime)), end = bound(bars, Math.max(fromTime, toTime), true);
+  const start = timeBound(bars, Math.min(fromTime, toTime)), end = timeBound(bars, Math.max(fromTime, toTime), true);
   let low = Infinity, high = -Infinity, compensation = 0;
   for (let i = start; i < end; i++) {
     const bar = bars[i]!, volume = bar.volume; // end <= length

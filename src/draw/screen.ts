@@ -13,6 +13,7 @@ import type { DrawingChartHost } from './controller-types';
 import { placeViewportAnchors, toolBounds } from './layer';
 import { boundsOf } from './geometry';
 import { rdpSimplify } from './freehand';
+import { clamp } from '../helpers/math';
 
 /**
  * The time scale's default bar spacing, for a horizontal nudge on a host that
@@ -51,9 +52,6 @@ export interface PointerSample {
   pressure?: number;
 }
 
-/** `v` held to `0..size`: a pixel on a plot of that size. */
-export const within = (v: number, size: number): number => (v < 0 ? 0 : v > size ? size : v);
-
 /**
  * Anchors on one axis, from `a0..a1`, cut so the box `b0..b1` they carry fits
  * a plot of `size`: held inside the room the box leaves them, so a label
@@ -65,7 +63,7 @@ const cutInto = (b0: number, b1: number, a0: number, a1: number, size: number) =
   const trail = Math.max(0, b1 - a1);
   return (v: number): number => (b1 - b0 <= size ? v
     : lead + trail < size ? Math.min(Math.max(v, lead), size - trail)
-    : within(v, size));
+    : clamp(v, 0, size));
 };
 
 export class DrawingScreen {

@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { TABLE } from '../src/draw/tools';
+import { TABLE } from '../src/draw/annotation-tools';
 import { makeCtx } from './helpers/fake-ctx';
 import type { Drawing, HitContext } from '../src/draw/types';
 

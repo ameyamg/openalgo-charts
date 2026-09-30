@@ -123,43 +123,66 @@ describe('a tool box covers every point the tool calls a hit', () => {
     expect(covered.length).toBe(BUILTIN_DRAWING_TOOLS.length - left.length);
   });
 
-  for (const tool of covered) {
-    it(tool.id, () => {
-      const rnd = seeded(tool.id.split('').reduce((h, c) => Math.imul(h, 31) + c.charCodeAt(0), 11));
-      let checked = 0;
-      for (let n = 0; n < 40; n++) {
-        const width = 300 + rnd() * 900, height = 150 + rnd() * 600;
-        const rc = affineRc(width, height, rnd);
-        const d = randomDrawing(tool, rnd, `d${n}`);
-        if (anchorCount(d) < Math.max(1, tool.points)) continue;
-        const pts = projectAnchors(rc, d);
-        for (const grab of [6, 12]) {
-          const box = toolHitBox(tool, pts, d, rc, grab)!;
-          const probes: { x: number; y: number }[] = [];
-          for (let i = 0; i < 120; i++) probes.push({ x: rnd() * (width + 400) - 200, y: rnd() * (height + 400) - 200 });
-          for (const p of pts) for (let i = 0; i < 25; i++) probes.push({ x: p.x + (rnd() - 0.5) * 6 * grab, y: p.y + (rnd() - 0.5) * 6 * grab });
-          // Just outside each finite edge, anywhere along it within reach.
-          const along = (lo: number, hi: number, fallback: number): number =>
-            Number.isFinite(lo) && Number.isFinite(hi) ? lo + rnd() * (hi - lo) : fallback + (rnd() - 0.5) * 400;
-          for (let i = 0; i < 40; i++) {
-            const cy = along(box.y0, box.y1, pts[0]?.y ?? 0), cx = along(box.x0, box.x1, pts[0]?.x ?? 0);
-            if (Number.isFinite(box.x0)) probes.push({ x: box.x0 - 0.001, y: cy });
-            if (Number.isFinite(box.x1)) probes.push({ x: box.x1 + 0.001, y: cy });
-            if (Number.isFinite(box.y0)) probes.push({ x: cx, y: box.y0 - 0.001 });
-            if (Number.isFinite(box.y1)) probes.push({ x: cx, y: box.y1 + 0.001 });
-          }
-          for (const { x, y } of probes) {
-            const dist = tool.distance(x, y, { pts: pts.map((p) => ({ ...p })), drawing: d, rc });
-            if (dist === null || !Number.isFinite(dist) || dist > grab) continue;
-            checked++;
-            if (!inHitBox(box, x, y)) {
-              expect.fail(`${tool.id}: a hit at (${x}, ${y}), distance ${dist}, grab ${grab}, lies outside ${JSON.stringify(box)} for ${JSON.stringify(d)} at ${JSON.stringify(pts)}`);
-            }
-          }
+  for (const tool of covered) it(tool.id, () => coversEveryHit(tool, toolHitBox));
+});
+
+/**
+ * Probe random drawings of `tool`, at both grab radii, for a hit its box
+ * leaves out. `boxOf` is passed in so a test can run it against modules
+ * loaded afresh, with a canvas to measure text on.
+ */
+function coversEveryHit(tool: DrawingTool, boxOf: typeof toolHitBox): void {
+  const rnd = seeded(tool.id.split('').reduce((h, c) => Math.imul(h, 31) + c.charCodeAt(0), 11));
+  let checked = 0;
+  for (let n = 0; n < 40; n++) {
+    const width = 300 + rnd() * 900, height = 150 + rnd() * 600;
+    const rc = affineRc(width, height, rnd);
+    const d = randomDrawing(tool, rnd, `d${n}`);
+    if (anchorCount(d) < Math.max(1, tool.points)) continue;
+    const pts = projectAnchors(rc, d);
+    for (const grab of [6, 12]) {
+      const box = boxOf(tool, pts, d, rc, grab)!;
+      const probes: { x: number; y: number }[] = [];
+      for (let i = 0; i < 120; i++) probes.push({ x: rnd() * (width + 400) - 200, y: rnd() * (height + 400) - 200 });
+      for (const p of pts) for (let i = 0; i < 25; i++) probes.push({ x: p.x + (rnd() - 0.5) * 6 * grab, y: p.y + (rnd() - 0.5) * 6 * grab });
+      // Just outside each finite edge, anywhere along it within reach.
+      const along = (lo: number, hi: number, fallback: number): number =>
+        Number.isFinite(lo) && Number.isFinite(hi) ? lo + rnd() * (hi - lo) : fallback + (rnd() - 0.5) * 400;
+      for (let i = 0; i < 40; i++) {
+        const cy = along(box.y0, box.y1, pts[0]?.y ?? 0), cx = along(box.x0, box.x1, pts[0]?.x ?? 0);
+        if (Number.isFinite(box.x0)) probes.push({ x: box.x0 - 0.001, y: cy });
+        if (Number.isFinite(box.x1)) probes.push({ x: box.x1 + 0.001, y: cy });
+        if (Number.isFinite(box.y0)) probes.push({ x: cx, y: box.y0 - 0.001 });
+        if (Number.isFinite(box.y1)) probes.push({ x: cx, y: box.y1 + 0.001 });
+      }
+      for (const { x, y } of probes) {
+        const dist = tool.distance(x, y, { pts: pts.map((p) => ({ ...p })), drawing: d, rc });
+        if (dist === null || !Number.isFinite(dist) || dist > grab) continue;
+        checked++;
+        if (!inHitBox(box, x, y)) {
+          expect.fail(`${tool.id}: a hit at (${x}, ${y}), distance ${dist}, grab ${grab}, lies outside ${JSON.stringify(box)} for ${JSON.stringify(d)} at ${JSON.stringify(pts)}`);
         }
       }
-      // A box that is never tested proves nothing.
-      expect(checked).toBeGreaterThan(20);
+    }
+  }
+  // A box that is never tested proves nothing.
+  expect(checked).toBeGreaterThan(20);
+}
+
+describe('with text measured on a canvas, a box still covers every hit', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  // The tools whose box follows their measured text: without a canvas they
+  // fall back to fixed guesses, which the loop above already covers.
+  for (const id of ['text', 'table', 'note', 'balloon', 'comment', 'signpost', 'price-note', 'price-label', 'callout', 'rectangle', 'ellipse']) {
+    it(id, async () => {
+      vi.stubGlobal('document', {
+        createElement: () => ({ getContext: () => ({ font: '', save() {}, restore() {}, measureText: (s: string) => ({ width: s.length * 6.5 }) }) }),
+      });
+      vi.resetModules();
+      const draw = await import('../src/draw/index');
+      const index = await import('../src/draw/hit-index');
+      coversEveryHit(draw.getDrawingTool(id), index.toolHitBox);
     });
   }
 });
@@ -674,6 +697,51 @@ describe('a text box follows the fonts', () => {
     charWidth = 20;
     fonts.dispatchEvent(new Event('loadingdone'));
     expect(layer.hitTest(at.x + 200, at.y + 5, rc)?.externalId).toBe('draw:n');
+  });
+
+  it('grabs a long note anywhere on its plate, as it is painted', async () => {
+    // A plate paints as wide as its text, and the hit test used to assume 120
+    // px whatever the text, so a long note could not be grabbed on its right.
+    vi.stubGlobal('document', {
+      createElement: () => ({ getContext: () => ({ font: '', save() {}, restore() {}, measureText: (s: string) => ({ width: s.length * 7 }) }) }),
+    });
+    vi.resetModules();
+    const draw = await import('../src/draw/index');
+    const layerModule = await import('../src/draw/layer');
+    const pane = makePane(marketBars(200), 800, 400, { min: 1800, max: 1900 });
+    const rc = paneContext(pane);
+    // 30 characters at 7 px and 16 px of padding: a plate 226 px wide, its
+    // top-left 16 px right of and 34 px above the pin.
+    const note: Drawing = { id: 'n', tool: 'note', paneIndex: 0, zIndex: 0, style: {},
+      text: { value: 'Breakout above the weekly high', fontSize: 12 }, points: [{ time: T0 + 60 * 100, price: 1850 }] };
+    const layer = new draw.DrawingLayer();
+    layer.setDrawings([note]);
+    const pin = layerModule.projectAnchors(rc, note)[0];
+    expect(layer.hitTest(pin.x + 16 + 200, pin.y - 34 + 5, rc)?.externalId).toBe('draw:n');
+    expect(layer.hitTest(pin.x + 16 + 240, pin.y - 34 + 5, rc)).toBeNull();
+  });
+
+  it('grabs a price label on the pill it paints, centred up and to the right of its anchor', async () => {
+    // The hit test assumed a 64 px box starting 18 px right of the anchor,
+    // where the pill is centred there: its left half could not be grabbed.
+    vi.stubGlobal('document', {
+      createElement: () => ({ getContext: () => ({ font: '', save() {}, restore() {}, measureText: (s: string) => ({ width: s.length * 7 }) }) }),
+    });
+    vi.resetModules();
+    const draw = await import('../src/draw/index');
+    const layerModule = await import('../src/draw/layer');
+    const pane = makePane(marketBars(200), 800, 400, { min: 1800, max: 1900 });
+    const rc = paneContext(pane);
+    // 21 characters at 7 px and 14 px of padding: a pill 161 px wide, centred
+    // 18 px right of and 30 px above the anchor.
+    const label: Drawing = { id: 'l', tool: 'price-label', paneIndex: 0, zIndex: 0, style: {},
+      text: { value: 'Resistance zone ahead' }, points: [{ time: T0 + 60 * 100, price: 1850 }] };
+    const layer = new draw.DrawingLayer();
+    layer.setDrawings([label]);
+    const at = layerModule.projectAnchors(rc, label)[0];
+    expect(layer.hitTest(at.x - 50, at.y - 30, rc)?.externalId).toBe('draw:l');
+    expect(layer.hitTest(at.x + 90, at.y - 30, rc)?.externalId).toBe('draw:l');
+    expect(layer.hitTest(at.x + 110, at.y - 30, rc)).toBeNull();
   });
 });
 

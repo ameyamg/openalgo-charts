@@ -31,7 +31,6 @@
  * interval there and lose its range on the next save.
  */
 import type { PrimitiveRenderContext, AlertDrawingValue, AlertDrawingLevel } from 'openalgo-charts';
-import type { SettingsSchema } from './schema';
 
 /** One anchor, in data space. */
 export interface DrawingPoint {
@@ -393,6 +392,48 @@ export interface DrawingValueContext {
   time: number;
   x: number;
   fromY(y: number): number | null;
+}
+
+// The settings schema a tool declares (`DrawingTool.settings`). schema.ts
+// builds and reads it and re-exports these names.
+
+/**
+ * The control a field wants. `interval` is a chart interval code, which the
+ * host offers from its own interval list (the engine has none), with an
+ * empty choice for no limit.
+ */
+export type FieldKind = 'color' | 'number' | 'select' | 'lineStyle' | 'boolean' | 'text' | 'opacity' | 'levels' | 'interval';
+
+/** The section a host groups a field under. */
+export type FieldGroup = 'line' | 'fill' | 'text' | 'levels' | 'behavior' | 'visibility';
+
+export interface SettingsField {
+  /**
+   * Dot path into the drawing. Two segments under `style`, `text`, `props`
+   * or `intervals` (`style.lineWidth`, `intervals.to`), or one of the
+   * top-level fields `locked`, `visible`, `zIndex`, `space`.
+   */
+  path: string;
+  label: string;
+  kind: FieldKind;
+  min?: number;
+  max?: number;
+  step?: number;
+  /** For `select` and `lineStyle`: the values a host may offer. */
+  options?: ReadonlyArray<{ value: string; label: string }>;
+  group?: FieldGroup;
+  /** Value displayed when the drawing has not overridden this setting. */
+  defaultValue?: string | number | boolean;
+}
+
+export interface SettingsSchema {
+  fields: SettingsField[];
+  /**
+   * The text *is* the drawing (a note, a callout, the text tool) rather than a
+   * label on a shape, so a host should ask for it the moment the tool is
+   * placed instead of waiting for a settings dialog.
+   */
+  textIsContent?: boolean;
 }
 
 export interface DrawingTool {

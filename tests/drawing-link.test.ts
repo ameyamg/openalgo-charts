@@ -56,10 +56,16 @@ describe('drawing linking', () => {
     group.destroy();
   });
 
-  it('refuses to create a lineage namespace without Web Crypto', async () => {
+  it('refuses to create a lineage namespace without Web Crypto, and only when a drawing is shared', async () => {
+    // Without Web Crypto the tier still loads, for every host that never
+    // links charts; the refusal comes at the first lineage a group makes.
     vi.resetModules();
     vi.stubGlobal('crypto', undefined);
-    await expect(import('../src/draw/drawing-link')).rejects.toThrow(/crypto/i);
+    const { DrawingLinkGroup: IsolatedGroup } = await import('../src/draw/drawing-link');
+    const a = host(); const b = host(); const group = new IsolatedGroup({ enabled: true });
+    group.add(a.chart, a.draw, identity); group.add(b.chart, b.draw, identity);
+    expect(() => add(a.draw)).toThrow(/^openalgo-charts: drawing links require Web Crypto/);
+    group.destroy();
   });
 
   it('requires opt-in and exact known symbol and exchange, regardless of interval', () => {
