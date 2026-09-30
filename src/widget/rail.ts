@@ -23,6 +23,7 @@ import { h, glyph, editableIds, historyPress, historyReady, TIP_DWELL_MS, type T
 import { commandChord } from './keymap';
 import { chromeGlyph } from './form';
 import { openMenu, type MenuRow } from './menu';
+import { drawingActionState, runDrawingAction } from './drawing-actions';
 
 export const MAGNET_MODES: readonly MagnetMode[] = ['off', 'weak', 'strong'];
 
@@ -253,11 +254,8 @@ export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptio
     const one = draw.selected();
     return one === null ? [] : [one];
   };
-  const allLocked = (ids: readonly string[]): boolean => ids.length > 0 && ids.every((id) => draw.get(id)?.locked === true);
-  /** Why lock, eye and trash are off for a selection the user may not edit, else nothing. */
-  const readOnlyNote = (ids: readonly string[]): string | undefined =>
-    editableIds(draw, ids).length === 0 ? widgetText(ctx, 'read-only') : undefined;
-  const allHidden = (ids: readonly string[]): boolean => ids.length > 0 && ids.every((id) => draw.get(id)?.visible === false);
+  /** Lock, eye and trash read the selection by the rules every drawing surface keeps (drawing-actions.ts). */
+  const stateOf = (ids: readonly string[]): ReturnType<typeof drawingActionState> => drawingActionState(ctx, ids);
 
   const armCursor = (tool: string | null): void => {
     const target = opts.cursorTarget;
@@ -550,12 +548,10 @@ export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptio
       glyphEl: chromeGlyph(doc, 'unlock'),
       tip: () => {
         const sel = selectionOf();
-        return { title: widgetText(ctx, 'Lock drawing'), sub: sel.length === 0 ? widgetText(ctx, 'Select a drawing first') : readOnlyNote(sel), side: 'right' };
+        return { title: widgetText(ctx, 'Lock drawing'), sub: sel.length === 0 ? widgetText(ctx, 'Select a drawing first') : stateOf(sel).readOnly ?? undefined, side: 'right' };
       },
       onClick: () => {
-        const sel = selectionOf();
-        const locked = !allLocked(sel);
-        for (const id of sel) draw.update(id, { locked });
+        runDrawingAction(ctx, 'lock', selectionOf());
         refreshControls();
       },
     });
@@ -565,13 +561,12 @@ export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptio
       glyphEl: chromeGlyph(doc, 'eye'),
       tip: () => {
         const sel = selectionOf();
+        const state = stateOf(sel);
         return { title: widgetText(ctx, 'Hide drawing'), side: 'right', sub: sel.length === 0 ? widgetText(ctx, 'Select a drawing first')
-          : readOnlyNote(sel) ?? (allHidden(sel) ? undefined : widgetText(ctx, 'Stays selected, so the eye brings it back')) };
+          : state.readOnly ?? (state.hidden ? undefined : widgetText(ctx, 'Stays selected, so the eye brings it back')) };
       },
       onClick: () => {
-        const sel = selectionOf();
-        const visible = allHidden(sel);
-        for (const id of sel) draw.update(id, { visible });
+        runDrawingAction(ctx, 'visible', selectionOf());
         refreshControls();
       },
     });
@@ -581,17 +576,16 @@ export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptio
       glyphEl: chromeGlyph(doc, 'trash'),
       tip: () => {
         const sel = selectionOf();
-        // The count is what the press deletes: read-only drawings stay.
-        const n = editableIds(draw, sel).length;
-        // A locked selection stays, as the drawing toolbar and the menu say.
-        const why = readOnlyNote(sel) ?? (n > 0 && allLocked(sel) ? widgetText(ctx, 'locked') : undefined);
+        const state = stateOf(sel);
+        // The count is what the press deletes: read-only drawings stay, and a locked selection stays whole.
+        const n = state.editable.length;
+        const why = state.noDelete ?? undefined;
         return sel.length > 0
           ? { title: n > 1 ? widgetText(ctx, 'Delete {count} drawings', { count: n }) : widgetText(ctx, 'Delete drawing'), chord: chordFor('delete', 'Delete'), sub: why ?? widgetText(ctx, 'Right-click to remove all'), side: 'right' }
           : { title: widgetText(ctx, 'Delete drawing'), chord: chordFor('delete', 'Delete'), sub: widgetText(ctx, 'Select one first. Right-click to remove all'), side: 'right' };
       },
       onClick: () => {
-        const sel = selectionOf();
-        if (!allLocked(sel)) for (const id of sel) draw.remove(id);
+        runDrawingAction(ctx, 'delete', selectionOf());
         refreshControls();
       },
       onContext: () => {
@@ -653,14 +647,12 @@ export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptio
     ctl.magnet.classList.toggle('is-weak', prefs.magnet === 'weak');
     ctl.magnet.dataset.mode = prefs.magnet;
     setState(ctl.stay, { on: prefs.stay, pressed: prefs.stay });
-    const sel = selectionOf();
+    const state = stateOf(selectionOf());
     // A read-only selection has nothing these three could change.
-    const none = editableIds(draw, sel).length === 0;
-    const locked = !none && allLocked(sel);
-    const hidden = !none && allHidden(sel);
-    setState(ctl.lock, { off: none, on: locked, pressed: locked, glyph: locked ? 'lock' : 'unlock' });
-    setState(ctl.eye, { off: none, on: hidden, pressed: hidden, glyph: hidden ? 'eye-off' : 'eye' });
-    setState(ctl.trash, { off: none || locked });
+    const none = state.editable.length === 0;
+    setState(ctl.lock, { off: none, on: state.locked, pressed: state.locked, glyph: state.locked ? 'lock' : 'unlock' });
+    setState(ctl.eye, { off: none, on: state.hidden, pressed: state.hidden, glyph: state.hidden ? 'eye-off' : 'eye' });
+    setState(ctl.trash, { off: state.noDelete !== null || none });
     setState(ctl.undo, { off: !historyReady(ctx, 'undo') });
     setState(ctl.redo, { off: !historyReady(ctx, 'redo') });
     // The accessible name follows the tip now, not what it said when it was

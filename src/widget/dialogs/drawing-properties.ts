@@ -22,6 +22,7 @@ import { widgetText } from '../localization';
 import { applyDrawingSettings, drawingSettingsSchema, getDrawingTool, readDrawingSettings } from 'openalgo-charts/draw';
 import type { Drawing, DrawingTool, SettingsSchema } from 'openalgo-charts/draw';
 import { editableIds, type WidgetContext } from '../context';
+import { drawingActionState, runDrawingAction, type DrawingAction } from '../drawing-actions';
 import { commandChord } from '../keymap';
 import {
   button, controlsFromFields, dialogFrame, el, openPanel, placePanel, renderForm, selectionPoint, tabList,
@@ -177,39 +178,31 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
 
   function renderTools(): void {
     tools.innerHTML = '';
-    const primary = live[0]!;
-    const locked = primary.locked === true;
-    const hidden = primary.visible === false;
-    // Between studies it is on neither side of the series, so neither toggle is pressed.
-    const between = primary.stackAbove !== undefined && ctx.chart.seriesStack(primary.paneIndex).includes(primary.stackAbove);
-    const behind = !between && primary.zIndex < 0;
-    const why = lockedOut();
-    const add = (spec: ButtonSpec, act: string, pressed?: boolean, edits = false): void => {
-      const b = button(doc, { ...spec, iconOnly: true });
+    // The rules every drawing surface keeps (drawing-actions.ts): one press is
+    // one undo step, and a switch reads the whole selection.
+    const state = drawingActionState(ctx, ids);
+    /** A button for one shared action, greyed with `off` when it has a reason to be. */
+    const add = (spec: Omit<ButtonSpec, 'onClick'>, act: DrawingAction, pressed?: boolean, off: string | null = null): void => {
+      const b = button(doc, { ...spec, iconOnly: true, onClick: () => { runDrawingAction(ctx, act, ids); } });
       b.dataset.act = act;
       if (pressed !== undefined) b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
-      if (edits && why !== null) { b.disabled = true; b.title += ` (${why})`; }
+      if (off !== null) { b.disabled = true; b.title += ` (${off})`; }
       tools.appendChild(b);
     };
     const sep = (): void => { tools.appendChild(el(doc, 'span', 'oac-sep')); };
     // The toggles keep one name each; the pressed state and the icon say locked or hidden.
-    add({ label: widgetText(ctx, 'Lock'), icon: locked ? 'lock' : 'unlock',
-      onClick: () => { draw.updateMany(ids.map((id) => ({ id, patch: { locked: !locked } }))); } }, 'lock', locked, true);
-    add({ label: widgetText(ctx, 'Hide'), icon: hidden ? 'eye-off' : 'eye',
-      onClick: () => { draw.updateMany(ids.map((id) => ({ id, patch: { visible: hidden } }))); } }, 'visible', hidden, true);
+    add({ label: widgetText(ctx, 'Lock'), icon: state.locked ? 'lock' : 'unlock' }, 'lock', state.locked, state.readOnly);
+    add({ label: widgetText(ctx, 'Hide'), icon: state.hidden ? 'eye-off' : 'eye' }, 'visible', state.hidden, state.readOnly);
     sep();
-    // The controller reorders one drawing at a time (the list position is part
-    // of the order), so a multi-selection is several calls.
-    add({ label: widgetText(ctx, 'Bring to front'), icon: 'front', onClick: () => { for (const id of ids) draw.bringToFront(id); } }, 'front');
-    add({ label: widgetText(ctx, 'Send to back'), icon: 'back', onClick: () => { for (const id of ids) draw.sendToBack(id); } }, 'back');
-    add({ label: widgetText(ctx, 'In front of the series'), icon: 'above-series',
-      onClick: () => { for (const id of ids) draw.bringAboveSeries(id); } }, 'above', !behind && !between);
-    add({ label: widgetText(ctx, 'Behind the series'), icon: 'behind-series',
-      onClick: () => { for (const id of ids) draw.sendBehindSeries(id); } }, 'behind', behind);
+    add({ label: widgetText(ctx, 'Bring to front'), icon: 'front' }, 'front');
+    add({ label: widgetText(ctx, 'Send to back'), icon: 'back' }, 'back');
+    // Between studies it is on neither side of the series, so neither toggle is pressed.
+    add({ label: widgetText(ctx, 'In front of the series'), icon: 'above-series' }, 'above', state.side === 'above');
+    add({ label: widgetText(ctx, 'Behind the series'), icon: 'behind-series' }, 'behind', state.side === 'behind');
     sep();
-    add({ label: widgetText(ctx, 'Duplicate'), icon: 'duplicate', chord: commandChord(ctx.keymap, 'duplicate', 'Mod+D'), onClick: () => { draw.duplicate(ids); } }, 'duplicate');
-    add({ label: widgetText(ctx, 'Delete'), icon: 'trash', chord: commandChord(ctx.keymap, 'delete', 'Delete'), variant: 'danger', onClick: () => { draw.removeMany(ids); } }, 'delete', undefined, true);
-    restore.disabled = why !== null;
+    add({ label: widgetText(ctx, 'Duplicate'), icon: 'duplicate', chord: commandChord(ctx.keymap, 'duplicate', 'Mod+D') }, 'duplicate');
+    add({ label: widgetText(ctx, 'Delete'), icon: 'trash', chord: commandChord(ctx.keymap, 'delete', 'Delete'), variant: 'danger' }, 'delete', undefined, state.noDelete);
+    restore.disabled = state.readOnly !== null;
   }
 
   function renderPane(): void {

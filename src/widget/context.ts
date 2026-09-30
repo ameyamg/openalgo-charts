@@ -72,6 +72,16 @@ export function historyPress(ctx: Pick<WidgetContext, 'draw' | 'history'>, direc
   return direction === 'undo' ? ctx.draw.undo() : ctx.draw.redo();
 }
 
+/**
+ * Run `run` as one step of the chart-wide timeline, however many controller
+ * calls it makes, so one user action is one undo. A context without the
+ * timeline runs it as it is.
+ */
+export function historyStep(ctx: Pick<WidgetContext, 'history'>, label: string | undefined, run: () => void): void {
+  if (ctx.history !== undefined) ctx.history.transact(run, label);
+  else run();
+}
+
 /** Whether that press would do anything, for the control's enabled state. */
 export function historyReady(ctx: Pick<WidgetContext, 'draw' | 'history'>, direction: 'undo' | 'redo'): boolean {
   const history = ctx.history;

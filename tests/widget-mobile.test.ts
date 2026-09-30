@@ -242,6 +242,9 @@ describe('mobile mode', () => {
     action(root, 'properties').click();
     expect(root.querySelector('.oac-props')).not.toBeNull();
     w.context.overlays.closeAll();
+    // A locked drawing stays, as on the desktop; unlocked, it goes.
+    expect(action(root, 'delete').getAttribute('aria-disabled')).toBe('true');
+    action(root, 'lock').click();
     action(root, 'delete').click();
     expect(w.draw.get(drawing.id)).toBeUndefined();
     expect(selected.hidden).toBe(true);

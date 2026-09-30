@@ -1,6 +1,7 @@
 import { widgetText } from './localization';
 import { chartTypeIcon, chromeIconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
-import { h, glyph, editableIds, historyPress, historyReady, type WidgetContext } from './context';
+import { h, glyph, historyPress, historyReady, type WidgetContext } from './context';
+import { drawingActionState, runDrawingAction } from './drawing-actions';
 import type { RailHandle } from './rail';
 import {
   chartTypeChoices, chartTypeLabel, intervalLabel,
@@ -266,14 +267,13 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
   let deleteButton: HTMLButtonElement | null = null;
   if (opts.rail !== null) {
     propertiesButton = makeAction('properties', widgetText(ctx, 'Properties'), (anchor) => { opts.onProperties(anchor); });
+    // The rules every drawing surface keeps (drawing-actions.ts).
     lockButton = makeAction('lock', widgetText(ctx, 'Lock'), () => {
-      const ids = ctx.draw.selection();
-      const lock = !ids.every((id) => ctx.draw.get(id)?.locked === true);
-      for (const id of ids) ctx.draw.update(id, { locked: lock });
+      runDrawingAction(ctx, 'lock', ctx.draw.selection());
       refresh();
     });
     deleteButton = makeAction('delete', widgetText(ctx, 'Delete'), () => {
-      ctx.draw.removeMany(ctx.draw.selection());
+      runDrawingAction(ctx, 'delete', ctx.draw.selection());
       refresh();
     });
     selection.append(propertiesButton, lockButton, deleteButton);
@@ -478,16 +478,15 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
     if (selection.parentNode !== null) {
       const ids = ctx.draw.selection();
       selection.hidden = ids.length === 0;
-      // Lock and delete have nothing to act on in a read-only selection.
-      const fixed = String(editableIds(ctx.draw, ids).length === 0);
+      // Lock has nothing to act on in a read-only selection, and delete keeps a locked one too.
+      const state = drawingActionState(ctx, ids);
       if (ids.length > 0 && lockButton !== null) {
-        const locked = ids.every((id) => ctx.draw.get(id)?.locked === true);
         // One name; the pressed state says locked.
-        lockButton.setAttribute('aria-pressed', String(locked));
-        lockButton.setAttribute('aria-disabled', fixed);
+        lockButton.setAttribute('aria-pressed', String(state.locked));
+        lockButton.setAttribute('aria-disabled', String(state.editable.length === 0));
       }
       if (propertiesButton !== null) propertiesButton.setAttribute('aria-disabled', String(ids.length === 0));
-      if (deleteButton !== null) deleteButton.setAttribute('aria-disabled', fixed);
+      if (deleteButton !== null) deleteButton.setAttribute('aria-disabled', String(state.noDelete !== null || state.editable.length === 0));
     }
     sheet?.repaint();
   }

@@ -1254,6 +1254,11 @@ while a tool is placing, while a drawing is dragged (`draw:preview`), in the nar
 - A selection with nothing the user may edit (`policy.editable: false`) shows its edit
   controls disabled with "(read-only)" in the title. Delete is also disabled when every
   selected drawing is locked, as in the context menu.
+- (unreleased) The toolbar, the context menu, the properties dialog, the rail, the phone bar
+  and the Delete, Backspace and cut keys share these rules (`drawing-actions.ts`): each
+  press is one history step; lock and hide read every drawing the user may edit, on when
+  every one is, so a partly locked selection locks; a selection whose every drawing is
+  locked is neither deleted nor cut; the order moves and duplicate reach every drawing.
 - Keyboard: it follows the chart in the tab order, so Tab from the focused chart reaches it,
   with one tab stop. Inside it, the arrow keys (with or without Shift), Home and End move
   between controls, and Escape goes back to the chart with the selection kept. Its key scope,

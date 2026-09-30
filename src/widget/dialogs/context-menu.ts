@@ -25,7 +25,8 @@ import { checkTradingCapability, getIndicator, isReplaying, PRICE_SCALE_MODES } 
 import type { Chart, ContextMenuEvent, ContextMenuTarget, IndicatorApi, PriceScaleId, PriceScaleMode, TradingCapabilityRequest, TradingCapabilitySource } from 'openalgo-charts';
 import { drawingSettingsSchema } from 'openalgo-charts/draw';
 import type { Drawing } from 'openalgo-charts/draw';
-import { editableIds, type WidgetContext } from '../context';
+import type { WidgetContext } from '../context';
+import { drawingActionState, runDrawingAction } from '../drawing-actions';
 import { ariaKeys, commandChord } from '../keymap';
 import { boxInRoot, chromeGlyph, el, openPanel, placePanel, stopOwnKeys, type PanelHandle } from '../form';
 import { mountDrawingProperties } from './drawing-properties';
@@ -123,19 +124,19 @@ function drawingEntries(ctx: WidgetContext, primary: Drawing, ids: readonly stri
   const { draw } = ctx;
   const schema = drawingSettingsSchema(primary.tool);
   const out: MenuEntry[] = [];
-  const locked = primary.locked === true;
-  const hidden = primary.visible === false;
-  // Placed between studies it is on neither side: neither radio is on, and
-  // either one takes it out of the series band.
-  const between = primary.stackAbove !== undefined && ctx.chart.seriesStack(primary.paneIndex).includes(primary.stackAbove);
-  const behind = !between && primary.zIndex < 0;
+  // The rows read the whole selection by the rules every drawing surface
+  // keeps (drawing-actions.ts), whichever drawing the pointer was on. A
+  // selection between studies is on neither side: neither radio is on.
+  const state = drawingActionState(ctx, ids);
+  const act = (action: Parameters<typeof runDrawingAction>[1]) => (): void => { runDrawingAction(ctx, action, ids); };
   const many = ids.length > 1;
   // A selection with nothing the user may edit keeps its edit rows, greyed
   // with the reason; the controller would refuse each one anyway. Cut and
   // delete count only what they take.
-  const mine = editableIds(draw, ids).length;
+  const mine = state.editable.length;
   const fixed = mine === 0;
-  const why = fixed ? widgetText(ctx, 'read-only') : undefined;
+  const why = state.readOnly ?? undefined;
+  const noDelete = state.noDelete ?? undefined;
   out.push({ id: 'draw-props', label: many ? widgetText(ctx, 'Properties of the selection...') : widgetText(ctx, 'Properties...'), icon: 'settings',
     run: () => { mountDrawingProperties(ctx, undefined, { ids }); } });
   if (!many && isTextContent(primary)) {
@@ -146,28 +147,22 @@ function drawingEntries(ctx: WidgetContext, primary: Drawing, ids: readonly stri
   }
   out.push(SEP);
   out.push({ id: 'draw-copy', label: many ? widgetText(ctx, 'Copy {count} drawings', { count: ids.length }) : widgetText(ctx, 'Copy drawing'), icon: 'copy', chord: commandChord(ctx.keymap, 'copy', 'Mod+C'), run: () => { void draw.copy(ids); } });
-  out.push({ id: 'draw-cut', label: mine > 1 ? widgetText(ctx, 'Cut {count} drawings', { count: mine }) : widgetText(ctx, 'Cut drawing'), chord: commandChord(ctx.keymap, 'cut', 'Mod+X'), disabled: locked || fixed, note: why ?? (locked ? widgetText(ctx, 'locked') : undefined),
+  out.push({ id: 'draw-cut', label: mine > 1 ? widgetText(ctx, 'Cut {count} drawings', { count: mine }) : widgetText(ctx, 'Cut drawing'), chord: commandChord(ctx.keymap, 'cut', 'Mod+X'), disabled: noDelete !== undefined, note: noDelete,
     run: () => { void draw.cut(ids); } });
-  out.push({ id: 'draw-duplicate', label: widgetText(ctx, 'Duplicate'), icon: 'duplicate', chord: commandChord(ctx.keymap, 'duplicate', 'Mod+D'), run: () => { draw.duplicate(ids); } });
+  out.push({ id: 'draw-duplicate', label: widgetText(ctx, 'Duplicate'), icon: 'duplicate', chord: commandChord(ctx.keymap, 'duplicate', 'Mod+D'), run: act('duplicate') });
   out.push(SEP);
   // Checkbox rows keep their names; the check says locked or hidden.
-  out.push({ id: 'draw-lock', label: widgetText(ctx, 'Lock'), icon: locked ? 'lock' : 'unlock', mark: 'check', on: locked, disabled: fixed, note: why,
-    run: () => { draw.updateMany(ids.map((id) => ({ id, patch: { locked: !locked } }))); } });
-  out.push({ id: 'draw-hide', label: widgetText(ctx, 'Hide'), icon: hidden ? 'eye-off' : 'eye', mark: 'check', on: hidden, disabled: fixed, note: why,
-    run: () => { draw.updateMany(ids.map((id) => ({ id, patch: { visible: hidden } }))); } });
+  out.push({ id: 'draw-lock', label: widgetText(ctx, 'Lock'), icon: state.locked ? 'lock' : 'unlock', mark: 'check', on: state.locked, disabled: fixed, note: why, run: act('lock') });
+  out.push({ id: 'draw-hide', label: widgetText(ctx, 'Hide'), icon: state.hidden ? 'eye-off' : 'eye', mark: 'check', on: state.hidden, disabled: fixed, note: why, run: act('visible') });
   out.push(SEP);
   out.push(header(widgetText(ctx, 'Order')));
-  // The controller reorders one drawing at a time (the list position is part
-  // of the order), so a multi-selection is several calls.
-  out.push({ id: 'draw-front', label: widgetText(ctx, 'Bring to front'), icon: 'front', run: () => { for (const id of ids) draw.bringToFront(id); } });
-  out.push({ id: 'draw-back', label: widgetText(ctx, 'Send to back'), icon: 'back', run: () => { for (const id of ids) draw.sendToBack(id); } });
-  out.push({ id: 'draw-above', label: widgetText(ctx, 'In front of the series'), icon: 'above-series', mark: 'radio', on: !behind && !between,
-    run: () => { for (const id of ids) draw.bringAboveSeries(id); } });
-  out.push({ id: 'draw-behind', label: widgetText(ctx, 'Behind the series'), icon: 'behind-series', mark: 'radio', on: behind,
-    run: () => { for (const id of ids) draw.sendBehindSeries(id); } });
+  out.push({ id: 'draw-front', label: widgetText(ctx, 'Bring to front'), icon: 'front', run: act('front') });
+  out.push({ id: 'draw-back', label: widgetText(ctx, 'Send to back'), icon: 'back', run: act('back') });
+  out.push({ id: 'draw-above', label: widgetText(ctx, 'In front of the series'), icon: 'above-series', mark: 'radio', on: state.side === 'above', run: act('above') });
+  out.push({ id: 'draw-behind', label: widgetText(ctx, 'Behind the series'), icon: 'behind-series', mark: 'radio', on: state.side === 'behind', run: act('behind') });
   out.push(SEP);
   out.push({ id: 'draw-delete', label: mine > 1 ? widgetText(ctx, 'Delete {count} drawings', { count: mine }) : widgetText(ctx, 'Delete'), icon: 'trash', chord: commandChord(ctx.keymap, 'delete', 'Delete'), danger: true,
-    disabled: locked || fixed, note: why ?? (locked ? widgetText(ctx, 'locked') : undefined), run: () => { draw.removeMany(ids); } });
+    disabled: noDelete !== undefined, note: noDelete, run: act('delete') });
   return out;
 }
 
