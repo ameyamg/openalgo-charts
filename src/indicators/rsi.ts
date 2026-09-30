@@ -20,8 +20,10 @@ export function rsi(values: readonly number[], period = 14): number[] {
   let gainSeeded = false;
   let lossSeeded = false;
   let finiteRun = 0;
+  // Deltas start at bar 1, so `finiteRun` finite ones ending at `i` put the
+  // seed window's first `j - 1` at zero or later.
   for (let i = 1; i < n; i++) {
-    const d = values[i] - values[i - 1];
+    const d = values[i]! - values[i - 1]!;
     if (!Number.isFinite(d)) {
       finiteRun = 0;
       continue;
@@ -39,7 +41,7 @@ export function rsi(values: readonly number[], period = 14): number[] {
       // Fresh chronological sums allow a failed seed to recover after the
       // overflowing window expires, without subtraction drift in later seeds.
       for (let j = i - period + 1; j <= i; j++) {
-        const change = values[j] - values[j - 1];
+        const change = values[j]! - values[j - 1]!;
         if (change >= 0) gain += change;
         else loss -= change;
       }
@@ -67,5 +69,6 @@ export function rsi(values: readonly number[], period = 14): number[] {
  */
 export function rsiSeries(bars: readonly Bar[], period = 14): Bar[] {
   const r = rsi(bars.map((b) => b.close), period);
-  return bars.map((b, i) => ({ time: b.time, open: r[i], high: r[i], low: r[i], close: r[i] }));
+  // `r` has one value per bar.
+  return bars.map((b, i) => ({ time: b.time, open: r[i]!, high: r[i]!, low: r[i]!, close: r[i]! }));
 }

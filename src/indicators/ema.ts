@@ -11,10 +11,10 @@ export function ema(values: readonly number[], period: number): number[] {
   const out: number[] = [];
   if (values.length === 0) return out;
   const k = 2 / (period + 1);
-  let prev = values[0];
+  let prev = values[0]!;
   out.push(prev);
   for (let i = 1; i < values.length; i++) {
-    prev = values[i] * k + prev * (1 - k);
+    prev = values[i]! * k + prev * (1 - k);
     out.push(prev);
   }
   return out;
@@ -27,5 +27,6 @@ export function ema(values: readonly number[], period: number): number[] {
 export function emaSeries(bars: readonly Bar[], period: number): Bar[] {
   const values = bars.map((b) => b.close);
   const e = ema(values, period);
-  return bars.map((b, i) => ({ time: b.time, open: e[i], high: e[i], low: e[i], close: e[i] }));
+  // `e` has one value per bar.
+  return bars.map((b, i) => ({ time: b.time, open: e[i]!, high: e[i]!, low: e[i]!, close: e[i]! }));
 }

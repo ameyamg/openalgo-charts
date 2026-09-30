@@ -12,6 +12,9 @@
  * A kernel still warming up keeps the run of values its seed will average,
  * never more than one window of them, so a checkpoint taken mid-warmup resumes
  * without reaching back into bars it no longer holds.
+ *
+ * A step that takes `bars` and `i` is driven by a machine (./tail), which
+ * hands it the index of a bar it holds.
  */
 import type { Bar } from 'openalgo-charts';
 import { finiteAverage } from './calc';
@@ -34,7 +37,7 @@ export function smooth(st: Seeded, x: number, period: number, exponential: boole
     if (recent.length > period) recent.shift();
     if (++st.run < period) return NaN;
     let sum = 0;
-    for (let k = 0; k < recent.length; k++) sum += recent[k];
+    for (let k = 0; k < recent.length; k++) sum += recent[k]!;
     const mean = sum / period;
     if (!Number.isFinite(mean)) return NaN;
     st.value = mean === 0 ? 0 : mean;
@@ -70,9 +73,9 @@ export function observedStep(st: Observed, x: number, period: number): number {
 
 /** `trueRange` in the base bundle, at one bar: the first bar is its own high-low. */
 export function trueRangeAt(bars: readonly Bar[], i: number): number {
-  const b = bars[i];
+  const b = bars[i]!;
   if (i === 0) return b.high - b.low;
-  const close = bars[i - 1].close;
+  const close = bars[i - 1]!.close;
   return Math.max(b.high - b.low, Math.abs(b.high - close), Math.abs(b.low - close));
 }
 
@@ -97,7 +100,7 @@ export function atrStep(st: Wilder, t: number, period: number): number {
     if (recent.length > period) recent.shift();
     if (st.run >= period) {
       let sum = 0;
-      for (let k = 0; k < recent.length; k++) sum += recent[k];
+      for (let k = 0; k < recent.length; k++) sum += recent[k]!;
       if (Number.isFinite(sum / period)) {
         st.a = sum / period;
         recent.length = 0;
@@ -142,7 +145,7 @@ export function rsiStep(st: Rsi, x: number, period: number): number {
       let gain = 0;
       let loss = 0;
       for (let k = 0; k < recent.length; k++) {
-        const change = recent[k];
+        const change = recent[k]!;
         if (change >= 0) gain += change;
         else loss -= change;
       }
@@ -175,7 +178,7 @@ export function supertrendStep(
   st: Supertrend, bars: readonly Bar[], i: number, period: number, multiplier: number, out: { direction: -1 | 1 },
 ): number {
   const a = atrStep(st.atr, trueRangeAt(bars, i), period);
-  const bar = bars[i];
+  const bar = bars[i]!;
   const close = bar.close;
   if (!Number.isFinite(a) || !Number.isFinite(close)) return NaN;
   const hl2 = (bar.high + bar.low) / 2;

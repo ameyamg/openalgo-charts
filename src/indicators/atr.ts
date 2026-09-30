@@ -12,11 +12,13 @@ export function trueRange(
   const n = high.length;
   const tr = new Array<number>(n);
   if (n === 0) return tr;
-  tr[0] = high[0] - low[0];
+  // `low` and `close` run alongside `high`. One that is shorter reads
+  // undefined past its end, and that bar's true range is NaN.
+  tr[0] = high[0]! - low[0]!;
   for (let i = 1; i < n; i++) {
-    const hl = high[i] - low[i];
-    const hc = Math.abs(high[i] - close[i - 1]);
-    const lc = Math.abs(low[i] - close[i - 1]);
+    const hl = high[i]! - low[i]!;
+    const hc = Math.abs(high[i]! - close[i - 1]!);
+    const lc = Math.abs(low[i]! - close[i - 1]!);
     tr[i] = Math.max(hl, hc, lc);
   }
   return tr;
@@ -43,8 +45,10 @@ export function atr(
   // never mistaken for an unseeded average and restarted from a fresh window.
   let a = NaN;
   let run = 0;
+  // `run` finite true ranges end at `i`, so a seed window of `period` of them
+  // starts at zero or later.
   for (let i = 0; i < n; i++) {
-    const t = tr[i];
+    const t = tr[i]!;
     if (!Number.isFinite(t)) { run = 0; continue; }
     run++;
     if (!Number.isNaN(a)) a = (a * (period - 1) + t) / period;
@@ -52,7 +56,7 @@ export function atr(
       // Summed oldest first, as the complete-data seed always was, and afresh
       // each time: a seed that overflowed retries once its window moves on.
       let sum = 0;
-      for (let j = i - period + 1; j <= i; j++) sum += tr[j];
+      for (let j = i - period + 1; j <= i; j++) sum += tr[j]!;
       if (Number.isFinite(sum / period)) a = sum / period;
     }
     if (Number.isFinite(a)) out[i] = a;
