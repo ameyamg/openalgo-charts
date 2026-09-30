@@ -15,7 +15,7 @@ export interface WorkspaceCatalog {
 
 export interface WorkspaceOperationOptions {
   /** Cancellation is effective until the storage transaction commits. */
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
   /**
    * Refuse the change with `WorkspaceConflictError` when the catalog has moved
    * past this revision. Pass the revision the change was prepared from, so a

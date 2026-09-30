@@ -26,7 +26,7 @@ export interface WatchlistCatalog {
 
 export interface WatchlistOperationOptions {
   /** Cancellation is effective until the storage transaction commits. */
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
   /**
    * Refuse the change when the catalog has moved past this revision. Pass the
    * revision a position-based edit (a move) was computed from, so it cannot
@@ -209,8 +209,9 @@ export class WatchlistRepository implements WatchlistStore {
   async moveEntry(id: string, entry: WatchlistEntry, index: number, options?: WatchlistOperationOptions): Promise<Watchlist> {
     const item = parseEntry(readJson(entry));
     return this._transact(catalog => this._touch(this._find(catalog, id), doc => {
+      // _position throws unless the entry is in the list, so the splice took it out.
       const [moved] = doc.entries.splice(this._position(doc, item), 1);
-      doc.entries.splice(this._index(index, doc.entries.length), 0, moved);
+      doc.entries.splice(this._index(index, doc.entries.length), 0, moved!);
     }), options);
   }
 
