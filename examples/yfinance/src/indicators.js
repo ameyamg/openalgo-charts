@@ -51,9 +51,16 @@ export function renderIndicatorChips() {
     const first = inst.series(Object.keys(inst.values())[0]);
     const color = (inst.settings().color) || '#8892a6';
     chip.innerHTML = `<span class="sw" style="background:${esc(String(color))}"></span><b>${esc(inst.name)}</b>`;
+    // A study that stopped drawing keeps saying why on its chip while it lasts.
+    const failed = studyErrorText(inst);
+    if (failed !== null) {
+      chip.classList.add('is-error');
+      chip.title = failed;
+      chip.setAttribute('aria-label', failed);
+    }
     // No remove button on a study the host keeps; the chip says why instead.
     if (!studyAllows(inst, 'removable')) {
-      chip.title = `${inst.name} is protected by the host`;
+      chip.title = failed ?? `${inst.name} is protected by the host`;
       chip.classList.add('is-protected');
       host.appendChild(chip);
       continue;
@@ -73,6 +80,37 @@ export function renderIndicatorChips() {
     void first;
   }
   if (!chart.indicators().length) host.innerHTML = '<span style="color:var(--faint);font-size:12px">none</span>';
+}
+
+/**
+ * Why a study stopped drawing, in words that name it once, or null while it
+ * draws. Its calculation failed, or the chart refuses its inputs (a
+ * timeframe on Renko bricks); either way the error rides on its data status.
+ */
+export function studyErrorText(inst) {
+  const status = inst.dataStatus?.();
+  if (status?.state !== 'error') return null;
+  const why = status.error instanceof Error && status.error.message ? status.error.message : 'its calculation failed';
+  return why.startsWith(`${inst.name}: `) ? why : `${inst.name}: ${why}`;
+}
+
+/**
+ * Say so when a study on `chart` stops drawing: the status line and a toast
+ * carry the reason once per new reason, not on every tick that fails again,
+ * and the chips follow it in and out. Returns the call that stops listening.
+ */
+export function watchStudyStatus(chart) {
+  const said = new Map();
+  return chart.on('indicator:data-status', ({ id }) => {
+    renderIndicatorChips();
+    const inst = chart.indicators().find((study) => study.id === id);
+    const message = inst ? studyErrorText(inst) : null;
+    if (message === null) { said.delete(id); return; }
+    if (said.get(id) === message) return;
+    said.set(id, message);
+    el('status').textContent = message;
+    toast('error', message);
+  });
 }
 
 // A study whose defaults cannot know the loaded history takes its first
