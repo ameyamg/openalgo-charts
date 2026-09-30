@@ -214,13 +214,20 @@ export function trimToView(
   }
 }
 
+/** The line renderer's own dash table (it does not share the grid's). */
+export function lineDash(style: SeriesStyle, dpr: number): number[] {
+  if (style.lineStyle === 'dashed') return [6 * dpr, 4 * dpr];
+  if (style.lineStyle === 'dotted') return [1 * dpr, 3 * dpr];
+  return [];
+}
+
 /**
  * Per-point colours aligned to the polyline drawn for `items`, or undefined
  * when not one point carries its own. Undefined is the fast path every
  * ordinary series takes: `strokePolyline` then walks the whole line into a
  * single stroke, as before.
  */
-function pointColors(items: readonly LineDrawItem[], step: boolean): (string | undefined)[] | undefined {
+export function pointColors(items: readonly LineDrawItem[], step: boolean): (string | undefined)[] | undefined {
   let any = false;
   for (let i = 0; i < items.length; i++) if (items[i]!.bar.color !== undefined) { any = true; break; }
   if (!any) return undefined;
@@ -323,9 +330,7 @@ export function drawLine(
   if (style.step) projectSteps(base, pts = STEPS);
   const cols = pointColors(items, style.step === true);
   const lineWidth = style.lineWidth ?? 1.5;
-  const dash = style.lineStyle === 'dashed' ? [6 * dpr, 4 * dpr]
-    : style.lineStyle === 'dotted' ? [1 * dpr, 3 * dpr]
-    : [];
+  const dash = lineDash(style, dpr);
   trimToView(pts, items, style.step === true, dashPeriod(dash, dpr), EDGE_PAD + lineWidth);
   ctx.save();
   ctx.strokeStyle = style.color ?? '#4f8cff';
