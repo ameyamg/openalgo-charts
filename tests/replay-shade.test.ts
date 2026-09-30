@@ -10,6 +10,8 @@ import { describe, it, expect } from 'vitest';
 import { ReplayShade } from '../src/primitives/replay-shade';
 import { TimeScale } from '../src/scale/time-scale';
 import { RecordingContext } from './helpers/fake-ctx';
+import { fakeDocument } from './helpers/fake-dom';
+import { Chart } from '../src/core/chart';
 import type { PrimitiveRenderContext } from '../src/primitives/primitive';
 
 const PLOT_W = 800;
@@ -97,5 +99,35 @@ describe('ReplayShade', () => {
     expect(draw(shade).rec.ops.filter((o) => o.type === 'moveTo')).toHaveLength(0);
     shade.setOptions({ index: null });
     expect(draw(shade).rec.ops).toHaveLength(0);
+  });
+
+  it('repaints the chart it is on when restyled, and stops asking once removed', () => {
+    // A host moves the cut while picking a start and clears it on leaving the
+    // mode. Neither may wait for something else to paint.
+    const frames: (() => void)[] = [];
+    const chart = new Chart(fakeDocument().createElement('div'), {
+      document: fakeDocument(),
+      raf: { schedule: (cb) => { frames.push(cb); return frames.length; } },
+      pixelRatio: () => 1,
+      shortcuts: false,
+    });
+    chart.applySize(800, 400);
+    const shade = new ReplayShade({ index: 10 });
+    chart.addPrimitive(shade);
+    for (const frame of frames.splice(0)) frame();
+    expect(frames).toHaveLength(0);
+
+    shade.setOptions({ index: 20 });
+    expect(frames).toHaveLength(1);
+    for (const frame of frames.splice(0)) frame();
+    shade.setOptions({ index: null });
+    expect(frames).toHaveLength(1);
+    for (const frame of frames.splice(0)) frame();
+
+    chart.removePrimitive(shade);
+    for (const frame of frames.splice(0)) frame();
+    shade.setOptions({ index: 30 });
+    expect(frames).toHaveLength(0);
+    chart.destroy();
   });
 });
