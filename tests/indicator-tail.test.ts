@@ -291,6 +291,8 @@ const CASES: Record<string, IndicatorSettings[]> = {
   'elder-ray': [{}, { length: 1 }, { length: 4 }],
   'schaff-trend-cycle': [{}, { fastLength: 3, slowLength: 7, cycleLength: 3, factor: 0.3 }, { fastLength: 1, slowLength: 2, cycleLength: 1, factor: 1 }],
   'volatility-squeeze': [{}, { length: 2, bbMult: 1, kcMult: 1 }, { length: 7, kcMult: 3 }],
+  zigzag: [{}, { deviation: 0.5 }, { deviation: 1.5 }, { deviation: 30 }],
+  'high-low-52-week': [{}, { timezone: 'America/New_York' }, { timezone: 'Europe/London' }],
 };
 
 /** Settings a tail deliberately declines: the full calc must still be what the runtime shows. */
