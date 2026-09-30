@@ -16,7 +16,7 @@ import type { DrawingHistoryEntry } from './drawing-history';
 import { placeViewportAnchors, readOnly } from './layer';
 import { getDrawingTool, hasDrawingTool } from './registry';
 import { cloneDrawing } from './clipboard';
-import { within } from './screen';
+import { clamp } from '../helpers/math';
 import { barAt } from './snap';
 
 /**
@@ -268,7 +268,7 @@ export class DrawingDrag {
       if (handle >= 0 && handle < anchors.length && at !== null && frame !== null) {
         const { width, height } = frame;
         const placed = placeViewportAnchors(d, anchors, width, height);
-        placed[handle] = { x: within(at.x, width), y: within(at.y, height) };
+        placed[handle] = { x: clamp(at.x, 0, width), y: clamp(at.y, 0, height) };
         // Where the box reaches an edge before the handle does (a label above
         // a box), the handle stops short instead of pushing the other corners
         // away from the edge it was dragged to.

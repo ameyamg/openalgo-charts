@@ -10,6 +10,7 @@ import {
   LINE_FIELDS, FONT_FIELDS, LINE_WIDTH_FIELD, LINE_STYLE_FIELD, SHOW_LABELS_FIELD,
   composeSettings,
 } from './schema';
+import { timeBound } from './analysis';
 import { OPACITY_FIELD, applyStroke, label, chip, grouped, arrowHead, UP_TINT, DOWN_TINT } from './tool-paint';
 
 /**
@@ -120,15 +121,8 @@ export const MEASURE: DrawingTool = {
       const hi = Math.max(p[0].time, p[1].time);
       let vol = 0;
       let seen = false;
-      // Seek the selected window without walking unrelated loaded history.
       // Read the window again on every paint because its last bar may be live.
-      let first = 0, end = src.length;
-      while (first < end) {
-        const mid = (first + end) >>> 1;
-        if (src[mid]!.time < lo) first = mid + 1; // mid < end <= length
-        else end = mid;
-      }
-      for (let i = first; i < src.length; i++) {
+      for (let i = timeBound(src, lo); i < src.length; i++) {
         const b = src[i]!; // i is in range
         if (b.time > hi) break;
         if (b.volume !== undefined) { vol += b.volume; seen = true; }

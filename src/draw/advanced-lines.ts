@@ -3,6 +3,7 @@ import type { AtLeast, DrawContext, DrawingPoint, DrawingTool, FibLevel, HitCont
 import { channelAlertValue, channelAlertLevels, fibAlertValue, fibAlertLevels, lineAlertValue } from './alert-values';
 import { composeSettings, EXTEND_FIELDS, FILL_FIELDS, FONT_FIELDS, LEVEL_FIELDS, LINE_FIELDS, SHOW_LABELS_FIELD } from './schema';
 import { cloneLevels, formatRatio, levelColor } from './levels';
+import { timeBound } from './analysis';
 import {
   activeLevels, clippedLine, clipPolygon, extendedLine, geometryTool, interpolate, midpoint, numericProp,
   paintGeometry, projectPoint, sampleArc, type DrawingGeometry, type GeometryPath,
@@ -54,17 +55,6 @@ const flat = geometryTool({
   },
 }, c => c.pts.length < 3 ? empty() : channel(c, [{ x: c.pts[0].x, y: c.pts[2].y }, { x: c.pts[1].x, y: c.pts[2].y }]));
 
-/** Inclusive time bounds avoid scanning unrelated loaded history. */
-function lowerBound(bars: readonly { time: number }[], time: number, inclusive: boolean): number {
-  let lo = 0, hi = bars.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (bars[mid]!.time < time || (inclusive && bars[mid]!.time === time)) lo = mid + 1; // mid < hi <= length
-    else hi = mid;
-  }
-  return lo;
-}
-
 const regression = geometryTool({
   id: 'regression-channel', name: 'Regression Channel', points: 2,
   defaultStyle: { fill: true, showLabels: true },
@@ -74,8 +64,8 @@ const regression = geometryTool({
   if (c.pts.length < 2) return empty();
   const bars = c.rc.bars?.() ?? [];
   const [a, b] = c.drawing.points;
-  const first = lowerBound(bars, Math.min(a.time, b.time), false);
-  const last = lowerBound(bars, Math.max(a.time, b.time), true);
+  const first = timeBound(bars, Math.min(a.time, b.time));
+  const last = timeBound(bars, Math.max(a.time, b.time), true);
   let n = 0, meanX = 0, meanY = 0, xx = 0, xy = 0, yy = 0;
   let firstTime = 0, lastTime = 0, firstIndex = 0, lastIndex = 0;
   // Bars are live and even historical closes can change in place. Recompute

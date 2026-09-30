@@ -33,6 +33,7 @@ import {
   composeSettings,
 } from './schema';
 import { catmullRom, pressureWidth } from './freehand';
+import { insidePolygon } from './advanced-shared';
 import { ADVANCED_LINE_TOOLS } from './advanced-lines';
 import { ADVANCED_GEOMETRY_TOOLS } from './advanced-geometry';
 import { PATTERN_DRAWING_TOOLS } from './pattern-tools';
@@ -415,7 +416,7 @@ export const ROTATED_RECTANGLE: DrawingTool = {
   distance: (x, y, h) => {
     if (h.pts.length < 3) return null;
     const corners = rotatedCorners(h.pts[0], h.pts[1], h.pts[2]);
-    if (h.drawing.style.fill === true && pointInPolygon(x, y, corners)) return 0;
+    if (h.drawing.style.fill === true && insidePolygon(x, y, corners)) return 0;
     let best = Infinity;
     for (let i = 0; i < 4; i++) {
       best = Math.min(best, distToSegment(x, y, corners[i]!, corners[(i + 1) % 4]!)); // four corners
@@ -441,17 +442,6 @@ function rotatedCorners(a: ScreenPoint, b: ScreenPoint, c: ScreenPoint): [Screen
     { x: b.x + nx * depth, y: b.y + ny * depth },
     { x: a.x + nx * depth, y: a.y + ny * depth },
   ];
-}
-
-/** Even-odd point-in-polygon, for filled shapes that are not axis-aligned. */
-function pointInPolygon(x: number, y: number, poly: readonly ScreenPoint[]): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i]!; // i and j stay in 0..length-1
-    const b = poly[j]!;
-    if ((a.y > y) !== (b.y > y) && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-  }
-  return inside;
 }
 
 /**

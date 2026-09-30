@@ -5,6 +5,7 @@ import type {
 } from './types';
 import { distToSegment } from './geometry';
 import { drawingTextWidth } from './text-metrics';
+import { analysisNumber } from './analysis';
 
 export interface GeometryPath {
   points: ScreenPoint[];
@@ -37,9 +38,9 @@ export const finitePoint = (p: ScreenPoint): boolean => Number.isFinite(p.x) && 
 export function projectPoint(p: DrawingPoint, rc: PrimitiveRenderContext): ScreenPoint {
   return { x: rc.timeScale.indexToX(rc.dataLayer.timeToIndexFloat(p.time)), y: rc.priceScale.priceToY(p.price) };
 }
+/** A numeric `props` entry held to `min..max`, or `fallback` when it is not a finite number. */
 export function numericProp(d: Drawing, key: string, fallback: number, min: number, max: number): number {
-  const v = d.props?.[key];
-  return typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : fallback;
+  return analysisNumber(d.props?.[key], fallback, min, max);
 }
 export function activeLevels(d: Drawing, fallback: readonly FibLevel[]): readonly FibLevel[] {
   return (d.style.levels ?? fallback).filter(l => l.enabled !== false && Number.isFinite(l.ratio));
