@@ -37,7 +37,7 @@ import { computeMarketProfile, MarketProfile } from 'openalgo-charts/profile';
 
 `computeVolumeProfile(bars, tickSize, valueAreaPercent = 0.7)` (**positional**, not an options object) returns `VolumeProfileResult` = `{ buckets: { price, volume }[], poc, vah, val, totalVolume }`.
 
-**`VolumeProfileOptions` is exported but no function consumes it.** It only describes `{ tickSize, valueAreaPercent }`; passing an object where `tickSize` is expected yields `NaN` buckets. Use the positional form, or `computeVolumeProfileSessions` for the options-object API.
+**`VolumeProfileOptions` is deprecated (removed in 3.0.0): no function consumes it.** It only describes `{ tickSize, valueAreaPercent }`; passing an object where `tickSize` is expected yields `NaN` buckets. Use the positional form, or `computeVolumeProfileSessions` for the options-object API.
 
 Semantics, identical in `computeVolumeProfile`, `computeTpo` and the session family:
 

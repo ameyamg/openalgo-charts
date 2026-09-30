@@ -8,6 +8,12 @@ import type { Bar } from '../model/bar';
 import type { VolumeProfileResult } from './profile-model';
 import { priceBuckets, valueArea } from './profile-model';
 
+/**
+ * @deprecated Removed in 3.0.0. No function takes this type:
+ * {@link computeVolumeProfile} takes the tick size and the value-area fraction
+ * as arguments. For an options object, use {@link computeVolumeProfileSessions}
+ * with {@link VolumeProfileFamilyOptions} (since 1.0.1).
+ */
 export interface VolumeProfileOptions {
   tickSize: number;
   /** Fraction of total volume contained in the value area (default 0.7). */

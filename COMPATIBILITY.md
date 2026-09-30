@@ -76,6 +76,7 @@ where they are recorded.
 | `Chart.movePriceAxis` | `src/core/chart.ts` | 2.5.4 | 3.0.0 | `Chart.setPriceAxisPlacement`, which moves the column and keeps the scale's id |
 | `PriceAxisState.movable` | `src/core/chart.ts` | 2.5.4 | 3.0.0 | Nothing: `setPriceAxisPlacement` needs no such check |
 | `priceAxisMoved` event | `src/core/chart.ts` (emitted by `movePriceAxis` alone), an event name | 2.5.4 | 3.0.0 | `priceAxisPlacementChanged`, which `setPriceAxisPlacement` emits with the pane, the scale id and its new side |
+| `VolumeProfileOptions` | `src/profile/volume-profile.ts` | 1.0.1 | 3.0.0 | Nothing takes this type: pass `computeVolumeProfile(bars, tickSize, valueAreaPercent)` its arguments as before, or use `computeVolumeProfileSessions` with `VolumeProfileFamilyOptions` for an options object |
 
 Migration, for the four a host is most likely to hold:
 
