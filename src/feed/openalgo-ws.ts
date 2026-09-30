@@ -24,6 +24,7 @@
 import type { MarketDepth } from './types';
 import { epochMsToUtcSeconds } from './time';
 import type { LooseOptional } from '../helpers/types';
+import { later } from '../helpers/timers';
 
 export type WsMode = 'LTP' | 'Quote' | 'Depth';
 
@@ -520,13 +521,6 @@ export class OpenAlgoWsFeed {
     this._emitControl(w);
   }
 
-  /** A timer that never holds a Node event loop open. `unref` is absent in browsers. */
-  private _later(fn: () => void, ms: number): ReturnType<typeof setTimeout> {
-    const t = setTimeout(fn, ms);
-    (t as unknown as { unref?: () => void }).unref?.();
-    return t;
-  }
-
   /**
    * Transport open. Send the handshake and nothing else: the subscription
    * replay waits for the acknowledgement, because a proxy that discards
@@ -544,7 +538,7 @@ export class OpenAlgoWsFeed {
       this._onAuthenticated();
       return;
     }
-    this._authTimer = this._later(
+    this._authTimer = later(
       () => this._failConnection('AUTH_TIMEOUT', `no auth acknowledgement within ${this._auth.ackTimeoutMs}ms`),
       this._auth.ackTimeoutMs,
     );
@@ -632,7 +626,7 @@ export class OpenAlgoWsFeed {
     const delay = backoffDelayMs(n, this._rc, this._rc.random);
     this._phase = 'backoff';
     this._emitState('reconnecting');
-    this._reconnectTimer = this._later(() => {
+    this._reconnectTimer = later(() => {
       this._reconnectTimer = null;
       this._sock = null;
       this._openSocket();
@@ -658,7 +652,7 @@ export class OpenAlgoWsFeed {
   private _armLiveness(): void {
     if (this._hbTimeoutMs <= 0 || this._phase !== 'ready') return;
     this._clearTimer('live');
-    this._liveTimer = this._later(() => this._probeLiveness(), this._hbTimeoutMs);
+    this._liveTimer = later(() => this._probeLiveness(), this._hbTimeoutMs);
   }
 
   /**
@@ -677,7 +671,7 @@ export class OpenAlgoWsFeed {
   private _probeLiveness(): void {
     if (this._phase !== 'ready' || this._sock === null) return;
     this._sock.send(JSON.stringify({ action: 'ping' }));
-    this._liveTimer = this._later(
+    this._liveTimer = later(
       () => this._failConnection('HEARTBEAT_DEAD', `no answer to a liveness ping within ${this._hbProbeMs}ms`),
       this._hbProbeMs,
     );

@@ -1,6 +1,7 @@
-import { ReplayController, type ReplayChartHost, type ReplayOptions, type ReplayScheduler, type ReplayState } from './controller';
+import { CATCH_UP_LIMIT, ReplayController, type ReplayChartHost, type ReplayOptions, type ReplayScheduler, type ReplayState } from './controller';
 import type { ReplayTiming } from './timeline';
 import { replayWindow, setReplayWindow } from '../model/replay-window';
+import { monotonicNow, repeat } from '../helpers/timers';
 
 export type ReplayScope = 'focused' | 'all';
 
@@ -119,11 +120,8 @@ export class ReplayGroup {
     positive(this._speed, 'speed'); positive(this._barMs, 'barMs');
     positive(this._barMs / this._speed, 'clock interval');
     if (options.startTime !== undefined) finite(options.startTime, 'start time');
-    this._now = options.now ?? (() => performance.now());
-    this._scheduler = options.scheduler ?? ((callback, ms) => {
-      const timer = setInterval(callback, Math.min(2147483647, Math.max(1, ms)));
-      return () => clearInterval(timer);
-    });
+    this._now = options.now ?? monotonicNow;
+    this._scheduler = options.scheduler ?? repeat;
     this._onChange = options.onChange;
     const ids = new Set<string>(), charts = new Set<object>();
     for (const member of members) {
@@ -328,7 +326,7 @@ export class ReplayGroup {
       if (now < this._lastAdvance) { this._lastAdvance = now; return; }
       let due = Math.floor((now - this._lastAdvance) / interval);
       if (due <= 0) return;
-      if (due > 10) { due = 10; this._lastAdvance = now; }
+      if (due > CATCH_UP_LIMIT) { due = CATCH_UP_LIMIT; this._lastAdvance = now; }
       else this._lastAdvance += due * interval;
       this._move(due);
     });

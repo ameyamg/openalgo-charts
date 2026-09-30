@@ -22,21 +22,17 @@ import { seriesConfirmation } from '../model/series-provenance';
 import { clamp } from '../helpers/math';
 import { setReplayWindow } from '../model/replay-window';
 import { ReplayTimeline, type ReplayTiming } from './timeline';
+import { monotonicNow, repeat } from '../helpers/timers';
 
 /** Schedules a repeating callback and returns its canceller. Inject in tests. */
 export type ReplayScheduler = (cb: () => void, intervalMs: number) => () => void;
-
-const defaultScheduler: ReplayScheduler = (cb, ms) => {
-  const id = setInterval(cb, ms);
-  return () => clearInterval(id);
-};
 
 /**
  * Most bars a single timer tick may consume. A backgrounded tab throttles its
  * timers to about one call a second, so without a ceiling the first tick after
  * the user comes back would fast-forward minutes of the session in one frame.
  */
-const CATCH_UP_LIMIT = 10;
+export const CATCH_UP_LIMIT = 10;
 
 /**
  * The slice of the time scale replay saves and restores. Declared structurally
@@ -179,7 +175,10 @@ export interface ReplayOptions {
   onFrame?: ((state: ReplayState) => void) | undefined;
   /** Playback clock. Default `performance.now`. */
   now?: () => number;
-  /** Playback timer. Default `setInterval`. */
+  /**
+   * Playback timer. Default `setInterval`, with the interval held from 1 ms to
+   * 2^31 - 1 ms, the longest a platform timer waits (a longer one fires at once).
+   */
   scheduler?: ReplayScheduler;
 }
 
@@ -311,8 +310,8 @@ export class ReplayController {
     const speed = options.speed ?? 1;
     this._speed = speed > 0 ? speed : 1;
     this._onFrame = options.onFrame ?? null;
-    this._now = options.now ?? (() => (typeof performance !== 'undefined' ? performance.now() : 0));
-    this._schedule = options.scheduler ?? defaultScheduler;
+    this._now = options.now ?? monotonicNow;
+    this._schedule = options.scheduler ?? repeat;
     // Opening on a half-formed candle is not a position anyone asked for, so
     // entering replay lands on the last step of `startIndex`, the same place a
     // `seek` there would.

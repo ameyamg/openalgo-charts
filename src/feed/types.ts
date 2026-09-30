@@ -15,7 +15,10 @@ export interface BarsRequest {
   noCache?: boolean;
   /** Cancel this consumer's request. Existing feeds may ignore cancellation. */
   signal?: AbortSignal | undefined;
-  /** Deadline in milliseconds, including response-body reading. */
+  /**
+   * Deadline in milliseconds, including response-body reading. The shared
+   * request pool holds it to 2^31 - 1 ms, the longest a timer waits.
+   */
   timeoutMs?: number;
   /** Preferred number of bars; a date-range feed may return a different count. */
   countBack?: number;

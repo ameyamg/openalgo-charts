@@ -35,7 +35,7 @@ replay.play({ speed: 2 });
 | `speed` | `number` | `1` | Multiplier over `barMs`. |
 | `onFrame` | `(state: ReplayState) => void` | none | Called after the chart is updated, alongside the event. |
 | `now` | `() => number` | `performance.now` | Injectable clock. |
-| `scheduler` | `(cb, ms) => () => void` | `setInterval` | Injectable timer; returns its canceller. |
+| `scheduler` | `(cb, ms) => () => void` | `setInterval` | Injectable timer; returns its canceller. The default holds the interval from 1 ms to 2^31 - 1 ms, the longest a platform timer waits, so a very slow replay no longer ticks every millisecond (since 2.6.0). |
 | `timing` | `ReplayTiming` | none | Explicit candle availability for time-aligned replay. `barEndTime: ReplayBarEndTime` returns UTC seconds; `subBarEndTime` is required with finer bars. |
 | `startTime` | `number` | selected candle's end | Requires `timing`. Before the first observation the chart is empty, `index` is -1 and `bar` is null. |
 | `autoStart` | `boolean` | `true` | False validates and captures data/viewport without changing the chart; seek or play enters later. |
