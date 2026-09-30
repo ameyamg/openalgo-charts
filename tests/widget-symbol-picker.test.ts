@@ -107,6 +107,8 @@ describe('shared symbol picker', () => {
       onSelect: (symbol, exchange) => selected.push([symbol, exchange]),
     });
     input.focus(); input.value = 'r'; fire(input, 'input'); await vi.advanceTimersByTimeAsync(150);
+    // Focus stays in the field: a host that restores its text on blur would otherwise void the press.
+    expect(fire(root.querySelector('.oac-symbol-picker__row')!, 'mousedown', { bubbles: true }).defaultPrevented).toBe(true);
     const futures = root.querySelectorAll('.oac-symbol-picker__category').find(el => el.textContent === 'Futures')!;
     futures.click();
     expect(root.querySelectorAll('.oac-symbol-picker__row')).toHaveLength(1);

@@ -96,6 +96,10 @@ export function mountSymbolPicker(ctx: WidgetContext, input: HTMLInputElement, o
     panel = h(doc, 'div', `oac-symbol-picker ${mobile ? 'oac-mobile-results' : 'oac-menu oac-sym__results'}`, {
       role: mobile ? 'region' : 'listbox', 'aria-label': widgetText(ctx, 'schema.ui.symbolResults', {}, 'Symbols'),
     });
+    // Focus stays in the field, as in any combobox: the top bar puts the
+    // chart's symbol back into its field on blur, and a selection is refused
+    // once the field no longer holds the text that was searched.
+    panel.addEventListener('mousedown', event => event.preventDefault());
     if (mobile) {
       const header = h(doc, 'div', 'oac-mobile-results__head');
       const title = h(doc, 'strong');
