@@ -618,7 +618,10 @@ export function percentRank(values: readonly number[], period: number | readonly
   return out;
 }
 
-/** the reference `alma`: Gaussian-weighted MA, `offset` 0..1 and `sigma` > 0. */
+/**
+ * the reference `alma`: Gaussian-weighted MA, `offset` 0..1 and `sigma` > 0. A period
+ * that is not a whole number of 1 or more gives NaN throughout.
+ */
 export function alma(
   values: readonly number[],
   period: number,
@@ -627,7 +630,8 @@ export function alma(
 ): number[] {
   const n = values.length;
   const out = new Array<number>(n).fill(NaN);
-  if (period <= 0 || sigma <= 0 || n < period) return out;
+  // The kernel is built per window position, so it needs a whole period.
+  if (!Number.isSafeInteger(period) || period <= 0 || sigma <= 0 || n < period) return out;
   const m = offset * (period - 1);
   const s = period / sigma;
   // The kernel depends only on the window position, so it is built once.
@@ -639,9 +643,8 @@ export function alma(
     norm += w;
   }
   if (norm === 0) return out;
-  // Only a whole period gets here, since a fractional one throws at
-  // `new Array(period)` above, so the window is [i - period + 1, i] and `k`
-  // indexes the kernel.
+  // Only a whole period gets here, so the window is [i - period + 1, i] and
+  // `k` indexes the kernel.
   for (let i = period - 1; i < n; i++) {
     let acc = 0;
     for (let k = 0; k < period; k++) acc += values[i - (period - 1 - k)]! * weights[k]!;
@@ -839,6 +842,7 @@ export function stoch(
  * actual member of the window rather than interpolating between two, so a
  * 50th percentile over an even-length window is the upper of the two middles,
  * not their mean. That difference is visible on Median's default length of 3.
+ * A percentage above 100, or NaN, has no reading.
  */
 export function percentileNearestRank(
   values: readonly number[],
@@ -853,9 +857,9 @@ export function percentileNearestRank(
     if (win.some((v) => !Number.isFinite(v))) continue;
     win.sort((a, b) => a - b);
     const rank = Math.max(1, Math.ceil((percentage / 100) * period));
-    // A percentage in [0, 100] ranks inside the whole window. Any other reads
-    // past it, and the undefined it stores is a gap to `nulls`.
-    out[i] = win[rank - 1]!;
+    // A percentage up to 100 ranks inside the window (below 0 ranks the
+    // lowest). One above 100, or NaN, ranks past it and has no reading.
+    out[i] = win[rank - 1] ?? NaN;
   }
   return out;
 }
@@ -1077,7 +1081,8 @@ export function barsSince(cond: readonly boolean[]): number[] {
 /**
  * the reference `valuewhen(cond, source, occurrence)`: the value of `source` the
  * n-th most recent time `cond` was true, counting the current bar. Occurrence 0
- * is the latest.
+ * is the latest. An occurrence that is not a whole number of 0 or more gives
+ * NaN throughout, and so does a hit past the end of a shorter `source`.
  */
 export function valueWhen(
   cond: readonly boolean[],
@@ -1086,14 +1091,15 @@ export function valueWhen(
 ): number[] {
   const n = cond.length;
   const out = new Array<number>(n).fill(NaN);
+  // Only a whole occurrence of zero or more counts back through the hits.
+  if (!Number.isSafeInteger(occurrence) || occurrence < 0) return out;
   const hits: number[] = [];
-  // A whole occurrence of zero or more keeps `at` inside `hits`, and each hit
-  // indexes `source` alongside `cond`. Any other occurrence, or a shorter
-  // `source`, reads undefined, which is a gap to `nulls`.
+  // `at` stays inside `hits`. Each hit indexes `source` alongside `cond`, and
+  // one past the end of a shorter `source` has no reading.
   for (let i = 0; i < n; i++) {
     if (cond[i]) hits.push(i);
     const at = hits.length - 1 - occurrence;
-    if (at >= 0) out[i] = source[hits[at]!]!;
+    if (at >= 0) out[i] = source[hits[at]!] ?? NaN;
   }
   return out;
 }
