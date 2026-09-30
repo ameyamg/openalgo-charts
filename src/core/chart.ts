@@ -155,6 +155,18 @@ function defaultPixelRatio(): number {
   return typeof window !== 'undefined' && window.devicePixelRatio ? window.devicePixelRatio : 1;
 }
 
+/**
+ * Whether two data variants name the same bars. A dimension left undefined
+ * reads as absent, as `dataVariantKey` reads it; the values are compared as
+ * given, since the chart stores a context as the host hands it over.
+ */
+function sameVariant(a: object | undefined, b: object | undefined): boolean {
+  if (a === b) return true;
+  const x = a as Record<string, unknown> | undefined, y = b as Record<string, unknown> | undefined;
+  for (const key of new Set([...Object.keys(x ?? {}), ...Object.keys(y ?? {})])) if (x?.[key] !== y?.[key]) return false;
+  return true;
+}
+
 export class Chart {
   private readonly _container: HTMLElement;
   private readonly _doc: Document;
@@ -952,12 +964,15 @@ export class Chart {
 
   /** Clear the previous source bars before changing context, then load the new source. */
   public setDataContext(context: ChartDataContext | undefined): void {
+    // The variant (session, adjustment, currency, unit) is part of the source,
+    // as the interval is: a series in another session is other bars.
+    const variantChanged = !sameVariant(this._dataContext?.variant, context?.variant);
     if (this._dataContext?.symbol === context?.symbol && this._dataContext?.exchange === context?.exchange
       && this._dataContext?.hasOpenInterest === context?.hasOpenInterest
-      && this._dataContext?.interval === context?.interval && !!this._dataContext === !!context) return;
+      && this._dataContext?.interval === context?.interval && !variantChanged && !!this._dataContext === !!context) return;
     const instrumentChanged = this._dataContext?.symbol !== context?.symbol
       || this._dataContext?.exchange !== context?.exchange;
-    const sourceChanged = instrumentChanged || this._dataContext?.interval !== context?.interval;
+    const sourceChanged = instrumentChanged || variantChanged || this._dataContext?.interval !== context?.interval;
     this._dataContext = context ? Object.freeze({ ...context }) : undefined;
     if (sourceChanged) this._cancelBarsRequests();
     if (sourceChanged) for (const state of this._seriesProvenance.values()) state.contextChanged();

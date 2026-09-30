@@ -584,17 +584,14 @@ interface DataVariantCapabilities { sessions?; adjustments?; currencies?; units?
   `FakeDataFeed.getBars` and `subscribeBars` refuse the same way, since the synthetic
   feed has one series too, whether it is called directly or through `withBarCache`.
 - **Chart data context.** `ChartDataContext.variant` carries the variant to studies and
-  hosts. Set it with `publishDataContext(chart, context)`, not `chart.setDataContext`:
-  `setDataContext` compares symbol, exchange, interval and OI only, so a change of
-  variant alone would be ignored. The helper passes through an interval-less context so
-  the chart treats the change as a new source (requested bars aborted, source revisions
-  restarted, studies told `'context'`), without changing the instrument, so event
-  markers, linked drawings and news stay. `Instrument.applyTo` keeps the context variant.
-  On that detour the chart emits `data:context` twice (the passing context with its
-  interval cleared, then the real one). The passing context is marked, and requested
-  studies, Tier 2 studies and `AlertController` skip it, so nothing is fetched, reported
-  or saved for it; a host listener sees both and should act on the context current once
-  the call returns.
+  hosts. Set it with `publishDataContext(chart, context)`, which normalizes the variant.
+  Since 2.6.0 `chart.setDataContext` compares the variant too, so a change of variant
+  alone is a new source (requested bars aborted, source revisions restarted, studies told
+  `'context'`) without changing the instrument, so event markers, linked drawings and news
+  stay, and `data:context` fires once. `Instrument.applyTo` keeps the context variant.
+  Before 2.6.0 the chart ignored a variant-only change, and the helper passed through an
+  interval-less context first, marked so the library's own listeners skip it; a host saw
+  two events. The helper still takes that detour for a target that keeps the old variant.
 - **Alerts.** `AlertScope.variant` records a non-default variant (the default adds no
   field); an alert evaluates only on its own variant, and a fixed price is not drawn in
   another currency or unit. See [alerts](alerts.md).
