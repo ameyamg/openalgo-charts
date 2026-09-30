@@ -194,7 +194,7 @@ export interface MarketProfileSessionResult {
   startTime: number;
   endTime: number;
   /** Window name when one was applied — the renderer's session label. */
-  label?: string;
+  label?: string | undefined;
   /** Price levels, sorted high -> low. */
   levels: MarketProfileLevel[];
   /** Point of control (price with the most TPOs). */
@@ -363,32 +363,36 @@ interface LevelAcc {
   volume: number;
 }
 
-/** POC + value area over a level list, expanding from the POC outward. */
+/**
+ * POC + value area over a level list, expanding from the POC outward. Both
+ * callers pass a non-empty list, and every index stays in 0..levels.length - 1:
+ * the loop bound and the guards on each step keep it there.
+ */
 function pocAndValueArea(
   levels: readonly { price: number; count: number }[],
   vaPct: number,
 ): { poc: number; vah: number; val: number } {
   const total = levels.reduce((s, l) => s + l.count, 0);
   let pocIdx = 0;
-  for (let i = 1; i < levels.length; i++) if (levels[i].count > levels[pocIdx].count) pocIdx = i;
+  for (let i = 1; i < levels.length; i++) if (levels[i]!.count > levels[pocIdx]!.count) pocIdx = i;
   let upper = pocIdx;
   let lower = pocIdx;
-  let acc = levels[pocIdx].count;
+  let acc = levels[pocIdx]!.count;
   const target = total * vaPct;
   while (acc < target && (upper > 0 || lower < levels.length - 1)) {
-    const up = upper > 0 ? levels[upper - 1].count : -1;
-    const down = lower < levels.length - 1 ? levels[lower + 1].count : -1;
-    if (up >= down) { upper -= 1; acc += levels[upper].count; }
-    else { lower += 1; acc += levels[lower].count; }
+    const up = upper > 0 ? levels[upper - 1]!.count : -1;
+    const down = lower < levels.length - 1 ? levels[lower + 1]!.count : -1;
+    if (up >= down) { upper -= 1; acc += levels[upper]!.count; }
+    else { lower += 1; acc += levels[lower]!.count; }
   }
-  return { poc: levels[pocIdx].price, vah: levels[upper].price, val: levels[lower].price };
+  return { poc: levels[pocIdx]!.price, vah: levels[upper]!.price, val: levels[lower]!.price };
 }
 
 /** Length of the run of consecutive single prints from `from`, walking `step`. */
 function tailRun(levels: readonly MarketProfileLevel[], from: number, step: number): number {
   let n = 0;
   for (let i = from; i >= 0 && i < levels.length; i += step) {
-    if (levels[i].count !== 1) break;
+    if (levels[i]!.count !== 1) break;
     n++;
   }
   return n;
@@ -409,13 +413,13 @@ function classifyDay(
   // A thin middle between two busy nodes is a double distribution, not a trend.
   const pocIdx = levels.findIndex((l) => l.price === poc);
   if (pocIdx >= 0 && levels.length >= 5) {
-    const peak = levels[pocIdx].count;
+    const peak = levels[pocIdx]!.count;
     let minMid = Infinity;
     let second = 0;
     for (let i = 0; i < levels.length; i++) {
       const d = Math.abs(i - pocIdx);
-      if (d > 1) second = Math.max(second, levels[i].count);
-      if (d > 0 && d <= Math.max(2, Math.floor(levels.length / 4))) minMid = Math.min(minMid, levels[i].count);
+      if (d > 1) second = Math.max(second, levels[i]!.count);
+      if (d > 0 && d <= Math.max(2, Math.floor(levels.length / 4))) minMid = Math.min(minMid, levels[i]!.count);
     }
     if (second >= peak * 0.7 && minMid <= peak * 0.35) return 'double-distribution';
   }
@@ -484,7 +488,7 @@ export function computeMarketProfile(
     for (let i = 0; i < order.length; i += merge) {
       const slice: Bar[] = [];
       for (let j = i; j < Math.min(i + merge, order.length); j++) {
-        slice.push(...(groups.get(order[j]) as Bar[]));
+        slice.push(...(groups.get(order[j]!) as Bar[]));
       }
       bucketsOfBars.push(slice);
     }
@@ -494,10 +498,12 @@ export function computeMarketProfile(
 
   const sessions: MarketProfileSessionResult[] = [];
   for (const g of bucketsOfBars) {
+    // From here on g has a first and a last bar, and once `levels` is known
+    // not to be empty, a first and a last level; loop indexes stay in range.
     if (g.length === 0) continue;
     // Anchor periods to the session's own window start, not the first bar —
     // otherwise a session whose first bar arrives late shifts every letter.
-    const first = g[0].time;
+    const first = g[0]!.time;
     let anchor = first;
     if (win !== undefined && win.startMinute !== win.endMinute) {
       const d = windowOpenOn(first, win, cal, 0);
@@ -569,39 +575,40 @@ export function computeMarketProfile(
     }
 
     const singlePrints: number[] = [];
-    for (let i = 1; i < levels.length - 1; i++) if (levels[i].count === 1) singlePrints.push(levels[i].price);
+    for (let i = 1; i < levels.length - 1; i++) if (levels[i]!.count === 1) singlePrints.push(levels[i]!.price);
 
     // Tails: a run of single prints hanging off an extreme, long enough to matter.
     let buyingTail: { high: number; low: number } | null = null;
     let sellingTail: { high: number; low: number } | null = null;
     if (o.tailEdges > 0) {
       const top = tailRun(levels, 0, 1);
-      if (top >= o.tailEdges) sellingTail = { high: levels[0].price, low: levels[top - 1].price };
+      // A run of `top` levels from the top, at least one long since tailEdges is positive.
+      if (top >= o.tailEdges) sellingTail = { high: levels[0]!.price, low: levels[top - 1]!.price };
       const bot = tailRun(levels, levels.length - 1, -1);
       if (bot >= o.tailEdges) {
-        buyingTail = { high: levels[levels.length - bot].price, low: levels[levels.length - 1].price };
+        buyingTail = { high: levels[levels.length - bot]!.price, low: levels[levels.length - 1]!.price };
       }
     }
 
     const ib = {
-      high: Number.isFinite(ibHigh) ? ibHigh : levels[0].price,
-      low: Number.isFinite(ibLow) ? ibLow : levels[levels.length - 1].price,
+      high: Number.isFinite(ibHigh) ? ibHigh : levels[0]!.price,
+      low: Number.isFinite(ibLow) ? ibLow : levels[levels.length - 1]!.price,
     };
     const rangeExtension = { up: Math.max(0, high - ib.high), down: Math.max(0, ib.low - low) };
 
-    let volumePoc = levels[0].price;
+    let volumePoc = levels[0]!.price;
     let maxVol = -1;
     for (const l of levels) if (l.volume > maxVol) { maxVol = l.volume; volumePoc = l.price; }
 
     sessions.push({
       startTime: first,
-      endTime: g[g.length - 1].time,
+      endTime: g[g.length - 1]!.time,
       label: win?.name,
       levels,
       poc: va.poc, vah: va.vah, val: va.val,
       high, low,
-      open: g[0].open,
-      close: g[g.length - 1].close,
+      open: g[0]!.open,
+      close: g[g.length - 1]!.close,
       periods: maxPeriod + 1,
       periodDetail,
       initialBalance: ib,
@@ -609,11 +616,11 @@ export function computeMarketProfile(
       singlePrints,
       buyingTail,
       sellingTail,
-      poorHigh: levels[0].count > 1,
-      poorLow: levels[levels.length - 1].count > 1,
+      poorHigh: levels[0]!.count > 1,
+      poorLow: levels[levels.length - 1]!.count > 1,
       developing,
       dayType: classifyDay(ib, high, low, rangeExtension, levels, va.poc),
-      openType: classifyOpen(g[0].open, periodDetail[0], periodDetail[1], high, low),
+      openType: classifyOpen(g[0]!.open, periodDetail[0], periodDetail[1], high, low),
       volumePoc,
       totalVolume,
     });
@@ -636,12 +643,12 @@ export function nakedLevels(
   const kinds: ('poc' | 'vah' | 'val')[] = ['poc', 'vah', 'val'];
   for (let i = 0; i < s.length; i++) {
     for (const kind of kinds) {
-      const price = s[i][kind];
+      const price = s[i]![kind];
       let touched = false;
       for (let j = i + 1; j < s.length && !touched; j++) {
-        if (price <= s[j].high && price >= s[j].low) touched = true;
+        if (price <= s[j]!.high && price >= s[j]!.low) touched = true;
       }
-      if (!touched) out.push({ time: s[i].startTime, price, kind });
+      if (!touched) out.push({ time: s[i]!.startTime, price, kind });
     }
   }
   return out;

@@ -24,7 +24,8 @@ const PATTERNS = [
 const GLYPHS = new Map(Array.from(ALPHABET, (letter, i) => {
   const runs: [number, number, number][] = [];
   for (let y = 0; y < 5; y++) {
-    const bits = Number(PATTERNS[i][y]);
+    // One pattern per letter, each five rows long.
+    const bits = Number(PATTERNS[i]![y]);
     for (let x = 0; x < 3; x++) {
       if ((bits & (4 >> x)) === 0) continue;
       const start = x;
@@ -54,7 +55,7 @@ export function drawCompactText(
   const left = Math.round(x - (align === 'center' ? width / 2 : align === 'right' ? width : 0));
   const top = Math.round(y - 5 * scale / 2);
   for (let i = 0; i < text.length; i++) {
-    const runs = GLYPHS.get(text[i]);
+    const runs = GLYPHS.get(text[i]!);
     if (runs === undefined) continue;
     for (const [gx, gy, length] of runs) {
       ctx.fillRect(left + (i * 4 + gx) * scale, top + gy * scale, length * scale, scale);
