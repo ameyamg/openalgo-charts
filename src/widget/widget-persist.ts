@@ -44,6 +44,7 @@ import type {
   WidgetChartState, WidgetImpl, WidgetRestoreReport, WidgetState,
   DRAWINGS_KEY_PREFIX as DrawingsKeyPrefix, SAVE_DEBOUNCE_MS as SaveDebounceMs, STATE_KEY as StateKey, WIDGET_STATE_VERSION as StateVersion,
 } from './widget';
+import { isRecord } from '../helpers/validate';
 
 // widget.ts declares these for hosts and imports this module, so reading them
 // from there at run time would be an import cycle. Each copy is typed as its
@@ -109,8 +110,6 @@ interface StartFacts {
   chartType: string;
   theme: WidgetThemeName;
 }
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
  * A stored variant: undefined for the default series, null for one this build

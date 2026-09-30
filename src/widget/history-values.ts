@@ -5,8 +5,7 @@
  * that records and walks the steps.
  */
 import type { Chart, IndicatorSettings, SeriesApi, SeriesType } from 'openalgo-charts';
-
-export const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+import { isRecord } from '../helpers/validate';
 
 /** Structural equality for the plain data a capture holds. */
 export function same(a: unknown, b: unknown): boolean {

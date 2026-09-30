@@ -11,6 +11,7 @@ import { isChartTypeChoice } from './topbar';
 import type { DrawingDocumentStore, DrawingsDocument } from 'openalgo-charts/draw';
 import type { WorkspacePayload } from 'openalgo-charts/workspace';
 import { checkLinks } from './grid-links';
+import { isRecord } from '../helpers/validate';
 
 /** Each chart's drawing documents, by pane id, then by instrument key. */
 export type ChartDrawings = Map<string, Map<string, DrawingsDocument>>;
@@ -44,7 +45,6 @@ export function readChartDrawings(value: unknown): ChartDrawings {
   return out;
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const int = (v: unknown, lo: number, hi: number): boolean => Number.isInteger(v) && (v as number) >= lo && (v as number) <= hi;
 
 /** What a grid cannot honour, checked before anything is built. Empty when the payload is usable. */

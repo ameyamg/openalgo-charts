@@ -5,6 +5,7 @@
  * pending writes when a page goes away. The IndexedDB store itself is
  * storage.ts.
  */
+import { isRecord } from '../helpers/validate';
 
 // ── storage ────────────────────────────────────────────────────────────
 
@@ -74,8 +75,6 @@ const JOURNAL_PREFIX = 'oac-widget-journal:';
  * widget from ever loading its chart.
  */
 const LOAD_TIMEOUT_MS = 4000;
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
  * Namespaced JSON storage that never throws: a private window, a full quota
