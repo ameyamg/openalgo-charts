@@ -32,26 +32,13 @@
  *     labelled plates carry the same information.
  */
 import { sourceValues } from 'openalgo-charts';
-import type { IndicatorDescriptor, IndicatorSource, SeriesMarker } from 'openalgo-charts';
+import type { IndicatorDescriptor, SeriesMarker } from 'openalgo-charts';
 import {
   smaSeededEma, nulls, pivotHigh, pivotLow, barsSince, valueWhen,
 } from './calc';
 import { windowMean } from './window-mean';
 import { fromFirstValue } from './smoothing';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A length that windows a series, so it has to be a whole number. */
-const len = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.max(1, Math.floor(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>): IndicatorSource =>
-  (s.source as IndicatorSource) ?? 'hlc3';
+import { num, len, str, src } from './settings';
 
 /**
  * A column holding one value on every bar, warmup included. The two shaded
@@ -129,11 +116,7 @@ export const WAVETREND: IndicatorDescriptor = {
       // The sign is the whole reading, and it is the half of the original's
       // per-bar area colour that survives into a shape the renderer can tint.
       colorBy: ({ value, settings }) => {
-        const pick = (key: string, fallback: string): string => {
-          const c = settings[key];
-          return typeof c === 'string' && c !== '' ? c : fallback;
-        };
-        return value >= 0 ? pick('momUpColor', '#008080') : pick('momDownColor', '#880e4f');
+        return value >= 0 ? str(settings, 'momUpColor', '#008080') : str(settings, 'momDownColor', '#880e4f');
       },
     },
     { key: 'wt1', type: 'line', title: 'WT1', colorKey: 'wt1Color', style: { lineWidth: 2 } },
@@ -180,7 +163,7 @@ export const WAVETREND: IndicatorDescriptor = {
     const hiddenBear: (number | null)[] = new Array(n).fill(null);
 
     // Every series below holds one value per bar.
-    const ap = sourceValues(bars, src(s));
+    const ap = sourceValues(bars, src(s, 'source', 'hlc3'));
     const esa = fromFirstValue(ap, (t) => smaSeededEma(t, n1));
     const absDev = fromFirstValue(
       ap.map((v, i) => Math.abs(v - esa[i]!)),

@@ -23,20 +23,9 @@
  * a stretch with no reading, a documented rule (K13 in the numerical audit).
  */
 import { sourceValues } from 'openalgo-charts';
-import type { Bar, IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
 import { cumulative, highest, nulls, smaSeededEma, rollingSum, sma } from './calc';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A length that windows a series: the reference `input.int` is a whole number. */
-const len = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.max(1, Math.floor(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string =>
-  typeof s[k] === 'string' && s[k] !== '' ? s[k] : d;
-const src = (s: Readonly<Record<string, unknown>>): IndicatorSource =>
-  (s.source as IndicatorSource) ?? 'close';
+import { len, str, src } from './settings';
 
 /** the reference `nz(volume)`: a bar the feed gave no volume for traded nothing. */
 const vol = (b: Bar): number =>
@@ -242,12 +231,10 @@ export const PVO: IndicatorDescriptor = {
       colorBy: ({ value, index, values, settings }) => {
         const prev = values.hist?.[index - 1];
         const rising = prev !== null && prev !== undefined && Number.isFinite(prev) && value > prev;
-        const pick = (k: string, d: string): string =>
-          typeof settings[k] === 'string' && settings[k] !== '' ? settings[k] : d;
         if (value >= 0) {
-          return rising ? pick('histUpColor', '#26a69a') : pick('histUpFadeColor', '#b2dfdb');
+          return rising ? str(settings, 'histUpColor', '#26a69a') : str(settings, 'histUpFadeColor', '#b2dfdb');
         }
-        return rising ? pick('histDownFadeColor', '#ffcdd2') : pick('histDownColor', '#ff5252');
+        return rising ? str(settings, 'histDownFadeColor', '#ffcdd2') : str(settings, 'histDownColor', '#ff5252');
       },
     },
     { key: 'pvo', type: 'line', title: 'PVO', colorKey: 'color', style: { lineWidth: 1.5 } },

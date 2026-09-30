@@ -10,30 +10,14 @@
  * bars that changed (see ./tail): the ZigZag by resuming its walk, the 52 week
  * range by rerunning its window from the bar before the tick.
  */
-import { plotStyleKeys, withAlpha, zonedDayIndex, DEFAULT_TIMEZONE, isValidTimezone } from 'openalgo-charts';
+import { plotStyleKeys, withAlpha, zonedDayIndex } from 'openalgo-charts';
 import type {
   Bar, DrawAnchor, IndicatorDescriptor, IndicatorDrawing, IndicatorLineStyle, IndicatorPlot,
 } from 'openalgo-charts';
 import { withTail, claimOf, resumable, settle, type Cell, type Tail } from './tail';
+import { type Settings, num, str, zoneOf } from './settings';
 
-type Settings = Readonly<Record<string, unknown>>;
 type Calc = IndicatorDescriptor['calc'];
-
-const num = (s: Settings, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-const str = (s: Settings, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-
-/** The chart's zone, as it reaches a `calc` on the reserved `timezone` key; see ./trend. */
-const zoneOf = (s: Settings): string => {
-  const v = s.timezone;
-  if (typeof v !== 'string' || v === '' || v === DEFAULT_TIMEZONE) return DEFAULT_TIMEZONE;
-  return isValidTimezone(v) ? v : DEFAULT_TIMEZONE;
-};
 
 /** A reversal size in percent, positive by construction whatever a settings blob carries. */
 const deviationOf = (s: Settings): number => Math.max(0.01, num(s, 'deviation', 5));

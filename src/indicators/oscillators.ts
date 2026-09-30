@@ -17,20 +17,13 @@
  *     the Connors streak) get their first term.
  */
 import { rsi, sourceValues } from 'openalgo-charts';
-import type { Bar, IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
 import {
   sma, wma, highest, lowest, nulls,
   change, roc, percentRank, highestBars, lowestBars, rollingSum,
 } from './calc';
+import { len, str, src } from './settings';
 
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A length that indexes or windows a series: the reference `input.int` is a whole number. */
-const len = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.max(1, Math.floor(num(s, k, d)));
-const src = (s: Readonly<Record<string, unknown>>): IndicatorSource => (s.source as IndicatorSource) ?? 'close';
 const hl2 = (bars: readonly Bar[]): number[] => sourceValues(bars, 'hl2');
 
 /**
@@ -138,12 +131,10 @@ export const AWESOME_OSCILLATOR: IndicatorDescriptor = {
       style: { base: 0 },
       colorBy: ({ value, index, values, settings }) => {
         const prev = values.ao?.[index - 1];
-        const str = (k: string, d: string): string =>
-          typeof settings[k] === 'string' && settings[k] !== '' ? settings[k] : d;
         const rising = prev === null || prev === undefined || !Number.isFinite(prev)
           ? true
           : value - prev > 0;
-        return rising ? str('upColor', '#009688') : str('downColor', '#f44336');
+        return rising ? str(settings, 'upColor', '#009688') : str(settings, 'downColor', '#f44336');
       },
     },
   ],

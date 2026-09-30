@@ -10,9 +10,10 @@
  * value, wherever the reference would return `na`.
  */
 import { trueRange, sourceValues } from 'openalgo-charts';
-import type { IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { IndicatorDescriptor } from 'openalgo-charts';
 import { sma, stdev, highest, lowest, nulls, smaSeededEma, rollingSum, roc, linreg } from './calc';
 import { withTail, windowTail } from './tail';
+import { num, int, str, src } from './settings';
 
 /**
  * the reference `color.new(c, t)` transparency, where 0 is opaque and 100 invisible.
@@ -22,14 +23,6 @@ function withAlphaPercent(hex: string, transparency: number): string {
   const a = Math.round(255 * (1 - transparency / 100));
   return `${hex}${a.toString(16).padStart(2, '0')}`;
 }
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>): IndicatorSource => (s.source as IndicatorSource) ?? 'close';
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string =>
-  typeof s[k] === 'string' && s[k] !== '' ? s[k] : d;
 
 /**
  * the reference `bb`: an SMA basis with symmetric `mult` **population** standard
@@ -413,17 +406,16 @@ export const CHOP_ZONE: IndicatorDescriptor = {
       // false.
       colorBy: ({ index, values, settings }) => {
         const a = values.angle?.[index];
-        const pick = (k: string, d: string): string => str(settings, k, d);
-        if (a === null || a === undefined || !Number.isFinite(a)) return pick('yellowColor', '#fdd835');
-        if (a >= 5) return pick('turquoiseColor', '#26c6da');
-        if (a >= 3.57) return pick('darkGreenColor', '#43a047');
-        if (a >= 2.14) return pick('paleGreenColor', '#a5d6a7');
-        if (a >= 0.71) return pick('limeColor', '#009688');
-        if (a <= -5) return pick('darkRedColor', '#d50000');
-        if (a <= -3.57) return pick('redColor', '#e91e63');
-        if (a <= -2.14) return pick('orangeColor', '#ff6d00');
-        if (a <= -0.71) return pick('lightOrangeColor', '#ffb74d');
-        return pick('yellowColor', '#fdd835');
+        if (a === null || a === undefined || !Number.isFinite(a)) return str(settings, 'yellowColor', '#fdd835');
+        if (a >= 5) return str(settings, 'turquoiseColor', '#26c6da');
+        if (a >= 3.57) return str(settings, 'darkGreenColor', '#43a047');
+        if (a >= 2.14) return str(settings, 'paleGreenColor', '#a5d6a7');
+        if (a >= 0.71) return str(settings, 'limeColor', '#009688');
+        if (a <= -5) return str(settings, 'darkRedColor', '#d50000');
+        if (a <= -3.57) return str(settings, 'redColor', '#e91e63');
+        if (a <= -2.14) return str(settings, 'orangeColor', '#ff6d00');
+        if (a <= -0.71) return str(settings, 'lightOrangeColor', '#ffb74d');
+        return str(settings, 'yellowColor', '#fdd835');
       },
     },
   ],
@@ -551,7 +543,7 @@ export const STANDARD_ERROR: IndicatorDescriptor = {
 };
 
 /** A length for the squeeze: its momentum fits a line, which needs two points. */
-const squeezeLength = (s: Readonly<Record<string, unknown>>): number => Math.max(2, Math.round(num(s, 'length', 20)));
+const squeezeLength = (s: Readonly<Record<string, unknown>>): number => int(s, 'length', 20, 2);
 
 /**
  * Volatility Squeeze: whether the Bollinger Bands have contracted inside the

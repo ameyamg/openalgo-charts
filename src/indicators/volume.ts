@@ -7,18 +7,7 @@ import { nulls, sma, stdev } from './calc';
 import { smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
 import { withTail, machineTail, claimOf, settle, whole, cell } from './tail';
 import { seeded, smooth } from './steppers';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A window length is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Readonly<Record<string, unknown>>, k: string, d: number, min = 1): number =>
-  Math.max(min, Math.round(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
+import { num, int, str } from './settings';
 
 /**
  * A bar's volume for a running total: a bar the feed gave no usable volume for

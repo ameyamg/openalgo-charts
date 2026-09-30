@@ -12,42 +12,12 @@ import {
   sessionStartFlags, calendarPeriodFlags,
   isNewZonedWeek, isNewZonedMonth,
   utcSecondsToIstParts, IST_OFFSET_SECONDS,
-  DEFAULT_TIMEZONE, isValidTimezone,
+  DEFAULT_TIMEZONE,
 } from 'openalgo-charts';
-import type {
-  Bar, IndicatorDescriptor, IndicatorInput, IndicatorPlot, IndicatorSource,
-} from 'openalgo-charts';
+import type { Bar, IndicatorDescriptor, IndicatorInput, IndicatorPlot } from 'openalgo-charts';
 import { sma, nulls, barsSince } from './calc';
 import { windowMean, windowSum } from './window-mean';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string =>
-  typeof s[k] === 'string' && s[k] !== '' ? s[k] : d;
-const bool = (s: Readonly<Record<string, unknown>>, k: string, d: boolean): boolean =>
-  typeof s[k] === 'boolean' ? (s[k] as boolean) : d;
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
-
-/**
- * The chart's configured zone, as it reaches an indicator.
- *
- * A `calc` is handed `(bars, settings, store)` and never the chart, so the zone
- * travels on the settings blob under the reserved `timezone` key. A blob without
- * one, which is every caller that predates the option, resolves to the shipped
- * default and computes exactly what 1.2.0 computed.
- *
- * An unrecognised name falls back rather than throwing: `chart.setTimezone`
- * already rejects a bad zone at the call site, and a `calc` that throws takes
- * the whole repaint down with it.
- */
-const zoneOf = (s: Readonly<Record<string, unknown>>): string => {
-  const v = s.timezone;
-  if (typeof v !== 'string' || v === '' || v === DEFAULT_TIMEZONE) return DEFAULT_TIMEZONE;
-  return isValidTimezone(v) ? v : DEFAULT_TIMEZONE;
-};
+import { num, int, str, flag, src, zoneOf } from './settings';
 
 /** A NaN-filled column of the right length, the shape every `calc` here starts from. */
 const blank = (n: number): number[] => new Array<number>(n).fill(NaN);
@@ -353,19 +323,19 @@ export const CPR: IndicatorDescriptor = {
     const manual = s.pivotMode === 'manual';
     const auto = autoPivotPeriod(bars);
     const show: PivotVisibility = {
-      pivot: bool(s, 'displaypivots', true),
-      support: bool(s, 'displaysupport', true),
-      resistance: bool(s, 'displayresistance', true),
-      cpr: bool(s, 'displaycpr', true),
-      s1r1: bool(s, 'displayS1R1', false),
+      pivot: flag(s, 'displaypivots', true),
+      support: flag(s, 'displaysupport', true),
+      resistance: flag(s, 'displayresistance', true),
+      cpr: flag(s, 'displaycpr', true),
+      s1r1: flag(s, 'displayS1R1', false),
     };
     // Manual lets a user stack frames; Auto resolves to exactly one, so the
     // toggles are read only on the branch that owns them.
     const wanted: Record<PivotPeriod, boolean> = manual
       ? {
-        daily: bool(s, 'showDaily', true),
-        weekly: bool(s, 'showWeekly', false),
-        monthly: bool(s, 'showMonthly', false),
+        daily: flag(s, 'showDaily', true),
+        weekly: flag(s, 'showWeekly', false),
+        monthly: flag(s, 'showMonthly', false),
       }
       : { daily: auto === 'daily', weekly: auto === 'weekly', monthly: auto === 'monthly' };
 
@@ -493,7 +463,7 @@ export const ALPHATREND: IndicatorDescriptor = {
     const sell = blank(n);
     if (n === 0) return { alphatrend: [], lagged: [], buySignal: [], sellSignal: [] };
 
-    const period = Math.max(1, Math.round(num(s, 'AP', 14)));
+    const period = int(s, 'AP', 14);
     const coeff = num(s, 'coeff', 1);
     const noVolume = s.novolumedata === true;
     const showSignals = s.showsignalsk !== false;
@@ -588,7 +558,7 @@ export const RANGE_ANALYSIS: IndicatorDescriptor = {
     }
     return {
       range: nulls(range),
-      avgRange: nulls(sma(range, Math.max(1, Math.round(num(s, 'avgLength', 3))))),
+      avgRange: nulls(sma(range, int(s, 'avgLength', 3))),
     };
   },
 };

@@ -20,25 +20,11 @@
  * column of prices and a signal is a named event at one bar.
  */
 import { rsi, atr, trueRange, sourceValues } from 'openalgo-charts';
-import type { IndicatorDescriptor, IndicatorSource, SeriesMarker } from 'openalgo-charts';
+import type { IndicatorDescriptor, SeriesMarker } from 'openalgo-charts';
 import {
   nulls, rollingSum, correlation, pivotHigh, pivotLow, barsSince, valueWhen,
 } from './calc';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A length that indexes or windows a series: a whole number, always. */
-const len = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.max(1, Math.floor(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
-const on = (s: Readonly<Record<string, unknown>>, k: string): boolean => s[k] !== false;
+import { num, len, str, flag, src } from './settings';
 
 /** The reading `k` bars back, with no value before the series starts. */
 function shift(values: readonly number[], k: number): number[] {
@@ -330,8 +316,8 @@ export const WILLIAMS_FRACTALS: IndicatorDescriptor = {
     const periods = Math.max(2, len(s, 'periods', 2));
     const high = bars.map((b) => b.high);
     const low = bars.map((b) => b.low);
-    const showUp = on(s, 'showUp');
-    const showDown = on(s, 'showDown');
+    const showUp = flag(s, 'showUp', true);
+    const showDown = flag(s, 'showDown', true);
     for (let i = 0; i < n; i++) {
       if (showUp && isFractal(high, i, periods, true)) upFractal[i] = high[i]!;
       if (showDown && isFractal(low, i, periods, false)) downFractal[i] = low[i]!;
@@ -628,7 +614,7 @@ export const CONSOLIDATION_BREAKOUT: IndicatorDescriptor = {
   // the bar from it, which keeps it clear of the range rails.
   markers: ({ bars, values, settings }) => {
     const out: SeriesMarker[] = [];
-    if (!on(settings, 'markbreakout')) return out;
+    if (!flag(settings, 'markbreakout', true)) return out;
     const up = values.breakUp ?? [];
     const down = values.breakDown ?? [];
     const upColor = str(settings, 'bullBreakColor', '#00c853');
@@ -655,7 +641,7 @@ export const CONSOLIDATION_BREAKOUT: IndicatorDescriptor = {
   barColors: ({ bars, values, settings }) => {
     const age = values.insideAge ?? [];
     const tint = str(settings, 'insideColor', '#000000');
-    const wanted = on(settings, 'colorinside');
+    const wanted = flag(settings, 'colorinside', true);
     return bars.map((_, i) =>
       (wanted && age[i] !== null && age[i] !== undefined ? tint : null));
   },

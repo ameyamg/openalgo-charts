@@ -13,25 +13,12 @@
  * (`openalgo-charts`), not deep paths, see the note in `src/indicators/index.ts`.
  */
 import { atr, sourceValues } from 'openalgo-charts';
-import type { IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { IndicatorDescriptor } from 'openalgo-charts';
 import { sma, wma, highest, lowest, nulls, smaSeededEma, alma, linreg } from './calc';
 import { emaOfGapped } from './smoothing';
 import { withTail, windowTail, whole } from './tail';
 import { withTimeframe } from './timeframe';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** the reference `input.int` is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Readonly<Record<string, unknown>>, k: string, d: number, min = 1): number =>
-  Math.max(min, Math.round(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
+import { num, int, offsetOf, str, src } from './settings';
 
 const highs = (bars: readonly { high: number }[]): number[] => bars.map((b) => b.high);
 const lows = (bars: readonly { low: number }[]): number[] => bars.map((b) => b.low);
@@ -224,7 +211,7 @@ export const DONCHIAN: IndicatorDescriptor = withTimeframe(withTail({
   calc: (bars, s) => {
     const length = int(s, 'length', 20);
     // Offset is a displacement, so it is the one setting that may be negative.
-    const offset = Math.round(num(s, 'offset', 0));
+    const offset = offsetOf(s, 'offset', 0);
     const upper = highest(highs(bars), length);
     const lower = lowest(lows(bars), length);
     const basis = upper.map((u, i) => (u + lower[i]!) / 2);
@@ -238,7 +225,7 @@ export const DONCHIAN: IndicatorDescriptor = withTimeframe(withTail({
   // A forward offset only reaches further back. A backward one draws the
   // forming bar's channel on an earlier slot than the tail covers.
   const length = int(s, 'length', 20);
-  const offset = Math.round(num(s, 'offset', 0));
+  const offset = offsetOf(s, 'offset', 0);
   return whole(length) && offset >= 0 ? length - 1 + offset : null;
 })));
 
@@ -449,8 +436,8 @@ export const MA_CHANNEL: IndicatorDescriptor = {
   }],
   calc: (bars, s) => ({
     // Offsets are displacements, so they are the settings here that may be negative.
-    upper: nulls(shift(sma(highs(bars), int(s, 'upperLength', 20)), Math.round(num(s, 'upperOffset', 0)))),
-    lower: nulls(shift(sma(lows(bars), int(s, 'lowerLength', 20)), Math.round(num(s, 'lowerOffset', 0)))),
+    upper: nulls(shift(sma(highs(bars), int(s, 'upperLength', 20)), offsetOf(s, 'upperOffset', 0))),
+    lower: nulls(shift(sma(lows(bars), int(s, 'lowerLength', 20)), offsetOf(s, 'lowerOffset', 0))),
   }),
 };
 

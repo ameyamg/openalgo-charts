@@ -13,52 +13,12 @@
  * bundle (`openalgo-charts`), not deep paths — see the note in
  * `src/indicators/index.ts`.
  */
-import {
-  atr, sourceValues, sessionStartFlags, DEFAULT_TIMEZONE, isValidTimezone,
-} from 'openalgo-charts';
-import type { Bar, IndicatorDescriptor, IndicatorInput, IndicatorSource } from 'openalgo-charts';
+import { atr, sourceValues, sessionStartFlags } from 'openalgo-charts';
+import type { Bar, IndicatorDescriptor, IndicatorInput } from 'openalgo-charts';
 import { sma, rma, nulls, smaSeededEma, vwma, percentileNearestRank } from './calc';
 import { emaOfGapped, smoothingMa } from './smoothing';
 import { withTimeframe } from './timeframe';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** the reference `input.int` is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Readonly<Record<string, unknown>>, k: string, d: number, min = 1): number =>
-  Math.max(min, Math.round(num(s, k, d)));
-/** An offset is a displacement, so it is the one integer setting that may be negative. */
-const offsetOf = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.round(num(s, k, d));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const flag = (s: Readonly<Record<string, unknown>>, k: string, d: boolean): boolean => {
-  const v = s[k];
-  return typeof v === 'boolean' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
-
-/**
- * The chart's configured zone, as it reaches an indicator.
- *
- * A `calc` is handed `(bars, settings, store)` and never the chart, so the zone
- * travels on the settings blob under the reserved `timezone` key. A blob without
- * one, which is every caller that predates the option, resolves to the shipped
- * default and computes exactly what 1.2.0 computed.
- *
- * An unrecognised name falls back rather than throwing: `chart.setTimezone`
- * already rejects a bad zone at the call site, and a `calc` that throws takes
- * the whole repaint down with it.
- */
-const zoneOf = (s: Readonly<Record<string, unknown>>): string => {
-  const v = s.timezone;
-  if (typeof v !== 'string' || v === '' || v === DEFAULT_TIMEZONE) return DEFAULT_TIMEZONE;
-  return isValidTimezone(v) ? v : DEFAULT_TIMEZONE;
-};
+import { num, int, offsetOf, str, flag, src, zoneOf } from './settings';
 
 /** the reference `nz(volume)`: a bar the feed gave no volume for traded nothing. */
 const volumes = (bars: readonly Bar[]): number[] =>

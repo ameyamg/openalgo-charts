@@ -17,20 +17,10 @@
  * studies are judged on.
  */
 import { sourceValues } from 'openalgo-charts';
-import type { IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { IndicatorDescriptor } from 'openalgo-charts';
 import { sma, nulls, change, roc, highest, lowest } from './calc';
 import { emaOfGapped } from './smoothing';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A length that indexes or windows a series, so it has to be a whole number. */
-const len = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.max(1, Math.floor(num(s, k, d)));
-const src = (s: Readonly<Record<string, unknown>>): IndicatorSource => (s.source as IndicatorSource) ?? 'close';
-const text = (s: Readonly<Record<string, unknown>>, k: string, d: string): string =>
-  typeof s[k] === 'string' && s[k] !== '' ? s[k] : d;
+import { len, str, src } from './settings';
 
 /**
  * The upstream `tsi(source, shortLength, longLength)`.
@@ -159,13 +149,11 @@ export const PPO: IndicatorDescriptor = {
       // forgiving "assume rising when there is no previous bar".
       colorBy: ({ value, index, values, settings }) => {
         const prev = values.hist?.[index - 1];
-        const pick = (k: string, d: string): string =>
-          typeof settings[k] === 'string' && settings[k] !== '' ? settings[k] : d;
         const rising = typeof prev === 'number' && Number.isFinite(prev) && value > prev;
         if (value >= 0) {
-          return rising ? pick('histUpColor', '#26a69a') : pick('histUpFadeColor', '#b2dfdb');
+          return rising ? str(settings, 'histUpColor', '#26a69a') : str(settings, 'histUpFadeColor', '#b2dfdb');
         }
-        return rising ? pick('histDownFadeColor', '#ffcdd2') : pick('histDownColor', '#ff5252');
+        return rising ? str(settings, 'histDownFadeColor', '#ffcdd2') : str(settings, 'histDownColor', '#ff5252');
       },
     },
     { key: 'ppo', type: 'line', title: 'PPO', colorKey: 'ppoColor', style: { lineWidth: 1.5 } },
@@ -173,13 +161,13 @@ export const PPO: IndicatorDescriptor = {
   ],
   calc: (bars, s) => {
     const values = sourceValues(bars, src(s));
-    const oscType = text(s, 'oscType', 'EMA');
+    const oscType = str(s, 'oscType', 'EMA');
     const fast = ppoMa(values, len(s, 'fastLength', 12), oscType);
     const slow = ppoMa(values, len(s, 'slowLength', 26), oscType);
     // A zero slow average makes the percentage undefined, which is a gap
     // upstream, not a division blowing up to Infinity.
     const ppo = fast.map((f, i) => (slow[i] === 0 ? NaN : (100 * (f - slow[i]!)) / slow[i]!));
-    const signal = ppoMa(ppo, len(s, 'signalLength', 9), text(s, 'sigType', 'EMA'));
+    const signal = ppoMa(ppo, len(s, 'signalLength', 9), str(s, 'sigType', 'EMA'));
     return {
       hist: nulls(ppo.map((v, i) => v - signal[i]!)),
       ppo: nulls(ppo),

@@ -5,49 +5,19 @@
  * `ema`, `supertrend`, and the `sourceValues` helper come from the base bundle
  * (`../index`), not deep paths — see the note in `src/indicators/index.ts`.
  */
-import {
-  supertrend, atr, sourceValues, sourceValue,
+import { supertrend, atr, sourceValues, sourceValue,
   sessionStartFlags, calendarPeriodFlags, isNewZonedPeriod, isNewIstDay, isNewZonedDay,
   utcSecondsToIstParts, IST_OFFSET_SECONDS,
-  DEFAULT_TIMEZONE, isValidTimezone,
-} from 'openalgo-charts';
+  DEFAULT_TIMEZONE } from 'openalgo-charts';
 import type { Bar, IndicatorDescriptor, IndicatorSource, IndicatorStudySource } from 'openalgo-charts';
 import { sma, wma, stdev, highest, lowest, nulls, smaSeededEma } from './calc';
 import type { NumericalWindowOptions } from './statistics';
 import { withTail, whole, cell, claimOf, settle, windowTail, machineTail, type Tail } from './tail';
 import { seeded, smooth, observed, observedStep, supertrendState, supertrendStep, sarState, sarStep } from './steppers';
 import { withTimeframe } from './timeframe';
+import { num, int, offsetOf, str, src, zoneOf } from './settings';
 
 type Calc = IndicatorDescriptor['calc'];
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
-
-/**
- * The chart's configured zone, as it reaches an indicator.
- *
- * A `calc` is handed `(bars, settings, store)` and never the chart, so the zone
- * travels on the settings blob under the reserved `timezone` key. A blob without
- * one, which is every caller that predates the option, resolves to the shipped
- * default and computes exactly what 1.2.0 computed.
- *
- * An unrecognised name falls back rather than throwing: `chart.setTimezone`
- * already rejects a bad zone at the call site, and a `calc` that throws takes
- * the whole repaint down with it.
- */
-const zoneOf = (s: Readonly<Record<string, unknown>>): string => {
-  const v = s.timezone;
-  if (typeof v !== 'string' || v === '' || v === DEFAULT_TIMEZONE) return DEFAULT_TIMEZONE;
-  return isValidTimezone(v) ? v : DEFAULT_TIMEZONE;
-};
 
 type Kernel = (values: readonly number[], period: number, options?: NumericalWindowOptions) => number[];
 
@@ -336,7 +306,7 @@ interface VwapState { pv: number; vol: number; pv2: number; reading: Reading | n
 function vwapTail(calc: Calc): Tail {
   return (bars, s, from, previous, store) => {
     const n = bars.length;
-    if (Math.round(num(s, 'offset', 0)) !== 0 || n - from > 2) return null;
+    if (offsetOf(s, 'offset', 0) !== 0 || n - from > 2) return null;
     const source = src(s);
     const anchor = str(s, 'anchor', 'session') as VwapAnchor;
     const zone = zoneOf(s);
@@ -459,7 +429,7 @@ export const VWAP: IndicatorDescriptor = withTail({
     const values = sourceValues(bars, src(s));
     const anchor = str(s, 'anchor', 'session') as VwapAnchor;
     const percentMode = s.calcMode === 'percent';
-    const offset = Math.round(num(s, 'offset', 0));
+    const offset = offsetOf(s, 'offset', 0);
 
     const vwap = new Array<number>(n).fill(NaN);
     // The band half-width in price terms, before the multiplier. Kept as its own
@@ -736,11 +706,10 @@ export const ICHIMOKU: IndicatorDescriptor = {
     // Whole bars, the way the other built-ins read a length: `mid` indexes
     // bars with the period, so a fractional one read a bar that does not exist
     // and threw, and a fractional displacement found nothing to copy.
-    const period = (k: string, d: number): number => Math.max(1, Math.round(num(s, k, d)));
-    const conv = period('conversionPeriod', 9);
-    const base = period('basePeriod', 26);
-    const lag = period('laggingSpanPeriod', 52);
-    const disp = Math.round(num(s, 'displacement', 26));
+    const conv = int(s, 'conversionPeriod', 9);
+    const base = int(s, 'basePeriod', 26);
+    const lag = int(s, 'laggingSpanPeriod', 52);
+    const disp = offsetOf(s, 'displacement', 26);
 
     // Donchian midpoint over `p` bars, a whole period of one or more, so the
     // window [i - p + 1, i] lies inside the bars.
@@ -879,14 +848,14 @@ export const HALFTREND: IndicatorDescriptor = {
     const out = { up, down, atrHigh: chHigh, atrLow: chLow, buySignal: buy, sellSignal: sell };
     if (n === 0) return out;
 
-    const amp = Math.max(1, Math.round(num(s, 'amplitude', 2)));
+    const amp = int(s, 'amplitude', 2);
     const chDev = num(s, 'channelDeviation', 2);
     const showChannels = s.showChannels !== false;
     const showSignals = s.showSignals !== false;
 
     const highs = bars.map((b) => b.high);
     const lows = bars.map((b) => b.low);
-    const halfAtr = atr(highs, lows, bars.map((b) => b.close), Math.max(1, Math.round(num(s, 'atrPeriod', 100))));
+    const halfAtr = atr(highs, lows, bars.map((b) => b.close), int(s, 'atrPeriod', 100));
     const meanHigh = sma(highs, amp);
     const meanLow = sma(lows, amp);
     const rollHigh = highest(highs, amp);

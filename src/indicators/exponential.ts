@@ -11,21 +11,12 @@
  * (see ./tail), so a tick costs a step, not a pass over the history.
  */
 import { sourceValues, sourceValue } from 'openalgo-charts';
-import type { Bar, IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
 import { nulls, smaSeededEma } from './calc';
 import { withTail, machineTail, stepAll, cell, type Machine } from './tail';
 import { seeded, smooth, type Seeded } from './steppers';
 import { withTimeframe } from './timeframe';
-
-type Settings = Readonly<Record<string, unknown>>;
-
-const num = (s: Settings, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A length is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Settings, k: string, d: number): number => Math.max(1, Math.round(num(s, k, d)));
-const src = (s: Settings): IndicatorSource => (s.source as IndicatorSource) ?? 'close';
+import { type Settings, num, int, src } from './settings';
 
 /** ZLEMA's lag: half the length, rounded down. */
 const lagOf = (length: number): number => Math.floor((length - 1) / 2);

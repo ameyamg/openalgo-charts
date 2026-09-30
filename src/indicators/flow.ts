@@ -14,11 +14,7 @@ import { change, cumulative, nulls, rollingSum, sma } from './calc';
 // A `change` series has no value on bar 0, so its smoothing starts later too:
 // the shared gapped EMA aligns it with the first finite input.
 import { emaOfGapped } from './smoothing';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
+import { num } from './settings';
 
 /** the reference `nz(volume)`: a bar the feed gave no volume for traded nothing. */
 const vol = (b: Bar): number =>

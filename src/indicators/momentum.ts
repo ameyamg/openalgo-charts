@@ -3,27 +3,15 @@
  * Part of the lazy `openalgo-charts/indicators` tier.
  */
 import { rsi, atr, trueRange, sourceValues, sourceValue } from 'openalgo-charts';
-import type { Bar, IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
 import { sma, rma, smaSeededEma, stdev, highest, lowest, nulls } from './calc';
 import { fromFirstValue, smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
 import { withTail, windowTail, machineTail, whole, cell, type Tail } from './tail';
 import { seeded, smooth, rsiState, rsiStep, wilder, atrStep, trueRangeAt, meanAt } from './steppers';
 import { withTimeframe } from './timeframe';
+import { num, int, str, src } from './settings';
 
 type Calc = IndicatorDescriptor['calc'];
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A window length is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Readonly<Record<string, unknown>>, k: string, d: number, min = 1): number =>
-  Math.max(min, Math.round(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>): IndicatorSource => (s.source as IndicatorSource) ?? 'close';
 
 /**
  * A column holding one value on every bar, warmup slots included.
@@ -116,18 +104,14 @@ export const MACD: IndicatorDescriptor = withTimeframe(withTail({
         const rising = prev === null || prev === undefined || !Number.isFinite(prev)
           ? true
           : value >= prev;
-        const pick = (key: string, fallback: string): string => {
-          const c = settings[key];
-          return typeof c === 'string' && c !== '' ? c : fallback;
-        };
         if (value >= 0) {
           return rising
-            ? pick('histUpColor', '#26a69a')
-            : pick('histUpFadeColor', '#a7d8d2');
+            ? str(settings, 'histUpColor', '#26a69a')
+            : str(settings, 'histUpFadeColor', '#a7d8d2');
         }
         return rising
-          ? pick('histDownFadeColor', '#f5b0ae')
-          : pick('histDownColor', '#ef5350');
+          ? str(settings, 'histDownFadeColor', '#f5b0ae')
+          : str(settings, 'histDownColor', '#ef5350');
       },
     },
     { key: 'macd', type: 'line', title: 'MACD', colorKey: 'macdColor', style: { lineWidth: 1.5 } },
@@ -601,12 +585,10 @@ export const WILLIAMS_VIX_FIX: IndicatorDescriptor = {
         const v = values.wvf?.[index];
         const upper = values.alertUpper?.[index];
         const high = values.alertHigh?.[index];
-        const str = (k: string, d: string): string =>
-          typeof settings[k] === 'string' && settings[k] !== '' ? settings[k] : d;
         if (v === null || v === undefined) return undefined;
         const hitBand = upper !== null && upper !== undefined && v >= upper;
         const hitRange = high !== null && high !== undefined && v >= high;
-        return hitBand || hitRange ? str('highColor', '#00ff00') : str('normalColor', '#808080');
+        return hitBand || hitRange ? str(settings, 'highColor', '#00ff00') : str(settings, 'normalColor', '#808080');
       },
     },
     { key: 'rangeHigh', type: 'line', title: 'Range High Percentile', colorKey: 'rangeColor', style: { lineWidth: 4 } },
