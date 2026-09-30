@@ -341,7 +341,8 @@ export class MarketProfile implements IPrimitive {
 
   private _blockColor(l: MarketProfileLevel, periodIdx: number, s: MarketProfileSessionResult): string {
     const o = this._opts;
-    if (o.colorMode === 'period') return o.periodColors[periodIdx % o.periodColors.length];
+    // An empty palette has no colour for any period, so the base colour stands in.
+    if (o.colorMode === 'period') return o.periodColors[periodIdx % o.periodColors.length] ?? o.color;
     if (o.colorMode === 'valueArea') return l.price <= s.vah && l.price >= s.val ? o.vaColor : o.color;
     return o.color;
   }
