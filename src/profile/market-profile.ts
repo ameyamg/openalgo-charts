@@ -11,15 +11,9 @@
  * unit-testable and derivable from intraday OHLCV bars alone.
  */
 import type { Bar } from '../model/bar';
-import { bucketPrice, priceBuckets } from './profile-model';
-import {
-  DEFAULT_TIMEZONE,
-  IST_OFFSET_SECONDS,
-  utcSecondsToIstParts,
-  utcSecondsToZonedParts,
-  zonedDayIndex,
-  zonedWallClockToUtcSeconds,
-} from '../feed/time';
+import { bucketPrice, priceBuckets, valueArea } from './profile-model';
+import { partsIn, minuteOfDay, sessionKey } from './profile-calendar';
+import { DEFAULT_TIMEZONE, zonedWallClockToUtcSeconds } from '../feed/time';
 
 export type MarketProfileSession = 'day' | 'week' | 'month' | 'composite';
 
@@ -245,8 +239,6 @@ export function tpoLetter(period: number): string {
   return m < 26 ? String.fromCharCode(65 + m) : String.fromCharCode(97 + (m - 26));
 }
 
-const DAY_SECONDS = 86400;
-
 /**
  * The clock a window's minutes are counted on: its own when it names one, the
  * chart's configured zone otherwise.
@@ -259,37 +251,6 @@ const DAY_SECONDS = 86400;
  */
 function windowZone(w: SessionWindow | undefined, zone: string): string {
   return w?.zone ?? zone;
-}
-
-/**
- * Calendar parts of an instant on `zone`'s clock.
- *
- * The default takes the fixed-offset arithmetic. These helpers run once per bar
- * over a whole history and Intl costs roughly 25x the arithmetic, so the branch
- * hands every existing caller back the speed it had. It cannot change an answer:
- * IST is a fixed offset, and tests/profile-timezone.test.ts pins the two paths
- * together rather than assuming they agree.
- */
-function partsIn(utcSeconds: number, zone: string): { year: number; month: number; day: number; hour: number; minute: number } {
-  return zone === DEFAULT_TIMEZONE
-    ? utcSecondsToIstParts(utcSeconds)
-    : utcSecondsToZonedParts(utcSeconds, zone);
-}
-
-/** Minutes from local midnight in `zone`. */
-function minuteOfDay(utcSeconds: number, zone: string): number {
-  if (zone === DEFAULT_TIMEZONE) {
-    const s = (((utcSeconds + IST_OFFSET_SECONDS) % DAY_SECONDS) + DAY_SECONDS) % DAY_SECONDS;
-    return Math.floor(s / 60);
-  }
-  const p = utcSecondsToZonedParts(utcSeconds, zone);
-  return p.hour * 60 + p.minute;
-}
-
-/** Whole days since 1970-01-01 on `zone`'s calendar. */
-function dayIndexIn(utcSeconds: number, zone: string): number {
-  if (zone === DEFAULT_TIMEZONE) return Math.floor((utcSeconds + IST_OFFSET_SECONDS) / DAY_SECONDS);
-  return zonedDayIndex(utcSeconds, zone);
 }
 
 /**
@@ -326,30 +287,6 @@ function windowOpenOn(utcSeconds: number, w: SessionWindow, zone: string, dayOff
   );
 }
 
-/**
- * Session group key for the chosen mode, on `zone`'s calendar.
- *
- * An identity, not a timestamp: bars sharing a key share a profile and nothing
- * outside this module reads the value, so a day index is both cheaper than a
- * midnight and immune to the 169-hour week a DST changeover produces.
- */
-function sessionKey(utcSeconds: number, mode: MarketProfileSession, zone: string, w?: SessionWindow): number {
-  if (mode === 'composite') return 0;
-  if (mode === 'month') {
-    const p = partsIn(utcSeconds, zone);
-    return p.year * 12 + (p.month - 1);
-  }
-  let dayIndex = dayIndexIn(utcSeconds, zone);
-  // An overnight window belongs to the day it *opened* on, so the evening and
-  // the following morning form one session instead of two half-profiles.
-  if (w !== undefined && w.startMinute > w.endMinute && minuteOfDay(utcSeconds, zone) < w.endMinute) {
-    dayIndex -= 1;
-  }
-  if (mode === 'day') return dayIndex;
-  // Monday-start weeks. 1970-01-01 was a Thursday, hence the +3 before the divide.
-  return Math.floor((dayIndex + 3) / 7);
-}
-
 /** Internal identity shared by the renderer's per-session display overrides. */
 export function profileSessionIdentity(time: number, options: MarketProfileOptions): string {
   const zone = windowZone(options.window, options.timezone ?? DEFAULT_TIMEZONE);
@@ -364,28 +301,16 @@ interface LevelAcc {
 }
 
 /**
- * POC + value area over a level list, expanding from the POC outward. Both
- * callers pass a non-empty list, and every index stays in 0..levels.length - 1:
- * the loop bound and the guards on each step keep it there.
+ * POC + value area over a level list, by TPO count. Both callers pass a
+ * non-empty list, so the indices `valueArea` hands back are rows of it.
  */
 function pocAndValueArea(
   levels: readonly { price: number; count: number }[],
   vaPct: number,
 ): { poc: number; vah: number; val: number } {
-  const total = levels.reduce((s, l) => s + l.count, 0);
-  let pocIdx = 0;
-  for (let i = 1; i < levels.length; i++) if (levels[i]!.count > levels[pocIdx]!.count) pocIdx = i;
-  let upper = pocIdx;
-  let lower = pocIdx;
-  let acc = levels[pocIdx]!.count;
-  const target = total * vaPct;
-  while (acc < target && (upper > 0 || lower < levels.length - 1)) {
-    const up = upper > 0 ? levels[upper - 1]!.count : -1;
-    const down = lower < levels.length - 1 ? levels[lower + 1]!.count : -1;
-    if (up >= down) { upper -= 1; acc += levels[upper]!.count; }
-    else { lower += 1; acc += levels[lower]!.count; }
-  }
-  return { poc: levels[pocIdx]!.price, vah: levels[upper]!.price, val: levels[lower]!.price };
+  const counts = levels.map((l) => l.count);
+  const va = valueArea(counts, counts.reduce((s, c) => s + c, 0) * vaPct);
+  return { poc: levels[va.poc]!.price, vah: levels[va.upper]!.price, val: levels[va.lower]!.price };
 }
 
 /** Length of the run of consecutive single prints from `from`, walking `step`. */

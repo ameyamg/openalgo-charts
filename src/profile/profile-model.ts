@@ -66,3 +66,30 @@ export function priceBuckets(low: number, high: number, step: number): number[] 
   for (let p = lo; p <= hi + step / 2; p += step) out.push(bucketPrice(p, step));
   return out;
 }
+
+/**
+ * Point of control and value area over rows sorted high to low price, as
+ * row indices: the POC is the first row with the most weight (a strict `>`,
+ * so a tie keeps the higher price), and the area grows from it one row at a
+ * time towards the heavier neighbour, the higher one on a tie, until it holds
+ * `target`. `upper` is the area's highest-priced row and `lower` its lowest.
+ * Every profile in this tier reads its POC and value area here, which is what
+ * keeps the semantics the tier documents identical across them. Tier-internal:
+ * the tier index does not re-export it.
+ */
+export function valueArea(weights: readonly number[], target: number): { poc: number; upper: number; lower: number } {
+  let poc = 0;
+  for (let i = 1; i < weights.length; i++) if (weights[i]! > weights[poc]!) poc = i;
+  let upper = poc;
+  let lower = poc;
+  let acc = weights[poc] ?? 0;
+  // Every index stays in 0..weights.length - 1: the loop bound and the guard
+  // on each step keep it there.
+  while (acc < target && (upper > 0 || lower < weights.length - 1)) {
+    const up = upper > 0 ? weights[upper - 1]! : -1;
+    const down = lower < weights.length - 1 ? weights[lower + 1]! : -1;
+    if (up >= down) acc += weights[--upper]!;
+    else acc += weights[++lower]!;
+  }
+  return { poc, upper, lower };
+}

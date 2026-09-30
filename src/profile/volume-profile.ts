@@ -6,7 +6,7 @@
  */
 import type { Bar } from '../model/bar';
 import type { VolumeProfileResult } from './profile-model';
-import { priceBuckets } from './profile-model';
+import { priceBuckets, valueArea } from './profile-model';
 
 export interface VolumeProfileOptions {
   tickSize: number;
@@ -34,29 +34,13 @@ export function computeVolumeProfile(
   }
 
   const total = buckets.reduce((s, b) => s + b.volume, 0);
-  // Every index below stays in 0..buckets.length - 1: the loop bound and the
-  // guards on each step keep it there, and buckets is not empty.
-  // POC: max-volume bucket
-  let pocIdx = 0;
-  for (let i = 1; i < buckets.length; i++) if (buckets[i]!.volume > buckets[pocIdx]!.volume) pocIdx = i;
-
-  // Value area: expand from POC, adding the larger-volume neighbour each step.
-  let upper = pocIdx; // toward higher price (lower index, since sorted desc)
-  let lower = pocIdx; // toward lower price (higher index)
-  let acc = buckets[pocIdx]!.volume;
-  const target = total * valueAreaPercent;
-  while (acc < target && (upper > 0 || lower < buckets.length - 1)) {
-    const upVol = upper > 0 ? buckets[upper - 1]!.volume : -1;
-    const downVol = lower < buckets.length - 1 ? buckets[lower + 1]!.volume : -1;
-    if (upVol >= downVol) { upper -= 1; acc += buckets[upper]!.volume; }
-    else { lower += 1; acc += buckets[lower]!.volume; }
-  }
-
+  // `valueArea` hands back indices into `buckets`, which is not empty.
+  const va = valueArea(buckets.map((b) => b.volume), total * valueAreaPercent);
   return {
     buckets,
-    poc: buckets[pocIdx]!.price,
-    vah: buckets[upper]!.price, // highest price in the value area
-    val: buckets[lower]!.price, // lowest price in the value area
+    poc: buckets[va.poc]!.price,
+    vah: buckets[va.upper]!.price,
+    val: buckets[va.lower]!.price,
     totalVolume: total,
   };
 }
