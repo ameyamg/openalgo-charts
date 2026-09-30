@@ -1,5 +1,6 @@
-import { widgetText, type WidgetTranslationOptions } from './localization';
+import { IndicatorInputError } from 'openalgo-charts';
 import type { DataAdjustment, DataLoadingController, DataLoadingSnapshot, DataSession, DataVariant, DataVariantDimension } from 'openalgo-charts';
+import { errorText, widgetText, type WidgetTranslationOptions } from './localization';
 import { h, type WidgetContext } from './context';
 
 /**
@@ -68,6 +69,13 @@ export function mountDataStatus(
     for (const indicator of ctx.chart.indicators()) {
       const status = indicator.dataStatus();
       if (status === null || status.state === 'ready') continue;
+      // A study its inputs refuse (a timeframe on transformed bars) says why and
+      // offers no retry: the same inputs are refused the same way.
+      if (status.state === 'error' && status.error instanceof IndicatorInputError) {
+        const why = errorText(ctx, status.error);
+        rows.push({ text: why.startsWith(`${indicator.name}: `) ? why : widgetText(ctx, '{name}: {error}', { name: indicator.name, error: why }) });
+        continue;
+      }
       const label = { loading: widgetText(ctx, 'Loading'), empty: widgetText(ctx, 'No data'), unsupported: widgetText(ctx, 'Unsupported'), error: widgetText(ctx, 'Could not load') }[status.state];
       rows.push({ text: `${indicator.name}: ${label}`, label: widgetText(ctx, 'Retry {name}', { name: indicator.name }),
         retry: status.state === 'loading' ? undefined : () => indicator.retryData() });

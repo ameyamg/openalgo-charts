@@ -196,7 +196,9 @@ test('widget: a Renko chart refuses a timeframe on its bricks and folds the unde
   });
   expect(refused.state).toBe('error');
   expect(refused.message).toMatch(/transformed bars.*compute the study on the underlying bars/);
-  await expect(page.locator('.oac-data-status')).toContainText('EMA');
+  // The overlay says why, once, and offers no Retry the same inputs would refuse again.
+  await expect(page.locator('.oac-data-status')).toHaveText(/^EMA: this chart draws transformed bars/);
+  await expect(page.locator('.oac-data-status button')).toHaveCount(0);
   await paint(page);
   await page.screenshot({ path: info.outputPath('widget-renko-refused.png') });
 

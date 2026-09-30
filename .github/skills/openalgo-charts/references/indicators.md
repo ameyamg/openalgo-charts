@@ -2094,7 +2094,7 @@ above. Style-only updates retain fetched data. Removal aborts pending work.
 `IndicatorApi.dataStatus()` returns null for ordinary indicators or a status with
 loading/ready/empty/unsupported/error. Subscribe with `subscribeDataStatus`, release
 the returned cleanup, and use `retryData()` for explicit retry. The chart bus emits
-`indicator:data-status` with id, indicatorId and status. The widget displays it.
+`indicator:data-status` with id, indicatorId and status. The widget displays it. (unreleased) An `error` whose detail is an `IndicatorInputError` (inputs this chart refuses, such as a timeframe on transformed bars) shows its message, naming the study once, and no Retry.
 
 Custom attach hooks can use optional `dataContext()`, `subscribeDataChanges()`,
 `setDataStatus()` and `setDataRetry()` from `IndicatorAttachContext`; the lifetime
