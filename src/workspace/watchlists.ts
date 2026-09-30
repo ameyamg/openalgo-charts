@@ -1,4 +1,5 @@
 import type { InstrumentKey } from 'openalgo-charts';
+import { CatalogQueue, createMemoryCatalogStorage, randomId, type CatalogKind } from './catalog';
 import { list, number, readJson, record, string, WorkspaceDocumentError, type Json } from './json';
 import { createIndexedDbCatalogStorage, type IndexedDbCatalogStorage } from './indexed-db';
 
@@ -112,7 +113,7 @@ export function parseWatchlistCatalog(input: unknown): WatchlistCatalog {
 
 const emptyCatalog = (): WatchlistCatalog => ({ version: 1, revision: 0, lists: [], activeListId: null });
 const describe = (entry: WatchlistEntry): string => entry.exchange === '' ? entry.symbol : `${entry.symbol} on ${entry.exchange}`;
-const copy = <T>(value: T): T => readJson(value) as T;
+const KIND: CatalogKind<WatchlistCatalog> = { parse: parseWatchlistCatalog, conflict: () => new WatchlistConflictError() };
 
 /**
  * Named symbol lists with serialized, revision-checked writes. Each change is
@@ -121,39 +122,26 @@ const copy = <T>(value: T): T => readJson(value) as T;
  * new repository when the account changes.
  */
 export class WatchlistRepository implements WatchlistStore {
-  private readonly _storage: WatchlistStorage;
-  private readonly _namespace: string;
+  private readonly _catalog: CatalogQueue<WatchlistCatalog>;
   private readonly _now: () => number;
   private readonly _id: () => string;
-  private readonly _listeners = new Set<(catalog: WatchlistCatalog) => void>();
-  private _queue: Promise<void> = Promise.resolve();
 
   constructor(storage: WatchlistStorage, namespace: string, options: WatchlistRepositoryOptions = {}) {
-    this._storage = storage;
-    this._namespace = string(namespace, 'storage namespace');
+    this._catalog = new CatalogQueue(storage, namespace, KIND, emptyCatalog);
     this._now = options.now ?? Date.now;
-    this._id = options.id ?? (() => {
-      if (!globalThis.crypto?.randomUUID) throw new WorkspaceDocumentError('Supply an ID factory when crypto.randomUUID is unavailable');
-      return globalThis.crypto.randomUUID();
-    });
+    this._id = options.id ?? randomId;
   }
 
-  get namespace(): string { return this._namespace; }
+  get namespace(): string { return this._catalog.namespace; }
 
-  async load(): Promise<WatchlistCatalog> {
-    await this._queue;
-    return this._read();
-  }
+  load(): Promise<WatchlistCatalog> { return this._catalog.load(); }
 
-  subscribe(listener: (catalog: WatchlistCatalog) => void): () => void {
-    this._listeners.add(listener);
-    return () => { this._listeners.delete(listener); };
-  }
+  subscribe(listener: (catalog: WatchlistCatalog) => void): () => void { return this._catalog.subscribe(listener); }
 
   async createList(name: string, entries: readonly WatchlistEntry[] = [], options?: WatchlistOperationOptions): Promise<Watchlist> {
     const title = string(name, 'name', 120);
     const parsed = parseEntries(readJson(entries));
-    return this._transact(catalog => {
+    return this._catalog.transact(catalog => {
       const now = this._now();
       const doc: Watchlist = { id: this._newId(catalog), name: title, entries: parsed, createdAt: now, updatedAt: now };
       catalog.lists.push(doc);
@@ -163,12 +151,12 @@ export class WatchlistRepository implements WatchlistStore {
 
   async renameList(id: string, name: string, options?: WatchlistOperationOptions): Promise<Watchlist> {
     const title = string(name, 'name', 120);
-    return this._transact(catalog => this._touch(this._find(catalog, id), doc => { doc.name = title; }), options);
+    return this._catalog.transact(catalog => this._touch(this._find(catalog, id), doc => { doc.name = title; }), options);
   }
 
   async duplicateList(id: string, name: string, options?: WatchlistOperationOptions): Promise<Watchlist> {
     const title = string(name, 'name', 120);
-    return this._transact(catalog => {
+    return this._catalog.transact(catalog => {
       const source = this._find(catalog, id);
       const now = this._now();
       const doc: Watchlist = { id: this._newId(catalog), name: title, entries: source.entries.map(entry => ({ ...entry })), createdAt: now, updatedAt: now };
@@ -178,7 +166,7 @@ export class WatchlistRepository implements WatchlistStore {
   }
 
   async removeList(id: string, options?: WatchlistOperationOptions): Promise<void> {
-    return this._transact(catalog => {
+    return this._catalog.transact(catalog => {
       const doc = this._find(catalog, id);
       catalog.lists = catalog.lists.filter(item => item !== doc);
       if (catalog.activeListId === doc.id) catalog.activeListId = null;
@@ -186,12 +174,12 @@ export class WatchlistRepository implements WatchlistStore {
   }
 
   async setActiveList(id: string | null, options?: WatchlistOperationOptions): Promise<void> {
-    return this._transact(catalog => { catalog.activeListId = id === null ? null : this._find(catalog, id).id; }, options);
+    return this._catalog.transact(catalog => { catalog.activeListId = id === null ? null : this._find(catalog, id).id; }, options);
   }
 
   async addEntry(id: string, entry: WatchlistEntry, options: WatchlistOperationOptions & { index?: number } = {}): Promise<Watchlist> {
     const item = parseEntry(readJson(entry));
-    return this._transact(catalog => this._touch(this._find(catalog, id), doc => {
+    return this._catalog.transact(catalog => this._touch(this._find(catalog, id), doc => {
       if (doc.entries.some(existing => watchlistKey(existing) === watchlistKey(item))) {
         throw new WorkspaceDocumentError(`${describe(item)} is already in this list`);
       }
@@ -201,49 +189,18 @@ export class WatchlistRepository implements WatchlistStore {
 
   async removeEntry(id: string, entry: WatchlistEntry, options?: WatchlistOperationOptions): Promise<Watchlist> {
     const item = parseEntry(readJson(entry));
-    return this._transact(catalog => this._touch(this._find(catalog, id), doc => {
+    return this._catalog.transact(catalog => this._touch(this._find(catalog, id), doc => {
       doc.entries.splice(this._position(doc, item), 1);
     }), options);
   }
 
   async moveEntry(id: string, entry: WatchlistEntry, index: number, options?: WatchlistOperationOptions): Promise<Watchlist> {
     const item = parseEntry(readJson(entry));
-    return this._transact(catalog => this._touch(this._find(catalog, id), doc => {
+    return this._catalog.transact(catalog => this._touch(this._find(catalog, id), doc => {
       // _position throws unless the entry is in the list, so the splice took it out.
       const [moved] = doc.entries.splice(this._position(doc, item), 1);
       doc.entries.splice(this._index(index, doc.entries.length), 0, moved!);
     }), options);
-  }
-
-  private async _read(): Promise<WatchlistCatalog> {
-    const input = await this._storage.read(this._namespace);
-    return input === null ? emptyCatalog() : parseWatchlistCatalog(input);
-  }
-
-  private _transact<T>(mutate: (catalog: WatchlistCatalog) => T, options: WatchlistOperationOptions = {}): Promise<T> {
-    const { signal } = options;
-    const expected = options.expectedRevision === undefined ? undefined
-      : number(options.expectedRevision, 'expected revision', 0, Number.MAX_SAFE_INTEGER, true);
-    const operation = this._queue.then(async () => {
-      signal?.throwIfAborted();
-      const catalog = await this._read();
-      signal?.throwIfAborted();
-      if (expected !== undefined && catalog.revision !== expected) throw new WatchlistConflictError();
-      const revision = catalog.revision;
-      const result = mutate(catalog);
-      catalog.revision++;
-      // Validate the entire candidate, including limits, before touching storage.
-      const next = parseWatchlistCatalog(catalog);
-      signal?.throwIfAborted();
-      await this._storage.write(this._namespace, next, revision, { signal });
-      for (const listener of Array.from(this._listeners)) {
-        // A host listener failing is reported, but the write has committed and resolves.
-        try { listener(copy(next)); } catch (error) { queueMicrotask(() => { throw error; }); }
-      }
-      return result === undefined ? result : copy(result);
-    });
-    this._queue = operation.then(() => {}, () => {});
-    return operation;
   }
 
   private _find(catalog: WatchlistCatalog, id: string): Watchlist {
@@ -281,23 +238,7 @@ export class WatchlistRepository implements WatchlistStore {
  * IndexedDB. Nothing outlives the page. `seed` maps namespaces to catalogs.
  */
 export function createMemoryWatchlistStorage(seed: Readonly<Record<string, unknown>> = {}): WatchlistStorage {
-  const values = new Map<string, unknown>(Object.entries(seed).map(([key, value]) => [key, copy(value)]));
-  return {
-    async read(namespace) {
-      const value = values.get(string(namespace, 'storage namespace'));
-      return value === undefined ? null : copy(value);
-    },
-    async write(namespace, catalog, expectedRevision, options) {
-      options?.signal?.throwIfAborted();
-      const key = string(namespace, 'storage namespace');
-      const expected = number(expectedRevision, 'expected revision', 0, Number.MAX_SAFE_INTEGER, true);
-      const next = parseWatchlistCatalog(catalog);
-      if (next.revision !== expected + 1) throw new WorkspaceDocumentError('A write must advance the catalog revision by one');
-      const previous = values.get(key);
-      if ((previous === undefined ? 0 : parseWatchlistCatalog(previous).revision) !== expected) throw new WatchlistConflictError();
-      values.set(key, next);
-    },
-  };
+  return createMemoryCatalogStorage(seed, KIND);
 }
 
 export type IndexedDbWatchlistStorage = IndexedDbCatalogStorage<WatchlistCatalog> & WatchlistStorage;
