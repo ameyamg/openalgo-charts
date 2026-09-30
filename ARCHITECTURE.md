@@ -609,7 +609,7 @@ Renko, Range bars, Point & Figure, Kagi, Line Break. These **re-bucket** raw dat
 1. A **transform pipeline** stage sits between the raw `DataStore` and the renderer:
    ```ts
    interface ISeriesTransform {
-     // streaming: feed raw bars/ticks in order, emit derived elements
+     // incremental: feed each raw bar once, in order, emit derived elements
      reset(params): void
      push(bar: Bar): DerivedElement[]   // 0..n new elements (bricks/columns/lines)
      // each DerivedElement carries the source time it formed at, for axis labels
@@ -627,7 +627,7 @@ Renko, Range bars, Point & Figure, Kagi, Line Break. These **re-bucket** raw dat
 | **Kagi** | single line; flips between thick and thin on a reversal beyond threshold; direction changes at shoulders/waists | variable-width polyline, ordinal |
 | **Line Break** | new line only if close breaks the high/low of the prior N lines | rect series, ordinal |
 
-Transforms must be **incremental/streaming** so live ticks extend the last element (or spawn new bricks) without recomputing history, same `series.update` hot-path discipline as Family A (§4.2). This is the part that makes live Renko/Range bars work.
+Transforms must be **incremental**: `push` takes each source bar once and never recomputes history, the same `series.update` hot-path discipline as Family A (§4.2). Every push moves the state, so a bar that is still forming is not pushed tick by tick; it goes through a copy of the state (the run below), which is the part that makes live Renko and range bars work.
 
 **In-chart transforms (unreleased).** The chart applies a Family B transform itself: `Chart.setSeriesTransform(series, spec)` (or `AddSeriesOptions.transform`). The pieces, and where each lives:
 

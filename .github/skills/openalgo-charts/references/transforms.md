@@ -66,7 +66,7 @@ runTransform(transform, bars): Bar[]   // reset -> push each -> flush -> ensureI
 
 `ensureIncreasingTimes(bars)` bumps any colliding timestamp by `+1` second. Several elements can complete inside one source bar; without distinct times the DataLayer collapses them onto one logical index. `runTransform` applies it for you, call it directly only when assembling batches by hand.
 
-Every transform is incremental: `push` is streaming, so live ticks extend the series without recomputing history.
+Every transform is incremental: `push` takes each source bar once, in time order, and never recomputes history. Every push moves the state, so pushing the bar still forming again on each tick counts it again: push closed bars, and push the forming one through a `clone()` of the state, which is what the in-chart transform does.
 
 ## The six transforms
 
@@ -104,7 +104,7 @@ const t = new RenkoTransform({ boxSize: 5 });
 const series = chart.addSeries('candlestick');
 series.setData(runTransform(t, history));   // runTransform calls reset() first
 
-feed.onBar((bar) => {
+feed.onBar((bar) => { // closed bars only; see the pipeline above for the forming one
   for (const brick of t.push(bar)) series.update(brick); // update-or-append
 });
 ```
