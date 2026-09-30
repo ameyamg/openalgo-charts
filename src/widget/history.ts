@@ -50,7 +50,7 @@
  */
 import { applyChartSettings, DEFAULT_PRICE_SCALE_OPTIONS, filterLinkAppearance, readChartSettings } from 'openalgo-charts';
 import type {
-  Chart, ChartSettingsValues, IndicatorApi, IndicatorPolicy, IndicatorSettings, IPrimitive, Pane, PriceScaleId, PriceScaleMode,
+  AddIndicatorOptions, Chart, ChartSettingsValues, IndicatorApi, IndicatorPolicy, IndicatorSettings, IPrimitive, Pane, PriceScaleId, PriceScaleMode,
   PriceScaleOptions, SeriesApi, LinkAppearanceValues, ChartEventMap,
 } from 'openalgo-charts';
 import { DRAWING_STATE_VERSION, type Drawing, type DrawingChangeEvent, type DrawingController, type DrawingsDocument } from 'openalgo-charts/draw';
@@ -1162,7 +1162,7 @@ export class ChartHistory {
   private _add(s: StudyShot, slot: number, to: Shot): void {
     const chart = this._chart;
     const id = this._liveId(s.id);
-    const options: Parameters<Chart['addIndicator']>[2] = { paneIndex: slot, instanceId: id };
+    const options: AddIndicatorOptions = { paneIndex: slot, instanceId: id };
     if (s.scale !== null) options.priceScaleId = s.scale;
     if (Object.keys(s.plots).length) options.plotPriceScaleIds = s.plots;
     const policy = this._policyOf(s.id);

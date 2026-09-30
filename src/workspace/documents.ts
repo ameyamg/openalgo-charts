@@ -5,6 +5,7 @@ import type {
 import { normalizeDataVariant, parseAlertsDocument, parseIndicatorPolicy, parsePaneState } from 'openalgo-charts';
 import { boolean, choice, list, number, readJson, record, string, WorkspaceDocumentError, type Json } from './json';
 import { hostOwnedStudy } from '../model/indicator-policy';
+import { isPriceScaleId } from '../model/price-axis-layout';
 
 export { WorkspaceDocumentError } from './json';
 export const WORKSPACE_VERSION = 1;
@@ -104,10 +105,8 @@ function metadata(input: Record<string, Json>, kind: WorkspaceKind): DocumentMet
 }
 
 function priceScaleId(input: Json | undefined, label: string): PriceScaleId {
-  if (typeof input !== 'string' || (input !== 'right' && input !== 'left' && input !== '' && !input.startsWith('overlay:'))) {
-    throw new WorkspaceDocumentError(`Invalid ${label}`);
-  }
-  return input as PriceScaleId;
+  if (!isPriceScaleId(input)) throw new WorkspaceDocumentError(`Invalid ${label}`);
+  return input;
 }
 
 /**

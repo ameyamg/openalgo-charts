@@ -235,7 +235,7 @@ place when the server disagrees with the caller's expectation.
 
 ## Events and state
 
-**`chart.emit` swallows exceptions thrown by listeners, silently, with no console output.** One bad listener must not break the render loop, so a bug inside your handler leaves no trace. Wrap handler bodies in your own try/catch while debugging.
+**A listener that throws does not stop the chart.** Since 2.6.0 an exception thrown by a listener on the chart bus, `chart.trading.on` or `chart.shortcuts.on` is reported through `reportError` (the browser console and the window `error` event) and the other listeners and the render loop carry on. Before 2.6.0 the chart bus dropped it silently, so on an older release wrap handler bodies in your own try/catch while debugging.
 
 **`subscribeClick`/`subscribeCrosshairMove`/`subscribeDrag` add a subscriber each call (since 2.6.0; before, a second call replaced the first) and `subscribeClick` is hit-only.** Keep the unsubscribe each returns: a host that subscribes again on the same chart without it hears every click twice. Use `chart.on('click', ...)` for clicks on empty plot, which carry `id: null` plus `price`, `time` and `point`. Event names are plain strings, so a typo silently never fires; the crosshair-leave payload is all-null and must be handled.
 
