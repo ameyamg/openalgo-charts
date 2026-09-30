@@ -152,16 +152,9 @@ export interface TopbarHandle {
   destroy(): void;
 }
 
-interface BrandingLinkOptions {
-  href?: string;
-  label?: string;
-}
-
 /** Read safe link metadata from the chart's active branding. */
 export function brandingLink(chart: WidgetContext['chart'], translation: WidgetTranslationOptions = {}): { href: string; label: string } | null {
-  const options = (chart as unknown as {
-    brandingOptions?(): false | BrandingLinkOptions;
-  }).brandingOptions?.();
+  const options = chart.brandingOptions();
   if (!options || typeof options.href !== 'string' || !/^https?:\/\//i.test(options.href)) return null;
   const label = typeof options.label === 'string' && options.label.trim() !== ''
     ? options.label.trim()

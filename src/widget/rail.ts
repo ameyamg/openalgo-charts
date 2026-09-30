@@ -210,10 +210,6 @@ export function sanitizeRailPrefs(raw: unknown, groups: readonly RailGroup[], to
   return out;
 }
 
-interface Selectionish {
-  selection(): readonly string[];
-}
-
 export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptions = {}): RailHandle {
   const doc = ctx.document;
   const translatedTool = (id: string | null): string => widgetText(ctx, `schema.drawing.${id ?? 'cursor'}.name`, {}, toolName(id));
@@ -248,12 +244,7 @@ export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptio
   };
 
   // ── controller plumbing ──────────────────────────────────────────────
-  const selectionOf = (): string[] => {
-    const d = draw as unknown as Partial<Selectionish>;
-    if (typeof d.selection === 'function') return d.selection().slice();
-    const one = draw.selected();
-    return one === null ? [] : [one];
-  };
+  const selectionOf = (): string[] => draw.selection().slice();
   /** Lock, eye and trash read the selection by the rules every drawing surface keeps (drawing-actions.ts). */
   const stateOf = (ids: readonly string[]): ReturnType<typeof drawingActionState> => drawingActionState(ctx, ids);
 

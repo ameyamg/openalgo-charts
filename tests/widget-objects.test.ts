@@ -87,6 +87,12 @@ class ObjectModel {
     return true;
   }
   public focus(id: string): boolean { return this.accept('focus', id); }
+  // The stack members every inventory has: this one keeps no paint order, so
+  // rows keep their list order and nothing is placed, grouped or refused a move.
+  public stack(): readonly ChartObjectSnapshot[] { return []; }
+  public canPlace(): boolean { return false; }
+  public canGroup(): boolean { return false; }
+  public canReorder(): boolean { return true; }
   public destroy(): void { this.calls.push(['destroy']); }
 }
 

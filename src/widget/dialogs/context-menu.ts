@@ -22,7 +22,7 @@
  */
 import { widgetText } from '../localization';
 import { checkTradingCapability, getIndicator, isReplaying, PRICE_SCALE_MODES } from 'openalgo-charts';
-import type { Chart, ContextMenuEvent, ContextMenuTarget, IndicatorApi, PriceScaleId, PriceScaleMode, TradingCapabilityRequest, TradingCapabilitySource } from 'openalgo-charts';
+import type { Chart, ContextMenuEvent, ContextMenuTarget, PriceScaleId, PriceScaleMode, TradingCapabilityRequest, TradingCapabilitySource } from 'openalgo-charts';
 import { drawingSettingsSchema } from 'openalgo-charts/draw';
 import type { Drawing } from 'openalgo-charts/draw';
 import { boxIn, historyStep, type WidgetContext } from '../context';
@@ -345,8 +345,7 @@ export function contextMenuEntries(ctx: WidgetContext, e: ContextMenuEvent, hook
       sep();
       // A study its host protects shows the rows its policy withholds greyed,
       // with the reason, rather than rows that would silently do nothing.
-      // A handle without policies (a host's own, older shape) allows everything.
-      const policy = (inst as Partial<IndicatorApi>).policy?.() ?? {};
+      const policy = inst.policy();
       const note = (flag: 'configurable' | 'removable'): string | undefined => policy[flag] === false ? widgetText(ctx, 'protected') : undefined;
       out.push({ id: 'ind-settings', label: widgetText(ctx, '{name} settings...', { name: inst.name }), icon: 'settings',
         disabled: note('configurable') !== undefined, note: note('configurable'),
