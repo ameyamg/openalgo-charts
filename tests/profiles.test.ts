@@ -22,6 +22,18 @@ describe('priceBuckets', () => {
   it('spans inclusive low→high on the tick grid', () => {
     expect(priceBuckets(100, 100.2, 0.05)).toEqual([100, 100.05, 100.1, 100.15, 100.2]);
   });
+
+  // A negative step walked the loop away from its end, growing the array
+  // until memory ran out; zero and NaN already returned no buckets.
+  it('returns no buckets for a step that is not a positive finite number', () => {
+    for (const step of [-1, -0.05, 0, NaN, Infinity, -Infinity]) expect(priceBuckets(100, 105, step)).toEqual([]);
+  });
+
+  it('leaves the two positional profiles empty on such a tick size instead of hanging', () => {
+    const bars = [bar(0, 100, 101, 99, 100.5, 1000), bar(60, 100.5, 102, 100, 101.5, 800)];
+    expect(computeVolumeProfile(bars, -0.5)).toEqual({ buckets: [], poc: 0, vah: 0, val: 0, totalVolume: 0 });
+    expect(computeTpo(bars, 1, -0.5)).toEqual({ buckets: [], poc: 0, vah: 0, val: 0, ib: { high: 0, low: 0 } });
+  });
 });
 
 describe('Volume Profile', () => {

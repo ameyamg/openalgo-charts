@@ -37,15 +37,17 @@ import { computeMarketProfile, MarketProfile } from 'openalgo-charts/profile';
 
 `computeVolumeProfile(bars, tickSize, valueAreaPercent = 0.7)` (**positional**, not an options object) returns `VolumeProfileResult` = `{ buckets: { price, volume }[], poc, vah, val, totalVolume }`.
 
-**`VolumeProfileOptions` is exported but no function consumes it.** It only describes `{ tickSize, valueAreaPercent }`; passing an object where `tickSize` is expected yields `NaN` buckets. Use the positional form, or `computeVolumeProfileSessions` for the options-object API.
+**`VolumeProfileOptions` is deprecated (removed in 3.0.0): no function consumes it.** It only describes `{ tickSize, valueAreaPercent }`; passing an object where `tickSize` is expected yields `NaN` buckets. Use the positional form, or `computeVolumeProfileSessions` for the options-object API.
 
-Semantics, identical in `computeVolumeProfile`, `computeTpo` and the session family:
+Semantics, identical in `computeVolumeProfile`, `computeTpo` and the session family (one shared expansion, which the footprint statistics use too):
 
 - Each bar's volume is spread **uniformly** across `priceBuckets(bar.low, bar.high, tickSize)`, `bar.volume / buckets.length` per row. From OHLCV this is an approximation, not a tick-accurate profile.
 - `buckets` / `levels` are always sorted **high price first**.
 - **POC** is the max-volume row; ties resolve to the **highest** price (strict `>` over a descending list).
 - **Value area** starts at the POC and repeatedly absorbs whichever immediate neighbour holds more volume, stopping once accumulated volume reaches `totalVolume * valueAreaPercent`. Ties go **upward**. `vah` / `val` are the extremes reached.
-- `valueAreaPercent` is a fraction. Passing `70` puts every row in the value area.
+- `valueAreaPercent` is a fraction. Passing `70` puts every row in the value area. The draw tier's fixed range volume profile names the same share `valueArea` and takes a percent (1..100, default 70), so a value copied between the two is off by a factor of 100.
+
+**Invalid numeric options, per entry point.** `computeVolumeProfile` and `computeTpo` take their arguments as given: a `tickSize` that is not a positive finite number gives an empty result (unreleased; before, a negative one never returned), and `valueAreaPercent` is not clamped; only `computeTpo`'s `periodBars` below 1 counts as 1. `computeVolumeProfileSessions` and `computeMarketProfile` repair instead: the tick falls back to the default, `valueAreaPercent` is clamped to 0..1, and the market profile floors `rowTicks`, `initialBalancePeriods` and `compositeSessions` at 1. `computeFootprint`, `FootprintAggregator` and the `Footprint` primitive throw `RangeError`.
 
 ### Session family
 
@@ -100,7 +102,7 @@ Returns `MarketProfileResult` = `{ sessions: MarketProfileSessionResult[], optio
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `tickSize` | `number` | `0.05` | Instrument tick. |
+| `tickSize` | `number` | `0.05` | Instrument tick. Non-positive falls back to the default. |
 | `rowTicks` | `number` | `1` | Row = `tickSize * rowTicks`. Floored at 1. |
 | `session` | `MarketProfileSession` | `'day'` | `'day' \| 'week' \| 'month' \| 'composite'`. |
 | `blockMinutes` | `number` | `30` | One letter per block. |

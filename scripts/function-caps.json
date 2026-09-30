@@ -15,25 +15,25 @@
       "Pane.paintBase": 232
     },
     "src/indicators/external.ts": {
-      "createTier2Indicator": 293
+      "createTier2Indicator": 298
     },
     "src/indicators/requested-indicator.ts": {
       "createRequestedIndicator": 199
     },
     "src/model/conflation.ts": {
-      "createLodColumns": 195
+      "createLodColumns": 196
     },
     "src/primitives/indicator-draws.ts": {
-      "IndicatorDrawings.draw": 163
+      "IndicatorDrawings.draw": 164
     },
     "src/primitives/markers.ts": {
-      "SeriesMarkers.draw": 216
+      "SeriesMarkers.draw": 219
+    },
+    "src/primitives/table.ts": {
+      "ChartTable.draw": 151
     },
     "src/profile/market-profile-primitive.ts": {
       "MarketProfile._drawSession": 229
-    },
-    "src/profile/market-profile.ts": {
-      "computeMarketProfile": 177
     },
     "src/render/axis.ts": {
       "drawTimeAxis": 155

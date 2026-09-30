@@ -10,6 +10,7 @@ import type { Bar } from '../model/bar';
 import { copyState, type ISeriesTransform } from './transform';
 
 export interface KagiOptions {
+  /** Price move that turns the line. The constructor throws unless it is above 0. */
   reversal: number;
 }
 

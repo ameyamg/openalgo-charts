@@ -17,20 +17,14 @@
  *     the Connors streak) get their first term.
  */
 import { rsi, sourceValues } from 'openalgo-charts';
-import type { Bar, IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
 import {
   sma, wma, highest, lowest, nulls,
   change, roc, percentRank, highestBars, lowestBars, rollingSum,
 } from './calc';
+import { int, str, src } from './settings';
+import { zip } from './series';
 
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A length that indexes or windows a series: the reference `input.int` is a whole number. */
-const len = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.max(1, Math.floor(num(s, k, d)));
-const src = (s: Readonly<Record<string, unknown>>): IndicatorSource => (s.source as IndicatorSource) ?? 'close';
 const hl2 = (bars: readonly Bar[]): number[] => sourceValues(bars, 'hl2');
 
 /**
@@ -59,7 +53,7 @@ export const AROON: IndicatorDescriptor = {
     { key: 'down', type: 'line', title: 'Aroon Down', colorKey: 'downColor', style: { lineWidth: 1.5 } },
   ],
   calc: (bars, s) => {
-    const length = len(s, 'length', 14);
+    const length = int(s, 'length', 14);
     const upBars = highestBars(bars.map((b) => b.high), length + 1);
     const downBars = lowestBars(bars.map((b) => b.low), length + 1);
     const scale = (offsets: readonly number[]): number[] =>
@@ -95,11 +89,11 @@ export const AROON_OSCILLATOR: IndicatorDescriptor = {
   ],
   fills: [{ between: ['osc', 'zero'], colorUpKey: 'upColor', colorDownKey: 'downColor', opacity: 0.1 }],
   calc: (bars, s) => {
-    const length = len(s, 'length', 14);
+    const length = int(s, 'length', 14);
     const upBars = highestBars(bars.map((b) => b.high), length + 1);
     const downBars = lowestBars(bars.map((b) => b.low), length + 1);
     // The calc helpers return one value per input, here and below.
-    const osc = upBars.map((o, i) => (100 * (o - downBars[i]!)) / length);
+    const osc = zip(upBars, downBars, (o, d) => (100 * (o - d)) / length);
     return { osc: nulls(osc), zero: osc.map((v) => (Number.isFinite(v) ? 0 : null)) };
   },
   levels: () => [
@@ -138,12 +132,10 @@ export const AWESOME_OSCILLATOR: IndicatorDescriptor = {
       style: { base: 0 },
       colorBy: ({ value, index, values, settings }) => {
         const prev = values.ao?.[index - 1];
-        const str = (k: string, d: string): string =>
-          typeof settings[k] === 'string' ? (settings[k] as string) : d;
         const rising = prev === null || prev === undefined || !Number.isFinite(prev)
           ? true
           : value - prev > 0;
-        return rising ? str('upColor', '#009688') : str('downColor', '#f44336');
+        return rising ? str(settings, 'upColor', '#009688') : str(settings, 'downColor', '#f44336');
       },
     },
   ],
@@ -151,7 +143,7 @@ export const AWESOME_OSCILLATOR: IndicatorDescriptor = {
     const mid = hl2(bars);
     const fast = sma(mid, 5);
     const slow = sma(mid, 34);
-    return { ao: nulls(fast.map((f, i) => f - slow[i]!)) };
+    return { ao: nulls(zip(fast, slow, (f, sl) => f - sl)) };
   },
   levels: () => [{ price: 0, color: '#787b86' }],
 };
@@ -210,7 +202,7 @@ export const CHANDE_MOMENTUM: IndicatorDescriptor = {
   plots: [{ key: 'cmo', type: 'line', title: 'Chande MO', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
     const n = bars.length;
-    const length = len(s, 'length', 9);
+    const length = int(s, 'length', 9);
     const momm = change(sourceValues(bars, src(s)));
     const gains = new Array<number>(Math.max(0, n - 1));
     const losses = new Array<number>(Math.max(0, n - 1));
@@ -252,9 +244,9 @@ export const COPPOCK_CURVE: IndicatorDescriptor = {
   plots: [{ key: 'curve', type: 'line', title: 'Coppock Curve', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
     const source = bars.map((b) => b.close);
-    const long = roc(source, len(s, 'longRoCLength', 14));
-    const short = roc(source, len(s, 'shortRoCLength', 11));
-    return { curve: nulls(wma(long.map((v, i) => v + short[i]!), len(s, 'wmaLength', 10))) };
+    const long = roc(source, int(s, 'longRoCLength', 14));
+    const short = roc(source, int(s, 'shortRoCLength', 11));
+    return { curve: nulls(wma(zip(long, short, (v, sh) => v + sh), int(s, 'wmaLength', 10))) };
   },
 };
 
@@ -288,7 +280,7 @@ export const DPO: IndicatorDescriptor = {
   plots: [{ key: 'dpo', type: 'line', title: 'DPO', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
     const n = bars.length;
-    const period = len(s, 'period', 21);
+    const period = int(s, 'period', 21);
     const barsback = Math.floor(period / 2) + 1;
     const close = bars.map((b) => b.close);
     const ma = sma(close, period);
@@ -335,7 +327,7 @@ export const FISHER_TRANSFORM: IndicatorDescriptor = {
   ],
   calc: (bars, s) => {
     const n = bars.length;
-    const length = len(s, 'length', 9);
+    const length = int(s, 'length', 9);
     const mid = hl2(bars);
     const hi = highest(mid, length);
     const lo = lowest(mid, length);
@@ -430,11 +422,11 @@ export const CONNORS_RSI: IndicatorDescriptor = {
   calc: (bars, s) => {
     const n = bars.length;
     const close = bars.map((b) => b.close);
-    const priceRsi = rsi(close, len(s, 'lenrsi', 3));
-    const streakRsi = rsi(connorsStreak(close), len(s, 'lenupdown', 2));
+    const priceRsi = rsi(close, int(s, 'lenrsi', 3));
+    const streakRsi = rsi(connorsStreak(close), int(s, 'lenupdown', 2));
 
     const returns = roc(close, 1);
-    const ranked = percentRank(returns.slice(1), len(s, 'lenroc', 100));
+    const ranked = percentRank(returns.slice(1), int(s, 'lenroc', 100));
     const rank = new Array<number>(n).fill(NaN);
     for (let i = 0; i < ranked.length; i++) rank[i + 1] = ranked[i]!;
 

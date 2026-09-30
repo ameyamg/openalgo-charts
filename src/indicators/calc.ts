@@ -21,7 +21,7 @@
  * use O(n + sum of evaluated window lengths) time and O(n) working storage.
  */
 
-import type { NumericalWindowOptions } from './statistics';
+import { windowPolicy, type NumericalWindowOptions } from './statistics';
 import { windowMean, windowSum } from './window-mean';
 
 // An index read marked `!` sits in a loop whose bounds keep it inside the
@@ -32,20 +32,6 @@ import { windowMean, windowSum } from './window-mean';
 
 interface Observation { value: number; index: number }
 
-function checkedPolicy(period: number, options: NumericalWindowOptions): 'skip' | 'propagate' {
-  if (!Number.isSafeInteger(period) || period <= 0) {
-    throw new RangeError('Missing-value period must be a positive safe integer');
-  }
-  if (options === null || typeof options !== 'object' || Array.isArray(options)) {
-    throw new TypeError('Missing-value options must be an object');
-  }
-  const policy = options.missing === undefined ? 'propagate' : options.missing;
-  if (policy !== 'skip' && policy !== 'propagate') {
-    throw new TypeError('Missing-value policy must be skip or propagate');
-  }
-  return policy;
-}
-
 /**
  * Opt-in windows require positive safe-integer periods and finite observations.
  * Keeping original indices lets skipped gaps age an extreme's bar offset.
@@ -55,7 +41,7 @@ function observationWindows(
   evaluate: (window: readonly Observation[], index: number) => number,
   previousOnly = false,
 ): number[] {
-  const policy = checkedPolicy(period, options);
+  const policy = windowPolicy(period, options);
   const out = new Array<number>(values.length).fill(NaN);
   const window: Observation[] = [];
   let missing = 0;
@@ -94,7 +80,7 @@ function varyingWindows(
   previousOnly = false,
 ): number[] {
   checkedParameterSeries(periods, values.length, 1, 'Window length');
-  const policy = checkedPolicy(1, options === undefined ? {} : options);
+  const policy = windowPolicy(1, options === undefined ? {} : options);
   const out = new Array<number>(values.length).fill(NaN);
   const history: Observation[] = [];
   let consecutive = 0;
@@ -229,7 +215,7 @@ function observationExtreme(window: readonly Observation[], high: boolean): Obse
 function observedSmoothing(
   values: readonly number[], period: number, options: NumericalWindowOptions, currentWeight: number,
 ): number[] {
-  const policy = checkedPolicy(period, options);
+  const policy = windowPolicy(period, options);
   const out = new Array<number>(values.length).fill(NaN);
   let count = 0;
   const seed: number[] = [];
@@ -618,7 +604,10 @@ export function percentRank(values: readonly number[], period: number | readonly
   return out;
 }
 
-/** the reference `alma`: Gaussian-weighted MA, `offset` 0..1 and `sigma` > 0. */
+/**
+ * the reference `alma`: Gaussian-weighted MA, `offset` 0..1 and `sigma` > 0. A period
+ * that is not a whole number of 1 or more gives NaN throughout.
+ */
 export function alma(
   values: readonly number[],
   period: number,
@@ -627,7 +616,8 @@ export function alma(
 ): number[] {
   const n = values.length;
   const out = new Array<number>(n).fill(NaN);
-  if (period <= 0 || sigma <= 0 || n < period) return out;
+  // The kernel is built per window position, so it needs a whole period.
+  if (!Number.isSafeInteger(period) || period <= 0 || sigma <= 0 || n < period) return out;
   const m = offset * (period - 1);
   const s = period / sigma;
   // The kernel depends only on the window position, so it is built once.
@@ -639,9 +629,8 @@ export function alma(
     norm += w;
   }
   if (norm === 0) return out;
-  // Only a whole period gets here, since a fractional one throws at
-  // `new Array(period)` above, so the window is [i - period + 1, i] and `k`
-  // indexes the kernel.
+  // Only a whole period gets here, so the window is [i - period + 1, i] and
+  // `k` indexes the kernel.
   for (let i = period - 1; i < n; i++) {
     let acc = 0;
     for (let k = 0; k < period; k++) acc += values[i - (period - 1 - k)]! * weights[k]!;
@@ -839,6 +828,7 @@ export function stoch(
  * actual member of the window rather than interpolating between two, so a
  * 50th percentile over an even-length window is the upper of the two middles,
  * not their mean. That difference is visible on Median's default length of 3.
+ * A percentage above 100, or NaN, has no reading.
  */
 export function percentileNearestRank(
   values: readonly number[],
@@ -853,9 +843,9 @@ export function percentileNearestRank(
     if (win.some((v) => !Number.isFinite(v))) continue;
     win.sort((a, b) => a - b);
     const rank = Math.max(1, Math.ceil((percentage / 100) * period));
-    // A percentage in [0, 100] ranks inside the whole window. Any other reads
-    // past it, and the undefined it stores is a gap to `nulls`.
-    out[i] = win[rank - 1]!;
+    // A percentage up to 100 ranks inside the window (below 0 ranks the
+    // lowest). One above 100, or NaN, ranks past it and has no reading.
+    out[i] = win[rank - 1] ?? NaN;
   }
   return out;
 }
@@ -903,7 +893,12 @@ export function correlation(
   return out;
 }
 
-/** the reference `cci`: `(src - sma) / (0.015 * dev)`, where `dev` is the mean absolute deviation. */
+/**
+ * the reference `cci`: `(src - sma) / (0.015 * dev)`, where `dev` is the mean absolute deviation.
+ * A flat window (a deviation of exactly 0) has no reading here. The built-in
+ * CCI study prints 0 on such a window instead, so a study ported onto this
+ * function shows a gap where the built-in shows 0.
+ */
 export function cci(values: readonly number[], period: number): number[] {
   const n = values.length;
   const out = new Array<number>(n).fill(NaN);
@@ -911,6 +906,63 @@ export function cci(values: readonly number[], period: number): number[] {
   const md = dev(values, period);
   // `mean` and `md` have one value per input.
   for (let i = 0; i < n; i++) out[i] = md[i] === 0 ? NaN : (values[i]! - mean[i]!) / (0.015 * md[i]!);
+  return out;
+}
+
+// Kernels two built-ins share, kept out of the tier's public exports.
+
+/**
+ * Residual spread of `values` about the least squares line fitted to the last
+ * `period` of them: `sqrt((Syy - Sxy^2 / Sxx) / (period - 2))`. The divisor is
+ * `period - 2`, not `period` or `period - 1`, because the fitted slope and
+ * intercept each consume a degree of freedom, and that is what makes this a
+ * standard *error* rather than a standard deviation. x runs 1 to `period` over
+ * the window, oldest last, but only its spacing reaches the answer. `period` is
+ * a whole number; below 3 there is no reading.
+ */
+export function standardError(values: readonly number[], period: number): number[] {
+  const n = values.length;
+  const out = new Array<number>(n).fill(NaN);
+  if (period < 3 || n < period) return out;
+  const meanX = (period + 1) / 2;
+  // x is the same ladder in every window, so its spread is a constant.
+  let sxx = 0;
+  for (let k = 0; k < period; k++) sxx += (meanX - k - 1) * (meanX - k - 1);
+  // Each window is [i - period + 1, i].
+  for (let i = period - 1; i < n; i++) {
+    let sumY = 0;
+    for (let k = 0; k < period; k++) sumY += values[i - k]!;
+    const meanY = sumY / period;
+    let syy = 0;
+    let sxy = 0;
+    for (let k = 0; k < period; k++) {
+      const dy = meanY - values[i - k]!;
+      syy += dy * dy;
+      sxy += (meanX - k - 1) * dy;
+    }
+    out[i] = Math.sqrt((syy - (sxy * sxy) / sxx) / (period - 2));
+  }
+  return out;
+}
+
+/**
+ * Money Flow Index from per-bar positive and negative flows, first reading at
+ * index `period`: each window sums its flows afresh, a window holding a
+ * missing flow or overflowing has no reading, and a window with no negative
+ * flow pins at 100. How a bar's flows are formed stays with each study.
+ */
+export function mfiFromFlows(positive: readonly number[], negative: readonly number[], period: number): number[] {
+  const n = positive.length;
+  const out = new Array<number>(n).fill(NaN);
+  const up = windowSum(positive, period);
+  const down = windowSum(negative, period);
+  // Both sums hold one value per bar.
+  for (let i = period; i < n; i++) {
+    const u = up[i]!;
+    const d = down[i]!;
+    if (!Number.isFinite(u) || !Number.isFinite(d)) continue;
+    out[i] = d === 0 ? 100 : 100 - 100 / (1 + u / d);
+  }
   return out;
 }
 
@@ -1015,7 +1067,8 @@ export function barsSince(cond: readonly boolean[]): number[] {
 /**
  * the reference `valuewhen(cond, source, occurrence)`: the value of `source` the
  * n-th most recent time `cond` was true, counting the current bar. Occurrence 0
- * is the latest.
+ * is the latest. An occurrence that is not a whole number of 0 or more gives
+ * NaN throughout, and so does a hit past the end of a shorter `source`.
  */
 export function valueWhen(
   cond: readonly boolean[],
@@ -1024,14 +1077,15 @@ export function valueWhen(
 ): number[] {
   const n = cond.length;
   const out = new Array<number>(n).fill(NaN);
+  // Only a whole occurrence of zero or more counts back through the hits.
+  if (!Number.isSafeInteger(occurrence) || occurrence < 0) return out;
   const hits: number[] = [];
-  // A whole occurrence of zero or more keeps `at` inside `hits`, and each hit
-  // indexes `source` alongside `cond`. Any other occurrence, or a shorter
-  // `source`, reads undefined, which is a gap to `nulls`.
+  // `at` stays inside `hits`. Each hit indexes `source` alongside `cond`, and
+  // one past the end of a shorter `source` has no reading.
   for (let i = 0; i < n; i++) {
     if (cond[i]) hits.push(i);
     const at = hits.length - 1 - occurrence;
-    if (at >= 0) out[i] = source[hits[at]!]!;
+    if (at >= 0) out[i] = source[hits[at]!] ?? NaN;
   }
   return out;
 }

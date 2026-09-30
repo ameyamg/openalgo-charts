@@ -1,6 +1,6 @@
 /** Footprint columns, volume profiles and cluster ladders from classified trades. */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from 'openalgo-charts';
-import type { FootprintBar, FootprintCell } from './profile-model';
+import { valueArea, type FootprintBar, type FootprintCell } from './profile-model';
 import { diagonalImbalances, stackedImbalances } from './footprint';
 import { footprintTextColor, readableTextColor, type FootprintTextColorMode } from './footprint-colors';
 import { parseColor, withAlpha } from '../render/pill';
@@ -214,20 +214,12 @@ export class Footprint implements IPrimitive {
       const volume = totals.reduce((sum, v) => sum + v, 0);
       const bidVolume = bar.cells.reduce((sum, cell) => sum + cell.bidVol, 0);
       const askVolume = bar.cells.reduce((sum, cell) => sum + cell.askVol, 0);
-      // Indexes stay in 0..totals.length - 1: the loop bound and the guards on
-      // each step keep them there.
-      let pocIndex = 0;
-      for (let i = 1; i < totals.length; i++) if (totals[i]! > totals[pocIndex]!) pocIndex = i;
-      let hi = pocIndex, lo = pocIndex, sum = totals[pocIndex] ?? 0;
-      while (sum < volume * this._opts.valueAreaPercent && (hi > 0 || lo < totals.length - 1)) {
-        if ((hi > 0 ? totals[hi - 1]! : -1) >= (lo < totals.length - 1 ? totals[lo + 1]! : -1)) sum += totals[--hi]!;
-        else sum += totals[++lo]!;
-      }
+      const va = valueArea(totals, volume * this._opts.valueAreaPercent);
       cvd += bar.delta;
       return { time: bar.time, volume, bidVolume, askVolume, delta: bar.delta,
         minDelta: bar.minDelta ?? null, maxDelta: bar.maxDelta ?? null, deltaPct: volume > 0 ? bar.delta / volume * 100 : 0,
-        cvd, trades: bar.tradeCount ?? null, poc: bar.cells[pocIndex]?.price ?? 0,
-        vah: bar.cells[hi]?.price ?? 0, val: bar.cells[lo]?.price ?? 0 };
+        cvd, trades: bar.tradeCount ?? null, poc: bar.cells[va.poc]?.price ?? 0,
+        vah: bar.cells[va.upper]?.price ?? 0, val: bar.cells[va.lower]?.price ?? 0 };
     });
   }
 

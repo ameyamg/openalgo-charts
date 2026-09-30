@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   rollingMedian, rollingMode, rollingVariance, rollingRange, percentileLinear,
   rankCorrelation, centerOfGravity, runningMin, runningMax,
-  crossesAbove, crossesBelow, crosses, rising, falling,
+  crossesAbove, crossesBelow, crosses, rising, falling, sma,
 } from '../src/indicators/index';
 import type { NumericalWindowOptions } from '../src/indicators/index';
 
@@ -248,5 +248,25 @@ describe('numerical input validation', () => {
     for (const run of [runningMin, runningMax]) expect(() => run([], invalid)).toThrow(/missing/i);
     for (const run of [crossesAbove, crossesBelow, crosses]) expect(() => run([], [], invalid)).toThrow(/missing/i);
     expect(() => rollingVariance([], 1, { sample: 'yes' } as unknown as { sample: boolean })).toThrow(/sample/i);
+  });
+
+  // The statistics and the calc helpers' option path take the same options
+  // object, so one mistake gets one error: the same class and the same words.
+  it('rejects what the calc helpers reject, in the same words', () => {
+    const message = (run: () => unknown): string => {
+      try { run(); } catch (e) { return `${(e as Error).constructor.name}: ${(e as Error).message}`; }
+      return 'no error';
+    };
+    const period = message(() => sma([], 0, {}));
+    expect(period).toMatch(/^RangeError/);
+    for (const run of [rollingMedian, rising]) expect(message(() => run([], 0))).toBe(period);
+    for (const options of [null, [], 5, 'skip', { missing: null }, { missing: 'drop' }]) {
+      const bad = options as unknown as NumericalWindowOptions;
+      const expected = message(() => sma([], 1, bad));
+      expect(expected).toMatch(/^TypeError/);
+      for (const run of [rollingMedian, rising]) expect(message(() => run([], 1, bad))).toBe(expected);
+      expect(message(() => runningMax([], bad))).toBe(expected);
+      expect(message(() => crosses([], [], bad))).toBe(expected);
+    }
   });
 });

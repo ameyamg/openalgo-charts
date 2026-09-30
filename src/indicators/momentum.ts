@@ -3,39 +3,16 @@
  * Part of the lazy `openalgo-charts/indicators` tier.
  */
 import { rsi, atr, trueRange, sourceValues, sourceValue } from 'openalgo-charts';
-import type { Bar, IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
-import { sma, rma, smaSeededEma, stdev, highest, lowest, nulls } from './calc';
-import { fromFirstValue, smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
+import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
+import { sma, rma, smaSeededEma, stdev, highest, lowest, nulls, mfiFromFlows } from './calc';
+import { fromFirstValue, smoothingBlock, smoothingInputs, smoothingPlots, smoothingFill } from './smoothing';
 import { withTail, windowTail, machineTail, whole, cell, type Tail } from './tail';
 import { seeded, smooth, rsiState, rsiStep, wilder, atrStep, trueRangeAt, meanAt } from './steppers';
 import { withTimeframe } from './timeframe';
+import { num, int, str, src } from './settings';
+import { constant, zip } from './series';
 
 type Calc = IndicatorDescriptor['calc'];
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A window length is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Readonly<Record<string, unknown>>, k: string, d: number, min = 1): number =>
-  Math.max(min, Math.round(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>): IndicatorSource => (s.source as IndicatorSource) ?? 'close';
-
-/**
- * A column holding one value on every bar, warmup slots included.
- *
- * The shaded band between two reference levels is a fill between two such
- * columns: `fills` resolves its keys out of the `calc` result rather than out
- * of the declared plots, so a level that is never plotted can still anchor a
- * band. It must stay non-null throughout, because the background covers the
- * whole pane and not just the stretch where the study prints.
- */
-const constant = (n: number, value: number): (number | null)[] =>
-  new Array<number | null>(n).fill(value);
 
 export const RSI: IndicatorDescriptor = withTimeframe(withTail({
   id: 'rsi',
@@ -58,7 +35,7 @@ export const RSI: IndicatorDescriptor = withTimeframe(withTail({
     opacity: 0.1,
   }],
   calc: (bars, s) => ({
-    rsi: nulls(rsi(sourceValues(bars, src(s)), num(s, 'length', 14))),
+    rsi: nulls(rsi(sourceValues(bars, src(s)), int(s, 'length', 14))),
     // The two band edges track the overbought / oversold inputs so the shading
     // stays glued to the reference lines when either is moved.
     upperLevel: constant(bars.length, num(s, 'overbought', 70)),
@@ -71,7 +48,7 @@ export const RSI: IndicatorDescriptor = withTimeframe(withTail({
   ],
   range: () => ({ min: 0, max: 100 }),
 }, (calc) => (bars, s, from, previous, store) => {
-  const length = num(s, 'length', 14);
+  const length = int(s, 'length', 14);
   if (!whole(length)) return null;
   const source = src(s);
   const upper = num(s, 'overbought', 70);
@@ -116,18 +93,14 @@ export const MACD: IndicatorDescriptor = withTimeframe(withTail({
         const rising = prev === null || prev === undefined || !Number.isFinite(prev)
           ? true
           : value >= prev;
-        const pick = (key: string, fallback: string): string => {
-          const c = settings[key];
-          return typeof c === 'string' ? c : fallback;
-        };
         if (value >= 0) {
           return rising
-            ? pick('histUpColor', '#26a69a')
-            : pick('histUpFadeColor', '#a7d8d2');
+            ? str(settings, 'histUpColor', '#26a69a')
+            : str(settings, 'histUpFadeColor', '#a7d8d2');
         }
         return rising
-          ? pick('histDownFadeColor', '#f5b0ae')
-          : pick('histDownColor', '#ef5350');
+          ? str(settings, 'histDownFadeColor', '#f5b0ae')
+          : str(settings, 'histDownColor', '#ef5350');
       },
     },
     { key: 'macd', type: 'line', title: 'MACD', colorKey: 'macdColor', style: { lineWidth: 1.5 } },
@@ -139,21 +112,21 @@ export const MACD: IndicatorDescriptor = withTimeframe(withTail({
     // values, so the study has a real warmup. The base bundle's `ema` seeds from
     // bar 0 instead, which prints a line where there should be a gap and stays
     // materially wrong until the seeds decay away.
-    const fast = smaSeededEma(values, num(s, 'fastPeriod', 12));
-    const slow = smaSeededEma(values, num(s, 'slowPeriod', 26));
+    const fast = smaSeededEma(values, int(s, 'fastPeriod', 12));
+    const slow = smaSeededEma(values, int(s, 'slowPeriod', 26));
     // Every kernel here returns one value per input.
-    const macd = fast.map((f, i) => f - slow[i]!);
+    const macd = zip(fast, slow, (f, sl) => f - sl);
     // The difference opens with its own warmup gap, so the signal's window has
     // to start counting at the first real MACD value.
-    const signal = fromFirstValue(macd, (t) => smaSeededEma(t, num(s, 'signalPeriod', 9)));
-    const histogram = macd.map((m, i) => m - signal[i]!);
+    const signal = fromFirstValue(macd, (t) => smaSeededEma(t, int(s, 'signalPeriod', 9)));
+    const histogram = zip(macd, signal, (m, sig) => m - sig);
     return { macd: nulls(macd), signal: nulls(signal), histogram: nulls(histogram) };
   },
   levels: () => [{ price: 0, color: '#5a6b8c', dashed: true }],
 }, (calc) => (bars, s, from, previous, store) => {
-  const fast = num(s, 'fastPeriod', 12);
-  const slow = num(s, 'slowPeriod', 26);
-  const signal = num(s, 'signalPeriod', 9);
+  const fast = int(s, 'fastPeriod', 12);
+  const slow = int(s, 'slowPeriod', 26);
+  const signal = int(s, 'signalPeriod', 9);
   if (!whole(fast) || !whole(slow) || !whole(signal)) return null;
   const source = src(s);
   // The signal's leading gap is the MACD's warmup, which a seeded average
@@ -196,8 +169,8 @@ export const STOCHASTIC: IndicatorDescriptor = withTimeframe(withTail({
     opacity: 0.1,
   }],
   calc: (bars, s) => {
-    const hi = highest(bars.map((b) => b.high), num(s, 'kPeriod', 14));
-    const lo = lowest(bars.map((b) => b.low), num(s, 'kPeriod', 14));
+    const hi = highest(bars.map((b) => b.high), int(s, 'kPeriod', 14));
+    const lo = lowest(bars.map((b) => b.low), int(s, 'kPeriod', 14));
     // Scaled before dividing, the arrangement the definition fixes. A span
     // that overflows has no reading, where dividing by it printed a flat 0; a
     // scaled distance that overflows leaves an infinity, which the smoothing
@@ -207,8 +180,8 @@ export const STOCHASTIC: IndicatorDescriptor = withTimeframe(withTail({
       const span = hi[i]! - lo[i]!;
       return span > 0 && span < Infinity ? (100 * (b.close - lo[i]!)) / span : NaN;
     });
-    const k = sma(raw, num(s, 'kSmoothing', 1));
-    const d = sma(k, num(s, 'dPeriod', 3));
+    const k = sma(raw, int(s, 'kSmoothing', 1));
+    const d = sma(k, int(s, 'dPeriod', 3));
     // The 80 / 20 band edges are fixed in the definition, so they are literals
     // here rather than inputs.
     return {
@@ -225,9 +198,9 @@ export const STOCHASTIC: IndicatorDescriptor = withTimeframe(withTail({
   range: () => ({ min: 0, max: 100 }),
 }, (calc) => windowTail(calc, (s) => {
   // %D averages %K, which averages the raw reading, which reads the range.
-  const k = num(s, 'kPeriod', 14);
-  const smoothing = num(s, 'kSmoothing', 1);
-  const d = num(s, 'dPeriod', 3);
+  const k = int(s, 'kPeriod', 14);
+  const smoothing = int(s, 'kSmoothing', 1);
+  const d = int(s, 'dPeriod', 3);
   return whole(k) && whole(smoothing) && whole(d) ? k + smoothing + d - 3 : null;
 })));
 
@@ -250,7 +223,7 @@ export const ADX: IndicatorDescriptor = withTimeframe(withTail({
   ],
   calc: (bars, s) => {
     const n = bars.length;
-    const period = num(s, 'period', 14);
+    const period = int(s, 'period', 14);
     const high = bars.map((b) => b.high);
     const low = bars.map((b) => b.low);
     const close = bars.map((b) => b.close);
@@ -293,13 +266,13 @@ export const ADX: IndicatorDescriptor = withTimeframe(withTail({
       dx[i] = sum > 0 ? (Math.abs(plusDi[i]! - minusDi[i]!) / sum) * 100 : 0;
     }
     // The DX series is NaN during DI warmup; smooth only the finite tail.
-    const adx = fromFirstValue(dx, (tail) => rma(tail, num(s, 'adxPeriod', 14)));
+    const adx = fromFirstValue(dx, (tail) => rma(tail, int(s, 'adxPeriod', 14)));
     return { plusDi: nulls(plusDi), minusDi: nulls(minusDi), adx: nulls(adx) };
   },
   levels: () => [{ price: 25, color: '#5a6b8c', title: '25', dashed: true }],
 }, (calc) => (bars, s, from, previous, store) => {
-  const period = num(s, 'period', 14);
-  const adxPeriod = num(s, 'adxPeriod', 14);
+  const period = int(s, 'period', 14);
+  const adxPeriod = int(s, 'adxPeriod', 14);
   if (!whole(period) || !whole(adxPeriod)) return null;
   return machineTail(calc, `${period}|${adxPeriod}`, {
     keys: ['plusDi', 'minusDi', 'adx'],
@@ -353,21 +326,11 @@ export const CCI: IndicatorDescriptor = withTimeframe(withTail({
     { key: 'constant', type: 'number', label: 'Constant', default: 0.015, min: 0.001, max: 1, step: 0.001 },
     { key: 'color', type: 'color', label: 'Color', default: '#26c6da' },
     { key: 'bandColor', type: 'color', label: 'Background', default: '#2196f3' },
-    {
-      key: 'maType', type: 'select', label: 'Type', default: 'SMA',
-      options: SMOOTHING_MA_TYPES, group: 'Smoothing',
-    },
-    { key: 'maLength', type: 'number', label: 'Length', default: 20, min: 1, max: 500, step: 1, group: 'Smoothing' },
-    { key: 'bbMult', type: 'number', label: 'BB StdDev', default: 2, min: 0.001, max: 50, step: 0.5, group: 'Smoothing' },
-    { key: 'maColor', type: 'color', label: 'CCI-based MA', default: '#ffeb3b', group: 'Smoothing' },
-    { key: 'bbUpperColor', type: 'color', label: 'Upper Bollinger Band', default: '#4caf50', group: 'Smoothing' },
-    { key: 'bbLowerColor', type: 'color', label: 'Lower Bollinger Band', default: '#4caf50', group: 'Smoothing' },
+    ...smoothingInputs('CCI', 'SMA', 20),
   ],
   plots: [
     { key: 'cci', type: 'line', title: 'CCI', colorKey: 'color', style: { lineWidth: 1.5 } },
-    { key: 'ma', type: 'line', title: 'CCI-based MA', colorKey: 'maColor', style: { lineWidth: 1.5 } },
-    { key: 'bbUpper', type: 'line', title: 'Upper Bollinger Band', colorKey: 'bbUpperColor', style: { lineWidth: 1 } },
-    { key: 'bbLower', type: 'line', title: 'Lower Bollinger Band', colorKey: 'bbLowerColor', style: { lineWidth: 1 } },
+    ...smoothingPlots('CCI'),
   ],
   // Background first, so the Bollinger shading sits on top of it rather than
   // underneath.
@@ -378,16 +341,11 @@ export const CCI: IndicatorDescriptor = withTimeframe(withTail({
       colorDownKey: 'bandColor',
       opacity: 0.1,
     },
-    {
-      between: ['bbUpper', 'bbLower'],
-      colorUpKey: 'bbUpperColor',
-      colorDownKey: 'bbUpperColor',
-      opacity: 0.1,
-    },
+    smoothingFill(),
   ],
   calc: (bars, s) => {
     const n = bars.length;
-    const period = num(s, 'period', 20);
+    const period = int(s, 'period', 20);
     const k = num(s, 'constant', 0.015);
     const tp = bars.map((b) => (b.high + b.low + b.close) / 3);
     const avg = sma(tp, period);
@@ -399,29 +357,14 @@ export const CCI: IndicatorDescriptor = withTimeframe(withTail({
       for (let j = 0; j < period; j++) dev += Math.abs(tp[i - j]! - avg[i]!);
       const md = dev / period;
       // A window holding a missing bar, or one whose deviation overflows, has
-      // no reading. Only a genuinely flat window (md exactly 0) prints 0.
+      // no reading. Only a genuinely flat window (md exactly 0) prints 0; the
+      // public `cci` kernel, which Woodies CCI uses, has no reading there.
       out[i] = !Number.isFinite(md) ? NaN : md > 0 ? (tp[i]! - avg[i]!) / (k * md) : 0;
     }
 
-    const maType = str(s, 'maType', 'SMA');
-    const maLength = int(s, 'maLength', 20);
-    const mult = num(s, 'bbMult', 2);
-    const ma = maType === 'None'
-      ? new Array<number>(n).fill(NaN)
-      : smoothingMa(maType, out, bars.map((b) => b.volume ?? 0), maLength);
-    // The band offset exists only for the Bollinger kernel, and an absent
-    // offset makes both band columns absent too, which is how the reference
-    // keeps the two plots and their fill hidden for every other type.
-    const band = maType === BOLLINGER_MA
-      ? fromFirstValue(out, (t) => stdev(t, maLength)).map((v) => v * mult)
-      : new Array<number>(n).fill(NaN);
-
     return {
       cci: nulls(out),
-      ma: nulls(ma),
-      // `ma` and `band` both hold one value per bar.
-      bbUpper: nulls(ma.map((v, i) => v + band[i]!)),
-      bbLower: nulls(ma.map((v, i) => v - band[i]!)),
+      ...smoothingBlock(out, bars.map((b) => b.volume ?? 0), s, 'SMA', 20),
       upperLevel: constant(n, 100),
       lowerLevel: constant(n, -100),
     };
@@ -440,7 +383,7 @@ export const CCI: IndicatorDescriptor = withTimeframe(withTail({
  */
 function cciTail(calc: Calc): Tail {
   const windowed = windowTail(calc, (s) => {
-    const period = num(s, 'period', 20);
+    const period = int(s, 'period', 20);
     const maLength = int(s, 'maLength', 20);
     if (!whole(period) || !whole(maLength)) return null;
     return period - 1 + (str(s, 'maType', 'SMA') === 'None' ? 0 : maLength - 1);
@@ -448,7 +391,7 @@ function cciTail(calc: Calc): Tail {
   return (bars, s, from, previous, store, ctx) => {
     const maType = str(s, 'maType', 'SMA');
     if (maType !== 'EMA' && maType !== 'SMMA (RMA)') return windowed(bars, s, from, previous, store, ctx);
-    const period = num(s, 'period', 20);
+    const period = int(s, 'period', 20);
     const k = num(s, 'constant', 0.015);
     const maLength = int(s, 'maLength', 20);
     if (!whole(period) || !whole(maLength)) return null;
@@ -497,12 +440,15 @@ export const MFI: IndicatorDescriptor = {
   }],
   calc: (bars, s) => {
     const n = bars.length;
-    const period = num(s, 'period', 14);
+    const period = int(s, 'period', 14);
     const tp = bars.map((b) => (b.high + b.low + b.close) / 3);
     const pos = new Array<number>(n).fill(0);
     const neg = new Array<number>(n).fill(0);
-    // `tp`, `pos` and `neg` hold one value per bar; a whole period's window
-    // is [i - period + 1, i], and a fractional one reads between bars into NaN.
+    // `tp`, `pos` and `neg` hold one value per bar. A bar without a typical
+    // price or a volume is absent, so no window holding it has a reading.
+    // AlphaTrend's gauge (./studies) forms its flows the published script's
+    // way, where such a bar compares false and adds no flow; the two are kept
+    // apart because each is the output its study is pinned to.
     for (let i = 1; i < n; i++) {
       const volume = bars[i]!.volume ?? 0;
       if (!Number.isFinite(tp[i]) || !Number.isFinite(tp[i - 1]) || !Number.isFinite(volume)) {
@@ -516,19 +462,10 @@ export const MFI: IndicatorDescriptor = {
       if (tp[i]! > tp[i - 1]!) pos[i] = flow;
       else if (tp[i]! < tp[i - 1]!) neg[i] = flow;
     }
-    const out = new Array<number>(n).fill(NaN);
-    for (let i = period; i < n; i++) {
-      let p = 0;
-      let q = 0;
-      // Chronological sums retain finite rounding order and discard expired gaps.
-      for (let j = i - period + 1; j <= i; j++) { p += pos[j]!; q += neg[j]!; }
-      if (!Number.isFinite(p) || !Number.isFinite(q)) continue;
-      out[i] = q === 0 ? 100 : 100 - 100 / (1 + p / q);
-    }
     // The 80 / 20 band edges are fixed in the definition, so they are literals
     // here rather than inputs.
     return {
-      mfi: nulls(out),
+      mfi: nulls(mfiFromFlows(pos, neg, period)),
       upperLevel: constant(n, 80),
       lowerLevel: constant(n, 20),
     };
@@ -551,10 +488,10 @@ export const ATR: IndicatorDescriptor = withTimeframe(withTail({
   ],
   plots: [{ key: 'atr', type: 'line', title: 'ATR', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => ({
-    atr: nulls(atr(bars.map((b) => b.high), bars.map((b) => b.low), bars.map((b) => b.close), num(s, 'period', 14))),
+    atr: nulls(atr(bars.map((b) => b.high), bars.map((b) => b.low), bars.map((b) => b.close), int(s, 'period', 14))),
   }),
 }, (calc) => (bars, s, from, previous, store) => {
-  const period = num(s, 'period', 14);
+  const period = int(s, 'period', 14);
   if (!whole(period)) return null;
   return machineTail(calc, `${period}`, {
     keys: ['atr'],
@@ -601,12 +538,10 @@ export const WILLIAMS_VIX_FIX: IndicatorDescriptor = {
         const v = values.wvf?.[index];
         const upper = values.alertUpper?.[index];
         const high = values.alertHigh?.[index];
-        const str = (k: string, d: string): string =>
-          typeof settings[k] === 'string' ? (settings[k] as string) : d;
         if (v === null || v === undefined) return undefined;
         const hitBand = upper !== null && upper !== undefined && v >= upper;
         const hitRange = high !== null && high !== undefined && v >= high;
-        return hitBand || hitRange ? str('highColor', '#00ff00') : str('normalColor', '#808080');
+        return hitBand || hitRange ? str(settings, 'highColor', '#00ff00') : str(settings, 'normalColor', '#808080');
       },
     },
     { key: 'rangeHigh', type: 'line', title: 'Range High Percentile', colorKey: 'rangeColor', style: { lineWidth: 4 } },
@@ -617,10 +552,10 @@ export const WILLIAMS_VIX_FIX: IndicatorDescriptor = {
     const n = bars.length;
     const closes = bars.map((b) => b.close);
     const lows = bars.map((b) => b.low);
-    const pd = num(s, 'pd', 22);
-    const bbl = num(s, 'bbl', 20);
+    const pd = int(s, 'pd', 22);
+    const bbl = int(s, 'bbl', 20);
     const mult = num(s, 'mult', 2);
-    const lb = num(s, 'lb', 50);
+    const lb = int(s, 'lb', 50);
     const ph = num(s, 'ph', 0.85);
     const pl = num(s, 'pl', 1.01);
     const showRange = s.hp === true;
