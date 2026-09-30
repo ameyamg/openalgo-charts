@@ -1217,8 +1217,8 @@ A trigger emits `'indicator:alert'` on the chart's own bus with `{ indicatorId, 
 
 | Frequency | Delivery on native live source calculations |
 | --- | --- |
-| omitted | Existing behavior: evaluate newly appended bars once, using the original tail-only gate. Same-time updates do not trigger. |
-| `everyUpdate` | Every observed live calculation where the condition is true, after chart batching. Superseded ticks are not separate executions. |
+| omitted | Existing behavior: evaluate each newly appended bar once, using the original tail-only gate. Same-time updates do not trigger. |
+| `everyUpdate` | Every observed live calculation where the condition is true, after chart batching. Superseded ticks on one bar are not separate executions. |
 | `oncePerBar` | The first true live evaluation for each bar, including a condition that was false when the bar opened. |
 | `onBarClose` | Once when a bar becomes confirmed and its close condition is true. A false close condition is final. |
 | `once` | The first matching live result during this indicator instance's lifetime. Source changes, history resets and replay do not rearm it; removing and recreating the instance does. |
@@ -1236,8 +1236,17 @@ bar. Same-time provider confirmation can close a bar without changing its price.
 Clock closure waits for an eligible live source calculation; there is no alert
 polling timer. Settings, repaint and asynchronous refresh alone cannot close it.
 
-For `onBarClose`, predicate and message contexts contain only bar/output prefixes
-through the evaluated index. Calculations must still be causal. Native dispatch
+(unreleased) A calculation that appends several bars after an unchanged prefix (ticks a
+frame batched, or one source bar completing several Renko bricks, range bars, line
+break lines, point and figure columns or Kagi vertices) judges each new bar in order,
+exactly as separate appends would, for every frequency and the omitted one. The
+newest may still be forming, so `onBarClose` judges it only once it closes. A
+calculation that changed an earlier bar (a reload, a correction, a symbol or interval
+change) still seeds silently. Within one calculation each alert takes its bars in
+order, the omitted-frequency alerts before the explicit ones.
+
+For `onBarClose`, and for any alert judged at a bar before the newest, predicate
+and message contexts contain only bar/output prefixes through the evaluated index. Calculations must still be causal. Native dispatch
 is at most once for a reserved delivery, including synchronous callback reentry;
 it is not a notification acknowledgement or transport guarantee. Predicate or
 message errors leave delivery unspent, surface through `dataStatus()`, and may

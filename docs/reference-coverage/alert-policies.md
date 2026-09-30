@@ -58,7 +58,10 @@ Capture the calculation's original execution context before source checkpoints
 advance. Alert checkpoints are separate from calculation caching. Compare history
 revision as well as final provenance: a correction followed by a coalesced live
 append still seeds historical state. The omitted-frequency path retains its
-existing single-tail gate; explicit policies use the stronger native provenance.
+tail-only gate; explicit policies use the stronger native provenance. Either way a
+calculation that appended several bars after an unchanged prefix (a batched burst,
+or one source bar completing several transformed elements) judges each new bar in
+order on its own prefix, as separate appends would.
 
 ## Verification sequence
 
