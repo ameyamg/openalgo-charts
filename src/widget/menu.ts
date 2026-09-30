@@ -50,7 +50,7 @@ const rowGlyph = (id: string | undefined): string =>
  * opener and the translations, so any widget context serves, and so does a
  * bottom bar context.
  */
-export function openMenu(ctx: Pick<WidgetContext, 'document' | 'openOverlay' | 'translate'>, anchor: HTMLElement, rows: ReadonlyArray<MenuRow | string>, opts: MenuOptions = {}): () => void {
+export function openMenu(ctx: WidgetContext | Pick<WidgetContext, 'document' | 'openOverlay' | 'translate'>, anchor: HTMLElement, rows: ReadonlyArray<MenuRow | string>, opts: MenuOptions = {}): () => void {
   const doc = ctx.document;
   const m = h(doc, 'div', 'oac-menu', { role: 'menu' });
   if (opts.ariaLabel) m.setAttribute('aria-label', opts.ariaLabel);
