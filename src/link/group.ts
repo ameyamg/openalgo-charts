@@ -445,6 +445,10 @@ export class LinkGroup {
   }
 
   private _applySymbol(from: Member, symbol: string): void {
+    // The same guard as the token channels: a follower's loader may announce
+    // the name it normalised to while the group is still applying the leader's,
+    // and that echo must not become the group's instrument.
+    if (this._broadcasting || this._destroyed || !alive(from.chart)) return;
     // Recorded even with the switch off, so turning it on later has something
     // to converge on rather than silently agreeing on a stale instrument.
     from.symbol = symbol;

@@ -258,6 +258,10 @@ group.setSymbol(chartA, 'INFY');
 - A member **joining** a group that already has a symbol adopts it, because joining a linked
   workspace is exactly the moment a user expects the new chart to fall in line. The first
   member to declare one establishes the group's.
+- A follower whose `onSymbol` announces the name it loaded under another spelling (a
+  suffix, a case change) does not replace the leader's choice. The announcement arrives
+  while the group is applying the change, so it is dropped as an echo, the same way the
+  interval and chart type channels drop one; the group keeps the leader's instrument.
 
 <Callout type="info">
 Switching `symbol` on converges the group immediately; switching `crosshair` off clears
