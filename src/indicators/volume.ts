@@ -8,7 +8,7 @@ import { smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
 import { withTail, machineTail, claimOf, settle, whole, cell } from './tail';
 import { seeded, smooth } from './steppers';
 import { num, int, str } from './settings';
-import { volumeOf } from './series';
+import { volumeOf, zip } from './series';
 
 export const VOLUME: IndicatorDescriptor = {
   id: 'volume',
@@ -64,8 +64,8 @@ function obvSmoothing(
   // `ma` and `band` both hold one value per input.
   return {
     ma: nulls(ma),
-    bbUpper: nulls(ma.map((v, i) => v + band[i]!)),
-    bbLower: nulls(ma.map((v, i) => v - band[i]!)),
+    bbUpper: nulls(zip(ma, band, (v, b) => v + b)),
+    bbLower: nulls(zip(ma, band, (v, b) => v - b)),
   };
 }
 

@@ -20,7 +20,7 @@ import { emaOfGapped, smoothingMa } from './smoothing';
 import { withTimeframe } from './timeframe';
 import { num, int, offsetOf, str, flag, src, zoneOf } from './settings';
 import { crosses } from './statistics';
-import { shift, volumeOf } from './series';
+import { shift, volumeOf, zip } from './series';
 
 /**
  * `close` is hard-coded in the reference (`sma(close, ...)`, not an
@@ -168,8 +168,8 @@ export const MEDIAN: IndicatorDescriptor = {
     return {
       median: nulls(median),
       // Both series hold one value per bar, as every calc helper returns.
-      upper: nulls(median.map((v, i) => v + mult * range[i]!)),
-      lower: nulls(median.map((v, i) => v - mult * range[i]!)),
+      upper: nulls(zip(median, range, (v, r) => v + mult * r)),
+      lower: nulls(zip(median, range, (v, r) => v - mult * r)),
       medianEma: nulls(emaOfGapped(median, length)),
     };
   },
@@ -463,7 +463,7 @@ function generalizedDouble(values: readonly number[], length: number, factor: nu
   const e1 = emaOfGapped(values, length);
   if (factor === 0) return e1;
   const e2 = emaOfGapped(e1, length);
-  return e1.map((v, i) => v * (1 + factor) - e2[i]! * factor);
+  return zip(e1, e2, (v, e) => v * (1 + factor) - e * factor);
 }
 
 /**

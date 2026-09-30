@@ -39,7 +39,7 @@ import {
 import { windowMean } from './window-mean';
 import { fromFirstValue } from './smoothing';
 import { num, int, str, src } from './settings';
-import { constant, shift, shiftFlags } from './series';
+import { constant, shift, shiftFlags, zip } from './series';
 
 /** The same colour at 60 percent opacity, for the dimmer hidden-divergence plates. */
 const dim = (hex: string): string => (/^#[0-9a-f]{6}$/i.test(hex) ? `${hex}99` : hex);
@@ -142,7 +142,7 @@ export const WAVETREND: IndicatorDescriptor = {
     const ap = sourceValues(bars, src(s, 'source', 'hlc3'));
     const esa = fromFirstValue(ap, (t) => smaSeededEma(t, n1));
     const absDev = fromFirstValue(
-      ap.map((v, i) => Math.abs(v - esa[i]!)),
+      zip(ap, esa, (v, e) => Math.abs(v - e)),
       (t) => smaSeededEma(t, n1),
     );
     // A flat stretch has no deviation to divide by, and the reading there is
@@ -156,7 +156,7 @@ export const WAVETREND: IndicatorDescriptor = {
     });
     const wt1 = fromFirstValue(ci, (t) => smaSeededEma(t, n2));
     const wt2 = fromFirstValue(wt1, (t) => windowMean(t, sigLen));
-    const mom = wt1.map((v, i) => v - wt2[i]!);
+    const mom = zip(wt1, wt2, (v, w2) => v - w2);
 
     const out = {
       wt1: nulls(wt1),

@@ -16,7 +16,7 @@ import { withTail, whole, cell, claimOf, settle, windowTail, machineTail, type T
 import { seeded, smooth, observed, observedStep, supertrendState, supertrendStep, sarState, sarStep } from './steppers';
 import { withTimeframe } from './timeframe';
 import { num, int, offsetOf, str, src, zoneOf } from './settings';
-import { shift } from './series';
+import { shift, zip } from './series';
 
 type Calc = IndicatorDescriptor['calc'];
 
@@ -112,9 +112,9 @@ function bollinger(bars: readonly Bar[], s: Readonly<Record<string, unknown>>): 
   const mult = num(s, 'stdDev', 2);
   const basis = sma(values, length);
   const dev = stdev(values, length);
-  // Both kernels return one value per input, so `dev[i]` is there.
-  const upper = basis.map((b, i) => b + mult * dev[i]!);
-  const lower = basis.map((b, i) => b - mult * dev[i]!);
+  // Both kernels return one value per input, as `zip` needs.
+  const upper = zip(basis, dev, (b, d) => b + mult * d);
+  const lower = zip(basis, dev, (b, d) => b - mult * d);
   return { upper: nulls(upper), basis: nulls(basis), lower: nulls(lower) };
 }
 
@@ -708,7 +708,7 @@ export const ICHIMOKU: IndicatorDescriptor = {
 
     const conversion = mid(conv);
     const baseLine = mid(base);
-    const spanA = conversion.map((c, i) => (c + baseLine[i]!) / 2);
+    const spanA = zip(conversion, baseLine, (c, b) => (c + b) / 2);
     const spanB = mid(lag);
     const closes = bars.map((b) => b.close);
     return {

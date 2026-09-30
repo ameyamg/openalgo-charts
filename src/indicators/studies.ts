@@ -15,8 +15,8 @@ import {
   DEFAULT_TIMEZONE,
 } from 'openalgo-charts';
 import type { Bar, IndicatorDescriptor, IndicatorInput, IndicatorPlot } from 'openalgo-charts';
-import { sma, nulls, barsSince } from './calc';
-import { windowMean, windowSum } from './window-mean';
+import { sma, nulls, barsSince, mfiFromFlows } from './calc';
+import { windowMean } from './window-mean';
 import { num, int, str, flag, src, zoneOf } from './settings';
 import { crossesAbove, crossesBelow } from './statistics';
 import { shift, shiftFlags } from './series';
@@ -353,12 +353,13 @@ export const CPR: IndicatorDescriptor = {
 // ── AlphaTrend ───────────────────────────────────────────────────────────────
 
 /**
- * Money Flow Index over an explicit typical-price series.
+ * Money Flow Index over an explicit typical-price series, for AlphaTrend.
  *
- * Neither `./calc` nor the base bundle exports one, and the catalog's MFI entry
- * is a descriptor rather than a reusable kernel, so the definition lives here.
- * First value lands at index `period`: bar 0 has no prior price to compare
- * against, so it contributes no flow in either direction.
+ * The flows follow the published script: a bar whose typical price is missing
+ * compares false both ways and adds no flow, where the MFI study marks it
+ * absent. The window sums and the ratio are the MFI study's own
+ * (`mfiFromFlows`). First value lands at index `period`: bar 0 has no prior
+ * price to compare against, so it contributes no flow in either direction.
  */
 function moneyFlowIndex(
   typical: readonly number[],
@@ -366,8 +367,6 @@ function moneyFlowIndex(
   period: number,
 ): number[] {
   const n = typical.length;
-  const out = blank(n);
-  if (period <= 0 || n === 0) return out;
   const positive = new Array<number>(n).fill(0);
   const negative = new Array<number>(n).fill(0);
   // `volume` runs alongside `typical`, and both sums keep their length.
@@ -376,16 +375,9 @@ function moneyFlowIndex(
     if (typical[i]! > typical[i - 1]!) positive[i] = flow;
     else if (typical[i]! < typical[i - 1]!) negative[i] = flow;
   }
-  const up = windowSum(positive, period);
-  const down = windowSum(negative, period);
-  for (let i = period; i < n; i++) {
-    if (!Number.isFinite(up[i]) || !Number.isFinite(down[i])) continue;
-    // A window with no down-flow has nothing to divide by, so the index pins at
-    // 100. That also covers a feed with no volume at all, where both sides are
-    // zero and the ratio is undefined rather than merely extreme.
-    out[i] = down[i] === 0 ? 100 : 100 - 100 / (1 + up[i]! / down[i]!);
-  }
-  return out;
+  // A window with no down-flow pins at 100, which also covers a feed with no
+  // volume at all, where both sides are zero.
+  return mfiFromFlows(positive, negative, period);
 }
 
 export const ALPHATREND: IndicatorDescriptor = {

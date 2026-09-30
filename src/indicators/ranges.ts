@@ -28,7 +28,7 @@ import {
 import { fromFirstValue, smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
 import { withTimeframe } from './timeframe';
 import { num, int, offsetOf, str, src } from './settings';
-import { shift } from './series';
+import { shift, zip } from './series';
 
 /**
  * the reference `ema`, written the way the reference manual defines it:
@@ -225,7 +225,7 @@ export const ULTIMATE_OSCILLATOR: IndicatorDescriptor = {
       const sumBp = rollingSum(bp, length);
       const sumTr = rollingSum(tr, length);
       // A run of doji bars sums to zero range, which is `na` rather than 0/0.
-      return sumBp.map((v, i) => (sumTr[i] === 0 ? NaN : v / sumTr[i]!));
+      return zip(sumBp, sumTr, (v, tr) => (tr === 0 ? NaN : v / tr));
     };
     const fast = avg(int(s, 'length1', 7));
     const middle = avg(int(s, 'length2', 14));
@@ -271,7 +271,7 @@ export const RELATIVE_VIGOR_INDEX: IndicatorDescriptor = {
     const range = swma(bars.map((b) => b.high - b.low));
     const numerator = fromFirstValue(body, (t) => rollingSum(t, length));
     const denominator = fromFirstValue(range, (t) => rollingSum(t, length));
-    const rvgi = numerator.map((v, i) => (denominator[i] === 0 ? NaN : v / denominator[i]!));
+    const rvgi = zip(numerator, denominator, (v, den) => (den === 0 ? NaN : v / den));
     const signal = fromFirstValue(rvgi, (t) => swma(t));
     const offset = offsetOf(s, 'offset', 0);
     return {
@@ -381,8 +381,8 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
     return {
       rvi: nulls(shift(rvi, offset)),
       ma: nulls(ma),
-      bbUpper: nulls(ma.map((v, i) => v + band[i]!)),
-      bbLower: nulls(ma.map((v, i) => v - band[i]!)),
+      bbUpper: nulls(zip(ma, band, (v, b) => v + b)),
+      bbLower: nulls(zip(ma, band, (v, b) => v - b)),
       // Never null and never shifted: reference lines stay put when the plot is
       // offset, and the shading covers the pane through the study's warmup.
       bandHigh: new Array<number>(n).fill(80),

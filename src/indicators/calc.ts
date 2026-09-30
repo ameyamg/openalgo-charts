@@ -903,7 +903,12 @@ export function correlation(
   return out;
 }
 
-/** the reference `cci`: `(src - sma) / (0.015 * dev)`, where `dev` is the mean absolute deviation. */
+/**
+ * the reference `cci`: `(src - sma) / (0.015 * dev)`, where `dev` is the mean absolute deviation.
+ * A flat window (a deviation of exactly 0) has no reading here. The built-in
+ * CCI study prints 0 on such a window instead, so a study ported onto this
+ * function shows a gap where the built-in shows 0.
+ */
 export function cci(values: readonly number[], period: number): number[] {
   const n = values.length;
   const out = new Array<number>(n).fill(NaN);
@@ -911,6 +916,63 @@ export function cci(values: readonly number[], period: number): number[] {
   const md = dev(values, period);
   // `mean` and `md` have one value per input.
   for (let i = 0; i < n; i++) out[i] = md[i] === 0 ? NaN : (values[i]! - mean[i]!) / (0.015 * md[i]!);
+  return out;
+}
+
+// Kernels two built-ins share, kept out of the tier's public exports.
+
+/**
+ * Residual spread of `values` about the least squares line fitted to the last
+ * `period` of them: `sqrt((Syy - Sxy^2 / Sxx) / (period - 2))`. The divisor is
+ * `period - 2`, not `period` or `period - 1`, because the fitted slope and
+ * intercept each consume a degree of freedom, and that is what makes this a
+ * standard *error* rather than a standard deviation. x runs 1 to `period` over
+ * the window, oldest last, but only its spacing reaches the answer. `period` is
+ * a whole number; below 3 there is no reading.
+ */
+export function standardError(values: readonly number[], period: number): number[] {
+  const n = values.length;
+  const out = new Array<number>(n).fill(NaN);
+  if (period < 3 || n < period) return out;
+  const meanX = (period + 1) / 2;
+  // x is the same ladder in every window, so its spread is a constant.
+  let sxx = 0;
+  for (let k = 0; k < period; k++) sxx += (meanX - k - 1) * (meanX - k - 1);
+  // Each window is [i - period + 1, i].
+  for (let i = period - 1; i < n; i++) {
+    let sumY = 0;
+    for (let k = 0; k < period; k++) sumY += values[i - k]!;
+    const meanY = sumY / period;
+    let syy = 0;
+    let sxy = 0;
+    for (let k = 0; k < period; k++) {
+      const dy = meanY - values[i - k]!;
+      syy += dy * dy;
+      sxy += (meanX - k - 1) * dy;
+    }
+    out[i] = Math.sqrt((syy - (sxy * sxy) / sxx) / (period - 2));
+  }
+  return out;
+}
+
+/**
+ * Money Flow Index from per-bar positive and negative flows, first reading at
+ * index `period`: each window sums its flows afresh, a window holding a
+ * missing flow or overflowing has no reading, and a window with no negative
+ * flow pins at 100. How a bar's flows are formed stays with each study.
+ */
+export function mfiFromFlows(positive: readonly number[], negative: readonly number[], period: number): number[] {
+  const n = positive.length;
+  const out = new Array<number>(n).fill(NaN);
+  const up = windowSum(positive, period);
+  const down = windowSum(negative, period);
+  // Both sums hold one value per bar.
+  for (let i = period; i < n; i++) {
+    const u = up[i]!;
+    const d = down[i]!;
+    if (!Number.isFinite(u) || !Number.isFinite(d)) continue;
+    out[i] = d === 0 ? 100 : 100 - 100 / (1 + u / d);
+  }
   return out;
 }
 

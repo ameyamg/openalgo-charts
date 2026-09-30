@@ -20,6 +20,7 @@ import { withTail, machineTail, whole, cell } from './tail';
 import { seeded, smooth, wilder, atrStep, trueRangeAt, meanAt } from './steppers';
 import { withTimeframe } from './timeframe';
 import { num, int, offsetOf, str, flag, src } from './settings';
+import { zip } from './series';
 
 /**
  * Kaufman's Adaptive Moving Average: an EMA whose smoothing constant is chosen
@@ -159,7 +160,7 @@ export const KELTNER_CHANNEL: IndicatorDescriptor = withTimeframe(withTail({
       // going `na`, which is exactly what the shared `trueRange` already does.
       rail = trueRange(high, low, close);
     } else if (style === 'Range') {
-      rail = rma(high.map((h, i) => h - low[i]!), length);
+      rail = rma(zip(high, low, (h, l) => h - l), length);
     } else {
       rail = atr(high, low, close, int(s, 'atrlength', 10));
     }

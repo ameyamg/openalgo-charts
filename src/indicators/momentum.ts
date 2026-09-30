@@ -4,13 +4,13 @@
  */
 import { rsi, atr, trueRange, sourceValues, sourceValue } from 'openalgo-charts';
 import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
-import { sma, rma, smaSeededEma, stdev, highest, lowest, nulls } from './calc';
+import { sma, rma, smaSeededEma, stdev, highest, lowest, nulls, mfiFromFlows } from './calc';
 import { fromFirstValue, smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
 import { withTail, windowTail, machineTail, whole, cell, type Tail } from './tail';
 import { seeded, smooth, rsiState, rsiStep, wilder, atrStep, trueRangeAt, meanAt } from './steppers';
 import { withTimeframe } from './timeframe';
 import { num, int, str, src } from './settings';
-import { constant } from './series';
+import { constant, zip } from './series';
 
 type Calc = IndicatorDescriptor['calc'];
 
@@ -115,11 +115,11 @@ export const MACD: IndicatorDescriptor = withTimeframe(withTail({
     const fast = smaSeededEma(values, int(s, 'fastPeriod', 12));
     const slow = smaSeededEma(values, int(s, 'slowPeriod', 26));
     // Every kernel here returns one value per input.
-    const macd = fast.map((f, i) => f - slow[i]!);
+    const macd = zip(fast, slow, (f, sl) => f - sl);
     // The difference opens with its own warmup gap, so the signal's window has
     // to start counting at the first real MACD value.
     const signal = fromFirstValue(macd, (t) => smaSeededEma(t, int(s, 'signalPeriod', 9)));
-    const histogram = macd.map((m, i) => m - signal[i]!);
+    const histogram = zip(macd, signal, (m, sig) => m - sig);
     return { macd: nulls(macd), signal: nulls(signal), histogram: nulls(histogram) };
   },
   levels: () => [{ price: 0, color: '#5a6b8c', dashed: true }],
@@ -372,7 +372,8 @@ export const CCI: IndicatorDescriptor = withTimeframe(withTail({
       for (let j = 0; j < period; j++) dev += Math.abs(tp[i - j]! - avg[i]!);
       const md = dev / period;
       // A window holding a missing bar, or one whose deviation overflows, has
-      // no reading. Only a genuinely flat window (md exactly 0) prints 0.
+      // no reading. Only a genuinely flat window (md exactly 0) prints 0; the
+      // public `cci` kernel, which Woodies CCI uses, has no reading there.
       out[i] = !Number.isFinite(md) ? NaN : md > 0 ? (tp[i]! - avg[i]!) / (k * md) : 0;
     }
 
@@ -393,8 +394,8 @@ export const CCI: IndicatorDescriptor = withTimeframe(withTail({
       cci: nulls(out),
       ma: nulls(ma),
       // `ma` and `band` both hold one value per bar.
-      bbUpper: nulls(ma.map((v, i) => v + band[i]!)),
-      bbLower: nulls(ma.map((v, i) => v - band[i]!)),
+      bbUpper: nulls(zip(ma, band, (v, b) => v + b)),
+      bbLower: nulls(zip(ma, band, (v, b) => v - b)),
       upperLevel: constant(n, 100),
       lowerLevel: constant(n, -100),
     };
@@ -474,8 +475,11 @@ export const MFI: IndicatorDescriptor = {
     const tp = bars.map((b) => (b.high + b.low + b.close) / 3);
     const pos = new Array<number>(n).fill(0);
     const neg = new Array<number>(n).fill(0);
-    // `tp`, `pos` and `neg` hold one value per bar; a whole period's window
-    // is [i - period + 1, i], and a fractional one reads between bars into NaN.
+    // `tp`, `pos` and `neg` hold one value per bar. A bar without a typical
+    // price or a volume is absent, so no window holding it has a reading.
+    // AlphaTrend's gauge (./studies) forms its flows the published script's
+    // way, where such a bar compares false and adds no flow; the two are kept
+    // apart because each is the output its study is pinned to.
     for (let i = 1; i < n; i++) {
       const volume = bars[i]!.volume ?? 0;
       if (!Number.isFinite(tp[i]) || !Number.isFinite(tp[i - 1]) || !Number.isFinite(volume)) {
@@ -489,19 +493,10 @@ export const MFI: IndicatorDescriptor = {
       if (tp[i]! > tp[i - 1]!) pos[i] = flow;
       else if (tp[i]! < tp[i - 1]!) neg[i] = flow;
     }
-    const out = new Array<number>(n).fill(NaN);
-    for (let i = period; i < n; i++) {
-      let p = 0;
-      let q = 0;
-      // Chronological sums retain finite rounding order and discard expired gaps.
-      for (let j = i - period + 1; j <= i; j++) { p += pos[j]!; q += neg[j]!; }
-      if (!Number.isFinite(p) || !Number.isFinite(q)) continue;
-      out[i] = q === 0 ? 100 : 100 - 100 / (1 + p / q);
-    }
     // The 80 / 20 band edges are fixed in the definition, so they are literals
     // here rather than inputs.
     return {
-      mfi: nulls(out),
+      mfi: nulls(mfiFromFlows(pos, neg, period)),
       upperLevel: constant(n, 80),
       lowerLevel: constant(n, 20),
     };

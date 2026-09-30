@@ -23,6 +23,7 @@ import {
   change, roc, percentRank, highestBars, lowestBars, rollingSum,
 } from './calc';
 import { int, str, src } from './settings';
+import { zip } from './series';
 
 const hl2 = (bars: readonly Bar[]): number[] => sourceValues(bars, 'hl2');
 
@@ -92,7 +93,7 @@ export const AROON_OSCILLATOR: IndicatorDescriptor = {
     const upBars = highestBars(bars.map((b) => b.high), length + 1);
     const downBars = lowestBars(bars.map((b) => b.low), length + 1);
     // The calc helpers return one value per input, here and below.
-    const osc = upBars.map((o, i) => (100 * (o - downBars[i]!)) / length);
+    const osc = zip(upBars, downBars, (o, d) => (100 * (o - d)) / length);
     return { osc: nulls(osc), zero: osc.map((v) => (Number.isFinite(v) ? 0 : null)) };
   },
   levels: () => [
@@ -142,7 +143,7 @@ export const AWESOME_OSCILLATOR: IndicatorDescriptor = {
     const mid = hl2(bars);
     const fast = sma(mid, 5);
     const slow = sma(mid, 34);
-    return { ao: nulls(fast.map((f, i) => f - slow[i]!)) };
+    return { ao: nulls(zip(fast, slow, (f, sl) => f - sl)) };
   },
   levels: () => [{ price: 0, color: '#787b86' }],
 };
@@ -245,7 +246,7 @@ export const COPPOCK_CURVE: IndicatorDescriptor = {
     const source = bars.map((b) => b.close);
     const long = roc(source, int(s, 'longRoCLength', 14));
     const short = roc(source, int(s, 'shortRoCLength', 11));
-    return { curve: nulls(wma(long.map((v, i) => v + short[i]!), int(s, 'wmaLength', 10))) };
+    return { curve: nulls(wma(zip(long, short, (v, sh) => v + sh), int(s, 'wmaLength', 10))) };
   },
 };
 

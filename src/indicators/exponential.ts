@@ -17,6 +17,7 @@ import { withTail, machineTail, stepAll, cell, type Machine } from './tail';
 import { seeded, smooth, type Seeded } from './steppers';
 import { withTimeframe } from './timeframe';
 import { type Settings, num, int, src } from './settings';
+import { zip } from './series';
 
 /** ZLEMA's lag: half the length, rounded down. */
 const lagOf = (length: number): number => Math.floor((length - 1) / 2);
@@ -172,8 +173,8 @@ export const ELDER_RAY: IndicatorDescriptor = withTail({
     const ema = smaSeededEma(sourceValues(bars, 'close'), int(s, 'length', 13));
     // `ema` holds one value per bar.
     return {
-      bull: nulls(bars.map((b, i) => b.high - ema[i]!)),
-      bear: nulls(bars.map((b, i) => b.low - ema[i]!)),
+      bull: nulls(zip(bars, ema, (b, e) => b.high - e)),
+      bear: nulls(zip(bars, ema, (b, e) => b.low - e)),
     };
   },
   levels: () => [{ price: 0, color: '#787b86', title: 'Zero', dashed: true }],

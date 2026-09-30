@@ -11,7 +11,7 @@
  */
 import { trueRange, sourceValues } from 'openalgo-charts';
 import type { IndicatorDescriptor } from 'openalgo-charts';
-import { sma, stdev, highest, lowest, nulls, smaSeededEma, rollingSum, roc, linreg } from './calc';
+import { sma, stdev, highest, lowest, nulls, smaSeededEma, rollingSum, roc, linreg, standardError } from './calc';
 import { withTail, windowTail } from './tail';
 import { num, int, offsetOf, str, src } from './settings';
 import { shift } from './series';
@@ -505,29 +505,7 @@ export const STANDARD_ERROR: IndicatorDescriptor = {
   ],
   plots: [{ key: 'stdErr', type: 'line', title: 'Standard Error', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
-    const len = int(s, 'length', 14, 3);
-    const closes = bars.map((b) => b.close);
-    // x is the same 1..len ladder on every bar, so its spread is a constant and
-    // only the close side has to be re-summed.
-    const xBar = (len + 1) / 2;
-    let sxx = 0;
-    for (let k = 0; k < len; k++) sxx += (xBar - k - 1) ** 2;
-    const out = new Array<number>(closes.length).fill(NaN);
-    // `len` is a whole number of at least 3, so each window lies in [0, i].
-    for (let i = len - 1; i < closes.length; i++) {
-      let sum = 0;
-      for (let k = 0; k < len; k++) sum += closes[i - k]!;
-      const mean = sum / len;
-      let syy = 0;
-      let sxy = 0;
-      for (let k = 0; k < len; k++) {
-        const dy = mean - closes[i - k]!;
-        syy += dy * dy;
-        sxy += (xBar - k - 1) * dy;
-      }
-      out[i] = Math.sqrt((syy - (sxy * sxy) / sxx) / (len - 2));
-    }
-    return { stdErr: nulls(out) };
+    return { stdErr: nulls(standardError(bars.map((b) => b.close), int(s, 'length', 14, 3))) };
   },
 };
 
