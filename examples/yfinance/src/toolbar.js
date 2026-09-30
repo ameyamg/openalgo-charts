@@ -21,6 +21,7 @@ import { referenceSymbolSearch } from './symbol-search.js';
 import { toggleInspection } from './inspection.js';
 import { openGoTo } from './goto.js';
 import { extendedSessionAvailable, sessionLabel, sessionOf } from './session.js';
+import { keepsView } from './transforms.js';
 
 let app;
 let symbolPicker = null;
@@ -213,14 +214,17 @@ function changeType(target, chartType, pfmode) {
   // The type is a rebuild here, so the switch is recorded as a command that
   // rebuilds again: one step on that chart's timeline.
   const show = (type) => {
+    const shown = pane === 2 ? { chartType: app.p2.chartType || 'candlestick', pfmode: app.p2.pfmode || 'atr' }
+      : { chartType: el('ctype').value, pfmode: el('pfmode').value };
+    const keepView = keepsView(shown, type);
     if (pane === 2) {
       app.p2.chartType = type.chartType;
       app.p2.pfmode = type.pfmode;
-      app.rebuildSecondary({ typeChanged: true });
+      app.rebuildSecondary({ typeChanged: true, keepView });
     } else {
       el('ctype').value = type.chartType;
       el('pfmode').value = type.pfmode;
-      app.render();
+      app.render({ keepView });
     }
     renderToolbar();
     autosave();

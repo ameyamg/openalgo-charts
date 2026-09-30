@@ -26,3 +26,14 @@ export function chartTypeSeries(sel, pfmode = 'fixed') {
   const transform = kind === 'point-figure' && pfmode !== 'fixed' ? { type: kind, options: { mode: pfmode } } : { type: kind };
   return { type: engine.getSeriesTransform(kind).renderer, transform };
 }
+
+/**
+ * Whether a switch between two chart types (`{ chartType, pfmode }`) keeps
+ * the view. A transform other than Heikin Ashi draws elements of its own, so a
+ * view kept from bars, or from other elements, would point at nothing: a
+ * switch into or out of one starts from a fitted view.
+ */
+export function keepsView(shown, next) {
+  const own = (type) => Boolean(type?.chartType?.startsWith('t:')) && type.chartType !== 't:heikin-ashi';
+  return !(own(shown) || own(next)) || (shown.chartType === next.chartType && shown.pfmode === next.pfmode);
+}

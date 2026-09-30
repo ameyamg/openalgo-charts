@@ -16,7 +16,7 @@ import { el, initShell, chartTheme, chartMotionOptions, setChartState, toast, cu
 import { initHover } from './hover.js';
 import { fillIntervalSelect, clampPeriod, rangeLoad } from './intervals.js';
 import { initFeed, fetchBars, fetchNote, feedErrorState } from './feed.js';
-import { chartTypeSeries, inChartTransforms } from './transforms.js';
+import { chartTypeSeries, inChartTransforms, keepsView } from './transforms.js';
 import { isExpression, fetchExpressionBars, mountOperatorKeypad, referenceDataContext } from './expression.js';
 import { initStatus, nameOf, symbolStatus } from './status.js';
 import { requestVariant, sessionOf, sessionLabel } from './session.js';
@@ -741,15 +741,16 @@ el('save').addEventListener('click', () => {
 ['ctype', 'pfmode'].forEach((id) => el(id).addEventListener('change', () => {
   if (!app.currentBars.length) return;
   const from = app.renderedType;
-  render();
+  render({ keepView: !from || keepsView(from, { chartType: el('ctype').value, pfmode: el('pfmode').value }) });
   if (from) recordChartType(1, from, app.renderedType, showPrimaryType);
 }));
 
 /** Build the main chart as `type`: what undoing or redoing a type switch does. */
 function showPrimaryType(type) {
+  const keepView = !app.renderedType || keepsView(app.renderedType, type);
   el('ctype').value = type.chartType;
   el('pfmode').value = type.pfmode;
-  render();
+  render({ keepView });
   renderToolbar();
   autosave();
 }
