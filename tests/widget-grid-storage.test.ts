@@ -216,6 +216,43 @@ describe('the chart grid over an asynchronous store', () => {
   });
 });
 
+/** A synchronous store at its quota: every write throws until `full` is cleared, the way `localStorage` does. */
+class FullStorage extends MemoryStorage {
+  public full = false;
+  public override setItem(k: string, v: string): void {
+    if (this.full) throw new Error('QuotaExceededError');
+    super.setItem(k, v);
+  }
+}
+
+describe('the chart grid over a synchronous store', () => {
+  it('says on the active chart that a refused save lost the desk, once per run of refusals', async () => {
+    const store = new FullStorage();
+    const grid = makeGrid({ persist: 'desk', storage: store, feed: recordingFeed().feed, preset: '1x2' });
+    await grid.ready;
+    await settle();
+    const statuses: string[] = [];
+    for (const cell of grid.cells()) cell.widget.on('status', e => { if (e.kind === 'error') statuses.push(e.text); });
+    store.full = true;
+    grid.cells()[0].widget.setSymbol('CCC');
+    await settle();
+    expect(statuses).toEqual(['The chart layout could not be saved']);
+    // Still full: the next refused save is the same failure, not a new one to say.
+    grid.cells()[1].widget.setSymbol('DDD');
+    await settle();
+    expect(statuses).toHaveLength(1);
+    // A save that lands ends the run, so the next refusal is said again.
+    store.full = false;
+    grid.setPreset('1x1');
+    await settle();
+    expect(store.map.get('oac-widget:desk:grid')).toContain('"CCC"');
+    store.full = true;
+    grid.setPreset('1x2');
+    await settle();
+    expect(statuses).toEqual(['The chart layout could not be saved', 'The chart layout could not be saved']);
+  });
+});
+
 class PageStorage extends MemoryStorage {
   public get length(): number { return this.map.size; }
   public key(i: number): string | null { return [...this.map.keys()][i] ?? null; }

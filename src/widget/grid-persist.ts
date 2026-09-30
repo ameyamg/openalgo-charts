@@ -69,14 +69,20 @@ export function saveSoon(s: GridState): void {
 export function saveNow(s: GridState): void {
   if (s.saveTimer !== 0) { clearTimeout(s.saveTimer); s.saveTimer = 0; }
   if (!s.storage.enabled || s.destroyed || s.held || s.restoring || s.active === null) return;
-  s.storage.set(STATE_KEY, s.grid.getWorkspace());
+  const desk = s.storage.set(STATE_KEY, s.grid.getWorkspace());
   // Only the charts on the grid: a chart the grid dropped takes its drawings with it.
   const charts: Record<string, Record<string, DrawingsDocument>> = {};
   for (const cell of s.cells) {
     const mine = s.drawings.get(cell.id);
     if (mine !== undefined && mine.size > 0) charts[cell.id] = Object.fromEntries(mine);
   }
-  s.storage.set(DRAWINGS_KEY, { version: 1, charts });
+  const drawn = s.storage.set(DRAWINGS_KEY, { version: 1, charts });
+  // A synchronous store refuses a write it has no room for by returning
+  // false, with no error to report, so it is said here, as one widget says
+  // it: once per run of refusals, not at every debounce while the store is full.
+  const refused = !desk || !drawn;
+  if (refused && !s.saveRefused) s.active.widget.context.status(widgetText(s.text, 'The chart layout could not be saved'), 'error');
+  s.saveRefused = refused;
 }
 
 /**

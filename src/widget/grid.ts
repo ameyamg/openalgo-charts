@@ -369,6 +369,8 @@ export interface GridState {
   nextId: number;
   saveTimer: ReturnType<typeof setTimeout> | 0;
   saveQueued: boolean;
+  /** The last save was refused by the store, and was said; the next refusal is the same failure. */
+  saveRefused: boolean;
   /** A stored desk this grid refused to restore, kept until the user changes something. */
   held: boolean;
   restored: ChartGridApplyReport | null;
@@ -430,7 +432,7 @@ export function createChartGrid(container: HTMLElement | string, options: ChartG
     root, tabs, body, barEl, footEl, splits: [], given: false, cells: [], chords: null, sharing: false, active: null,
     rows: 1, cols: 1, rowW: [1], colW: [1], preset: null, theme: options.theme ?? 'dark',
     themeSync: false, compact: false, maxed: false, pointerIn: false, destroyed: false, syncing: false, nextId: 0,
-    saveTimer: 0, saveQueued: false, held: false, restored: null, drawings: new Map(),
+    saveTimer: 0, saveQueued: false, saveRefused: false, held: false, restored: null, drawings: new Map(),
     chromeLayer: null, bar: null, foot: null, saved: null, ready: Promise.resolve(),
   } as Omit<GridState, 'storage' | 'grid' | 'barHost' | 'restoring'> as GridState;
   s.storage = gridStorage(s);
