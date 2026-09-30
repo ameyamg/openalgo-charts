@@ -396,18 +396,25 @@ export function drawTimeAxis(
 
   // Detect sub-minute (seconds / tick) timeframes from the visible data so the
   // axis shows HH:MM:SS instead of collapsing same-minute bars to one label.
-  // Use the smallest positive gap between adjacent bars as the bar interval.
+  // Use the smallest positive gap between adjacent bars as the bar interval,
+  // and of those, one that crosses into another minute where there is one: a
+  // seconds chart crosses each minute a few seconds at a time, while elements
+  // a transform formed on one bar sit a second apart inside that bar's minute
+  // and say nothing about the chart's resolution.
   let barIntervalSec = Number.POSITIVE_INFINITY;
   {
     let prev = dataLayer.indexToTime(from);
+    let within = Number.POSITIVE_INFINITY;
     for (let i = from + 1; i <= to; i++) {
       const t = dataLayer.indexToTime(i);
       if (t !== undefined && prev !== undefined) {
         const d = t - prev;
-        if (d > 0 && d < barIntervalSec) barIntervalSec = d;
+        if (d > 0 && Math.floor(t / 60) !== Math.floor(prev / 60)) barIntervalSec = Math.min(barIntervalSec, d);
+        else if (d > 0) within = Math.min(within, d);
       }
       if (t !== undefined) prev = t;
     }
+    if (!Number.isFinite(barIntervalSec)) barIntervalSec = within;
   }
   // Seconds resolution only helps when the labelled step itself is sub-minute.
   const labelStepSec = barIntervalSec * stride;
