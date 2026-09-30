@@ -70,6 +70,7 @@ import { groupMark, installGridKeys, installHeaderDrag, neighbour } from './grid
 import { followChords, gridStorage, leaving, openStoredDesk, saveNow, saveSoon, scheduleSave } from './grid-persist';
 import { density, solo, splitters, tracks } from './grid-tracks';
 import { lazyPart, partFailed, usePart, type PartSlot } from './lazy';
+import { rovingIndex } from './roving';
 
 /** The grid bar, fetched when a grid shows it, and its menus, fetched when one first opens (lazy.ts). Internal. */
 export const gridBarPart = lazyPart(() => import('./grid-bar'));
@@ -1192,11 +1193,8 @@ function listenGrid(s: GridState): void {
   };
   // The tabs follow the arrows, Home and End, each one showing its chart as the focus lands.
   listen(tabs, 'keydown', e => {
-    const key = (e as KeyboardEvent).key;
     const list = Array.from(tabs.children);
-    const at = list.indexOf(doc.activeElement as Element);
-    const to = at < 0 ? -1 : key === 'ArrowRight' ? (at + 1) % list.length : key === 'ArrowLeft' ? (at - 1 + list.length) % list.length
-      : key === 'Home' ? 0 : key === 'End' ? list.length - 1 : -1;
+    const to = rovingIndex((e as KeyboardEvent).key, list.indexOf(doc.activeElement as Element), list.length, ['ArrowLeft', 'ArrowRight']);
     const cell = s.cells[to];
     if (to < 0 || cell === undefined) return;
     // Claimed here, as a splitter claims its arrows, so no chart pans with it.
