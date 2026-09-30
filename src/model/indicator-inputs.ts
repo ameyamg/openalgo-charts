@@ -2,6 +2,7 @@ import { parseSessionSpec } from '../feed/time';
 import type { IndicatorInput, IndicatorSettings } from './indicator-registry';
 import { IndicatorInputError } from './indicator-input-error';
 import { isPriceScaleId } from './price-axis-layout';
+import { isPlainObject } from '../helpers/validate';
 
 /** Validate new native kinds without changing established descriptor contracts. */
 export function validateIndicatorInputs(inputs: readonly IndicatorInput[], settings: Readonly<IndicatorSettings>): void {
@@ -23,7 +24,7 @@ export function validateIndicatorInputs(inputs: readonly IndicatorInput[], setti
       if (pick !== undefined && typeof pick !== 'boolean') {
         if (input.type !== 'price' || pick === null || typeof pick !== 'object') fail('invalid pick target');
         const target = pick as { paneIndex?: number; priceScaleId?: string };
-        if (![Object.prototype, null].includes(Object.getPrototypeOf(target))) fail('invalid pick target');
+        if (!isPlainObject(target)) fail('invalid pick target');
         const properties = Object.getOwnPropertyDescriptors(target);
         if (Object.values(properties).some(item => !('value' in item))) fail('invalid pick target');
         const paneIndex = properties.paneIndex?.value as number | undefined;

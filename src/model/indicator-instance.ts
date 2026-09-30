@@ -26,6 +26,7 @@ import { IndicatorDrawings } from '../primitives/indicator-draws';
 import { IndicatorBackground } from '../primitives/indicator-background';
 import { PlotWrites } from './indicator-plot-writes';
 import { drawnTime, parseIndicatorBarSource, sampleIndicatorValues, type IndicatorBarSource } from './indicator-bar-source';
+import { isPlainObject } from '../helpers/validate';
 
 import { isInvisible, withAlpha } from '../render/pill';
 import { DEFAULT_TIMEZONE } from '../feed/time';
@@ -61,8 +62,7 @@ const num = (v: unknown, fallback: number): number =>
   (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 
 function plotScaleEntries(descriptor: IndicatorDescriptor, input: unknown, clear: boolean): [string, PriceScaleId | null][] {
-  if (!input || typeof input !== 'object' || Array.isArray(input)
-    || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw new TypeError('Invalid indicator plot price scale map');
+  if (!isPlainObject(input)) throw new TypeError('Invalid indicator plot price scale map');
   const keys = new Set(descriptor.plots.map(plot => plot.key));
   return Reflect.ownKeys(input).map(key => {
     const property = Object.getOwnPropertyDescriptor(input, key)!;

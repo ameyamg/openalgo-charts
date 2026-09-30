@@ -18,6 +18,7 @@ import { isPriceScaleId, type PriceAxisPlacement } from './price-axis-layout';
 import type { IndicatorPolicy } from './indicator-policy';
 import type { SeriesTransformSpec } from './series-transform';
 import type { IndicatorBarSource } from './indicator-bar-source';
+import { hasOnlyDataProperties, isPlainObject } from '../helpers/validate';
 
 /**
  * The newest state version this build reads and writes. Bumped when the shape
@@ -67,12 +68,9 @@ export interface PaneState {
 }
 
 function stateRecord(input: unknown): Record<string, unknown> {
-  if (!input || typeof input !== 'object' || Array.isArray(input)
-    || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw new Error('Invalid pane scale object');
-  if (Object.values(Object.getOwnPropertyDescriptors(input)).some(property => !('value' in property))) {
-    throw new Error('Pane scale accessors are not supported');
-  }
-  return input as Record<string, unknown>;
+  if (!isPlainObject(input)) throw new Error('Invalid pane scale object');
+  if (!hasOnlyDataProperties(input)) throw new Error('Pane scale accessors are not supported');
+  return input;
 }
 
 function stateNumber(value: unknown, label: string, min = -Number.MAX_VALUE, max = Number.MAX_VALUE): number {

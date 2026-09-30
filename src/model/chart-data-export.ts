@@ -3,6 +3,7 @@ import type { ComparisonHandle } from '../compare/controller';
 import { captureCsvSnapshot } from './chart-data-export-snapshot';
 import { alignCsvRows } from './chart-data-export-alignment';
 import { serializeCsv } from './chart-data-export-formatting';
+import { isPlainObject } from '../helpers/validate';
 
 /** Inclusive UTC-second bounds over installed primary rows. Omitted bounds are unbounded. */
 export interface ChartDataCsvRange {
@@ -56,8 +57,7 @@ function ownOption(options: ChartDataCsvOptions, key: keyof ChartDataCsvOptions)
 
 function selectedFormatters(input: unknown): ChartDataCsvFormatters {
   if (input === undefined) return {};
-  if (input === null || typeof input !== 'object'
-    || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw new TypeError('Invalid CSV formatters');
+  if (!isPlainObject(input)) throw new TypeError('Invalid CSV formatters');
   const properties = Object.getOwnPropertyDescriptors(input);
   for (const key of Reflect.ownKeys(properties)) { // own keys, so each has a descriptor
     if (!['time', 'value', 'header'].includes(key as string) || !('value' in properties[key as string]!)) {
@@ -97,8 +97,7 @@ function selectedIds(input: unknown): boolean | string[] {
 
 function selectedRange(input: unknown): ChartDataCsvRange {
   if (input === undefined) return {};
-  if (input === null || typeof input !== 'object'
-    || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw new TypeError('Invalid CSV range');
+  if (!isPlainObject(input)) throw new TypeError('Invalid CSV range');
   const properties = Object.getOwnPropertyDescriptors(input);
   for (const key of Reflect.ownKeys(properties)) { // own keys, as above
     if ((key !== 'from' && key !== 'to') || !('value' in properties[key]!)) throw new TypeError('Invalid CSV range property');

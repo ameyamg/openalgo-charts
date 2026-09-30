@@ -42,6 +42,7 @@ import { validateIndicatorInputs } from '../model/indicator-inputs';
 import type { ChartSettingsState } from '../model/chart-settings';
 import { isValidTimezone } from '../feed/time';
 import type { LooseOptional } from '../helpers/types';
+import { hasOnlyDataProperties, isPlainObject } from '../helpers/validate';
 
 interface PreparedIndicatorRestore {
   specs: IndicatorState[];
@@ -236,9 +237,7 @@ export class ChartPersistence {
       if (collapsed && (!('value' in collapsed) || (collapsed.value !== undefined && typeof collapsed.value !== 'boolean'))) {
         throw new Error('Invalid indicator legend preference');
       }
-      const plain = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object'
-        && [Object.prototype, null].includes(Object.getPrototypeOf(value))
-        && Object.values(Object.getOwnPropertyDescriptors(value)).every(property => 'value' in property);
+      const plain = (value: unknown): value is Record<string, unknown> => isPlainObject(value) && hasOnlyDataProperties(value);
       if (!plain(options)) throw new Error('Invalid chart restore options');
       if (options.preserveScaleFormats !== undefined) {
         const selectors = options.preserveScaleFormats;

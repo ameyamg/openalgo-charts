@@ -73,6 +73,7 @@ import type { TickSchedule } from '../feed/tick-schedule';
 import { DEFAULT_TIMEZONE, isValidTimezone } from '../feed/time';
 import { roundToTick } from '../helpers/math';
 import { dispatch, subscribe } from '../helpers/dispatch';
+import { hasOnlyDataProperties, isPlainObject } from '../helpers/validate';
 // Last, so the runtime modules imported above still load in the order they did.
 import { ChartPersistence, type PersistenceHost, type PreservedScaleFormats } from './chart-state';
 import { ChartStudies, type StudiesHost } from './chart-studies';
@@ -1801,8 +1802,7 @@ export class Chart {
   public beginPick(kind: PickKind | 'point', cb: (value: never) => void, options: PickOptions = {}): PickHandle {
     if (this._destroyed || this._destroying) throw new Error('Cannot pick on a destroyed chart');
     if (this._input._placementMode) throw new Error('Finish drawing placement before picking a study value');
-    if (options === null || typeof options !== 'object' || ![Object.prototype, null].includes(Object.getPrototypeOf(options))
-      || Object.values(Object.getOwnPropertyDescriptors(options)).some(item => !('value' in item))) throw new TypeError('Invalid pick options');
+    if (!isPlainObject(options) || !hasOnlyDataProperties(options)) throw new TypeError('Invalid pick options');
     const fields = Object.getOwnPropertyDescriptors(options);
     const paneIndex = fields.paneIndex?.value as PickOptions['paneIndex'];
     const priceScaleId = fields.priceScaleId?.value as PickOptions['priceScaleId'];
