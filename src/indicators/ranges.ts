@@ -25,9 +25,9 @@ import {
   sma, stdev, highest, lowest, nulls,
   change, roc, rollingSum, swma, stoch, cci,
 } from './calc';
-import { fromFirstValue, smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
+import { fromFirstValue, smoothingBlock, smoothingInputs, smoothingPlots, smoothingFill } from './smoothing';
 import { withTimeframe } from './timeframe';
-import { num, int, offsetOf, str, src } from './settings';
+import { int, offsetOf, str, src } from './settings';
 import { shift, zip } from './series';
 
 /**
@@ -303,29 +303,14 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
     { key: 'offset', type: 'number', label: 'Offset', default: 0, min: -500, max: 500, step: 1 },
     { key: 'color', type: 'color', label: 'RVI', default: '#7e57c2' },
     { key: 'fillColor', type: 'color', label: 'Background', default: '#7e57c2' },
-    {
-      key: 'maType', type: 'select', label: 'Type', default: 'SMA',
-      options: SMOOTHING_MA_TYPES, group: 'Smoothing',
-    },
-    { key: 'maLength', type: 'number', label: 'Length', default: 14, min: 1, max: 500, step: 1, group: 'Smoothing' },
-    { key: 'bbMult', type: 'number', label: 'BB StdDev', default: 2, min: 0.001, max: 50, step: 0.5, group: 'Smoothing' },
-    { key: 'maColor', type: 'color', label: 'RVI-based MA', default: '#ffeb3b', group: 'Smoothing' },
-    { key: 'bbUpperColor', type: 'color', label: 'Upper Bollinger Band', default: '#4caf50', group: 'Smoothing' },
-    { key: 'bbLowerColor', type: 'color', label: 'Lower Bollinger Band', default: '#4caf50', group: 'Smoothing' },
+    ...smoothingInputs('RVI', 'SMA', 14),
   ],
   plots: [
     { key: 'rvi', type: 'line', title: 'RVI', colorKey: 'color', style: { lineWidth: 1.5 } },
-    { key: 'ma', type: 'line', title: 'RVI-based MA', colorKey: 'maColor', style: { lineWidth: 1.5 } },
-    { key: 'bbUpper', type: 'line', title: 'Upper Bollinger Band', colorKey: 'bbUpperColor', style: { lineWidth: 1 } },
-    { key: 'bbLower', type: 'line', title: 'Lower Bollinger Band', colorKey: 'bbLowerColor', style: { lineWidth: 1 } },
+    ...smoothingPlots('RVI'),
   ],
   fills: [
-    {
-      between: ['bbUpper', 'bbLower'],
-      colorUpKey: 'bbUpperColor',
-      colorDownKey: 'bbUpperColor',
-      opacity: 0.1,
-    },
+    smoothingFill(),
     // The 80/20 shading spans two reference lines rather than two series, so its
     // edges are constant columns with no plot of their own. One colour on both
     // sides: a level band has no up or down side to tell apart.
@@ -363,26 +348,11 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
       rvi[i] = total === 0 ? NaN : (upper[i]! / total) * 100;
     }
 
-    const maType = str(s, 'maType', 'SMA');
-    const maLength = int(s, 'maLength', 14);
-    const mult = num(s, 'bbMult', 2);
-    const isBB = maType === BOLLINGER_MA;
-    const ma = maType === 'None'
-      ? new Array<number>(n).fill(NaN)
-      : smoothingMa(maType, rvi, bars.map((b) => b.volume ?? 0), maLength);
-    // `smoothingStDev` is `na` unless the bands are on, and `ma + na` is `na`,
-    // so the two band columns switch themselves off exactly as the reference
-    // `display` guards do.
-    const band = isBB
-      ? fromFirstValue(rvi, (t) => stdev(t, maLength)).map((v) => v * mult)
-      : new Array<number>(n).fill(NaN);
-
-    const offset = offsetOf(s, 'offset', 0);
     return {
-      rvi: nulls(shift(rvi, offset)),
-      ma: nulls(ma),
-      bbUpper: nulls(zip(ma, band, (v, b) => v + b)),
-      bbLower: nulls(zip(ma, band, (v, b) => v - b)),
+      rvi: nulls(shift(rvi, offsetOf(s, 'offset', 0))),
+      // The offset moves the RVI line only; the block reads the unshifted
+      // values and stays where it is.
+      ...smoothingBlock(rvi, bars.map((b) => b.volume ?? 0), s, 'SMA', 14),
       // Never null and never shifted: reference lines stay put when the plot is
       // offset, and the shading covers the pane through the study's warmup.
       bandHigh: new Array<number>(n).fill(80),

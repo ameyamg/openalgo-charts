@@ -3,12 +3,12 @@
  * Part of the lazy `openalgo-charts/indicators` tier.
  */
 import type { IndicatorDescriptor } from 'openalgo-charts';
-import { nulls, sma, stdev } from './calc';
-import { smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
+import { nulls, sma } from './calc';
+import { smoothingBlock, smoothingInputs, smoothingPlots, smoothingFill } from './smoothing';
 import { withTail, machineTail, claimOf, settle, whole, cell } from './tail';
 import { seeded, smooth } from './steppers';
-import { num, int, str } from './settings';
-import { volumeOf, zip } from './series';
+import { int, str } from './settings';
+import { volumeOf } from './series';
 
 export const VOLUME: IndicatorDescriptor = {
   id: 'volume',
@@ -44,31 +44,6 @@ export const VOLUME: IndicatorDescriptor = {
   },
 };
 
-/** OBV's smoothing block over a run of OBV values, shared by `calc` and the tail's windowed kinds. */
-function obvSmoothing(
-  out: readonly number[], volumes: readonly number[], s: Readonly<Record<string, unknown>>,
-): Record<string, (number | null)[]> {
-  const n = out.length;
-  const maType = str(s, 'maType', 'None');
-  const maLength = int(s, 'maLength', 9);
-  const mult = num(s, 'bbMult', 2);
-  const ma = maType === 'None'
-    ? new Array<number>(n).fill(NaN)
-    : smoothingMa(maType, out, volumes, maLength);
-  // The band offset exists only for the Bollinger kernel, and an absent
-  // offset makes both band columns absent too, which is how the reference
-  // keeps the two plots and their fill hidden for every other type.
-  const band = maType === BOLLINGER_MA
-    ? stdev(out, maLength).map((v) => v * mult)
-    : new Array<number>(n).fill(NaN);
-  // `ma` and `band` both hold one value per input.
-  return {
-    ma: nulls(ma),
-    bbUpper: nulls(zip(ma, band, (v, b) => v + b)),
-    bbLower: nulls(zip(ma, band, (v, b) => v - b)),
-  };
-}
-
 export const OBV: IndicatorDescriptor = withTail({
   id: 'obv',
   name: 'On-Balance Volume',
@@ -76,30 +51,15 @@ export const OBV: IndicatorDescriptor = withTail({
   placement: 'pane',
   inputs: [
     { key: 'color', type: 'color', label: 'Color', default: '#26c6da' },
-    {
-      key: 'maType', type: 'select', label: 'Type', default: 'None',
-      options: SMOOTHING_MA_TYPES, group: 'Smoothing',
-    },
     // 9, not the 14 the smoothing block carries elsewhere: the reference
     // definition of this study fixes its own smoothing length at 9.
-    { key: 'maLength', type: 'number', label: 'Length', default: 9, min: 1, max: 500, step: 1, group: 'Smoothing' },
-    { key: 'bbMult', type: 'number', label: 'BB StdDev', default: 2, min: 0.001, max: 50, step: 0.5, group: 'Smoothing' },
-    { key: 'maColor', type: 'color', label: 'OBV-based MA', default: '#ffeb3b', group: 'Smoothing' },
-    { key: 'bbUpperColor', type: 'color', label: 'Upper Bollinger Band', default: '#4caf50', group: 'Smoothing' },
-    { key: 'bbLowerColor', type: 'color', label: 'Lower Bollinger Band', default: '#4caf50', group: 'Smoothing' },
+    ...smoothingInputs('OBV', 'None', 9),
   ],
   plots: [
     { key: 'obv', type: 'line', title: 'OBV', colorKey: 'color', style: { lineWidth: 1.5 } },
-    { key: 'ma', type: 'line', title: 'OBV-based MA', colorKey: 'maColor', style: { lineWidth: 1.5 } },
-    { key: 'bbUpper', type: 'line', title: 'Upper Bollinger Band', colorKey: 'bbUpperColor', style: { lineWidth: 1 } },
-    { key: 'bbLower', type: 'line', title: 'Lower Bollinger Band', colorKey: 'bbLowerColor', style: { lineWidth: 1 } },
+    ...smoothingPlots('OBV'),
   ],
-  fills: [{
-    between: ['bbUpper', 'bbLower'],
-    colorUpKey: 'bbUpperColor',
-    colorDownKey: 'bbUpperColor',
-    opacity: 0.1,
-  }],
+  fills: [smoothingFill()],
   calc: (bars, s) => {
     const n = bars.length;
     const out = new Array<number>(n).fill(NaN);
@@ -114,7 +74,7 @@ export const OBV: IndicatorDescriptor = withTail({
       }
       out[i] = acc;
     }
-    return { obv: nulls(out), ...obvSmoothing(out, bars.map(volumeOf), s) };
+    return { obv: nulls(out), ...smoothingBlock(out, bars.map(volumeOf), s, 'None', 9) };
   },
 }, (calc) => (bars, s, from, previous, store) => {
   // The running total resumes. An exponential or Wilder smoothing resumes with
@@ -151,7 +111,7 @@ export const OBV: IndicatorDescriptor = withTail({
   // The machine above writes `obv`.
   const run: number[] = [];
   for (let j = start; j < bars.length; j++) run.push((j < from ? held[j] : tail.obv![j - from]) ?? NaN);
-  const smoothed = settle(claim, obvSmoothing(run, bars.slice(start).map(volumeOf), s), from - start, previous, from);
+  const smoothed = settle(claim, smoothingBlock(run, bars.slice(start).map(volumeOf), s, 'None', 9), from - start, previous, from);
   return smoothed === null ? null : { obv: tail.obv!, ...smoothed };
 });
 

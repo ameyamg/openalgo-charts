@@ -5,7 +5,7 @@
 import { rsi, atr, trueRange, sourceValues, sourceValue } from 'openalgo-charts';
 import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
 import { sma, rma, smaSeededEma, stdev, highest, lowest, nulls, mfiFromFlows } from './calc';
-import { fromFirstValue, smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
+import { fromFirstValue, smoothingBlock, smoothingInputs, smoothingPlots, smoothingFill } from './smoothing';
 import { withTail, windowTail, machineTail, whole, cell, type Tail } from './tail';
 import { seeded, smooth, rsiState, rsiStep, wilder, atrStep, trueRangeAt, meanAt } from './steppers';
 import { withTimeframe } from './timeframe';
@@ -326,21 +326,11 @@ export const CCI: IndicatorDescriptor = withTimeframe(withTail({
     { key: 'constant', type: 'number', label: 'Constant', default: 0.015, min: 0.001, max: 1, step: 0.001 },
     { key: 'color', type: 'color', label: 'Color', default: '#26c6da' },
     { key: 'bandColor', type: 'color', label: 'Background', default: '#2196f3' },
-    {
-      key: 'maType', type: 'select', label: 'Type', default: 'SMA',
-      options: SMOOTHING_MA_TYPES, group: 'Smoothing',
-    },
-    { key: 'maLength', type: 'number', label: 'Length', default: 20, min: 1, max: 500, step: 1, group: 'Smoothing' },
-    { key: 'bbMult', type: 'number', label: 'BB StdDev', default: 2, min: 0.001, max: 50, step: 0.5, group: 'Smoothing' },
-    { key: 'maColor', type: 'color', label: 'CCI-based MA', default: '#ffeb3b', group: 'Smoothing' },
-    { key: 'bbUpperColor', type: 'color', label: 'Upper Bollinger Band', default: '#4caf50', group: 'Smoothing' },
-    { key: 'bbLowerColor', type: 'color', label: 'Lower Bollinger Band', default: '#4caf50', group: 'Smoothing' },
+    ...smoothingInputs('CCI', 'SMA', 20),
   ],
   plots: [
     { key: 'cci', type: 'line', title: 'CCI', colorKey: 'color', style: { lineWidth: 1.5 } },
-    { key: 'ma', type: 'line', title: 'CCI-based MA', colorKey: 'maColor', style: { lineWidth: 1.5 } },
-    { key: 'bbUpper', type: 'line', title: 'Upper Bollinger Band', colorKey: 'bbUpperColor', style: { lineWidth: 1 } },
-    { key: 'bbLower', type: 'line', title: 'Lower Bollinger Band', colorKey: 'bbLowerColor', style: { lineWidth: 1 } },
+    ...smoothingPlots('CCI'),
   ],
   // Background first, so the Bollinger shading sits on top of it rather than
   // underneath.
@@ -351,12 +341,7 @@ export const CCI: IndicatorDescriptor = withTimeframe(withTail({
       colorDownKey: 'bandColor',
       opacity: 0.1,
     },
-    {
-      between: ['bbUpper', 'bbLower'],
-      colorUpKey: 'bbUpperColor',
-      colorDownKey: 'bbUpperColor',
-      opacity: 0.1,
-    },
+    smoothingFill(),
   ],
   calc: (bars, s) => {
     const n = bars.length;
@@ -377,25 +362,9 @@ export const CCI: IndicatorDescriptor = withTimeframe(withTail({
       out[i] = !Number.isFinite(md) ? NaN : md > 0 ? (tp[i]! - avg[i]!) / (k * md) : 0;
     }
 
-    const maType = str(s, 'maType', 'SMA');
-    const maLength = int(s, 'maLength', 20);
-    const mult = num(s, 'bbMult', 2);
-    const ma = maType === 'None'
-      ? new Array<number>(n).fill(NaN)
-      : smoothingMa(maType, out, bars.map((b) => b.volume ?? 0), maLength);
-    // The band offset exists only for the Bollinger kernel, and an absent
-    // offset makes both band columns absent too, which is how the reference
-    // keeps the two plots and their fill hidden for every other type.
-    const band = maType === BOLLINGER_MA
-      ? fromFirstValue(out, (t) => stdev(t, maLength)).map((v) => v * mult)
-      : new Array<number>(n).fill(NaN);
-
     return {
       cci: nulls(out),
-      ma: nulls(ma),
-      // `ma` and `band` both hold one value per bar.
-      bbUpper: nulls(zip(ma, band, (v, b) => v + b)),
-      bbLower: nulls(zip(ma, band, (v, b) => v - b)),
+      ...smoothingBlock(out, bars.map((b) => b.volume ?? 0), s, 'SMA', 20),
       upperLevel: constant(n, 100),
       lowerLevel: constant(n, -100),
     };

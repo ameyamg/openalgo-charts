@@ -4,12 +4,15 @@
  *
  * Internal to the indicator tier: `./index` does not export it, and no base
  * module imports it, so none of it reaches a chart-only build. It exists so
- * the alignment rule and the Smoothing block are written once. Private copies
- * of these helpers and of the block's option list, some under other names and
- * one written inline, sat across the study modules, where one copy could be
- * corrected and its siblings left behind.
+ * the alignment rule and the Smoothing block (its inputs, plots, band fill and
+ * arithmetic) are written once. Private copies of these helpers and of the
+ * block, some under other names and one written inline, sat across the study
+ * modules, where one copy could be corrected and its siblings left behind.
  */
-import { sma, wma, rma, vwma, smaSeededEma } from './calc';
+import type { IndicatorFillSpec, IndicatorInput, IndicatorPlot } from 'openalgo-charts';
+import { sma, wma, rma, vwma, smaSeededEma, stdev, nulls } from './calc';
+import { zip } from './series';
+import { num, int, str, type Settings } from './settings';
 
 /**
  * The Smoothing block's choices, for every study that offers the block. 'None'
@@ -90,4 +93,56 @@ export function smoothingMa(
     case 'VWMA': return fromFirstValue(values, (t, start) => vwma(t, volumes.slice(start), length));
     default: return fromFirstValue(values, (t) => sma(t, length));
   }
+}
+
+/**
+ * The Smoothing group's inputs for a study labelled `name` ('CCI' offers a
+ * 'CCI-based MA'). Only the default kind and length differ between the studies
+ * that offer the block.
+ */
+export function smoothingInputs(name: string, kind: string, length: number): IndicatorInput[] {
+  return [
+    { key: 'maType', type: 'select', label: 'Type', default: kind, options: SMOOTHING_MA_TYPES, group: 'Smoothing' },
+    { key: 'maLength', type: 'number', label: 'Length', default: length, min: 1, max: 500, step: 1, group: 'Smoothing' },
+    { key: 'bbMult', type: 'number', label: 'BB StdDev', default: 2, min: 0.001, max: 50, step: 0.5, group: 'Smoothing' },
+    { key: 'maColor', type: 'color', label: `${name}-based MA`, default: '#ffeb3b', group: 'Smoothing' },
+    { key: 'bbUpperColor', type: 'color', label: 'Upper Bollinger Band', default: '#4caf50', group: 'Smoothing' },
+    { key: 'bbLowerColor', type: 'color', label: 'Lower Bollinger Band', default: '#4caf50', group: 'Smoothing' },
+  ];
+}
+
+/** The block's three plots: the average and the two Bollinger bands around it. */
+export function smoothingPlots(name: string): IndicatorPlot[] {
+  return [
+    { key: 'ma', type: 'line', title: `${name}-based MA`, colorKey: 'maColor', style: { lineWidth: 1.5 } },
+    { key: 'bbUpper', type: 'line', title: 'Upper Bollinger Band', colorKey: 'bbUpperColor', style: { lineWidth: 1 } },
+    { key: 'bbLower', type: 'line', title: 'Lower Bollinger Band', colorKey: 'bbLowerColor', style: { lineWidth: 1 } },
+  ];
+}
+
+/** The shading between the two bands, absent wherever the bands are. */
+export function smoothingFill(): IndicatorFillSpec {
+  return { between: ['bbUpper', 'bbLower'], colorUpKey: 'bbUpperColor', colorDownKey: 'bbUpperColor', opacity: 0.1 };
+}
+
+/**
+ * The block's columns over a study's own output, read from the settings with
+ * the study's default `kind` and `length`. The band offset exists only for the
+ * Bollinger kernel, and an absent offset makes both band columns absent too,
+ * which is how the reference keeps the two plots and their fill hidden for
+ * every other kind. The band's window starts at the first real value, as the
+ * average's does.
+ */
+export function smoothingBlock(
+  values: readonly number[], volumes: readonly number[], s: Settings, kind: string, length: number,
+): { ma: (number | null)[]; bbUpper: (number | null)[]; bbLower: (number | null)[] } {
+  const n = values.length;
+  const maType = str(s, 'maType', kind);
+  const maLength = int(s, 'maLength', length);
+  const mult = num(s, 'bbMult', 2);
+  const ma = maType === 'None' ? new Array<number>(n).fill(NaN) : smoothingMa(maType, values, volumes, maLength);
+  const band = maType === BOLLINGER_MA
+    ? fromFirstValue(values, (t) => stdev(t, maLength)).map((v) => v * mult)
+    : new Array<number>(n).fill(NaN);
+  return { ma: nulls(ma), bbUpper: nulls(zip(ma, band, (v, b) => v + b)), bbLower: nulls(zip(ma, band, (v, b) => v - b)) };
 }
