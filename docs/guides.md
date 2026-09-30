@@ -23,6 +23,16 @@ const bricks = runTransform(new RenkoTransform({ boxSize: 5 }), bars);
 chart.addSeries('candlestick').setData(bricks); // Renko renders as candles
 ```
 
+Or (unreleased) have the chart apply the transform itself, to the bars you feed
+it, live: the series keeps taking your bars, and bricks form as ticks land.
+
+```ts
+import 'openalgo-charts/transform';
+const series = chart.addSeries('candlestick', { transform: { type: 'renko', options: { boxSize: 5 } } });
+series.setData(bars);   // your own bars
+series.update(bar);     // a tick moves the forming brick
+```
+
 Point &amp; Figure and Kagi have dedicated renderers registered when you import the
 transform tier:
 

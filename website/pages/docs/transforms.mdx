@@ -9,9 +9,10 @@ import { Callout } from 'nextra/components'
 # Transforms
 
 The **transform tier** (`openalgo-charts/transform`) turns time-based OHLC into
-movement-driven series. Run a transform, then plot the result. Heikin Ashi, Renko, Range,
-and Line Break render as a `candlestick` series; Point &amp; Figure and Kagi have dedicated
-renderers.
+movement-driven series. The chart can apply a transform itself, live, to the bars you feed it
+(see [In-chart transforms](#in-chart-transforms)), or you can run a transform and plot the
+result. Heikin Ashi, Renko, Range, and Line Break render as a `candlestick` series; Point &amp;
+Figure and Kagi have dedicated renderers.
 
 ```ts
 import { runTransform, RenkoTransform } from 'openalgo-charts/transform';
@@ -28,6 +29,84 @@ with gaps between them. Re-bucket companion series onto the **transformed
 times** instead (e.g. sum the raw volume of the source bars behind each brick,
 keyed by `brick.time`), as the live example does.
 </Callout>
+
+## In-chart transforms
+
+(unreleased) Give a series a transform and the chart applies it to the bars you feed, forming
+the elements again on every tick. The series keeps speaking your bars: `setData`, `update`
+and `prependData` take them and `getData` returns them, so a live feed, replay and history
+paging work unchanged, while the chart draws the bricks. This chart streams: a tick on the
+forming bar moves its bricks, a tick back takes them off, and a closed bar keeps them.
+
+<RunnableExample height={340} tiers={['transform', 'indicators']} code={`const chart = lib.createChart(el);
+const series = chart.addSeries('candlestick', { transform: { type: 'renko', options: { boxSize: 1 } } });
+series.setData(lib.generateBars(1700000000, 400, 300));
+chart.addIndicator('sma', { length: 9 });
+chart.fitContent();
+
+let bar = series.getData().slice(-1)[0], ticks = 0, seed = 11;
+const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+const id = setInterval(() => {
+  const close = bar.close + (rnd() - 0.5) * 1.6;
+  bar = ticks++ < 5
+    ? { ...bar, close, high: Math.max(bar.high, close), low: Math.min(bar.low, close) }
+    : (ticks = 0, { time: bar.time + 300, open: bar.close, high: bar.close, low: bar.close, close: bar.close });
+  series.update(bar); // your bar; the chart forms the bricks
+}, 600);
+chart.on('destroy', () => clearInterval(id));
+return chart;`} />
+
+```ts
+import 'openalgo-charts/transform'; // registers the six transforms
+
+const series = chart.addSeries('candlestick', { transform: { type: 'renko' } });
+series.setData(bars);
+
+// A new type selects its renderer too: 'point-figure' here.
+chart.setSeriesTransform(series, { type: 'point-figure', options: { mode: 'atr' } });
+chart.seriesTransform(series);          // that spec, as set
+chart.setSeriesTransform(series, null); // your bars as given again
+```
+
+| Type | Options (0 or omitted: sized from the loaded history) |
+|---|---|
+| `heikin-ashi` | none; one candle per bar, at the bar's time |
+| `renko` | `boxSize` |
+| `range-bars` | `range` (twice the history box) |
+| `line-break` | `lines`, default 3 |
+| `point-figure` | `mode` (`'fixed'`, `'percent'`, `'atr'`), `boxSize`, `percent` (1), `atrPeriod` (14), `atrMultiplier` (1), `reversal` (3), `method` (`'hl'`, `'close'`) |
+| `kagi` | `reversal` (twice the history box) |
+
+The history box is a fortieth of the loaded price range, at least a tenth of a percent of the
+last close, rounded to two significant figures. It is resolved when you call `setData` (a new
+load or symbol), never on a tick, and kept when `prependData` pages older history in. An option
+you leave out stays out of the spec and of saved state. A new transform type also selects its
+renderer; `setSeriesType` afterwards picks another and keeps the transform. The chart settings
+dialog's Price tab offers the transform's options, keyed `transform.<option>`.
+
+<Callout type="info">
+Nothing is transformed unless you ask. `addSeries('point-figure')` and `setSeriesType` only pick
+the renderer, so a host that prepares its own elements, as 2.5.x required, is never transformed
+twice. The widget's chart type menu uses in-chart transforms when it loads its own bars from a
+feed.
+</Callout>
+
+### Studies on a transformed chart
+
+A study computes on the elements the chart draws by default, which is what it computed on when a
+host fed it the elements. Set it to the underlying bars and it computes on your bars instead,
+reading each value at the bar the element was completed on: the value a trader could have read as
+that brick formed. Its points stay on the elements' times.
+
+```ts
+const sma = chart.addIndicator('sma', { length: 20 }, { barSource: 'underlying' });
+sma.barSource();              // 'underlying'
+sma.setBarSource('chart');    // back to the elements
+```
+
+Heikin Ashi keeps one candle per bar at the bar's own time, so there the underlying values need no
+reading across. On a chart with no transform the two choices are the same bars. The choice is saved
+with the study (`barSource: 'underlying'`, written only when it is not the default).
 
 ## Heikin Ashi
 
@@ -143,8 +222,9 @@ chart.addSeries('kagi').setData(kagi);
 ```
 
 <Callout type="info">
-All transforms are incremental, so they update efficiently on live data - feed each new bar
-through `runTransform` (or the transform's streaming API) and the series keeps building.
+All transforms are incremental, so they update efficiently on live data. The simplest way to use
+that is an in-chart transform: feed each bar and tick with `series.update` and the chart keeps
+building.
 </Callout>
 
 ---
@@ -185,14 +265,17 @@ interface ISeriesTransform {
   reset(): void;
   push(bar: Bar): Bar[];
   flush?(): Bar[];
+  clone?(): ISeriesTransform;
 }
 ```
 
 The contract every transform class implements. `reset` returns the transform to its initial state
 at the start of a fresh history batch. `push` feeds one source bar and returns zero or more newly
 completed derived elements as `Bar[]`. The optional `flush` emits any in-progress element at the
-end of the data stream (for example, the current partial Renko brick). `runTransform` calls all
-three in sequence.
+end of the data stream (for example, the current partial range bar). `runTransform` calls all
+three in sequence. (unreleased) The optional `clone` returns an independent copy of the state,
+which is how an in-chart transform pushes a forming bar on every tick without committing it; every
+built-in transform has one.
 
 ```ts
 import type { ISeriesTransform } from 'openalgo-charts/transform';
