@@ -79,6 +79,8 @@ this table is where they are recorded.
 | `Chart.on`, `Chart.once` and `Chart.off` given a name outside `ChartEventMap` (the `string` overload) | `src/core/chart.ts` | 2.6.0 | 3.0.0 | The same calls with a `ChartEventMap` name, which types the listener's payload; declare an event of your own by merging it into `ChartEventMap` |
 | `Chart.emit` | `src/core/chart.ts` | 2.5.10 | 3.0.0 | `setDataContext` to announce an instrument, `LinkGroup.setSymbol`, `setInterval` and `setChartType` to drive a link group, and an emitter of your own for events of your own |
 | `VolumeProfileOptions` | `src/profile/volume-profile.ts` | 1.0.1 | 3.0.0 | Nothing takes this type: pass `computeVolumeProfile(bars, tickSize, valueAreaPercent)` its arguments as before, or use `computeVolumeProfileSessions` with `VolumeProfileFamilyOptions` for an options object |
+| `TradeFeed` | `src/feed/types.ts` | 1.0.0 | 3.0.0 | `OrderFeed` from `openalgo-charts/trade`, which `OrderEngine` writes through and `OpenAlgoTradeFeed` implements; nothing in the library ever called a `TradeFeed`, so hand the book to the chart with `chart.trading.syncState` |
+| `PlaceOrder` | `src/feed/types.ts` | 1.0.0 | 3.0.0 | `PlaceRequest` from `openalgo-charts/trade`, the order `OrderEngine` and `OrderFeed.place` take |
 
 Migration, for the five a host is most likely to hold:
 

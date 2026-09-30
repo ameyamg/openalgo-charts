@@ -51,7 +51,7 @@ Install the newly seeded subscription before releasing the previous one, so a sh
 
 Supporting types: `MarketDepth { bids: DepthLevel[]; asks: DepthLevel[]; ltp: number; ltq?: number; timeSec?: UTCSeconds }`, `DepthLevel { price, qty, orders? }`, variable depth, whatever the broker streams. `UnsubscribeFn = () => void`.
 
-`TradeFeed` is the separate, higher-level broker abstraction (`placeOrder` / `modifyOrder` / `cancelOrder` / `subscribeOrders` / `subscribePositions`, taking `PlaceOrder`). The trade tier's `OrderEngine` does **not** use it, it uses the smaller `OrderFeed` (`place` / `modify` / `cancel`) from `openalgo-charts/trade`, which is what `OpenAlgoTradeFeed` implements. See [trading](trading.md).
+`TradeFeed` (`placeOrder` / `modifyOrder` / `cancelOrder` / `subscribeOrders` / `subscribePositions`, taking `PlaceOrder`) is deprecated, removed in 3.0.0 (both types): nothing in the library takes or implements it. The trade tier's `OrderEngine` uses the smaller `OrderFeed` (`place` / `modify` / `cancel`, taking `PlaceRequest`) from `openalgo-charts/trade`, which is what `OpenAlgoTradeFeed` implements, and the chart draws the book a host hands it with `chart.trading.syncState`. `OrderSide` and `OrderType` are one type each: the trade tier's are the base's, re-exported. See [trading](trading.md).
 
 **Verify every OpenAlgo wire field against your running OpenAlgo build.** The adapters below encode the documented REST paths and WS message shapes, and the parsers are deliberately tolerant, but field names have moved between OpenAlgo releases. Pin them for your deployment before production.
 

@@ -91,7 +91,7 @@ interface PlaceRequest {
 interface PlaceResult { ok: boolean; clientId?: string; state?: ClientOrderState; reason?: string }
 ```
 
-`OrderFeed` is **not** the base package's `TradeFeed`. Implement `OrderFeed` for the engine.
+`OrderFeed` is **not** the base package's `TradeFeed`, which is deprecated (removed in 3.0.0) and taken by nothing. Implement `OrderFeed` for the engine.
 
 | Method | Behaviour |
 |---|---|
