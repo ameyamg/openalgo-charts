@@ -40,7 +40,11 @@ export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
+  // The retry stays, so a report still names a test that failed once and
+  // passed once as flaky, but the run fails on it: a flaky test is fixed or
+  // reported with its failure rate, never retried into green (CLAUDE.md).
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: !!process.env.CI,
   reporter: process.env.CI ? 'github' : 'list',
   use: { baseURL: ENGINE_URL },
   webServer: [

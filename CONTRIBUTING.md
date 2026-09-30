@@ -29,9 +29,10 @@ For library or reference-demo code, run the complete local gate:
 npm run verify
 ```
 
-This runs lint, TypeScript, unit tests, the library build, demo tests, declaration
-checks, the compatibility gate, bundle budgets and tree-shaking checks. Run a focused
-test while developing, for example `npx vitest run tests/navigation-settings.test.ts`.
+This runs lint, TypeScript, the import-cycle and unused-export gates, unit tests, the
+library build, demo tests, declaration checks, the compatibility gate, bundle budgets
+and tree-shaking checks. Run a focused test while developing, for example
+`npx vitest run tests/navigation-settings.test.ts`.
 
 TypeScript runs twice, and `npm run typecheck` runs both. `tsconfig.json` compiles
 `src`, the code that ships, with `strict` and two more flags:

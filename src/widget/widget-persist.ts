@@ -34,7 +34,7 @@ import {
   type DrawingDocumentStore, type DrawingInstrument,
 } from 'openalgo-charts/draw';
 import { WidgetBus, type WidgetBusEvents, type WidgetStorage, type WidgetStorageError } from './context';
-import { isChartTypeChoice } from './topbar';
+import { isChartTypeChoice } from './chart-type-choice';
 import { errorText, widgetText } from './localization';
 import { sanitizePanelDockState } from './panel-dock';
 import { RAIL_PREFS_KEY, type RailPrefs } from './rail';

@@ -55,10 +55,10 @@ Node and any bundler honouring `exports` will refuse a deep specifier outright, 
 
 ## What the tier bundles actually import
 
-Verified against the built output:
+`npm run shake` checks this list against the built output (`TIER_IMPORTS` in `scripts/check-shake.mjs`), so a tier that starts or stops importing the base fails the build until this page says so:
 
-- `dist/openalgo-charts.indicators.mjs`, `.transform.mjs`, `.trade.mjs`, `.draw.mjs`, `.webgl.mjs` and `.workspace.mjs` import from `"./openalgo-charts.mjs"`, a **relative** specifier, not the bare package name. Rollup rewrites it via `output.paths: { 'openalgo-charts': './openalgo-charts.mjs' }`. The widget imports `./openalgo-charts.mjs` and `./openalgo-charts.draw.mjs`.
-- `dist/openalgo-charts.profile.mjs` emits no base import at all: it takes only *types* from `openalgo-charts`, which erase at compile time.
+- `dist/openalgo-charts.indicators.mjs`, `.transform.mjs`, `.trade.mjs`, `.draw.mjs`, `.webgl.mjs` and `.workspace.mjs` import from `"./openalgo-charts.mjs"`, a **relative** specifier, not the bare package name. Rollup rewrites it via `output.paths: { 'openalgo-charts': './openalgo-charts.mjs' }`. The draw tier takes the interval resolver and the indicator registry from the base at run time, so it cannot be loaded without it. The widget imports `./openalgo-charts.mjs` and `./openalgo-charts.draw.mjs`, and its parts that load on first use (`openalgo-charts.widget.<part>-<hash>.mjs`) import the same two, the widget file and, where they share code, each other.
+- `dist/openalgo-charts.profile.mjs` emits no base import at all: it takes only *types* from `openalgo-charts`, which erase at compile time. The base `dist/openalgo-charts.mjs` imports nothing.
 
 **Serving `dist/` directly over HTTP works with no import map.** A `<script type="module">` that loads `/dist/openalgo-charts.indicators.mjs` resolves `./openalgo-charts.mjs` as a sibling URL. Every example in `examples/` relies on this; none declares an import map. The `.d.ts` builds keep the bare specifier, which TypeScript resolves through `exports`.
 
@@ -187,7 +187,7 @@ The chart-only tree-shaking ceiling is 46 KiB; widget controls remain excluded.
 
 **Nothing is excluded from these numbers.** The package has zero runtime dependencies (`dependencies` is absent; everything in `devDependencies` is build tooling), so the measured file *is* the shipped payload. There is no CSS to import, no peer dependency, no web-component registration.
 
-`npm run verify` runs lint, typecheck, unit tests, endurance-harness tests, build, demo tests, declaration checks, the export checks (script-tag keys and `require()`), size budgets and tree shaking, and is the `prepublishOnly` hook.
+`npm run verify` runs lint, typecheck, the import-cycle and unused-export gates, unit tests, endurance-harness tests, build, demo tests, declaration checks, the export checks (script-tag keys and `require()`), size budgets and tree shaking, and is the `prepublishOnly` hook.
 
 ## `src/all.ts` is not an entry point
 
