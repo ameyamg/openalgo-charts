@@ -176,6 +176,10 @@ changed, empty or loading source. The widget supplies source readiness; custom
 `mountTopbar` hosts can supply `TopbarOptions.dataAvailable()` for their own loading
 boundary. Active replay exports only installed rows. File failures surface in
 the status line and download resources are released after handoff or failure.
+(unreleased) The dialog asks for its From and To bounds as a date and a time on
+the chart's clock (the chart's timezone, named under the fields), not as UTC
+seconds; a To written to the minute takes in every bar that opens inside it, and
+the captured visible range fills both to the second.
 
 ### The bottom bar (`bottombar.ts`, `ranges.ts`) (since 2.5.10)
 

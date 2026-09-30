@@ -5,15 +5,12 @@ import type { ChartGridMessage } from './grid-text';
 export type WidgetBuiltinMessage =
   | ChartGridMessage
   | "Only loaded rows are exported. Blank bounds include all loaded times."
-  | "From (UTC seconds)"
-  | "To (UTC seconds)"
   | "Study alignment"
   | "Source rows"
   | "Displayed rows"
   | "Use captured visible range"
   | "All loaded rows"
   | "Download CSV"
-  | "Enter finite UTC seconds or leave the bound blank"
   | "The From bound must be before or equal to the To bound"
   | "Enable panning"
   | "Enable zooming"
@@ -212,6 +209,11 @@ export type WidgetBuiltinMessage =
   | "Click for strong: every anchor lands on the nearest O/H/L/C"
   | "Ratio"
   | "Remove level"
+  // The chart data dialog's bounds in UTC seconds, which it asks for on the
+  // chart clock since 2.6.0.
+  | "From (UTC seconds)"
+  | "To (UTC seconds)"
+  | "Enter finite UTC seconds or leave the bound blank"
   | "Enter an expiry date and time"
   | "Every match"
   | "Expired"
