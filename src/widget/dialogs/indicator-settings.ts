@@ -151,7 +151,7 @@ export function mountIndicatorSettings(
     form?.destroy();
     const tab = tabs.find((t) => t.id === activeTab) ?? tabs[0];
     body.innerHTML = '';
-    const controls = controlsFromInputs(tab.inputs, { translate: ctx.translate, scope: `indicator.${descriptor.id}` });
+    const controls = controlsFromInputs(tab.inputs, { translate: ctx.translate, scope: `indicator.${descriptor.id}` }, ctx.intervals);
     const sources = new Map<string, Map<string, IndicatorStudySource>>();
     for (const input of tab.inputs) {
       if (input.type !== 'source') continue;

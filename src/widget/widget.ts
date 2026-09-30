@@ -434,6 +434,7 @@ class WidgetContextImpl implements WidgetContext {
   public readonly overlays: WidgetContext['overlays'];
   public readonly symbol: WidgetContext['symbol'];
   public readonly interval: WidgetContext['interval'];
+  public readonly intervals: readonly string[] | undefined;
   private readonly _source: ThemeSource;
 
   public constructor(source: ThemeSource, parts: ContextParts) {
@@ -458,6 +459,7 @@ class WidgetContextImpl implements WidgetContext {
     this.overlays = parts.overlays;
     this.symbol = parts.symbol;
     this.interval = parts.interval;
+    this.intervals = parts.intervals;
   }
 
   public get theme(): WidgetThemeName { return this._source.theme(); }
@@ -745,6 +747,7 @@ class WidgetImpl implements Widget {
       overlays,
       symbol: () => ({ symbol: this._symbol, exchange: this._exchange }),
       interval: () => this._interval,
+      intervals: options.intervals === undefined ? undefined : this._intervals,
     });
     this._cleanups.push(() => { tips.destroy(); overlays.destroy(); });
     this._cleanups.push(canvasButtonTips(this.context, chartEl));
