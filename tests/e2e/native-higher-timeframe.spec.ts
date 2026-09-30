@@ -169,18 +169,16 @@ for (const surface of ['widget', 'demo'] as const) {
 }
 
 // The reference host says why a study stopped drawing: the status line and a
-// toast carry the reason, and the study's chip keeps it until it draws again.
-test('demo: a study whose timeframe the chart refuses says why on its chip', async ({ page }, info) => {
+// toast carry the reason.
+test('demo: a study whose timeframe the chart refuses says why', async ({ page }, info) => {
   const errors = await mount(page, 'demo');
   await page.evaluate(() => { window.__htf.folded.setSettings({ timeframe: '7x' }); });
-  const chip = page.locator('#indlist .chip.is-error');
-  await expect(chip).toHaveCount(1);
-  await expect(chip).toHaveAttribute('aria-label', /^EMA: "7x" is not a known timeframe/);
   await expect(page.locator('#status')).toHaveText(/^EMA: "7x" is not a known timeframe/);
+  await expect(page.getByText(/^EMA: "7x" is not a known timeframe/).last()).toBeVisible();
   await paint(page);
-  await page.locator('#indlist').screenshot({ path: info.outputPath('demo-refused-chip.png') });
+  await page.screenshot({ path: info.outputPath('demo-refused-study.png') });
   await page.evaluate(() => { window.__htf.folded.setSettings({ timeframe: '15m' }); });
-  await expect(chip).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.__htf.folded.dataStatus()?.state ?? 'ready')).toBe('ready');
   expect(errors).toEqual([]);
 });
 

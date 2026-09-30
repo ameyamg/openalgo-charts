@@ -112,7 +112,8 @@ for (const host of ['widget', 'reference'] as const) for (const width of [1100, 
     await expect(controls.from).toHaveValue(shown(clock(state.from))); await expect(controls.to).toHaveValue(shown(clock(state.to)));
     await expect(controls.studies).toHaveCount(2);
     await controls.studies.nth(0).uncheck();
-    await controls.from.fill(clock(at(20))); await controls.to.fill(clock(at(10))); await controls.download.click();
+    // A browser keeps a whole minute without its seconds, so a field takes it that way.
+    await controls.from.fill(clock(at(20)).slice(0, 16)); await controls.to.fill(clock(at(10)).slice(0, 16)); await controls.download.click();
     await expect(controls.error).toContainText(/before|later/); await expect(controls.dialog).toBeVisible();
     // A To written to the minute takes in the bars that open inside it.
     await controls.from.fill(clock(at(1)).slice(0, 16)); await controls.to.fill(clock(at(2)).slice(0, 16));
@@ -128,7 +129,7 @@ for (const host of ['widget', 'reference'] as const) for (const width of [1100, 
     controls = await openDataDialog(page, host);
     await controls.studies.nth(0).uncheck(); await controls.studies.nth(2).uncheck();
     // To the second, so the half-bar plot position after the last bar stays out.
-    await controls.alignment.selectOption('display'); await controls.from.fill(clock(at(2))); await controls.to.fill(clock(at(4)));
+    await controls.alignment.selectOption('display'); await controls.from.fill(clock(at(2)).slice(0, 16)); await controls.to.fill(clock(at(4) + 1));
     const displayed = await downloadRows(page, controls.download);
     expect(displayed[0]).toEqual(['time', 'logical_index', 'time_origin', 'open', 'high', 'low', 'close', 'volume', 'oi', `indicator:${state.second}:ma`]);
     expect(displayed.slice(1).map(row => [row[0], row[2], row[6], row[9]]))

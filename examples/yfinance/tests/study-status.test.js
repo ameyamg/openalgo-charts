@@ -6,7 +6,7 @@ import { toast } from '../src/ui.js';
 import { initIndicators, watchStudyStatus } from '../src/indicators.js';
 
 // A study that stops drawing says why in the reference host: the status line
-// and a toast once per reason, and the chip while it lasts.
+// and a toast, once per reason.
 afterEach(() => { vi.clearAllMocks(); });
 
 function setup() {
@@ -26,20 +26,18 @@ function setup() {
     } };
   initIndicators({ chart, req: {}, focusPane: 1 });
   const publish = next => { status = next; for (const callback of listeners.get('indicator:data-status') ?? []) callback({ id: study.id, indicatorId: 'ema', status }); };
-  return { document, chart, publish, chip: () => document.getElementById('indlist').querySelector('.chip') };
+  return { document, chart, publish };
 }
 
 describe('a study that stops drawing', () => {
-  it('says why once per reason, and its chip keeps saying it until it draws again', () => {
-    const { document, chart, publish, chip } = setup();
+  it('says why once per reason, and again once it fails anew after drawing', () => {
+    const { document, chart, publish } = setup();
     watchStudyStatus(chart);
     const refusal = new Error('EMA: this chart draws transformed bars, which a timeframe cannot fold; compute the study on the underlying bars');
     publish({ state: 'error', error: refusal });
     expect(document.getElementById('status').textContent).toBe(refusal.message);
     expect(toast).toHaveBeenCalledTimes(1);
     expect(toast).toHaveBeenCalledWith('error', refusal.message);
-    expect(chip().classList.contains('is-error')).toBe(true);
-    expect(chip().getAttribute('aria-label')).toBe(refusal.message);
     // The next tick fails the same way with a new error object: no second toast.
     publish({ state: 'error', error: new Error(refusal.message) });
     expect(toast).toHaveBeenCalledTimes(1);
@@ -47,6 +45,7 @@ describe('a study that stops drawing', () => {
     publish({ state: 'error', error: new Error('division by zero') });
     expect(toast).toHaveBeenLastCalledWith('error', 'EMA: division by zero');
     publish({ state: 'ready' });
-    expect(chip().classList.contains('is-error')).toBe(false);
+    publish({ state: 'error', error: new Error('division by zero') });
+    expect(toast).toHaveBeenCalledTimes(3);
   });
 });
