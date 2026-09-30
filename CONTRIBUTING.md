@@ -33,6 +33,16 @@ This runs lint, TypeScript, unit tests, the library build, demo tests, declarati
 checks, bundle budgets and tree-shaking checks. Run a focused test while developing,
 for example `npx vitest run tests/navigation-settings.test.ts`.
 
+TypeScript runs twice. `npm run typecheck` uses `tsconfig.json`. `npm run
+typecheck:strict` compiles `src` under `tsconfig.strict.json`, which adds
+`noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`, and counts the errors
+per tier by the path of the file each is in. It fails when a tier listed in
+`scripts/strict-tiers.json` has an error, or when a tier with none is not listed yet,
+so a tier that becomes clean joins the list in the same change. Code in a listed tier
+must pass both flags. Prefer a fix that shows the compiler what the code already
+guarantees (a checked index, a narrowed local, an optional property typed
+`| undefined` where `undefined` is written) over a non-null assertion.
+
 Write regression tests around observable behavior and realistic inputs. A bug test
 should fail against the original behavior; avoid assertions that merely repeat the
 implementation. Rendering and gesture changes also need a real browser check and
