@@ -56,7 +56,9 @@ writes `undefined` into such a type is written `{ ... } satisfies LooseOptional<
 `points: N`, so it reads them without one. Indicator maths and the renderers read
 series by index inside loops whose bounds hold the index, which no type can state;
 those reads carry `!`, with the bound said once per block. A read that nothing bounds
-is not asserted: it is a defect, and it is fixed with a test first.
+is not asserted: it is a defect, and it is fixed with a test first. `npm run check:dts`
+compiles a host against the built declarations with both flags and without
+`skipLibCheck`, so the published types hold for a host that is as strict.
 
 Write regression tests around observable behavior and realistic inputs. A bug test
 should fail against the original behavior; avoid assertions that merely repeat the
