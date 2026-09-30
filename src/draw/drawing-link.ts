@@ -1,3 +1,9 @@
+/**
+ * Drawings shared between linked charts of one instrument: a drawing made,
+ * moved or removed on one chart is made, moved or removed on the others,
+ * each with its own undo history. A shared drawing carries a lineage mark in
+ * its props, so the link finds it again after a restore.
+ */
 import { DRAWING_LINK_METADATA_KEY, type DrawingController, type DrawingChartHost } from './controller';
 import type { Drawing } from './types';
 import { cloneDrawing } from './clipboard';
@@ -43,13 +49,23 @@ function resolveContext(source: DrawingLinkContextSource | undefined): DrawingLi
 }
 
 let nextLinkedId = 1;
-const sessionId = (() => {
-  const crypto = globalThis.crypto;
-  if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID();
-  if (typeof crypto?.getRandomValues !== 'function') throw new Error('Drawing links require Web Crypto');
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
-})();
+let sessionId: string | undefined;
 let nextLineage = 1;
+
+/**
+ * This page's lineage namespace, made when a group first shares a drawing.
+ * Made then rather than on import, so a runtime without Web Crypto still
+ * loads the tier, and is refused only when it links charts.
+ */
+function session(): string {
+  if (sessionId === undefined) {
+    const crypto = globalThis.crypto;
+    if (typeof crypto?.randomUUID === 'function') sessionId = crypto.randomUUID();
+    else if (typeof crypto?.getRandomValues !== 'function') throw new Error('openalgo-charts: drawing links require Web Crypto');
+    else sessionId = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+  return sessionId;
+}
 
 /**
  * Whether a drawing can travel between linked charts: on this chart's price
@@ -202,7 +218,7 @@ export class DrawingLinkGroup {
 
   private _create(member: Member, drawing: Drawing): SharedDrawing {
     const context = member.context as string;
-    const lineage = lineageOf(drawing, context) ?? `${sessionId}:${nextLineage++}`;
+    const lineage = lineageOf(drawing, context) ?? `${session()}:${nextLineage++}`;
     for (const peer of this._members.values()) {
       for (const shared of peer.drawings.values()) {
         if (shared.context !== context || shared.lineage !== lineage) continue;
