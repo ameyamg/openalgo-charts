@@ -269,7 +269,8 @@ export interface IndicatorHost {
    * The host's bars under a transformed primary series and the source bar each
    * of `sourceBars` was completed on (null when they are one to one), or null
    * when the chart draws its bars as given. Optional; without it a study on the
-   * underlying bars computes on `sourceBars`.
+   * underlying bars computes on `sourceBars`, and one on the chart's bars is
+   * never told they are transformed (`IndicatorCalcContext.transformed`).
    */
   underlyingBars?(): { bars: readonly Bar[]; sourceIndex: readonly number[] | null } | null;
   /** Optional mutation metadata; absent hosts retain the legacy timestamp heuristic. */
