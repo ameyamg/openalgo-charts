@@ -715,10 +715,11 @@ export function createOverlayStack(root: HTMLElement, doc: Document): OverlaySta
   const onPointerDown = (e: Event): void => {
     const target = e.target as Node | null;
     // Newest first: an outside press closes every popover above the one it
-    // landed in, and stops at a modal.
+    // landed in, and stops at a modal. An onClose may close older overlays
+    // too, which leaves i past the end of the stack.
     for (let i = stack.length - 1; i >= 0; i--) {
       const o = stack[i];
-      if (o.suspended > 0) continue;
+      if (o === undefined || o.suspended > 0) continue;
       if (target !== null && (o.el.contains(target) || o.opts.anchor?.contains(target) === true)) break;
       if (o.opts.dismissOnOutside === false || (o.opts.modal === true && o.opts.dismissOnOutside !== true)) break;
       close(o);
