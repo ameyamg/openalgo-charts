@@ -19,11 +19,12 @@ export interface PriceBand {
 }
 
 /**
- * Machine-readable rejection code. Four of these are spelled exactly as the v2
- * broker contract's `RejectCode` members so the eventual mapping is identity;
- * `QTY_INVALID` and `PRICE_INVALID` are local until v2's `reject.ts` lands, at
- * which point they fold into `CONTRACT_VIOLATION`. Every member is emitted by a
- * branch below: a code nothing can produce would be a label with nothing behind it.
+ * Machine-readable rejection code. Three of these (`QTY_STEP`,
+ * `QTY_FREEZE_LIMIT`, `PRICE_OUT_OF_BAND`) are spelled exactly as the planned v2
+ * broker contract's `RejectCode` members, so a mapping to it would be
+ * identity; `QTY_INVALID` and `PRICE_INVALID` are local, and would fold into
+ * its `CONTRACT_VIOLATION`. Every member is emitted by a branch below: a code
+ * nothing can produce would be a label with nothing behind it.
  */
 export type ValidationCode =
   | 'QTY_INVALID'

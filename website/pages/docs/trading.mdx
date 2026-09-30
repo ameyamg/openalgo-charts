@@ -627,7 +627,8 @@ broker.setBook(
 broker.emitLtp('RELIANCE', 2950); // drives P&L display
 
 broker.fill('O1');                 // simulate a fill; removes order and notifies
-broker.rejectNextPlace = 'outside price band'; // next place() will throw
+broker.rejectNextPlace = 'socket reset'; // next place() throws once: a lost answer, settled as ambiguous
+// A refusal instead: failNext('place', 'reject', reason) on a broker built with accounts.
 
 // Static helper -- generate a synthetic depth book around an LTP:
 const depth = FakeBroker.makeDepth(2950, 5, 0.05); // 5 levels, 0.05 tick

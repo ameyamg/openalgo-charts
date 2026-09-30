@@ -272,8 +272,9 @@ turning each into a script is the preferred fix whenever one of them is missed.
   workspaces and layouts written by those versions load and round-trip in tests.
 - **Warnings.** Zero lint warnings and zero typedoc warnings.
 - **Structure.** No import cycles between modules (checked at release); a module has one
-  job and its index is its only door; `scripts/line-caps.json` caps only ever go down, so
-  a file that outgrows its cap is split, never given a larger cap.
+  job and its index is its only door; `scripts/line-caps.json` and `scripts/function-caps.json`
+  caps only ever go down, so a file or function that outgrows its cap is split, never
+  given a larger cap.
 - **Surface.** No unused exports (checked at release); `npm run skills:coverage` at 100
   percent; every `@deprecated` names its removal version.
 - **Tests.** No skipped test without a written reason beside it (checked at release), and

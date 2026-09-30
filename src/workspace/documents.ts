@@ -1,11 +1,16 @@
 import type {
-  ChartState, ChartSettingsState, DataVariant, IndicatorPolicy, IndicatorState, LinkMissingPolicy, PaneState, PriceScaleId, SeriesState, SeriesTransformSpec,
+  ChartState, ChartSettingsState, DataVariant, IndicatorPolicy, IndicatorState, LinkMissingPolicy, PaneState, PriceScaleId, PriceScaleState,
+  SeriesState, SeriesTransformSpec,
 } from 'openalgo-charts';
 import { normalizeDataVariant, parseAlertsDocument, parseIndicatorPolicy, parsePaneState } from 'openalgo-charts';
 import { boolean, choice, list, number, readJson, record, string, WorkspaceDocumentError, type Json } from './json';
 
 export { WorkspaceDocumentError } from './json';
 export const WORKSPACE_VERSION = 1;
+/** The last pane slot a portable document may name: 32 panes, slots 0 to 31. Internal. */
+export const MAX_PANE_SLOT = 31;
+/** The most studies one chart or template may hold. Internal. */
+export const MAX_STUDIES = 256;
 export type WorkspaceKind = 'workspace' | 'indicator-template';
 export type WorkspaceSettings = Record<string, string | number | boolean>;
 export type WorkspaceChartState = ChartState & ChartSettingsState & { timezone?: string };
@@ -110,13 +115,13 @@ function priceScaleId(input: Json | undefined, label: string): PriceScaleId {
  */
 function indicatorStates(input: Json | undefined, preserveIdentity = true, keepPolicy = true): IndicatorState[] {
   const ids = new Set<string>();
-  return list(input, 'indicators', 256).map(item => {
+  return list(input, 'indicators', MAX_STUDIES).map(item => {
     const entry = record(item, 'indicator');
     const settings = record(entry.settings, 'indicator settings');
     const out: IndicatorState = {
       indicatorId: string(entry.indicatorId, 'indicatorId'),
       settings,
-      paneIndex: number(entry.paneIndex, 'indicator paneIndex', 0, 31, true),
+      paneIndex: number(entry.paneIndex, 'indicator paneIndex', 0, MAX_PANE_SLOT, true),
     };
     if (entry.studyInputs !== undefined) {
       const keys = list(entry.studyInputs, 'indicator studyInputs', 100000).map(key => {
@@ -170,6 +175,17 @@ export function hostOwnedStudy(policy: Readonly<IndicatorPolicy> | undefined): b
 }
 
 /**
+ * A scale whose range owner is leaving lets go of the range. An owner the
+ * user set by hand leaves the scale as the user had it; otherwise the scale
+ * fits again. Internal, shared with the template planner.
+ */
+export function releaseScaleOwner(scale: PriceScaleState): void {
+  const manual = scale.indicatorRange?.manual === true;
+  delete scale.indicatorRange; delete scale.fixedRange;
+  if (!manual) { scale.autoScale = true; delete scale.range; delete scale.ratioLock; }
+}
+
+/**
  * Which entries a portable template keeps. A study its host keeps from the
  * user is the host's, and so is every study that reads its output, since a
  * copy would read nothing. Also returns the ids of the entries left out.
@@ -203,7 +219,7 @@ function portableEntries(entries: readonly Json[]): { kept: Json[]; left: Set<st
 
 function templateIndicatorStates(input: Json | undefined, requireIdentity = false, left?: Set<string>): IndicatorState[] {
   // A portable template is the user's own copy of the user's own studies.
-  const portable = portableEntries(list(input, 'indicators', 256)), entries = portable.kept;
+  const portable = portableEntries(list(input, 'indicators', MAX_STUDIES)), entries = portable.kept;
   for (const id of portable.left) left?.add(id);
   const connected = entries.some(item => {
     const keys = record(item, 'indicator').studyInputs;
@@ -242,7 +258,7 @@ export function parseTemplateIndicatorStates(input: unknown): IndicatorState[] {
 }
 
 function chartPanes(input: Json | undefined): PaneState[] {
-  return list(input, 'chart panes', 32).map(item => {
+  return list(input, 'chart panes', MAX_PANE_SLOT + 1).map(item => {
     try {
       const pane = parsePaneState(item);
       // Portable workspaces retain their established numeric limits; the engine
@@ -284,8 +300,7 @@ function templatePayload(input: Json): IndicatorTemplatePayload {
     // A scale a study left out owned lets go of its range, as it would on a replace.
     const owner = scale?.indicatorRange;
     if (scale && owner && left.has(owner.instanceId)) {
-      delete scale.indicatorRange; delete scale.fixedRange;
-      if (!owner.manual) { scale.autoScale = true; delete scale.range; delete scale.ratioLock; }
+      releaseScaleOwner(scale);
       continue;
     }
     if (scale?.indicatorRange && !studies.has(scale.indicatorRange.instanceId)) {
@@ -376,7 +391,7 @@ function chartState(input: Json | undefined): WorkspaceChartState {
     // Only version 2 says where the price pane sits. A version 1 chart that
     // claims a slot would be misread by every reader that trusts the version.
     if (source.version !== 2) throw new WorkspaceDocumentError('A moved price pane needs chart version 2');
-    out.primaryPane = number(source.primaryPane, 'primaryPane', 0, 31, true);
+    out.primaryPane = number(source.primaryPane, 'primaryPane', 0, MAX_PANE_SLOT, true);
     if (!out.panes || out.primaryPane >= out.panes.length) throw new WorkspaceDocumentError('The price pane slot must name a saved pane');
   }
   if (source.series !== undefined) out.series = list(source.series, 'series descriptors', 512).map(item => {
@@ -384,7 +399,7 @@ function chartState(input: Json | undefined): WorkspaceChartState {
     const scaleId = series.priceScaleId;
     if (typeof scaleId !== 'string') throw new WorkspaceDocumentError('priceScaleId must be a string');
     const out = { type: string(series.type, 'series type'), style: record(series.style, 'series style'),
-      paneIndex: number(series.paneIndex, 'series paneIndex', 0, 31, true), priceScaleId: scaleId } as SeriesState;
+      paneIndex: number(series.paneIndex, 'series paneIndex', 0, MAX_PANE_SLOT, true), priceScaleId: scaleId } as SeriesState;
     if (series.transform !== undefined) out.transform = seriesTransform(series.transform);
     return out;
   });

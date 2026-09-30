@@ -13,6 +13,7 @@
  * never carries what a drawing says or where it is (`text.value`, anchors, a
  * lock, a pane): those are the drawing's, not its look.
  */
+import { CatalogQueue, createMemoryCatalogStorage, randomId, type CatalogKind } from './catalog';
 import { list, number, readJson, record, string, WorkspaceDocumentError, type Json } from './json';
 import { createIndexedDbCatalogStorage, type IndexedDbCatalogStorage } from './indexed-db';
 
@@ -170,7 +171,7 @@ export function parseDrawingTemplateCatalog(input: unknown): DrawingTemplateCata
 }
 
 const emptyCatalog = (): DrawingTemplateCatalog => ({ version: 1, revision: 0, templates: [], defaults: [] });
-const copy = <T>(value: T): T => readJson(value) as T;
+const KIND: CatalogKind<DrawingTemplateCatalog> = { parse: parseDrawingTemplateCatalog, conflict: () => new DrawingTemplateConflictError() };
 const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /**
@@ -180,40 +181,27 @@ const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b
  * refused, as a conflict. Create a new repository when the account changes.
  */
 export class DrawingTemplateRepository implements DrawingTemplateStore {
-  private readonly _storage: DrawingTemplateStorage;
-  private readonly _namespace: string;
+  private readonly _catalog: CatalogQueue<DrawingTemplateCatalog>;
   private readonly _now: () => number;
   private readonly _id: () => string;
-  private readonly _listeners = new Set<(catalog: DrawingTemplateCatalog) => void>();
-  private _queue: Promise<void> = Promise.resolve();
 
   constructor(storage: DrawingTemplateStorage, namespace: string, options: DrawingTemplateRepositoryOptions = {}) {
-    this._storage = storage;
-    this._namespace = string(namespace, 'storage namespace');
+    this._catalog = new CatalogQueue(storage, namespace, KIND, emptyCatalog);
     this._now = options.now ?? Date.now;
-    this._id = options.id ?? (() => {
-      if (!globalThis.crypto?.randomUUID) throw new WorkspaceDocumentError('Supply an ID factory when crypto.randomUUID is unavailable');
-      return globalThis.crypto.randomUUID();
-    });
+    this._id = options.id ?? randomId;
   }
 
-  get namespace(): string { return this._namespace; }
+  get namespace(): string { return this._catalog.namespace; }
 
-  async load(): Promise<DrawingTemplateCatalog> {
-    await this._queue;
-    return this._read();
-  }
+  load(): Promise<DrawingTemplateCatalog> { return this._catalog.load(); }
 
-  subscribe(listener: (catalog: DrawingTemplateCatalog) => void): () => void {
-    this._listeners.add(listener);
-    return () => { this._listeners.delete(listener); };
-  }
+  subscribe(listener: (catalog: DrawingTemplateCatalog) => void): () => void { return this._catalog.subscribe(listener); }
 
   async saveTemplate(name: string, tool: string, values: DrawingTemplateValues, options?: DrawingTemplateOperationOptions): Promise<DrawingTemplate> {
     const title = string(name, 'name', 120);
     const id = toolId(tool);
     const parsed = parseDrawingTemplateValues(values);
-    return this._transact(catalog => {
+    return this._catalog.transact(catalog => {
       const now = this._now();
       const existing = catalog.templates.find(item => item.tool === id && sameName(item.name, title));
       if (existing) {
@@ -229,7 +217,7 @@ export class DrawingTemplateRepository implements DrawingTemplateStore {
 
   async renameTemplate(id: string, name: string, options?: DrawingTemplateOperationOptions): Promise<DrawingTemplate> {
     const title = string(name, 'name', 120);
-    return this._transact(catalog => {
+    return this._catalog.transact(catalog => {
       const doc = this._find(catalog, id);
       if (catalog.templates.some(item => item !== doc && item.tool === doc.tool && sameName(item.name, title))) {
         throw new WorkspaceDocumentError(`A template named ${title} already exists for this tool`);
@@ -241,7 +229,7 @@ export class DrawingTemplateRepository implements DrawingTemplateStore {
   }
 
   async removeTemplate(id: string, options?: DrawingTemplateOperationOptions): Promise<void> {
-    return this._transact(catalog => {
+    return this._catalog.transact(catalog => {
       const doc = this._find(catalog, id);
       catalog.templates = catalog.templates.filter(item => item !== doc);
     }, options);
@@ -250,7 +238,7 @@ export class DrawingTemplateRepository implements DrawingTemplateStore {
   async setDefault(tool: string, values: DrawingTemplateValues | null, options?: DrawingTemplateOperationOptions): Promise<void> {
     const id = toolId(tool);
     const parsed = values === null ? null : parseDrawingTemplateValues(values);
-    return this._transact(catalog => {
+    return this._catalog.transact(catalog => {
       const existing = catalog.defaults.find(item => item.tool === id);
       if (parsed === null) {
         catalog.defaults = catalog.defaults.filter(item => item !== existing);
@@ -260,37 +248,6 @@ export class DrawingTemplateRepository implements DrawingTemplateStore {
       if (existing) { existing.values = parsed; existing.updatedAt = updatedAt; }
       else catalog.defaults.push({ tool: id, values: parsed, updatedAt });
     }, options);
-  }
-
-  private async _read(): Promise<DrawingTemplateCatalog> {
-    const input = await this._storage.read(this._namespace);
-    return input === null ? emptyCatalog() : parseDrawingTemplateCatalog(input);
-  }
-
-  private _transact<T>(mutate: (catalog: DrawingTemplateCatalog) => T, options: DrawingTemplateOperationOptions = {}): Promise<T> {
-    const { signal } = options;
-    const expected = options.expectedRevision === undefined ? undefined
-      : number(options.expectedRevision, 'expected revision', 0, Number.MAX_SAFE_INTEGER, true);
-    const operation = this._queue.then(async () => {
-      signal?.throwIfAborted();
-      const catalog = await this._read();
-      signal?.throwIfAborted();
-      if (expected !== undefined && catalog.revision !== expected) throw new DrawingTemplateConflictError();
-      const revision = catalog.revision;
-      const result = mutate(catalog);
-      catalog.revision++;
-      // Validate the entire candidate, including limits, before touching storage.
-      const next = parseDrawingTemplateCatalog(catalog);
-      signal?.throwIfAborted();
-      await this._storage.write(this._namespace, next, revision, { signal });
-      for (const listener of Array.from(this._listeners)) {
-        // A host listener failing is reported, but the write has committed and resolves.
-        try { listener(copy(next)); } catch (error) { queueMicrotask(() => { throw error; }); }
-      }
-      return result === undefined ? result : copy(result);
-    });
-    this._queue = operation.then(() => {}, () => {});
-    return operation;
   }
 
   private _find(catalog: DrawingTemplateCatalog, id: string): DrawingTemplate {
@@ -316,23 +273,7 @@ export class DrawingTemplateRepository implements DrawingTemplateStore {
  * IndexedDB. Nothing outlives the page. `seed` maps namespaces to catalogs.
  */
 export function createMemoryDrawingTemplateStorage(seed: Readonly<Record<string, unknown>> = {}): DrawingTemplateStorage {
-  const values = new Map<string, unknown>(Object.entries(seed).map(([key, value]) => [key, copy(value)]));
-  return {
-    async read(namespace) {
-      const value = values.get(string(namespace, 'storage namespace'));
-      return value === undefined ? null : copy(value);
-    },
-    async write(namespace, catalog, expectedRevision, options) {
-      options?.signal?.throwIfAborted();
-      const key = string(namespace, 'storage namespace');
-      const expected = number(expectedRevision, 'expected revision', 0, Number.MAX_SAFE_INTEGER, true);
-      const next = parseDrawingTemplateCatalog(catalog);
-      if (next.revision !== expected + 1) throw new WorkspaceDocumentError('A write must advance the catalog revision by one');
-      const previous = values.get(key);
-      if ((previous === undefined ? 0 : parseDrawingTemplateCatalog(previous).revision) !== expected) throw new DrawingTemplateConflictError();
-      values.set(key, next);
-    },
-  };
+  return createMemoryCatalogStorage(seed, KIND);
 }
 
 export type IndexedDbDrawingTemplateStorage = IndexedDbCatalogStorage<DrawingTemplateCatalog> & DrawingTemplateStorage;

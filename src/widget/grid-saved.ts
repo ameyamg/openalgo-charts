@@ -29,7 +29,7 @@ import type { WidgetContext } from './context';
 import type { ChartGrid } from './grid';
 import { createLayoutsController, type LayoutsController, type LayoutTarget } from './layouts';
 import { layoutChartState, widgetLayoutTarget } from './layouts-target';
-import { layoutStatusText, showLayoutsMenu, type LayoutsMenuSlot } from './layouts-widget';
+import { layoutStatusText, sayLayoutFailures, showLayoutsMenu, type LayoutsMenuSlot } from './layouts-widget';
 import { errorText, widgetText } from './localization';
 import type { WidgetChartState } from './widget';
 
@@ -63,7 +63,7 @@ export function attachGridSaved(host: GridSavedHost): GridSaved | null {
   const { grid } = host;
   const given = host.layouts === false ? null : host.layouts ?? null;
   if (host.layouts === false || (given === null && host.workspaces === undefined)) return null;
-  const text = (key: string, fallback: string, values: Record<string, string> = {}): string =>
+  const text = (key: string, fallback: string, values: Record<string, string | number> = {}): string =>
     widgetText(host.context(), `schema.ui.layouts.${key}`, values, fallback);
   const report = (message: string): void => { if (!grid.isDestroyed) host.context().status(message, 'error'); };
 
@@ -103,18 +103,9 @@ export function attachGridSaved(host: GridSavedHost): GridSaved | null {
   const controller = (given ?? own) as LayoutsController;
   const menu: LayoutsMenuSlot = { handle: null, waiting: null };
   let destroyed = false;
-  // An autosave that stops is said once on the active chart's status line, as
-  // one widget says it: the menu may be closed, and a screen reader hears no
-  // mark. The controller's destroy lets go of this listener.
-  let failing = false;
-  own?.subscribe(state => {
-    const failed = state.autosave === 'failed' && !state.conflict;
-    if (!failing && (failed || state.conflict)) {
-      report(failed ? text('autosaveStopped', 'Autosave stopped: the layout could not be saved') : text('conflictStatus', 'The layout was changed in another window'));
-    }
-    failing = failed || state.conflict;
-  });
   if (own !== null) {
+    // Said on the active chart's status line, as one widget says it. The controller's destroy lets go of this listener.
+    sayLayoutFailures(own, text, report);
     void host.ready.then(() => (destroyed ? null : own.reload())).then(async catalog => {
       if (destroyed || catalog == null || catalog.activeWorkspaceId === null || host.opened()) return;
       const opened = await own.open(catalog.activeWorkspaceId);
