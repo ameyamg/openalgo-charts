@@ -7,6 +7,7 @@ import { createColorPicker, applyTokens, widgetTokens, inputStates } from '/dist
 import { bindTypedField, typedFieldValue, typedFieldError, typedFieldProblem, validateTypedRows, mountReferenceInputControls, outOfPlay } from './indicator-input-controls.js';
 import { studyAllows } from './host-study.js';
 import { anchoredGrowthSeed } from './anchored-study.js';
+import { INTERVALS, intervalLabel } from './intervals.js';
 
 let app;
 
@@ -344,9 +345,15 @@ export function destroyInputRows(host) {
 function inputField(host, key, kind, spec, value, onChange, unavailable) {
   const off = unavailable ? unavailable(key) : null;
   let field;
-  if (kind === 'select' || kind === 'source') {
+  if (kind === 'select' || kind === 'source' || kind === 'interval') {
     field = document.createElement('select');
-    const options = [...(kind === 'source' ? INDICATOR_SOURCES : spec.options)];
+    // A timeframe offers the chart's own and the intervals this page serves;
+    // a saved code it does not list stays an entry, since a select would
+    // otherwise drop it to the chart's own without a word.
+    const options = kind === 'interval'
+      ? [{ value: '', label: 'Chart' }, ...INTERVALS.concat(value && !INTERVALS.includes(value) ? [value] : [])
+        .map(code => ({ value: code, label: intervalLabel(code) }))]
+      : [...(kind === 'source' ? INDICATOR_SOURCES : spec.options)];
     const references = new Map();
     if (kind === 'source') {
       for (const output of spec.studyOutputs ?? []) {
