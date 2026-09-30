@@ -34,7 +34,7 @@ const CHANNEL_LABEL = {
 interface MenuItem {
   kind: 'radio' | 'check' | 'action';
   label: string;
-  sub?: string;
+  sub?: string | undefined;
   checked?: boolean;
   disabled?: boolean;
   icon?: HTMLElement;
@@ -114,7 +114,7 @@ function openRows(host: GridBarHost, anchor: HTMLElement, label: string, build: 
     if (to < 0 || rows.length === 0) return;
     e.preventDefault();
     e.stopPropagation();
-    rows[to].focus();
+    rows[to]!.focus(); // every branch wraps to into the rows, which are not empty
   });
   close = host.overlays.open(menu, { anchor, placement: 'below',
     initialFocus: menu.querySelector<HTMLElement>('.oac-menu__row[aria-checked="true"]') ?? undefined });
@@ -177,13 +177,14 @@ export function openLayoutPicker(host: GridBarHost, anchor: HTMLElement): () => 
   menu.addEventListener('keydown', e => {
     const at = flat.indexOf(doc.activeElement as HTMLElement);
     if (at < 0) return;
-    const row = rows.findIndex(r => r.includes(flat[at]));
-    const col = rows[row].indexOf(flat[at]);
+    // flat is rows flattened, so the focused cell has a row, and every row index below wraps into rows.
+    const row = rows.findIndex(r => r.includes(flat[at]!));
+    const col = rows[row]!.indexOf(flat[at]!);
     let next: HTMLElement | undefined;
     if (e.key === 'ArrowRight') next = flat[(at + 1) % flat.length];
     else if (e.key === 'ArrowLeft') next = flat[(at - 1 + flat.length) % flat.length];
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      const to = rows[(row + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length];
+      const to = rows[(row + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length]!;
       next = to[Math.min(col, to.length - 1)];
     } else if (e.key === 'Home') next = flat[0];
     else if (e.key === 'End') next = flat[flat.length - 1];

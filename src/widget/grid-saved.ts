@@ -38,8 +38,8 @@ export interface GridSavedHost {
   readonly grid: ChartGrid;
   /** The grid's own persisted desk has landed. */
   readonly ready: Promise<void>;
-  readonly workspaces?: WorkspaceStore;
-  readonly layouts?: LayoutsController | false;
+  readonly workspaces?: WorkspaceStore | undefined;
+  readonly layouts?: LayoutsController | false | undefined;
   /** The active chart's context over the grid's own layer: the menu opens there, and reports go to its status line. */
   context(): WidgetContext;
   /** Whether a desk was opened on the grid (`applyWorkspace`) since it was built. */
@@ -77,8 +77,8 @@ export function attachGridSaved(host: GridSavedHost): GridSaved | null {
   };
   const target: LayoutTarget = {
     capture(): WorkspacePayload {
-      const payload = grid.getWorkspace();
-      return { ...payload, activePaneId: payload.panes[0].id,
+      const payload = grid.getWorkspace(); // one pane per cell, and a grid is never without a cell
+      return { ...payload, activePaneId: payload.panes[0]!.id,
         panes: payload.panes.map(pane => ({ ...pane, chart: layoutChartState(pane.chart as WidgetChartState) })) };
     },
     apply: payload => grid.applyWorkspace(payload),

@@ -76,7 +76,7 @@ export interface ChartGridOptions extends Omit<WidgetOptions, 'persist' | 'stora
    * builds each chart's feed from its pane id and the `historyPeriod` its
    * workspace pane carries, for a host whose source answers by period.
    */
-  feed?: DataFeed | ((chart: { readonly id: string; readonly historyPeriod?: string }) => DataFeed);
+  feed?: DataFeed | ((chart: { readonly id: string; readonly historyPeriod?: string | undefined }) => DataFeed);
   /** The layout to start with when nothing is restored: a preset or any `CHART_GRID_LAYOUTS` id. Default `1x1`. */
   preset?: ChartGridLayoutId;
   /** Link channels the first group starts with, and every new group. Default: crosshair and viewport on, the rest off. */
@@ -289,7 +289,10 @@ interface Cell {
   hold: boolean;
 }
 
-interface Source { symbol?: string; exchange?: string; interval?: string; variant?: DataVariant; chartType?: string; historyPeriod?: string }
+interface Source {
+  symbol?: string | undefined; exchange?: string | undefined; interval?: string | undefined; variant?: DataVariant | undefined;
+  chartType?: string | undefined; historyPeriod?: string | undefined;
+}
 type Axis = 'row' | 'column';
 
 /** Pixels between tracks, and the track a splitter sits in. */
@@ -565,15 +568,17 @@ export function createChartGrid(container: HTMLElement | string, options: ChartG
   };
 
   // ── splitters ──────────────────────────────────────────────────────────
+  // A splitter at boundary b sits between tracks b and b + 1, so both weights
+  // are there: whatever changes how many there are renders the splitters again.
   const valueNow = (split: HTMLElement): void => {
     const w = split.dataset.axis === 'column' ? colW : rowW;
     const b = Number(split.dataset.index);
-    split.setAttribute('aria-valuenow', String(Math.round(w[b] / (w[b] + w[b + 1]) * 100)));
+    split.setAttribute('aria-valuenow', String(Math.round(w[b]! / (w[b]! + w[b + 1]!) * 100)));
   };
 
   const resize = (axis: Axis, b: number, first: number, dragging = false): void => {
     const w = (axis === 'column' ? colW : rowW).slice();
-    const pair = w[b] + w[b + 1];
+    const pair = w[b]! + w[b + 1]!;
     const next = round(Math.min(pair * (1 - MIN_SHARE), Math.max(pair * MIN_SHARE, first)));
     if (next === w[b]) return;
     w[b] = next;
@@ -606,7 +611,7 @@ export function createChartGrid(container: HTMLElement | string, options: ChartG
       const size = (col ? rect.width : rect.height) - GUTTER * (w.length - 1);
       const total = w.reduce((a, v) => a + v, 0);
       const start = col ? e.clientX : e.clientY;
-      const first = w[b];
+      const first = w[b]!;
       split.setPointerCapture?.(e.pointerId);
       split.classList.add('is-drag');
       const move = (m: PointerEvent): void => {
@@ -631,9 +636,9 @@ export function createChartGrid(container: HTMLElement | string, options: ChartG
       e.preventDefault();
       e.stopPropagation();
       const w = weights();
-      resize(axis, b, w[b] + (dir * 2 - 1) * (w[b] + w[b + 1]) * (e.shiftKey ? 0.2 : 0.05));
+      resize(axis, b, w[b]! + (dir * 2 - 1) * (w[b]! + w[b + 1]!) * (e.shiftKey ? 0.2 : 0.05));
     });
-    split.addEventListener('dblclick', () => { const w = weights(); resize(axis, b, (w[b] + w[b + 1]) / 2); });
+    split.addEventListener('dblclick', () => { const w = weights(); resize(axis, b, (w[b]! + w[b + 1]!) / 2); });
     split.hidden = solo();
     body.appendChild(split);
     splits.push(split);
@@ -1075,7 +1080,7 @@ export function createChartGrid(container: HTMLElement | string, options: ChartG
       maxed = false;
       root.dataset.maximized = 'false';
       for (const cell of cells.filter(c => !kept.includes(c))) { drop(cell); drawings.delete(cell.id); }
-      if (active === null || !kept.includes(active)) active = kept[0] ?? made[0];
+      if (active === null || !kept.includes(active)) active = kept[0] ?? made[0]!; // between them they hold every slot, and a layout has one
       // In an uneven layout the chart being worked on takes the large slot;
       // the others keep their reading order around it.
       const order = [...kept, ...made];
@@ -1197,7 +1202,7 @@ export function createChartGrid(container: HTMLElement | string, options: ChartG
       }));
       const fallback = (options as { pixelRatio?: () => number }).pixelRatio?.() ?? (doc.defaultView?.devicePixelRatio ?? 1);
       const tokens = widgetTokens(resolveTheme(theme).theme, resolveTheme(theme).name);
-      const token = (name: string): string => tokens[TOKEN_PREFIX + name];
+      const token = (name: string): string => tokens[TOKEN_PREFIX + name]!; // names every theme's table carries
       return composeGridCapture(doc, { width: base.width, height: base.height }, captureRatio(pieces, fallback), pieces,
         { gutter: token('bd-soft'), panel: token('panel'), text: token('tx'), font: WIDGET_FONT });
     },

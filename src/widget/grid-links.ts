@@ -173,7 +173,7 @@ export class GridLinks<C extends LinkedCell> {
   public constructor(private readonly defaults: LinkOptions = {}) {}
 
   /** A new, empty group on the grid's channels with `links` over them, or null when every letter is taken. */
-  public create(options: { id?: string; name?: string | null; links?: LinkOptions } = {}): GridGroup<C> | null {
+  public create(options: { id?: string | undefined; name?: string | null; links?: LinkOptions | undefined } = {}): GridGroup<C> | null {
     const free = (l: string): boolean => !this.groups.some(g => g.letter === l);
     // The grid names a group by its letter, so a saved group comes back under
     // the letter it was marked with, gaps an emptied group left included.
@@ -234,7 +234,7 @@ export class GridLinks<C extends LinkedCell> {
 
   /** One group holding every chart under no name: the desk as it linked before groups. */
   public trivial(cells: readonly C[]): boolean {
-    return this.groups.length === 1 && this.groups[0].name === null && cells.every(c => c.group === this.groups[0]);
+    return this.groups.length === 1 && this.groups[0]!.name === null && cells.every(c => c.group === this.groups[0]); // length checked first
   }
 
   /** The channels of `cell`'s group, or every channel off for a chart in none. */
@@ -247,7 +247,7 @@ export class GridLinks<C extends LinkedCell> {
    * than the flat ones can; an unnamed group is saved under the name it shows.
    */
   public sync(cells: readonly C[], name: (group: GridGroup<C>) => string): WorkspaceSync {
-    if (this.trivial(cells)) return savedChannels(this.groups[0].links.options()) as WorkspaceSync;
+    if (this.trivial(cells)) return savedChannels(this.groups[0]!.links.options()) as WorkspaceSync; // trivial: exactly one group
     const whole = this.groups.find(g => cells.every(c => c.group === g));
     const flat = savedChannels(whole?.links.options() ?? ALL_OFF);
     const groups: WorkspaceLinkGroup[] = this.groups.filter(g => cells.some(c => c.group === g))

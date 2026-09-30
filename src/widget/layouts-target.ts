@@ -70,7 +70,7 @@ export function layoutChartState(chart: WidgetChartState): WorkspaceChartState {
 /** Why a saved layout cannot show on one widget, checked before anything changes; empty when it can. */
 function refusal(payload: WorkspacePayload): string {
   if (payload.panes.length !== 1) return `a layout of ${payload.panes.length} charts needs a chart grid`;
-  const [pane] = payload.panes;
+  const [pane] = payload.panes as [WorkspacePane]; // exactly one, checked above
   if (!isKnownInterval(pane.interval)) return `unknown interval ${pane.interval}`;
   if (!registeredChartTypes().includes(pane.chartType)) return `unknown chart type ${pane.chartType}`;
   if (pane.comparisons.length > 0) return 'comparison symbols are not supported in a widget chart';
@@ -106,7 +106,7 @@ export function widgetLayoutTarget(widget: Widget): LayoutTarget {
       // it would refuse part way is refused here, before anything changes.
       const reason = refusal(payload);
       if (reason !== '') return { applied: false, reason };
-      const [pane] = payload.panes;
+      const [pane] = payload.panes as [WorkspacePane]; // refusal() lets only a single pane through
       const theme = pane.settings[THEME_SETTING];
       // The pane carries the rail's magnet and stay; the rest of the rail (pins, last tools) stays the user's.
       const rail = widget.getState().rail;
