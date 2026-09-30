@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DiagnosticBag, check, emit, isError, parse, sourceFile } from 'script-engine-under-test';
+import { DiagnosticBag, VERSION as ENGINE_VERSION, check, emit, isError, parse, sourceFile } from 'script-engine-under-test';
 import { descriptorFor } from 'script-engine-under-test/adapters/charts';
-import engine from 'script-engine-under-test/package.json';
 import { Chart as PublicChart, registerIndicator as registerPublicIndicator } from 'openalgo-charts';
 import { captureIndicatorTemplate, planIndicatorTemplateState } from 'openalgo-charts/workspace';
 import { Chart } from '../src/core/chart';
@@ -46,12 +45,16 @@ function compile(text: string, extra: Record<string, unknown> = {}): IndicatorDe
   return descriptor;
 }
 
-/** Whether the engine under test is at least `wanted`, read from its own package.json. */
+/**
+ * Whether the engine under test is at least `wanted`, as its build reports it.
+ * Not its package.json: a checkout whose manifest moved on without a rebuild
+ * still runs the older build, and a newer case must skip there, not fail.
+ */
 function engineAtLeast(wanted: string): boolean {
-  const have = engine.version.split(/[-+]/)[0].split('.').map(Number);
+  const have = ENGINE_VERSION.split(/[-+]/)[0].split('.').map(Number);
   const want = wanted.split('.').map(Number);
   for (let i = 0; i < 3; i++) if (have[i] !== want[i]) return have[i] > want[i];
-  return !engine.version.includes('-');
+  return !ENGINE_VERSION.includes('-');
 }
 
 function makeChart(data: Bar[], now: number, updatesOnly = false) {
@@ -627,7 +630,7 @@ plot(close, "Close")
   it('draws every declared grid and a band coloured per bar when the host states the chart version', context => {
     // The adapter draws both only from 0.8.0, and refuses such a study before.
     context.skip(!engineAtLeast('0.8.0'),
-      `script engine ${engine.version} is older than 0.8.0, whose adapter first draws several grids and a band colour computed per bar`);
+      `script engine build ${ENGINE_VERSION} is older than 0.8.0, whose adapter first draws several grids and a band colour computed per bar`);
     const descriptor = compile(`version 1
 study("Grids and band", overlay = true)
 upper = plot(close + 1, "Upper")
