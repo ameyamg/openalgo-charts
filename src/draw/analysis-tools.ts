@@ -8,6 +8,7 @@ import { composeSettings, FONT_FIELDS, LINE_FIELDS, SHOW_LABELS_FIELD } from './
 
 interface AnalysisRect { left: number; right: number; top: number; bottom: number; area: boolean }
 interface AnalysisGeometry {
+  /** Clipped segments, each of two points: an empty clip is never kept. Bands too. */
   lines: ScreenPoint[][];
   bands: ScreenPoint[][];
   rects: AnalysisRect[];
@@ -44,7 +45,7 @@ function unavailableAnchors(g: AnalysisGeometry, c: HitContext): void {
     for (const [a, b] of [
       [{ x: p.x - 4, y: p.y }, { x: p.x + 4, y: p.y }],
       [{ x: p.x, y: p.y - 4 }, { x: p.x, y: p.y + 4 }],
-    ]) {
+    ] as const) {
       const path = clippedLine(a, b, c.rc);
       if (path.length > 0) g.lines.push(path);
     }
@@ -106,7 +107,8 @@ function profile(c: HitContext): AnalysisGeometry {
   };
   if (c.drawing.props?.showPoc !== false) level(result.poc, g.lines);
   if (showArea) { level(result.valueAreaLow, g.bands); level(result.valueAreaHigh, g.bands); }
-  if (result.valueAreaHigh !== null) g.labelAt.y = c.rc.priceScale.priceToY(result.rows[result.rows.length - 1].high);
+  // A value area is set only on a profile with rows.
+  if (result.valueAreaHigh !== null) g.labelAt.y = c.rc.priceScale.priceToY(result.rows[result.rows.length - 1]!.high);
   if (result.rows.length === 0) unavailableAnchors(g, c);
   return g;
 }
@@ -131,8 +133,8 @@ function paint(c: DrawContext, build: (c: HitContext) => AnalysisGeometry): void
     if (lines.length === 0) return;
     ctx.beginPath();
     for (const line of lines) {
-      ctx.moveTo(line[0].x * dpr, line[0].y * dpr);
-      ctx.lineTo(line[1].x * dpr, line[1].y * dpr);
+      ctx.moveTo(line[0]!.x * dpr, line[0]!.y * dpr); // a segment's two points
+      ctx.lineTo(line[1]!.x * dpr, line[1]!.y * dpr);
     }
     ctx.stroke();
   };
@@ -155,7 +157,7 @@ function distance(x: number, y: number, c: HitContext, build: (c: HitContext) =>
   if (x < 0 || y < 0 || x > c.rc.plotWidth || y > c.rc.plotHeight) return null;
   const g = build(c);
   let best = Infinity;
-  for (const line of [...g.lines, ...g.bands]) best = Math.min(best, distToSegment(x, y, line[0], line[1]));
+  for (const line of [...g.lines, ...g.bands]) best = Math.min(best, distToSegment(x, y, line[0]!, line[1]!)); // two points each
   if (analysisNumber(c.drawing.style.fillOpacity, 0.4, 0, 1) > 0) {
     for (const rect of g.rects) best = Math.min(best, distToRect(x, y, { x: rect.left, y: rect.top }, { x: rect.right, y: rect.bottom }, true));
   }

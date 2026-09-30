@@ -1,5 +1,5 @@
 /** Labeled price patterns with shared paint and hit geometry. */
-import type { DrawingPoint, DrawingTool, HitContext, ScreenPoint } from './types';
+import type { AtLeast, DrawingPoint, DrawingTool, HitContext, ScreenPoint } from './types';
 import { composeSettings, FILL_FIELDS, FONT_FIELDS, LINE_FIELDS, SHOW_LABELS_FIELD } from './schema';
 import {
   clippedLine, clipPolygon, finitePoint, geometryTool, midpoint,
@@ -28,13 +28,13 @@ const VALID_COLOR = '#16a34a';
 const INVALID_COLOR = '#dc2626';
 const CYPHER_XC: RatioBand = { min: 1.272, max: 1.414 };
 const CYPHER_CD: RatioBand = { min: 0.74, max: 0.83 };
-const NAMED: Readonly<Record<string, HarmonicBands>> = {
+const NAMED = {
   gartley: { ab: { min: 0.55, max: 0.68 }, bc: { min: 0.382, max: 0.886 }, cd: { min: 1.13, max: 1.618 }, ad: { min: 0.74, max: 0.83 } },
   bat: { ab: { min: 0.382, max: 0.5 }, bc: { min: 0.382, max: 0.886 }, cd: { min: 1.618, max: 2.618 }, ad: { min: 0.84, max: 0.92 } },
   butterfly: { ab: { min: 0.74, max: 0.83 }, bc: { min: 0.382, max: 0.886 }, cd: { min: 1.618, max: 2.618 }, ad: { min: 1.272, max: 1.618 } },
   crab: { ab: { min: 0.382, max: 0.618 }, bc: { min: 0.382, max: 0.886 }, cd: { min: 2.618, max: 3.618 }, ad: { min: 1.55, max: 1.69 } },
   shark: { ab: { min: 0.382, max: 0.618 }, bc: { min: 1.13, max: 1.618 }, cd: { min: 1.618, max: 2.24 }, ad: { min: 0.886, max: 1.13 } },
-};
+} satisfies Readonly<Record<string, HarmonicBands>>;
 
 const LINE_AND_LABEL_SETTINGS = composeSettings([LINE_FIELDS, SHOW_LABELS_FIELD, FONT_FIELDS]);
 const FILLED_PATTERN_SETTINGS = composeSettings([LINE_FIELDS, FILL_FIELDS, SHOW_LABELS_FIELD, FONT_FIELDS]);
@@ -44,7 +44,7 @@ const leg = (a: ScreenPoint, b: ScreenPoint, c: HitContext): GeometryPath => ({ 
 function dashedLeg(a: ScreenPoint, b: ScreenPoint, c: HitContext): GeometryPath[] {
   const clipped = clippedLine(a, b, c.rc);
   if (clipped.length < 2) return [];
-  const [start, end] = clipped;
+  const [start, end] = clipped as AtLeast<ScreenPoint, 2>; // by the length check
   const dx = end.x - start.x, dy = end.y - start.y, length = Math.hypot(dx, dy);
   if (!(length > 0) || !Number.isFinite(length)) return [{ points: clipped }];
   const paths: GeometryPath[] = [];
@@ -65,15 +65,16 @@ function ratio(numerator: number, denominator: number): number | null {
 
 function priceLength(points: readonly DrawingPoint[], a: number, b: number): number {
   const first = points[a]?.price, second = points[b]?.price;
-  return Number.isFinite(first) && Number.isFinite(second) ? Math.abs(second - first) : NaN;
+  return Number.isFinite(first) && Number.isFinite(second) ? Math.abs(second! - first!) : NaN; // both finite numbers
 }
 
 function alternatingPriceDirections(points: readonly DrawingPoint[], count: number): boolean {
   if (points.length < count) return false;
-  let previous = points[1].price - points[0].price;
+  // A harmonic's five anchors, all there by the length check; index < count.
+  let previous = points[1]!.price - points[0]!.price;
   if (!Number.isFinite(previous) || previous === 0) return false;
   for (let index = 2; index < count; index++) {
-    const current = points[index].price - points[index - 1].price;
+    const current = points[index]!.price - points[index - 1]!.price;
     if (!Number.isFinite(current) || current === 0 || Math.sign(current) === Math.sign(previous)) return false;
     previous = current;
   }
@@ -133,7 +134,7 @@ function vertexLabels(spec: PatternSpec, points: readonly ScreenPoint[]): Geomet
 function ratioLabels(rules: readonly RatioRule[], points: readonly ScreenPoint[]): GeometryLabel[] {
   const labels: GeometryLabel[] = [];
   for (let index = 0; index < rules.length; index++) {
-    const rule = rules[index];
+    const rule = rules[index]!; // index is in range
     if (rule.value === null || !Number.isFinite(rule.value)) continue;
     const end = points[rule.anchor], start = points[Math.max(0, rule.anchor - 1)];
     if (!end || !start || !finitePoint(end) || !finitePoint(start)) continue;
@@ -174,13 +175,14 @@ function patternGeometry(spec: PatternSpec, c: HitContext): DrawingGeometry {
       }
     }
   }
-  for (let index = 1; index < points.length; index++) paths.push(leg(points[index - 1], points[index], c));
+  for (let index = 1; index < points.length; index++) paths.push(leg(points[index - 1]!, points[index]!, c)); // in range
   if (spec.neckline !== undefined && points.length >= spec.labels.length) {
     const [leftIndex, rightIndex] = spec.neckline;
-    const leftTrough = points[leftIndex], rightTrough = points[rightIndex];
-    const left = lineSegmentIntersection(leftTrough, rightTrough, points[0], points[1]) ?? leftTrough;
+    // Every anchor the pattern declares is there, and the neckline names two of them.
+    const leftTrough = points[leftIndex]!, rightTrough = points[rightIndex]!;
+    const left = lineSegmentIntersection(leftTrough, rightTrough, points[0]!, points[1]!) ?? leftTrough;
     const last = points.length - 1;
-    const right = lineSegmentIntersection(leftTrough, rightTrough, points[last - 1], points[last]) ?? rightTrough;
+    const right = lineSegmentIntersection(leftTrough, rightTrough, points[last - 1]!, points[last]!) ?? rightTrough;
     paths.push(...dashedLeg(left, right, c));
   }
   if (c.drawing.style.showLabels === false) return { paths };
