@@ -54,7 +54,7 @@ import { mountDrawingToolbar, type DrawingToolbarHandle } from './drawing-toolba
 import { createDrawingTemplates, type DrawingTemplates } from './drawing-templates';
 import type { DrawingTemplateStore } from 'openalgo-charts/workspace';
 import { errorText, widgetText, type WidgetTranslator } from './localization';
-import { EventDetailsPopup, type EventDetailsPopupOptions } from './event-details';
+import { EventDetailsPopup, eventDetailsLabels, type EventDetailsPopupOptions } from './event-details';
 import type { ChartEventClick } from 'openalgo-charts';
 import { mountDataWindow } from './data-window';
 import { mountPanelDock, type PanelDockHandle, type PanelDockState } from './panel-dock';
@@ -775,6 +775,8 @@ class WidgetImpl implements Widget {
           }).format(date) : String(time);
         },
         ...options.eventDetails,
+        // In the widget's language; a host's own labels still win, one by one.
+        labels: { ...eventDetailsLabels(this.context), ...options.eventDetails?.labels },
         // Reuse the host's shared stylesheet and its preserved CSP nonce.
         injectStyles: false,
       });

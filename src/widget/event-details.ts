@@ -1,5 +1,7 @@
+import { DEFAULT_TIMEZONE } from 'openalgo-charts';
 import type { ChartEvent, ChartEventDetails, EventDetailSpan, EventMarkerDetails } from 'openalgo-charts';
 import { createOverlayStack, h, type OverlayStack } from './context';
+import { widgetText, type WidgetTranslationOptions } from './localization';
 import { safeNewsUrl } from './news-panel';
 
 export type EventDetailsLoader = (
@@ -71,10 +73,18 @@ export const EVENT_DETAILS_CSS = `
 .oac-event-details__actions:empty{display:none}
 `;
 
-const LABELS: EventDetailsLabels = {
-  title: 'Event details', close: 'Close', events: 'Events',
-  loading: 'Loading details...', empty: 'No additional details.', error: 'Unable to load additional details.',
-};
+/**
+ * The popup's words in the host's language. The widget passes its own
+ * translator, so a translated widget shows a translated popup; a host that
+ * mounts the popup itself gets English, or its own `labels`.
+ */
+export function eventDetailsLabels(translation: WidgetTranslationOptions): EventDetailsLabels {
+  return {
+    title: widgetText(translation, 'Event details'), close: widgetText(translation, 'Close'), events: widgetText(translation, 'Events'),
+    loading: widgetText(translation, 'Loading details...'), empty: widgetText(translation, 'No additional details.'),
+    error: widgetText(translation, 'Unable to load additional details.'),
+  };
+}
 
 /** The event markers' copy: arrays and plain objects all the way down, anything else shared. */
 function copyData<T>(value: T): T {
@@ -112,9 +122,9 @@ export class EventDetailsPopup {
 
   public constructor(private readonly _container: HTMLElement, private readonly _options: EventDetailsPopupOptions = {}) {
     this._doc = _container.ownerDocument;
-    this._labels = { ...LABELS, ..._options.labels };
+    this._labels = { ...eventDetailsLabels({}), ..._options.labels };
     const formatter = new Intl.DateTimeFormat(undefined, {
-      timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short',
+      timeZone: DEFAULT_TIMEZONE, dateStyle: 'medium', timeStyle: 'short',
     });
     this._formatTime = _options.formatTime ?? (time => {
       const date = new Date(time * 1000);

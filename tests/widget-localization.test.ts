@@ -210,6 +210,17 @@ describe('widget translation contract', () => {
     expect(root.querySelector('[data-action="toggle-alert"]')?.getAttribute('aria-label')).toBe('Local Disable Chart settings');
   });
 
+  it('translates the event popup it mounts, while host labels still win', () => {
+    const words: Record<string, string> = { 'Event details': 'Detalles', 'Close': 'Cerrar', 'Loading details...': 'Cargando...' };
+    const { widget, root } = make({ translate: (key, fallback) => words[key] ?? fallback, eventDetails: { labels: { close: 'Salir' } } });
+    widget.series.setData(Array.from({ length: 20 }, (_, i) => ({ time: 1700000000 + i * 60, open: 101 + i * 0.3, high: 102 + i * 0.3, low: 100 + i * 0.3, close: 101.5 + i * 0.3 })));
+    widget.chart.emit('event:click', { events: [{ id: 'e1', time: 1700000300, label: 'D', title: 'Dividend' }], point: { x: 50, y: 50 } });
+    const popup = root.querySelector('.oac-event-details') as FakeElement;
+    expect(popup.getAttribute('aria-label')).toBe('Detalles');
+    expect(popup.querySelector('.oac-event-details__heading')?.textContent).toBe('Detalles');
+    expect(popup.querySelector('[data-action="close-event-details"]')?.textContent).toBe('Salir');
+  });
+
   it('preserves raw provider errors inside translated loading feedback', async () => {
     const { root } = make({ symbol: 'BHEL', interval: '5m', translate: (_key, fallback) => `Local ${fallback}`, feed: {
       getBars: async () => { throw new Error('Chart settings'); }, subscribeBars: () => () => {},

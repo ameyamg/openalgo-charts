@@ -20,7 +20,10 @@ chart's current timezone and widget locale. Event data is supplied through
 Symbol changes, replaced events and widget disposal close the popup and cancel
 pending detail loading. (unreleased) Details may carry rich `blocks`, rendered as
 text with vetted links, and `eventDetails.actions` adds host buttons (the type is
-`EventDetailAction`). See the timeline section in `primitives-and-plugins.md`.
+`EventDetailAction`). (unreleased) The widget's popup takes its words from the widget's
+`translate` (message keys `Event details`, `Close`, `Events`, `Loading details...`,
+`No additional details.`, `Unable to load additional details.`); `eventDetails.labels`
+still wins, one label at a time. See the timeline section in `primitives-and-plugins.md`.
 
 ```ts
 import { createWidget } from 'openalgo-charts/widget';
@@ -1095,7 +1098,10 @@ widget.openNews();
   reorders in list order with the revision it was computed from, one move at a time so
   a held key lands every step; ArrowUp/Down moves between rows.
 - Rows take prices only from `quotes`. Without it every row is `unavailable` and shows
-  `n/a`. Row `data-state` is a `QuoteRowStatus`: `loading`, `live`, `delayed`,
+  `n/a`. (unreleased) That word, the `...` of a loading row and the name a row and a
+  message give an instrument (`{symbol} on {exchange}`) translate through
+  `schema.ui.watchlist.noQuote`, `schema.ui.watchlist.quoteLoading` and
+  `schema.ui.watchlist.entry`. Row `data-state` is a `QuoteRowStatus`: `loading`, `live`, `delayed`,
   `snapshot`, `stale`, `unavailable`, `error`; the status line reads the
   `QuoteBoardStatus`, and warns that values are stale only when one is on screen. The
   board holds one timer, for the next visible snapshot to age past `staleAfterMs`; a

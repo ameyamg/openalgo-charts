@@ -67,7 +67,6 @@ interface Row {
 const COLUMNS = [['symbol', 'Symbol'], ['last', 'Last'], ['change', 'Chg'], ['percent', 'Chg%']] as const;
 const SORT_KEY = 'watchlist-sort';
 const keyOf = (entry: InstrumentKey): string => JSON.stringify([entry.symbol, entry.exchange]);
-const describeEntry = (entry: InstrumentKey): string => entry.exchange === '' ? entry.symbol : `${entry.symbol} on ${entry.exchange}`;
 const sameInstrument = (a: InstrumentKey, b: InstrumentKey): boolean => a.symbol === b.symbol && a.exchange === b.exchange;
 
 /**
@@ -89,6 +88,9 @@ export function mountWatchlistPanel(ctx: WidgetContext, host: HTMLElement, optio
   const store = options.store;
   const text = (key: string, fallback: string, values: Record<string, string | number> = {}): string =>
     widgetText(ctx, `schema.ui.watchlist.${key}`, values, fallback);
+  /** An instrument as a row and a message name it. */
+  const describeEntry = (entry: InstrumentKey): string =>
+    entry.exchange === '' ? entry.symbol : text('entry', '{symbol} on {exchange}', { symbol: entry.symbol, exchange: entry.exchange });
   const root = el(doc, 'div', 'oac-watchlist');
   root.setAttribute('aria-label', text('title', 'Watchlist'));
 
@@ -444,7 +446,7 @@ export function mountWatchlistPanel(ctx: WidgetContext, host: HTMLElement, optio
       else row.el.removeAttribute('aria-current');
       const move = quote === null ? null : quoteChange(quote);
       write(row.last, quote !== null ? price(quote.last, row.entry)
-        : state.status === 'loading' ? '...' : 'n/a');
+        : state.status === 'loading' ? text('quoteLoading', '...') : text('noQuote', 'n/a'));
       write(row.change, move === null ? '' : signed(move.change, n => price(n, row.entry)));
       write(row.percent, move === null ? '' : `${signed(move.percent, n => percent.format(n))}%`);
       for (const cell of [row.change, row.percent]) {

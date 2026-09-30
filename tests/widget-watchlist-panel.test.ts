@@ -46,7 +46,7 @@ afterEach(() => { for (const chart of charts.splice(0)) chart.destroy(); FakeObs
 
 async function rig(options: {
   store?: WatchlistStore; storage?: WatchlistStorage; quotes?: QuoteFeed | null; observer?: boolean; lists?: Array<[string, InstrumentKey[]]>;
-  panel?: Partial<WatchlistPanelOptions>; search?: WidgetContext['symbolSearch'];
+  panel?: Partial<WatchlistPanelOptions>; search?: WidgetContext['symbolSearch']; translate?: WidgetContext['translate'];
 } = {}) {
   const doc = fakeWidgetDocument();
   if (options.observer) (doc as unknown as { defaultView: unknown }).defaultView = { IntersectionObserver: FakeObserver };
@@ -60,7 +60,7 @@ async function rig(options: {
   const stack = createOverlayStack(root as unknown as HTMLElement, doc as unknown as Document);
   const ctx = {
     chart, document: doc, root, locale: 'en-US', overlays: stack, openOverlay: stack.open, storage: new WidgetStorage('t', null),
-    tips: { attach: () => () => {} }, bus: new WidgetBus(), symbolSearch: options.search,
+    tips: { attach: () => () => {} }, bus: new WidgetBus(), symbolSearch: options.search, translate: options.translate,
     symbol: () => ({ symbol: chart.getDataContext()?.symbol ?? '', exchange: chart.getDataContext()?.exchange ?? '' }),
   } as unknown as WidgetContext;
   let n = 0;
@@ -100,6 +100,17 @@ describe('watchlist panel', () => {
     r.quotes!.streams.get('TCS@NSE')!.onQuote({ symbol: 'TCS', exchange: 'NSE', last: 3500, previousClose: 3400, time: 1700000000 });
     await flush();
     expect(r.cell(r.rows()[1], 'last').title).toBe('Live 3:43:20 AM');
+    r.panel.destroy();
+  });
+
+  it('names its rows and empty prices in the host language', async () => {
+    const words: Record<string, string> = {
+      'schema.ui.watchlist.entry': '{symbol} en {exchange}', 'schema.ui.watchlist.noQuote': 'sin dato',
+    };
+    const r = await rig({ quotes: null, lists: [['Tech', [nse('INFY')]]], translate: (key, fallback) => words[key] ?? fallback });
+    const row = r.rows()[0]!;
+    expect(r.cell(row, 'last').textContent).toBe('sin dato');
+    expect(row.querySelector('.oac-watchlist__open')?.getAttribute('aria-label')).toBe('INFY en NSE');
     r.panel.destroy();
   });
 
