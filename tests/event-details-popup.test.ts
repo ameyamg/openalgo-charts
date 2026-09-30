@@ -184,6 +184,107 @@ describe('event details popup', () => {
     popup.destroy();
   });
 
+  it('renders rich blocks as text with emphasis, lists and vetted links', () => {
+    const { popup, element } = fixture();
+    popup.open({ id: 'rich', cluster: false, events: [{ id: 'rich', time: 300, type: 'news', label: 'N', title: 'Results call', details: {
+      summary: 'Quarter in brief.',
+      blocks: [
+        { type: 'heading', text: 'Highlights <b>bold</b>' },
+        { type: 'paragraph', text: [
+          { text: 'Revenue ' }, { text: 'up 12%', strong: true }, { text: ' on ', em: true },
+          { text: 'the filing', href: 'https://example.com/filing?q=1' },
+        ] },
+        { type: 'list', items: ['<script>window.__xss = 1</script>', [{ text: 'Guidance', strong: true, em: true }]] },
+      ],
+    } }] });
+    const content = element.querySelector('.oac-event-details__content')!;
+    expect(content.querySelector('.oac-event-details__subhead')!.textContent).toBe('Highlights <b>bold</b>');
+    expect(content.querySelector('b')).toBeNull();
+    const paragraph = content.querySelector('.oac-event-details__text')!;
+    expect(paragraph.textContent).toBe('Revenue up 12% on the filing');
+    expect(paragraph.querySelector('strong')!.textContent).toBe('up 12%');
+    expect(paragraph.querySelector('em')!.textContent).toBe(' on ');
+    const link = paragraph.querySelector('a')!;
+    expect(link.textContent).toBe('the filing');
+    expect(link.getAttribute('href')).toBe('https://example.com/filing?q=1');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    const items = content.querySelectorAll('.oac-event-details__list li');
+    expect(items.map(item => item.textContent)).toEqual(['<script>window.__xss = 1</script>', 'Guidance']);
+    expect(content.querySelector('script')).toBeNull();
+    expect(items[1].querySelector('strong em')!.textContent).toBe('Guidance');
+    expect(element.textContent).not.toContain('No additional details');
+    popup.destroy();
+  });
+
+  it.each([
+    'javascript:alert(1)', 'JAVASCRIPT:alert(1)', ' javascript:alert(1)', 'java\tscript:alert(1)', 'java&#115;cript:alert(1)',
+    'data:text/html,<script>alert(1)</script>', 'vbscript:msgbox(1)', '//evil.example/x', '/relative', 'https://user:pass@example.com/',
+  ])('shows a link to %j as plain text', href => {
+    const { popup, element } = fixture();
+    popup.open({ id: 'x', cluster: false, events: [{ id: 'x', time: 1, type: 'news', label: 'N', details: {
+      blocks: [{ type: 'paragraph', text: [{ text: 'Open me', href }] }],
+    } }] });
+    expect(element.querySelector('a')).toBeNull();
+    expect(element.querySelector('.oac-event-details__text')!.textContent).toBe('Open me');
+    popup.destroy();
+  });
+
+  it('skips malformed blocks from an untrusted feed without failing', () => {
+    const { popup, element } = fixture();
+    const blocks = [null, 7, { type: 'script', text: 'x' }, { type: 'list', items: 'not a list' }, { type: 'paragraph', text: { text: 'object' } },
+      { type: 'paragraph', text: [null, { text: 5 }, { text: 'kept' }] }, { type: 'heading', text: 'Heading' }];
+    popup.open({ id: 'x', cluster: false, events: [{ id: 'x', time: 1, type: 'news', label: 'N',
+      details: { blocks } as unknown as ChartEventDetails }] });
+    const content = element.querySelector('.oac-event-details__content')!;
+    expect(content.querySelectorAll('.oac-event-details__text').map(p => p.textContent)).toEqual(['kept']);
+    expect(content.querySelector('.oac-event-details__subhead')!.textContent).toBe('Heading');
+    expect(content.querySelectorAll('.oac-event-details__list')).toHaveLength(0);
+    popup.destroy();
+  });
+
+  it('renders blocks a loader returns', async () => {
+    const { popup, element } = fixture(async () => ({ blocks: [{ type: 'paragraph', text: 'Loaded body' }] }));
+    popup.open(cluster);
+    await Promise.resolve(); await Promise.resolve();
+    expect(element.querySelector('.oac-event-details__text')!.textContent).toBe('Loaded body');
+    popup.destroy();
+  });
+
+  it('shows no action buttons unless the host supplies actions', () => {
+    const { popup, element } = fixture();
+    popup.open(cluster);
+    expect(element.querySelectorAll('.oac-event-details__actions button')).toHaveLength(0);
+    popup.destroy();
+  });
+
+  it('runs a host action with the shown event after closing the popup', () => {
+    const doc = fakeWidgetDocument();
+    const root = fakeContainer(doc, 400, 300);
+    const runs: Array<{ id: string | undefined; open: boolean }> = [];
+    const asked: Array<string | undefined> = [];
+    const popup = new EventDetailsPopup(root as unknown as HTMLElement, {
+      actions: event => {
+        asked.push(event.id);
+        return event.type === 'news' ? [] : [{ label: '<b>Add alert</b>', run: shown => runs.push({ id: shown.id, open: popup.element.isConnected }) }];
+      },
+    });
+    const element = popup.element as unknown as FakeElement;
+    const data = structuredClone(cluster);
+    popup.open(data);
+    const buttons = element.querySelectorAll('.oac-event-details__actions button');
+    expect(buttons.map(button => button.textContent)).toEqual(['<b>Add alert</b>']);
+    expect(element.querySelector('b')).toBeNull();
+    fire(element.querySelectorAll('[data-event-index]')[1], 'click');
+    expect(element.querySelectorAll('.oac-event-details__actions button')).toHaveLength(0);
+    fire(element.querySelectorAll('[data-event-index]')[0], 'click');
+    fire(element.querySelector('.oac-event-details__actions button')!, 'click');
+    expect(runs).toEqual([{ id: 'one', open: false }]);
+    expect(element.isConnected).toBe(false);
+    expect(asked).toEqual(['one', 'two', 'one']);
+    popup.destroy();
+  });
+
   it('positions in shared overlay coordinates and leaves the shared stack alive on disposal', () => {
     const doc = fakeWidgetDocument();
     const root = fakeContainer(doc, 600, 400);

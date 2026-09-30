@@ -158,4 +158,4 @@ export type { IndicatorInputControlsOptions, IndicatorInputControlsHandle } from
 export { createAlertUi } from './alert-ui';
 export type { AlertUi, AlertUiOptions } from './alert-ui';
 export { EventDetailsPopup, EVENT_DETAILS_CSS } from './event-details';
-export type { EventDetailsPopupOptions, EventDetailsLoader, EventDetailsLabels } from './event-details';
+export type { EventDetailsPopupOptions, EventDetailsLoader, EventDetailsLabels, EventDetailAction } from './event-details';
