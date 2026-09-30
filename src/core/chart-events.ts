@@ -222,9 +222,9 @@ export interface ChartEventMap {
   'data:context': Readonly<ChartDataContext> | undefined;
   /** The primary source was written: a live bar, a reset or a page of history. */
   'data:update': ChartDataUpdate;
-  /** Studies were invalidated because the primary bars or the clock they read changed. Fires before `data:update`. */
+  /** Studies were invalidated because the primary bars or the clock they read changed; a write fires it before `data:update`. */
   'data:range': EmptyEvent;
-  /** The bars provider changed or a host invalidated requested data; studies that fetch ask again. */
+  /** `setBarsProvider` or `invalidateRequestedData` ran; studies that fetch ask again. */
   'data:requests': EmptyEvent;
 
   // Saved state.

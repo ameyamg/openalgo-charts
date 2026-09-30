@@ -12,7 +12,8 @@ OpenAlgo Charts gives you one small, predictable event surface. A single
 `chart.on(name, cb)` bus covers interaction, viewport, data, and lifecycle
 events, and it returns an unsubscribe function so cleanup is one call. The
 trading layer routes its `trading:*` events through the same bus, so you never
-juggle two APIs.
+juggle two APIs. Every name is declared in `ChartEventMap` with its payload, so
+in TypeScript the listener's argument is typed by the name you subscribe to.
 
 ## Subscribing
 
@@ -38,18 +39,73 @@ Every `on(...)` returns its own unsubscribe. Keep the returned function and call
 it on teardown (component unmount, route change) so listeners never leak.
 </Callout>
 
+## Typed payloads
+
+`ChartEventMap` (since 2.6.0) names every event on the bus with the payload a
+listener receives. `chart.on`, `once` and `off` read it, so the payload needs no cast:
+
+```ts
+chart.on('click', (e) => {          // e: ChartClickEvent
+  if (e.id !== null) select(e.id);
+});
+chart.on('pan', ({ from, to }) => syncRange(from, to));   // ChartViewportEvent
+```
+
+The draw tier adds its `draw:*` and `drawing:*` names to the map by declaration merging,
+so they are typed once `openalgo-charts/draw` (or the widget) is imported. The payload
+types are exported (`ChartViewportEvent`, `PaneEvent`, `DrawingEvent` and the rest), and
+any one of them is also `ChartEventMap['name']`.
+
+An event of your own, emitted by a study descriptor's `ctx.emit` for instance, is declared
+the same way, once, and is then typed everywhere:
+
+```ts
+declare module 'openalgo-charts' {
+  interface ChartEventMap {
+    'myapp:signal': { price: number };
+  }
+}
+
+chart.on('myapp:signal', ({ price }) => mark(price));
+```
+
+<Callout type="warning">
+**Upgrading from 2.5.** A name that is not in the map still compiles, through a string
+overload that is deprecated and goes in 3.0.0; declare it as above. A list of names typed
+`string[]` takes that overload too, so write it `as const`. And a cast that no longer
+overlaps the typed payload stops compiling: `(p) => p as Record<string, unknown>` on
+`click` is error TS2352, because `ChartClickEvent` is an interface. Read the field
+directly, or cast through `unknown` (`p as unknown as Record<string, unknown>`). Nothing
+changes at runtime.
+</Callout>
+
+**Names.** A name is `namespace:action`, lower case, hyphen-joined, in the present tense
+(`objects:change`, `draw:preview-clear`). The names that predate that rule keep their
+spelling: the camelCase pane and indicator events, the single words, `trading:*` in snake
+case, and `branding:changed`, `timezone:changed`, `alerts:changed` and `alerts:restored`.
+Each name has one payload shape; one with nothing to report carries an empty object
+(`EmptyEvent`), except `events:change`, which carries `undefined`.
+
+**A listener that throws** does not stop the others, and nothing reaches the engine that
+emitted. Since 2.6.0 the error goes to the platform's `reportError`, which in a browser
+logs it and fires the window's `error` event, as a throwing DOM listener does; before, the
+chart bus dropped it silently. `chart.trading.on` and `chart.shortcuts?.on` follow the same
+rule, so a throwing trading listener no longer stops the others or the copy on the chart
+bus.
+
 ## What the engine emits
 
 | Event | Payload | Fires when |
 |-------|---------|-----------|
 | `ready` | `{}` | Once, on the microtask after `createChart` returns. |
 | `destroy` | `{}` | Once, at the end of `chart.destroy()`, with the chart already torn down. Anything holding a chart it did not create lets go of it here. |
+| `crosshair:readout` | `CrosshairMoveEvent` | Every position a readout should show: the pointer's, and a linked chart's (`source: 'linked'`, `point: null`). |
 | `crosshair:move` | `{ time, index, price, bar, point, paneIndex, pressed, modifiers, pointerType, pressure, samples? }` | The pointer moves over the plot (all-null when it leaves). `pressed` is true while a pointer is held: the only way to observe a drag in progress, since placement mode suppresses panning. `samples` is present only then and lists every coalesced position since the last move. |
 | `click` | `{ id, price, time, paneIndex, point, modifiers, pointerType, pressure }` | The plot was clicked. `id` is the hit primitive's `externalId`, or **`null`** for a click on empty chart space. `point` uses container x and pane-local y in media pixels. `pressure` is the press pressure, since a release always reads 0. |
 | `event:click` | `ChartEventClick`: `{ id, cluster, events, point, paneIndex }` | A chart-owned timeline badge was clicked. `events` contains independent copies of every cluster member. |
 | `events:change` | `undefined` | Chart-owned event data, type visibility or group visibility changes. Hosts can dismiss stale detail views. |
 | `hover` | `{ id }` | The pointer enters (`id` = `externalId`) or leaves (`id` = `null`) a hit-testable primitive. |
-| `dblclick` | `{}` | The plot is double-clicked. The chart also resets the scale on this, *unless* a drawing tool is armed. There a double-click finishes the shape instead. |
+| `dblclick` | `DoubleClickEvent`: `{ paneIndex, x, y, handled }` | The plot is double-clicked. The chart then resets the scale (or maximizes the pane, per `doubleClick`), *unless* a drawing tool is active, where a double-click finishes the shape instead, or a listener set `handled = true`. |
 | `contextmenu` | `{ paneIndex, point, price, time, index, target, preventDefault }` | The plot is right-clicked. `target` classifies what is under the pointer, so an app can raise its own menu. See below. |
 | `drag:start` | `ChartDragEndEvent` | A draggable primitive accepts the press, before movement. Capture the original value here. |
 | `drag` | `{ id, price, time, paneIndex, fromPrice, fromTime, point, samples, modifiers, pointerType, pressure }` | A draggable primitive is being moved. `from*` is the grab origin. `point` is container x with y local to the pane where the drag started, including when the pointer crosses another pane. `samples` uses the same space. |
@@ -62,16 +118,26 @@ it on teardown (component unmount, route change) so listeners never leak.
 | `priceAxisMoved` | `{ paneIndex, from, to }` | Deprecated, removed in 3.0.0 with `chart.movePriceAxis`, the only call that emits it: listen for `priceAxisPlacementChanged`, which `chart.setPriceAxisPlacement` emits. A pane's price axis moved to the other strip. The scale object travels with it, so a menu holding a `scaleId` should follow. |
 | `priceAxisPlacementChanged` | `{ paneIndex, scaleId, side, order }` | `chart.setPriceAxisPlacement` moved or reordered a price scale's column. The scale keeps its id; `side` and `order` are where it now draws. |
 | `layout:change` | `{ setter }` (`LayoutChangeEvent`) | A setter that changes the saved layout and has no event of its own ran: `setPaneWeight`, `setPriceAxisOptions`, `setPriceAxisAutoFit`, `setPriceAxisLockRatio`, `setPriceScaleOptions`, `setAutoScale`, `setGridOptions`, `setCanvasOptions`, `setStatusLineOptions`, `setWatermarkOptions`, `setTradingSettings`, `setAxisChromeOptions`, `setEventOptions` or `applyOptions`. Once per outermost call, after the change; never during a restore, which has its own start and end events. Save the layout here, or record an undo step. |
-| `paneRemoved` / `paneMaximized` / `paneResized` | `{ paneIndex }` | The pane layout changed through a legend button or a divider drag. `paneMoved` reports `{ from, to }` instead: two neighbours swapped, the price pane included on a chart built with `movablePrimaryPane`. `setPrimaryPaneIndex` emits one per step; read `chart.primaryPaneIndex()` after one. |
+| `paneAdded` / `paneRemoved` / `paneMaximized` / `paneResized` | `{ paneIndex }` | The pane layout changed through a legend button or a divider drag. `paneMoved` reports `{ from, to }` instead: two neighbours swapped, the price pane included on a chart built with `movablePrimaryPane`. `setPrimaryPaneIndex` emits one per step; read `chart.primaryPaneIndex()` after one. |
 | `paneCollapsed` | `{ paneIndex, collapsed }` | A study pane folded to its header strip or opened again, from `setPaneCollapsed`, its legend button or a host menu. |
 | `indicatorRemoved` / `indicatorSettings` | `{ instanceId, indicatorId, paneIndex }` | An indicator legend's close or gear button was pressed. |
 | `indicatorSource` | `{ instanceId, indicatorId, paneIndex }` | The source button of a descriptor with `hasSource: true` was pressed. The [host supplies the code and viewer](/docs/indicators#source-access-and-legend-controls). |
 | `indicator:alert` | `IndicatorAlertPayload` | A condition an indicator descriptor declared came true on a new bar. See [Indicator alerts](#indicator-alerts). |
+| `objects:change` | `{}` | The source, study or chart object inventory changed, including the pan and zoom switches of `setNavigationOptions` (which sent `undefined` before 2.6.0). Re-read what you show; the payload says nothing. |
+| `style:change` | `LinkAppearanceValues` | `applyChartSettings` applied appearance a [link group](/docs/chart-linking) mirrors. |
+| `timezone:changed` | `{ timezone }` | `chart.setTimezone` changed the chart's clock. |
+| `branding:changed` | `BrandingChangedEvent` | The brand mark changed: its options, or `false` when removed. |
+| `data:context` | `ChartDataContext` or `undefined` | `chart.setDataContext` changed the instrument, interval or variant. |
+| `data:update` | `ChartDataUpdate`: `{ kind, time? }` | The primary series was written: a live bar (`update`), a replacement (`reset`) or older history (`prepend`). |
+| `data:range` / `data:requests` | `{}` | Studies were invalidated (the bars or the clock they read changed), or their bars provider changed; studies that fetch ask again. |
+| `state:restore:start` / `state:restore:end` | `{}` | `chart.restoreState` began and finished. `drawings:restore` and `alerts:restore` hand the draw tier and an `AlertController` their part of the state in between. |
 | `indicator:data-status` | `{ id, indicatorId, status: IndicatorDataStatus }` | An indicator's managed data state changed: a Tier-2 fetch is loading, ready, empty, unsupported or failed, and since 2.4.0 a `calc` that threw (`{ state: 'error', error }`) or recovered (`ready`). |
 | `pick:start` / `pick:end` | `{ kind }` / `{ kind, value }` | `chart.beginPick` armed, and then resolved or was cancelled (`value` is `null` when cancelled). `kind` is `'price'`, `'time'` or `'point'`, whose `value` is `{ time, price }`. See [Picking a price or a bar](/docs/interactions#picking-a-price-or-a-bar). |
 | `replay:*` | `ReplayState` | The [market replay](/docs/market-replay) playhead starts, moves, plays, pauses, ends or stops. |
 | `trading:*` | see [Trading events](#trading-events) | The user interacts with a position, order, or bracket. |
-| `alert:triggered` / `alert:updated` / `alerts:changed` | see [Trader alerts](/docs/alerts) | An `AlertController` reports a trigger or a committed change. Drag previews do not emit saved changes. |
+| `alert:*` / `alerts:*` | see [Trader alerts](/docs/alerts) | An `AlertController` reports a trigger or a committed change. Drag previews do not emit saved changes. |
+| `draw:*` / `drawing:*` | see [Drawing tools](/docs/drawing-tools#events) | The draw tier reports tools, drawings and the selection: `draw:*` once per drawing, `drawing:*` once per change. |
+| `symbol` / `interval` / `chartType` | `{ symbol, exchange? }`, `{ interval }`, `{ chartType }` or a bare string | A host (the widget, for `symbol`) announced a choice; a [link group](/docs/chart-linking) follows it. The engine never emits these. |
 
 `from` / `to` on the viewport and data events are **UTC seconds** (or `null`
 when the edge falls outside loaded data). `logicalFrom` / `logicalTo` are the raw
@@ -135,8 +201,7 @@ the next instrument's calendar. Group and visibility preferences remain availabl
 ```ts
 import type { ChartEventClick } from 'openalgo-charts';
 
-const off = chart.on('event:click', payload => {
-  const { id, cluster, events } = payload as ChartEventClick;
+const off = chart.on('event:click', ({ id, cluster, events }) => {   // ChartEventClick
   showEventDetails({ id, cluster, events });
 });
 ```
@@ -465,10 +530,7 @@ history from the source series' earliest timestamp.
 | `replay:stop` | Replay left; data and viewport restored. |
 
 ```ts
-import type { ReplayState } from 'openalgo-charts';
-
-chart.on('replay:frame', payload => {
-  const { index, total, bar } = payload as ReplayState;
+chart.on('replay:frame', ({ index, total, bar }) => {   // ReplayState
   scrub.max = String(total - 1);
   scrub.value = String(index);
   clock.textContent = bar ? new Date(bar.time * 1000).toLocaleString() : 'No available bar';
@@ -504,15 +566,20 @@ chart.isDestroyed;   // true once it has run
 ```
 
 <Callout type="info">
-**Host events on the same bus.** `chart.emit(name, payload)` is public, so a host can put
-its own facts on the chart's bus and have consumers pick them up. A
-[link group](/docs/chart-linking) listens for host `symbol` and `interval` events.
-`chart.setDataContext(...)` separately declares the identity used by studies and
-alerts; emitting a link event does not load bars or update that context.
+**Host events on the same bus.** `chart.emit(name, payload)` is deprecated and goes in
+3.0.0: the bus carries the chart's own events. It still works in 2.x, and a
+[link group](/docs/chart-linking) still listens for host `symbol`, `interval` and
+`chartType` events, but the direct calls are the way forward:
 
 ```ts
-chart.emit('symbol', 'RELIANCE');   // or { symbol: 'RELIANCE' }
+group.setSymbol(chart, 'RELIANCE');      // was chart.emit('symbol', 'RELIANCE')
+group.setInterval(chart, '5m');          // was chart.emit('interval', '5m')
+chart.setDataContext({ symbol: 'RELIANCE', exchange: 'NSE', interval: '5m' });
 ```
+
+`chart.setDataContext(...)` declares the identity used by studies, alerts and a drawing
+link; a link event alone does not load bars or update that context. Keep events of your
+own app on your own emitter.
 </Callout>
 
 ## Indicator alerts

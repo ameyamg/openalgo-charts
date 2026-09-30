@@ -534,7 +534,7 @@ chart.subscribeDrag(
 );
 ```
 
-**The `subscribe*` helpers store exactly one callback each and return `void`.** A second call replaces the first and there is no unsubscribe. For multiple listeners or teardown use the bus: `chart.on(name, cb)` returns an unsubscribe function; `chart.once`, `chart.off(name, cb?)` and `chart.emit(name, payload)` are also public.
+**The `subscribe*` helpers store exactly one callback each and return `void`.** A second call replaces the first and there is no unsubscribe. For multiple listeners or teardown use the bus: `chart.on(name, cb)` returns an unsubscribe function and types `cb`'s payload by the name (`ChartEventMap`); `chart.once` and `chart.off(name, cb?)` are also public, and `chart.emit(name, payload)` is deprecated (removed in 3.0.0). See [events-and-state](events-and-state.md).
 
 Core event names: `ready`, `crosshair:move`, `click`, `hover`, `drag`, `drag:end`, `pan`, `zoom`, `resize`, `dblclick`, `contextmenu`, `lazy-load`, `paneResized`, `paneMoved`, `paneMaximized`, `paneCollapsed`, `paneRemoved`, `indicatorRemoved`, `indicatorSettings`. `ReplayController` adds `replay:start|frame|play|pause|end|stop`, and the trading tier routes `trading:*` through the same bus. See [events-and-state](events-and-state.md).
 
