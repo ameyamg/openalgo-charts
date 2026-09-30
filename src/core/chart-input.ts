@@ -160,6 +160,7 @@ export interface InputHost {
   fitContent: Chart['fitContent'];
   downloadScreenshot: Chart['downloadScreenshot'];
   setGridOptions: Chart['setGridOptions'];
+  applyOptions: Chart['applyOptions'];
   maximizePane: Chart['maximizePane'];
   invalidate: Chart['invalidate'];
   _emit: Chart['_emit'];
@@ -1222,7 +1223,9 @@ export class ChartInput {
       case 'screenshot': this._host.downloadScreenshot(); return true;
       case 'toggleGridVert': this._host.setGridOptions({ vertLines: !this._host._gridVert }); return true;
       case 'toggleGridHorz': this._host.setGridOptions({ horzLines: !this._host._gridHorz }); return true;
-      case 'toggleCrosshairMagnet': this._host._crosshairMode = this._host._crosshairMode === 'magnet' ? 'normal' : 'magnet'; return true;
+      // Through applyOptions, as the grid toggles go through setGridOptions: the
+      // mode is saved state, so the change is announced like any other.
+      case 'toggleCrosshairMagnet': this._host.applyOptions({ crosshairMode: this._host._crosshairMode === 'magnet' ? 'normal' : 'magnet' }); return true;
       default: return false;
     }
   }

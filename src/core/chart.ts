@@ -589,7 +589,11 @@ export class Chart {
     return { ...this._navigation };
   }
 
-  /** A new default count or spacing immediately restores that view without dropping history. */
+  /**
+   * A new default count or spacing immediately restores that view without dropping history.
+   * `getState` saves these preferences, so the change is announced with `layout:change`;
+   * a pan or zoom switch also fires `objects:change`, as it always has.
+   */
   public setNavigationOptions(patch: Partial<ChartNavigationOptions>): void {
     const before = this._navigation.defaultVisibleBars;
     const spacing = this._navigation.defaultBarSpacing;
@@ -597,6 +601,7 @@ export class Chart {
     this._input._patchNavigation(patch);
     if (before !== this._navigation.defaultVisibleBars || spacing !== this._navigation.defaultBarSpacing) this.resetScale();
     if (pan !== this._navigation.panEnabled || zoom !== this._navigation.zoomEnabled) this._emit('objects:change', {});
+    this._layoutChanged('setNavigationOptions');
   }
 
   private _fitDefaultView(): boolean {

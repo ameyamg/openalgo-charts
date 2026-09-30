@@ -563,7 +563,8 @@ export const PRICE_SCALE_MODES: readonly PriceScaleMode[] =
 export type LayoutSetter =
   | 'setPaneWeight' | 'setPriceAxisOptions' | 'setPriceAxisAutoFit' | 'setPriceAxisLockRatio'
   | 'setPriceScaleOptions' | 'setAutoScale' | 'setGridOptions' | 'setCanvasOptions' | 'setStatusLineOptions'
-  | 'setWatermarkOptions' | 'setTradingSettings' | 'setAxisChromeOptions' | 'setEventOptions' | 'applyOptions';
+  | 'setWatermarkOptions' | 'setTradingSettings' | 'setAxisChromeOptions' | 'setEventOptions' | 'applyOptions'
+  | 'setNavigationOptions';
 
 /**
  * Payload of the `layout:change` event (`chart.on('layout:change', ...)`):
