@@ -199,7 +199,11 @@ export interface ChartOptions {
    * draws the axes it always drew.
    */
   axisChrome?: AxisChromeOptions;
-  /** Time source for kinetic animation (defaults to performance.now). */
+  /**
+   * Time source for kinetic animation (defaults to performance.now).
+   * `WidgetOptions.now` is a different clock (the widget's wall clock, epoch
+   * milliseconds) and is not passed to a widget's chart.
+   */
   now?: () => number;
   /**
    * Ease a wheel zoom over a few frames instead of landing the whole step on
