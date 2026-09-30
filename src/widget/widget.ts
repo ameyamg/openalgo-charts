@@ -27,8 +27,8 @@
  */
 import {
   AlertController, ChartObjects, DataLoadingController, ShortcutManager, createChart, darkTheme, lightTheme, registeredIntervals, registeredChartTypes, tryResolveInterval, resolveInterval, isKnownInterval,
-  dataVariantKey, normalizeDataVariant, publishDataContext,
-  type Chart, type ChartOptions, type ChartTheme, type DataFeed, type Bar, type SeriesApi, type SeriesType, type DataVariant,
+  dataVariantKey, normalizeDataVariant, publishDataContext, getSeriesTransform, parseSeriesTransformSpec, registeredSeriesTransforms,
+  type Chart, type ChartOptions, type ChartTheme, type DataFeed, type Bar, type SeriesApi, type SeriesType, type DataVariant, type SeriesTransformSpec,
   type RestoreReport, type BarsRequest, type DataLoadingOptions, type DataLoadingSnapshot, type AlertTriggeredPayload, type TradingCapabilityRequest, type TradingCapabilitySource,
 } from 'openalgo-charts';
 import { DrawingController, type DrawingDocumentStore, type InstrumentDrawings } from 'openalgo-charts/draw';
@@ -41,7 +41,7 @@ import { ChartHistory } from './history';
 import { Keymap } from './keymap';
 import { mountRail, toolName, type RailHandle, type RailOptions, type RailPrefs } from './rail';
 import { mountStatusline, type StatuslineHandle } from './statusline';
-import { mountTopbar, type MenuRow, type SymbolSearch, type TopbarHandle } from './topbar';
+import { isChartTypeChoice, mountTopbar, type MenuRow, type SymbolSearch, type TopbarHandle } from './topbar';
 import { mountToasts, type ToastHandle, type ToastKind, type Toaster } from './toast';
 import { applyTokens, themeMode, widgetTokens, type WidgetThemeName } from './tokens';
 import { injectWidgetStyles } from './styles';
@@ -143,7 +143,11 @@ export interface WidgetOptions extends Omit<ChartOptions, 'theme'>, WidgetBottom
   variant?: DataVariant;
   /** The interval pills, each a known code. Default: `DEFAULT_INTERVALS` plus every registered code. */
   intervals?: readonly string[];
-  /** Primary series type. Default `candlestick`. Must be a registered chart type. */
+  /**
+   * Primary chart type. Default `candlestick`. A registered renderer, or a
+   * transform the chart applies (`registeredSeriesTransforms`, once the
+   * transform tier is imported).
+   */
   chartType?: string;
   /** `dark` (default), `light`, or a full `ChartTheme`; the chrome derives its palette from it. */
   theme?: WidgetThemeName | ChartTheme;
@@ -323,7 +327,13 @@ export interface Widget {
    * it. Undefined returns to the default. Throws a TypeError for a malformed one.
    */
   setDataVariant(variant: DataVariant | undefined): void;
-  /** Select a renderer while retaining series state. Transform data remains host-owned. */
+  /**
+   * Select a chart type while retaining series state: a renderer, or a
+   * transform the chart applies to the bars the widget loads (Heikin Ashi,
+   * Renko, range bars, line break, point and figure, Kagi). A widget whose host
+   * feeds `series` itself keeps point and figure and Kagi as renderers over the
+   * elements that host prepares, as before.
+   */
   setChartType(id: string): void;
   setTheme(theme: WidgetThemeName | ChartTheme): void;
   /** Open the settings dialog. False when the dialog tier has not registered one. */
@@ -611,10 +621,10 @@ class WidgetImpl implements Widget {
     // `readSaved` has already dropped one the stored record could not name.
     this._variant = options.variant !== undefined ? normalizeDataVariant(options.variant) : saved?.variant;
     const wantType = options.chartType ?? saved?.chartType ?? 'candlestick';
-    if (options.chartType !== undefined && !registeredChartTypes().includes(options.chartType)) {
+    if (options.chartType !== undefined && !isChartTypeChoice(options.chartType)) {
       throw new Error(`openalgo-charts widget: "${options.chartType}" is not a registered chart type`);
     }
-    this._chartType = registeredChartTypes().includes(wantType) ? wantType : 'candlestick';
+    this._chartType = isChartTypeChoice(wantType) ? wantType : 'candlestick';
     const t = resolveTheme(options.theme ?? saved?.theme);
     this._themeName = t.name;
     this._chartTheme = t.theme;
@@ -681,7 +691,9 @@ class WidgetImpl implements Widget {
     }
     this.chart = createChart(chartEl, { ...(chartOpts as ChartOptions), theme: this._chartTheme, document: doc });
     chartEl.setAttribute('aria-label', options.ariaLabel ?? widgetText(options, 'Price chart'));
-    this._series = this.chart.addSeries(this._chartType as SeriesType);
+    const transform = this._transformFor(this._chartType, options.chartType === undefined ? saved?.chart : undefined);
+    this._series = this.chart.addSeries((transform === null ? this._chartType : getSeriesTransform(transform.type).renderer) as SeriesType,
+      transform === null ? {} : { transform });
     this._publishDataContext();
     this.draw = new DrawingController(this.chart, {});
     // Before the alerts and before the saved layout lands: the drawings on the
@@ -910,7 +922,25 @@ class WidgetImpl implements Widget {
   public exchange(): string { return this._exchange; }
   public interval(): string { return this._interval; }
   public variant(): Readonly<DataVariant> | undefined { return this._variant; }
-  public chartType(): string { return this.chart.seriesType(this._series) ?? this._chartType; }
+  public chartType(): string {
+    return this.chart.seriesTransform(this._series)?.type ?? this.chart.seriesType(this._series) ?? this._chartType;
+  }
+
+  /**
+   * The transform a chart type applies, with the options a saved chart state
+   * gave it, or null for a renderer. Point and figure and Kagi are both. A
+   * widget that loads its own bars applies the transform. One whose host feeds
+   * `widget.series` keeps them a renderer, which is the 2.5.x contract for a
+   * host that prepares its own elements, so none is transformed twice.
+   */
+  private _transformFor(id: string, saved?: { series?: unknown }): SeriesTransformSpec | null {
+    if (!registeredSeriesTransforms().includes(id) || (this._opts.feed === undefined && registeredChartTypes().includes(id))) return null;
+    const series = Array.isArray(saved?.series) ? (saved.series as readonly ({ transform?: SeriesTransformSpec } | null)[]) : [];
+    const options = series.find(item => item?.transform?.type === id)?.transform?.options;
+    try { return parseSeriesTransformSpec({ type: id, options }); }
+    catch { return { type: id }; } // options this build refuses: the transform's defaults
+  }
+
   public theme(): WidgetThemeName { return this._themeName; }
   /** The engine palette in force, for the context's `chartTheme` getter. */
   public chartThemeInUse(): ChartTheme { return this._chartTheme; }
@@ -985,12 +1015,20 @@ class WidgetImpl implements Widget {
     this._bus.emit('variant', { variant: next });
   }
 
-  public setChartType(id: string): void {
-    if (!registeredChartTypes().includes(id)) throw new Error(`openalgo-charts widget: "${id}" is not a registered chart type`);
-    if (id === this.chartType()) return;
+  public setChartType(id: string): void { this._selectChartType(id); }
+
+  /** `setChartType`, and a restore bringing the transform options its state saved. */
+  private _selectChartType(id: string, saved?: Parameters<WidgetImpl['_transformFor']>[1]): void {
+    if (!isChartTypeChoice(id)) throw new Error(`openalgo-charts widget: "${id}" is not a registered chart type`);
+    // The type on screen again changes nothing, and keeps the options it was set up with.
+    if (id === this.chartType() && saved === undefined) return;
+    const transform = this._transformFor(id, saved);
     const request = ++this._chartTypeRequest;
-    if (!this.chart.setSeriesType(this._series, id as SeriesType)) return;
-    if (request !== this._chartTypeRequest || this.chartType() !== id) return;
+    let changed = this.chart.setSeriesTransform(this._series, transform);
+    // Each step notifies, and a listener may have chosen another type meanwhile.
+    if (request !== this._chartTypeRequest) return;
+    if (transform === null) changed = this.chart.setSeriesType(this._series, id as SeriesType) || changed;
+    if (!changed || request !== this._chartTypeRequest || this.chartType() !== id) return;
     this._scheduleSave();
     this._bus.emit('layout', { reason: 'chartType', chartType: id });
   }
@@ -1161,8 +1199,11 @@ class WidgetImpl implements Widget {
     if (!state.paused && state.bars !== this._displayedBars) {
       const before = this._series.getData();
       const view = this.chart.getVisibleLogicalRange();
-      const anchor = before[Math.max(0, Math.min(before.length - 1, Math.round(view.from)))];
-      const anchorIndex = anchor === undefined ? -1 : before.findIndex(bar => bar.time === anchor.time);
+      // The view indexes what is drawn: a transformed series draws elements its handle does not return.
+      const transformed = this.chart.seriesTransform(this._series) !== null;
+      const drawn = transformed ? this.chart.primaryBars() : before;
+      const anchor = drawn[Math.max(0, Math.min(drawn.length - 1, Math.round(view.from)))];
+      const anchorIndex = anchor === undefined ? -1 : drawn.findIndex(bar => bar.time === anchor.time);
       const tail = state.bars[state.bars.length - 1];
       if (state.reason === 'live' && tail !== undefined && before[0]?.time === state.bars[0]?.time &&
         (before.length === state.bars.length || before.length + 1 === state.bars.length)) this._series.update(tail);
@@ -1177,7 +1218,10 @@ class WidgetImpl implements Widget {
             this._initialView = false;
             this._keepView = false;
           } else {
-            const nextIndex = anchor === undefined ? -1 : state.bars.findIndex(bar => bar.time === anchor.time);
+            // Elements are formed again from the new history, so the anchor is the last one at or before its time.
+            const after = transformed ? this.chart.primaryBars() : state.bars;
+            const nextIndex = anchor === undefined ? -1 : transformed
+              ? after.filter(bar => bar.time <= anchor.time).length - 1 : after.findIndex(bar => bar.time === anchor.time);
             const shift = nextIndex < 0 || anchorIndex < 0 ? 0 : nextIndex - anchorIndex;
             this.chart.setVisibleLogicalRange({ from: view.from + shift, to: view.to + shift });
           }

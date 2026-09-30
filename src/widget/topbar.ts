@@ -7,12 +7,13 @@ import { errorText, widgetText, type WidgetTranslationOptions } from './localiza
  * cannot carry a chord and looks like a form control on a chart. The
  * interval pills come from the list the shell resolves (its own defaults
  * plus every code registered with the engine); the chart type menu is read
- * from the chart-type registry at open time, so a type the transform tier
- * registers appears without a second list to keep in step. The indicators
+ * from the chart-type and series-transform registries at open time, so the
+ * types the transform tier registers appear without a second list to keep in
+ * step. The indicators
  * and settings buttons open the dialog tier's panels; without one registered
  * they render disabled, with their state visible, rather than dead.
  */
-import { registeredChartTypes, getChartType, exportChartDataCsv } from 'openalgo-charts';
+import { registeredChartTypes, getChartType, exportChartDataCsv, getSeriesTransform, registeredSeriesTransforms } from 'openalgo-charts';
 import { chartTypeIcon, chromeIcon, chromeIconSvg } from 'openalgo-charts/draw';
 import { h, glyph, type WidgetContext } from './context';
 import type { WidgetThemeName } from './tokens';
@@ -30,7 +31,7 @@ import { ariaKeys } from './keymap';
 /** The chart data dialog, fetched when it first opens. Internal. */
 export const dataExportPart = lazyPart(() => import('./chart-data-export-dialog'));
 
-/** Labels for the built-in chart types; anything else is read from its id. */
+/** Labels for the built-in chart types; a transform's is its own name, and anything else is read from its id. */
 export const CHART_TYPE_LABELS: Readonly<Record<string, string>> = {
   candlestick: 'Candles',
   'hollow-candle': 'Hollow candles',
@@ -48,20 +49,30 @@ export const CHART_TYPE_LABELS: Readonly<Record<string, string>> = {
 };
 
 export function chartTypeLabel(id: string): string {
-  const known = CHART_TYPE_LABELS[id];
+  const known = CHART_TYPE_LABELS[id] ?? (registeredSeriesTransforms().includes(id) ? getSeriesTransform(id).name : undefined);
   if (known !== undefined) return known;
   return id.replace(/[-_]+/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 }
 
 /**
  * The chart types a primary series can be: every registered renderer that
- * declares itself a price series. A volume histogram is registered too and
- * would draw, but it is not a chart type anyone picks for the instrument.
+ * declares itself a price series, then every transform the chart can apply
+ * (Heikin Ashi to Kagi, once the transform tier is imported), which the chart
+ * derives from the bars rather than drawing them as they come. Point and
+ * figure and Kagi are both a renderer and a transform, and are listed once,
+ * with the transforms. A volume histogram is registered too and would draw,
+ * but it is not a chart type anyone picks for the instrument.
  */
 export function chartTypeChoices(): string[] {
-  return registeredChartTypes().filter((t) => {
-    try { return getChartType(t).isPriceSeries; } catch { return false; }
-  });
+  const transforms = registeredSeriesTransforms();
+  return [...registeredChartTypes().filter((t) => {
+    try { return !transforms.includes(t) && getChartType(t).isPriceSeries; } catch { return false; }
+  }), ...transforms];
+}
+
+/** Whether a widget can show this chart type: a registered renderer, or a transform the chart applies. */
+export function isChartTypeChoice(id: unknown): id is string {
+  return typeof id === 'string' && (registeredChartTypes().includes(id) || registeredSeriesTransforms().includes(id));
 }
 
 /**
