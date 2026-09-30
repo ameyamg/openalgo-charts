@@ -25,6 +25,7 @@ import type { MarketDepth } from './types';
 import { epochMsToUtcSeconds } from './time';
 import type { LooseOptional } from '../helpers/types';
 import { later } from '../helpers/timers';
+import { dispatch } from '../helpers/dispatch';
 
 export type WsMode = 'LTP' | 'Quote' | 'Depth';
 
@@ -508,12 +509,14 @@ export class OpenAlgoWsFeed {
     return () => this._controlCbs.delete(cb);
   }
 
+  // Every host callback goes through `dispatch`, as on the chart bus: a throw
+  // reaches neither the other listeners nor the state change that emitted.
   private _emitState(s: WsState): void {
-    for (const cb of this._stateCbs) cb(s);
+    dispatch(this._stateCbs, s);
   }
 
   private _emitControl(msg: WsControlMessage): void {
-    for (const cb of this._controlCbs) cb(msg);
+    dispatch(this._controlCbs, msg);
   }
 
   private _warn(code: string, message: string): void {
@@ -791,7 +794,7 @@ export class OpenAlgoWsFeed {
     const orderUpdate = parseOrderUpdate(raw);
     if (orderUpdate !== null) {
       if (!this._sequenceOk('orders', raw)) return;
-      for (const cb of this._orderCbs) cb(orderUpdate);
+      dispatch(this._orderCbs, orderUpdate);
       return;
     }
     const parsed = parseMessage(raw);
@@ -803,10 +806,11 @@ export class OpenAlgoWsFeed {
     const rawTopic = (raw as RawMsg).topic;
     if (parsed.kind === 'ltp') {
       if (!this._sequenceOk(rawTopic ?? `ltp:${parsed.event.symbol}.${parsed.event.exchange}`, raw)) return;
-      for (const cb of this._ltpCbs) cb(parsed.event);
+      dispatch(this._ltpCbs, parsed.event);
     } else {
       if (!this._sequenceOk(rawTopic ?? `depth:${parsed.symbol}.${parsed.exchange}`, raw)) return;
-      for (const cb of this._depthCbs) cb(parsed.symbol, parsed.exchange, parsed.depth);
+      const { symbol, exchange, depth } = parsed;
+      dispatch([...this._depthCbs].map(cb => () => cb(symbol, exchange, depth)), undefined);
     }
   }
 }
