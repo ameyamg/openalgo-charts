@@ -79,8 +79,6 @@ export interface StudiesHost {
   readonly _legends: Chart['_legends'];
   readonly _legendActions: Chart['_legendActions'];
   readonly _studyLegends: Chart['_studyLegends'];
-  readonly _timeNav: Chart['_timeNav'];
-  readonly _anchored: Chart['_anchored'];
   readonly _timezone: Chart['_timezone'];
   readonly _dataContext: Chart['_dataContext'];
   readonly _barsProvider: Chart['_barsProvider'];
@@ -251,7 +249,7 @@ export class ChartStudies {
     this._host._emit('objects:change', {});
     // Retain a pane holding drawings or host visuals even after its last plot moves.
     const source = this._host._panes[previous]!; // the pane the study was on still stands
-    if (source !== this._host._primaryPane && source.series().length === 0 && source.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive))) this._host.removePane(previous);
+    if (this._host._layout._holdsOnlyFurniture(source)) this._host.removePane(previous);
     this._reorderIndicatorResources();
     this._host._layout._recomputeAxisColumns();
     this._host._layout._relayout();
@@ -305,7 +303,7 @@ export class ChartStudies {
     const i = this._host._indicators.findIndex((x) => x.id === instanceId);
     if (i < 0) {
       const pane = failedOwnedPane === undefined ? undefined : this._host._panes[failedOwnedPane];
-      if (failedOwnedPane !== undefined && pane !== undefined && pane !== this._host._primaryPane && pane.series().length === 0 && pane.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive))) this._host.removePane(failedOwnedPane);
+      if (failedOwnedPane !== undefined && pane !== undefined && this._host._layout._holdsOnlyFurniture(pane)) this._host.removePane(failedOwnedPane);
       return;
     }
     const { indicatorId, paneIndex } = this._host._indicators[i]!;
@@ -322,6 +320,8 @@ export class ChartStudies {
     // `getState` then persisted the orphan, so every reload restored a blank
     // region. Doing it here means every caller behaves the same. The price
     // pane stays whatever emptied it, and it can sit in any slot.
+    // Unlike a move, this does not ask `_holdsOnlyFurniture`: what was placed
+    // on the pane was placed against the study's units, and it goes with it.
     const pane = this._host._panes[paneIndex];
     if (pane !== undefined && pane !== this._host._primaryPane && pane.series().length === 0) this._host.removePane(paneIndex);
   }

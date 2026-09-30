@@ -362,6 +362,30 @@ describe('pane removal, ordering, and maximize', () => {
     expect(chart.panes()[0].element.style.borderTopWidth).toBe('0px');
   });
 
+  it('drops a study pane with the study, host visuals and all, but keeps one a move leaves them on', () => {
+    // Two rules on purpose: a removed study takes its pane, whatever was
+    // placed on it against the study's units; a study moved away leaves a
+    // pane that still holds such a visual, as ChartPanes._holdsOnlyFurniture says.
+    const { chart } = makeChart();
+    chart.addSeries('candlestick').setData(bars(60));
+    const removed = chart.addIndicator('rsi');
+    chart.addPrimitive(new PaneLegend({ id: 'host-note', title: 'Note' }), removed.paneIndex);
+    expect(chart.panes()).toHaveLength(2);
+    chart.removeIndicator(removed.id);
+    expect(chart.panes()).toHaveLength(1);
+
+    const moved = chart.addIndicator('rsi');
+    chart.addPrimitive(new PaneLegend({ id: 'host-note-2', title: 'Note' }), moved.paneIndex);
+    expect(chart.moveIndicator(moved.id, 0)).toBe(true);
+    expect(chart.panes()).toHaveLength(2);
+
+    // A pane that held nothing but the study goes with a move too.
+    const bare = chart.addIndicator('rsi');
+    expect(chart.panes()).toHaveLength(3);
+    expect(chart.moveIndicator(bare.id, 0)).toBe(true);
+    expect(chart.panes()).toHaveLength(2);
+  });
+
   it('refuses to maximize an index that names no pane, which would hide every pane', () => {
     const { chart } = makeChart();
     chart.addSeries('candlestick').setData(bars(60));

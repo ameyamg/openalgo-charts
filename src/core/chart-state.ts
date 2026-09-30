@@ -72,8 +72,6 @@ export interface PersistenceHost {
   readonly _indicatorReservedIds: Chart['_indicatorReservedIds'];
   readonly _indicatorRefreshes: Chart['_indicatorRefreshes'];
   readonly _primaryPane: Chart['_primaryPane'];
-  readonly _timeNav: Chart['_timeNav'];
-  readonly _anchored: Chart['_anchored'];
   _crosshairMode: Chart['_crosshairMode'];
   _crosshairSnapToBar: Chart['_crosshairSnapToBar'];
   _priceOnlyAutoScale: Chart['_priceOnlyAutoScale'];
@@ -513,8 +511,7 @@ export class ChartPersistence {
     // A study pane above the price pane is as prunable as one below it.
     for (let i = this._host._panes.length - 1; i >= 0; i--) {
       const pane = this._host._panes[i]!;
-      if (pane !== this._host._primaryPane && pane.series().length === 0 && !this._host._indicators.some(study => study.paneIndex === i)
-        && pane.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive))) this._host.removePane(i);
+      if (!this._host._indicators.some(study => study.paneIndex === i) && this._host._layout._holdsOnlyFurniture(pane)) this._host.removePane(i);
     }
 
     this._host._alertState = alerts;
