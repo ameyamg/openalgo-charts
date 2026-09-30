@@ -346,12 +346,30 @@ export class TradingController {
     if (payload.trades !== undefined) this.setTrades(payload.trades);
   }
 
-  public updatePositionPnl(id: string, unrealizedPnl: number, pnlText?: string, pnlPercent?: string): void {
+  /**
+   * Refresh a position's P&L pill in place, without recreating its line: the
+   * pill reads `pnlText`, then `pnlPercent` in brackets. Either one left out
+   * keeps what the pill showed. The host formats both, since only it knows
+   * the account's currency and how it rounds.
+   */
+  public updatePositionPnl(id: string, pnlText?: string, pnlPercent?: string): void;
+  /**
+   * The form that also takes the P&L as a number, which nothing ever read:
+   * the pill shows `pnlText` and `pnlPercent` only.
+   *
+   * @deprecated Removed in 3.0.0. Leave the number out: `updatePositionPnl(id, pnlText, pnlPercent)` (since
+   * 2.6.0) sets the same pill.
+   */
+  public updatePositionPnl(id: string, unrealizedPnl: number, pnlText?: string, pnlPercent?: string): void;
+  public updatePositionPnl(id: string, ...args: (string | number | undefined)[]): void {
     const cur = this._positions.get(id);
     if (cur === undefined) return;
-    if (pnlText !== undefined) cur.entity.pnlText = pnlText;
-    if (pnlPercent !== undefined) cur.entity.pnlPercent = pnlPercent;
-    void unrealizedPnl;
+    // A text is a string. Anything else first is the unread number of the
+    // deprecated form, including the undefined or null a script host passes
+    // before it has one, and the texts follow it.
+    const [pnlText, pnlPercent] = typeof args[0] === 'string' ? args : args.slice(1);
+    if (typeof pnlText === 'string') cur.entity.pnlText = pnlText;
+    if (typeof pnlPercent === 'string') cur.entity.pnlPercent = pnlPercent;
     cur.line.setLeftLabel(this._positionPill(cur.entity));
   }
 

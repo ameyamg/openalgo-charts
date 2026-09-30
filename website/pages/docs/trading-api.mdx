@@ -132,7 +132,7 @@ Access via `chart.trading`.
 | `upsertOrder(order)` | add or update one order |
 | `removeOrder(id)` | remove an order (and its bracket children) |
 | `addTrade(trade)` | add one fill |
-| `updatePositionPnl(id, pnl, pnlText?, pnlPercent?)` | refresh a position's P&L pill without recreating the line |
+| `updatePositionPnl(id, pnlText?, pnlPercent?)` | refresh a position's P&L pill without recreating the line. The older form with a number first, `updatePositionPnl(id, pnl, pnlText?, pnlPercent?)`, still works but is deprecated, removed in 3.0.0: the number was never shown |
 | `getPositions()` / `getOrders()` / `getTrades()` | current state |
 | `clear()` | remove everything |
 | `setSettings(colors)` / `getSettings()` | global trading colors |
@@ -211,7 +211,26 @@ ws.on('account', (a) => chart.trading.syncState({ positions: a.positions, orders
 ```ts
 ws.on('mark', ({ price }) => {
   const pnl = (price - entry) * size;
-  chart.trading.updatePositionPnl('pos_1', pnl, (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2));
+  chart.trading.updatePositionPnl('pos_1', (pnl >= 0 ? '+' : '') + '
+});
+```
+
+**Confirm-then-render modify** - keep the exchange as the source of truth:
+
+```ts
+chart.trading.on('trading:order_modify', async ({ orderId, newPrice }) => {
+  const ok = await exchange.amend(orderId, newPrice);
+  if (!ok) chart.trading.setOrders(currentOrders); // revert to server state
+});
+```
+
+<Callout type="info">
+Timestamps on trades are **milliseconds** (markers snap to the nearest bar). Positions and
+orders are drawn at their price with the pill anchored near the right (price) axis. For the
+lower-level order engine, depth ladder, and validation, see
+[On-Chart Trading](/docs/trading).
+</Callout>
+ + pnl.toFixed(2));
 });
 ```
 

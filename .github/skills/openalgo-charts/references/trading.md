@@ -145,7 +145,7 @@ Markers snap to the **nearest bar index**, not an exact time; sub-bar fill preci
 | `upsertOrder(order)` | Filters by id then re-runs `setOrders` |
 | `removeOrder(id)` | Removes the order **and every order whose `parentId === id`** |
 | `addTrade(trade)` | One fill, keyed by `id` |
-| `updatePositionPnl(id, pnl, pnlText?, pnlPercent?)` | Rewrites the info segment in place |
+| `updatePositionPnl(id, pnlText?, pnlPercent?)` | Rewrites the info segment in place |
 | `getPositions()` / `getOrders()` / `getTrades()` | Current entities |
 | `clear()` | Removes every line and the marker primitive |
 | `setSettings(settings)` / `getSettings()` | Colours; see below |
@@ -153,7 +153,7 @@ Markers snap to the **nearest bar index**, not an exact time; sub-bar fill preci
 | `on(event, cb)` | Returns an unsubscribe function |
 | `off(event, cb)` | `cb` is required here (unlike `chart.off`) |
 
-**`updatePositionPnl`'s second argument is discarded.** The source does `void unrealizedPnl`; only `pnlText` and `pnlPercent` reach the pill. Format the number yourself.
+**`updatePositionPnl` takes texts, not a number.** Only `pnlText` and `pnlPercent` reach the pill, so format the number yourself. The 2.x form with the number first, `updatePositionPnl(id, pnl, pnlText?, pnlPercent?)`, still works and ignores the number; it is deprecated, removed in 3.0.0. The method tells the forms apart by the second argument: a string is a text, anything else (a number, or the undefined or null a script host passes before it has one) is the ignored number.
 
 Diffing: `_sync` recreates a line whenever `color | dashed | closeButton | cursor | hasLeftLabel | badge | qty` changes and otherwise patches `price` + `leftLabel` in place. Changing `size` therefore rebuilds the primitive; changing only `price` does not.
 
