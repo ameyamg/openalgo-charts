@@ -28,6 +28,9 @@
  * with the key fields, so every rule is testable without a browser.
  */
 import { isReservedCombo, normalizeCombo, type ShortcutListItem } from 'openalgo-charts';
+// The engine's own platform test, so its key hints and the widget's never
+// disagree on Cmd or Ctrl. A pure helper, so the path inlines just it.
+import { detectMac } from '../input/shortcuts';
 import { inTextField, type WidgetContext } from './context';
 import { lazyPart, partFailed, usePart, type PartSlot } from './lazy';
 import { widgetText } from './localization';
@@ -266,11 +269,6 @@ export function eventKeyCombo(e: KeyEventLike): string {
 const DISPLAY_KEYS: Readonly<Record<string, string>> = {
   Escape: 'Esc', Delete: 'Del', ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down',
 };
-
-function detectMac(): boolean {
-  const nav = (globalThis as { navigator?: { platform?: string; userAgent?: string } }).navigator;
-  return nav !== undefined && /mac|iphone|ipad/i.test(nav.platform ?? nav.userAgent ?? '');
-}
 
 /** A chord as a user reads it: `Ctrl+Shift+Z`, or `Cmd+Shift+Z` on a Mac. */
 export function formatKeyCombo(combo: string, isMac: boolean = detectMac()): string {
