@@ -648,6 +648,12 @@ export interface IndicatorCalcContext {
   interval?: string;
   /** The chart's IANA zone, the calendar its axis is labelled in. */
   timezone: string;
+  /**
+   * True when the bars `calc` receives are a transform's elements (Renko
+   * bricks, Heikin Ashi candles) rather than the bars the host feeds, so their
+   * times do not mark out the clock. Absent otherwise.
+   */
+  transformed?: boolean;
   /** Chart wall clock in UTC seconds, the clock the countdown row reads. */
   now(): number;
   /**

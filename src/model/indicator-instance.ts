@@ -1799,6 +1799,8 @@ export class IndicatorInstance implements IndicatorApi {
     if (source === undefined && tailOnly) this._live = true;
     const ctx = this._calcContext(calc, appended, source);
     ctx.resolveSource = bindings.resolve;
+    // The chart's own bars on a transformed series are its elements, not time bars.
+    if (this._barSource === 'chart' && (this._host.underlyingBars?.() ?? null) !== null) ctx.transformed = true;
     let usedTail = false;
     if (tailOnly && sourceIndex === null && bindings.canTail && this._d.calcTail !== undefined) {
       const from = this._barCount - 1; // the previously-last bar may have been replaced

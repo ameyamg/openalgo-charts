@@ -24,6 +24,9 @@ import type {
 } from '../src/model/indicator-registry';
 import type { Bar } from '../src/model/bar';
 import { fakeDocument } from './helpers/fake-dom';
+import { registerTransformChartTypes, RenkoTransform } from '../src/transform/index';
+
+registerTransformChartTypes();
 
 // ── data ──────────────────────────────────────────────────────────────────────
 
@@ -521,6 +524,120 @@ describe('what a timeframe refuses', () => {
     ema.setSettings({ timeframe: '1h' });
     ema.values();
     expect(ema.dataStatus()?.state).toBe('ready');
+  });
+});
+
+// ── on a transformed chart ────────────────────────────────────────────────────
+
+/**
+ * A chart that transforms its bars draws elements (bricks, Heikin Ashi
+ * candles) whose times are not a clock, so a study on the chart's own bars
+ * has nothing a timeframe could fold. On the underlying bars it folds as on
+ * any chart, and its values are read at the bar each element completed on.
+ */
+describe('a timeframe on a transformed chart', () => {
+  const bars = nseMinutes(2, 52);
+  const BOX = 1;
+
+  function transformed(type: 'renko' | 'heikin-ashi'): Chart {
+    const chart = makeChart();
+    chart.setDataContext({ interval: '1m' });
+    const series = chart.addSeries('candlestick');
+    series.setData(bars);
+    chart.setSeriesTransform(series, type === 'renko' ? { type, options: { boxSize: BOX } } : { type });
+    return chart;
+  }
+
+  /** The source bar each brick was completed on. */
+  const completedOn = (): number[] => {
+    const t = new RenkoTransform({ boxSize: BOX });
+    return bars.flatMap((bar, i) => t.push(bar).map(() => i));
+  };
+
+  it('refuses the chart bars: the add throws, a later setting reports an error status and recovers', () => {
+    const chart = transformed('renko');
+    expect(() => chart.addIndicator('ema', { timeframe: '15m' })).toThrow(IndicatorInputError);
+    expect(() => chart.addIndicator('ema', { timeframe: '15m' })).toThrow(/transformed bars.*underlying bars/);
+    const ema = chart.addIndicator('ema', { length: 5 });
+    expect(ema.dataStatus()).toBeNull();
+    ema.setSettings({ timeframe: '15m' });
+    ema.values();
+    const status = ema.dataStatus();
+    expect(status?.state).toBe('error');
+    expect(String((status as { error: unknown }).error)).toMatch(/transformed bars.*underlying bars/);
+    ema.setSettings({ timeframe: '' });
+    ema.values();
+    expect(ema.dataStatus()?.state).toBe('ready');
+  });
+
+  it('counts Heikin Ashi as transformed, since its prices are not the traded ones', () => {
+    const chart = transformed('heikin-ashi');
+    expect(() => chart.addIndicator('ema', { timeframe: '15m' })).toThrow(/transformed bars/);
+  });
+
+  it('takes a timeframe no coarser than the chart as the chart own there too', () => {
+    const chart = transformed('renko');
+    const ema = chart.addIndicator('ema', { timeframe: '1m', length: 5 });
+    const d = getIndicator('ema');
+    expect(firstDifference(ema.values(), d.calc(chart.primaryBars(), settingsFor(d, { length: 5 }), {}))).toBeNull();
+  });
+
+  it('folds the underlying bars, read at the bar each brick completed on', () => {
+    const chart = transformed('renko');
+    const d = getIndicator('ema');
+    const folded = d.calc(bars, settingsFor(d, { timeframe: '15m', length: 5 }), {}, context('1m', bars));
+    const expected = { ma: completedOn().map((i) => folded.ma[i] ?? null) };
+    expect(expected.ma.some((v) => v !== null)).toBe(true);
+    const direct = chart.addIndicator('ema', { timeframe: '15m', length: 5 }, { barSource: 'underlying' });
+    expect(direct.dataStatus()).toBeNull();
+    expect(firstDifference(direct.values(), expected)).toBeNull();
+    // A study refused on the chart bars recovers by moving to the underlying ones.
+    const moved = chart.addIndicator('ema', { length: 5 });
+    moved.setSettings({ timeframe: '15m' });
+    moved.values();
+    expect(moved.dataStatus()?.state).toBe('error');
+    expect(moved.setBarSource('underlying')).toBe(true);
+    expect(firstDifference(moved.values(), expected)).toBeNull();
+    expect(moved.dataStatus()?.state).toBe('ready');
+  });
+
+  it('a layout saved with the refusal restores it as saved, beside the studies around it', () => {
+    const chart = transformed('renko');
+    chart.addIndicator('sma', { length: 5 });
+    chart.addIndicator('ema', { length: 5 }).setSettings({ timeframe: '15m' });
+    chart.addIndicator('rsi');
+    const state = JSON.parse(JSON.stringify(chart.getState()));
+    const again = transformed('renko');
+    again.addIndicator('macd');
+    expect(again.restoreState(state).applied).toBe(true);
+    expect(again.indicators().map((api) => api.indicatorId)).toEqual(['sma', 'ema', 'rsi']);
+    const ema = again.indicators()[1];
+    expect(ema.settings().timeframe).toBe('15m');
+    expect(ema.dataStatus()?.state).toBe('error');
+    expect(String((ema.dataStatus() as { error: unknown }).error)).toMatch(/underlying bars/);
+    expect(again.indicators()[2].dataStatus()).toBeNull();
+    expect(ema.setBarSource('underlying')).toBe(true);
+    ema.values();
+    expect(ema.dataStatus()?.state).toBe('ready');
+  });
+
+  it('marks only the chart bars of a transformed series as transformed in the calc context', () => {
+    const seen: (boolean | undefined)[] = [];
+    registerIndicator({
+      id: 'transformed-probe', name: 'Transformed probe', placement: 'onchart', inputs: [],
+      plots: [{ key: 'v', type: 'line', title: 'v' }],
+      calc: (b, _s, _store, ctx) => { seen.push(ctx?.transformed); return { v: b.map((bar) => bar.close) }; },
+    });
+    const plain = makeChart();
+    plain.addSeries('candlestick').setData(bars);
+    plain.addIndicator('transformed-probe');
+    expect(seen.pop()).toBeUndefined();
+    const chart = transformed('renko');
+    const probe = chart.addIndicator('transformed-probe');
+    expect(seen.pop()).toBe(true);
+    probe.setBarSource('underlying');
+    probe.values();
+    expect(seen.pop()).toBeUndefined();
   });
 });
 

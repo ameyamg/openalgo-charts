@@ -88,6 +88,9 @@ function plan(d: IndicatorDescriptor, s: Readonly<IndicatorSettings>, ctx: Indic
     }
     if (span(found.bucketing) <= span(chart)) return null;
   }
+  if (ctx?.transformed === true) {
+    throw new IndicatorInputError(`${d.name}: this chart draws transformed bars, which a timeframe cannot fold; compute the study on the underlying bars`);
+  }
   for (const input of d.inputs) {
     const value = s[input.key];
     if (input.type === 'source' && typeof value === 'object' && value !== null) {

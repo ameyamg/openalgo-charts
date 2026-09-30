@@ -1163,6 +1163,7 @@ calc: (bars, settings, store, ctx) => {
 | `symbol` / `interval` | Supplied by `chart.setDataContext`, or by a custom `IndicatorHost`. Undefined when the host has not supplied them. |
 | `timezone` | The chart's IANA zone, the calendar its axis is labelled in. Same value as the reserved `settings.timezone` key. |
 | `now()` | Chart wall clock in UTC seconds, the clock the countdown row reads. |
+| `transformed` | (unreleased) `true` when the bars are a transform's elements (a study on the chart's own bars of a transformed series), so their times do not mark out the clock; absent otherwise. |
 
 `isConfirmed` uses the declared interval when available. Fixed intervals close at the
 recorded opening plus their duration; calendar intervals use the next boundary in the
@@ -1529,9 +1530,14 @@ ema.setSettings({ timeframe: '' });   // the chart's own timeframe again
   on every tick instead.
 - **History depth.** The fold has only the loaded bars: an hourly EMA 20 needs about 20
   hours of bars on the chart, a daily one about 20 sessions.
-- **Transformed bars fold nothing meaningful.** A host that feeds Renko bricks, Kagi or
-  point and figure elements as the primary series gets those elements folded by their
-  times. Compute a timeframe study on time bars.
+- **Refused on a transformed chart's own bars (unreleased).** A study computing on the
+  bars of a chart that transforms them (`chart.setSeriesTransform`, Heikin Ashi
+  included) reads elements whose times are no clock (`calc` context `transformed`), so
+  a timeframe coarser than the chart's is refused as above. On the underlying bars
+  (`setBarSource('underlying')`, the widget's Compute on row) it folds the host's bars and
+  each value is read at the bar its element completed on. Elements a host transformed
+  itself and fed as the chart's bars cannot be told from time bars and are folded by
+  their times: compute a timeframe study on time bars there.
 
 The widget's study settings render the input as a select: `Chart` (the empty value), then
 the intervals the host serves (`WidgetOptions.intervals`), or the built-in tokens and every
