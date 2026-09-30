@@ -1,4 +1,3 @@
-import { widgetText } from '../localization';
 /**
  * The indicator picker: everything the indicator registry holds, grouped by
  * category, with a search box that filters as you type. Built from
@@ -14,6 +13,7 @@ import { widgetText } from '../localization';
  * button opens the saved study sets, bottom left where a dialog keeps its
  * secondary control.
  */
+import { widgetText } from '../localization';
 import { registeredIndicators } from 'openalgo-charts';
 import type { IndicatorApi, IndicatorDescriptor, IndicatorPolicy } from 'openalgo-charts';
 import type { WorkspaceStore } from 'openalgo-charts/workspace';

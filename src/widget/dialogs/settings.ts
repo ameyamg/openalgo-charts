@@ -1,4 +1,3 @@
-import { widgetText } from '../localization';
 /**
  * The chart settings dialog, generated from `chartSettingsSchema`.
  *
@@ -11,6 +10,7 @@ import { widgetText } from '../localization';
  * only those, so an axis the user dragged while the dialog was open stays
  * where they left it.
  */
+import { widgetText } from '../localization';
 import { applyChartSettings, chartSettingsSchema, readChartSettings } from 'openalgo-charts';
 import type { ChartSettingsTab, ChartSettingsTabId, ChartSettingsValues } from 'openalgo-charts';
 import { historyStep, type WidgetContext } from '../context';

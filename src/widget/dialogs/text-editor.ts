@@ -1,4 +1,3 @@
-import { widgetText } from '../localization';
 /**
  * Inline text editing for a drawing: a contentEditable box laid over the
  * painted text so its frame coincides with the frame on the canvas. The
@@ -11,6 +10,7 @@ import { widgetText } from '../localization';
  * event stops at the box, or the chart under it would take the press as a
  * pan and the widget's chords would read a Backspace as "delete the drawing".
  */
+import { widgetText } from '../localization';
 import { drawingSettingsSchema } from 'openalgo-charts/draw';
 import type { Drawing, DrawingText } from 'openalgo-charts/draw';
 import type { Chart } from 'openalgo-charts';

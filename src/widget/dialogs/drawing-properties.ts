@@ -1,4 +1,3 @@
-import { widgetText } from '../localization';
 /**
  * Properties of the selected drawing, generated from the tool's settings
  * schema (`drawingSettingsSchema`), which declares only the fields the tool's
@@ -19,6 +18,7 @@ import { widgetText } from '../localization';
  * look as the tool's default or by name, and applies a saved one, when the
  * widget was given a template store.
  */
+import { widgetText } from '../localization';
 import { applyDrawingSettings, drawingSettingsSchema, readDrawingSettings } from 'openalgo-charts/draw';
 import type { Drawing, DrawingTool, SettingsSchema } from 'openalgo-charts/draw';
 import { drawingToolOf, editableIds, type WidgetContext } from '../context';

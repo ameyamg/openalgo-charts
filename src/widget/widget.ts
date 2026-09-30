@@ -72,7 +72,7 @@ import {
   ShellBus, applySavedLayout, flushOnPageHide, readSaved, reportStorage, restoreWhenLoaded, restoreWidgetState, saveNow, scheduleSave,
   scopeDrawings, stripView as stripSavedView, type PersistHost,
 } from './widget-persist';
-// Bottom bar hook: the bar, the ranges, the session calendar and the shading live in bottombar-shell.ts.
+// The bar, the ranges, the session calendar and the shading live in bottombar-shell.ts.
 import { attachBottombar, BOTTOMBAR_OPTION_KEYS, type BottombarHost, type ShellBottombar, type WidgetBottombarOptions } from './bottombar-shell';
 // Layouts: the store, the menu and the templates live in layouts-widget.ts.
 import type { WorkspaceStore } from 'openalgo-charts/workspace';
@@ -95,7 +95,7 @@ export const DRAWINGS_KEY_PREFIX = 'drawings:';
 export const WIDGET_STATE_VERSION = 1;
 
 /**
- * Hook (chart grid, 2.5.10): the options of a chart under a grid's own
+ * The options of a chart under a grid's own
  * bottom bar, which carries Go to and the market status for every chart. Such
  * a chart shows neither in its own bars, and opens its go-to panel in the
  * context this gives, over the whole grid. Internal: the tier does not export it.
@@ -201,7 +201,6 @@ export interface WidgetOptions extends Omit<ChartOptions, 'theme'>, WidgetBottom
   layouts?: LayoutsController | false;
   /** The floating toolbar over the selected drawings on a desktop layout. Default: shown with the rail. */
   drawingToolbar?: boolean;
-  // Hook (chart grid, 2.5.10): read by topbar.ts openCapture; the grid fills it.
   /**
    * More rows at the end of the capture menu, read each time it opens; a
    * string starts a group. The chart grid adds its whole-grid capture here.
@@ -384,7 +383,7 @@ const WIDGET_ONLY_KEYS: ReadonlyArray<keyof WidgetOptions> = [
   'panels', 'typingNavigation', 'keyboardRoute', 'watchlist', 'news', 'drawingTemplates', 'drawingToolbar',
   'shortcutsEditor',
   'workspaces', 'layouts',
-  // Bottom bar hook: its options are the widget's, not the chart's.
+  // The bottom bar's options are the widget's, not the chart's.
   ...BOTTOMBAR_OPTION_KEYS,
 ];
 
@@ -550,7 +549,7 @@ class WidgetImpl implements Widget {
   private _goToPanel: PanelHandle | null = null;
   private _layouts: WidgetLayouts | null = null;
   private readonly _navigator: DateNavigator;
-  /** Bottom bar hook: the ranges, the load window and the bar's controls (bottombar-shell.ts). */
+  /** The ranges, the load window and the bar's controls (bottombar-shell.ts). */
   private readonly _bottombar: ShellBottombar;
   /** Bumped by every go-to request and every context change, so a waiting request knows it lost. */
   private _navigation = 0;
@@ -822,7 +821,7 @@ class WidgetImpl implements Widget {
     this.drawingTemplates = options.drawingTemplates ? createDrawingTemplates(this.context, options.drawingTemplates) : null;
     (this.context as WidgetContextImpl).drawingTemplates = this.drawingTemplates ?? undefined;
     if (options.drawingToolbar ?? options.rail !== false) this._drawbar = mountDrawingToolbar(this.context, stage, { chart: chartEl, templates: this.drawingTemplates });
-    // Bottom bar hook: with no bar, here or under a grid, Go to and the market status stay in the chart's own bars.
+    // With no bottom bar, here or under a grid, Go to and the market status stay in the chart's own bars.
     const gridBar = GRID_BAR_CHARTS.has(options);
     const barless = options.bottombar === false && !gridBar;
     if (options.statusline !== false) {
@@ -833,7 +832,7 @@ class WidgetImpl implements Widget {
         this._cleanups.push(() => summary.destroy());
       }
     }
-    // Bottom bar hook: the calendar, the shading, the ranges and the bar, between the stage and the status line.
+    // The calendar, the shading, the ranges and the bottom bar, between the stage and the status line.
     this._bottombar = attachBottombar.call(this as unknown as BottombarHost, statusEl);
     this._layouts = attachWidgetLayouts(this, options); // Layouts: before the chrome that opens the menu.
     if (options.topbar !== false) {
@@ -886,7 +885,7 @@ class WidgetImpl implements Widget {
       ...(gridBar ? {} : { onGoTo: (anchor: HTMLElement) => this._openGoTo(anchor) }),
       onProperties: (anchor) => this._openDialog('drawingProperties', anchor),
       onCapture: (anchor) => this._topbar?.openCapture(anchor),
-      // Bottom bar hook: the More sheet stands in for the bar the phone layout hides.
+      // The More sheet stands in for the bottom bar the phone layout hides.
       bottombar: this._bottombar.controls,
       ...(this._layouts?.controller ? { onLayouts: () => this._layouts?.open() } : {}),
       settingsAvailable: () => widgetDialog('settings') !== null,
@@ -1081,7 +1080,7 @@ class WidgetImpl implements Widget {
     return true;
   }
   public openDateNavigation(): boolean { return this._openGoTo(); }
-  // Bottom bar hook: a range is the widget's, so it works with the bar off.
+  // A range is the widget's, so it works with the bottom bar off.
   public setRange(id: string): Promise<DateNavigationResult> { return this._bottombar.setRange(id); }
   public range(): string | null { return this._bottombar.range(); }
 
@@ -1150,7 +1149,7 @@ class WidgetImpl implements Widget {
     if (same) { await controller.refresh(); return; }
     const nowSec = this._opts.loading?.now?.() ?? Math.floor((this._opts.now ?? Date.now)() / 1000);
     const request: BarsRequest = { symbol: this._symbol, exchange: this._exchange, interval: this._interval,
-      // Bottom bar hook: a range in force widens the window to its sessions.
+      // A range in force widens the window to its sessions.
       ...this._bottombar.fetchWindow(loadWindow(this._interval, this._opts.lookbackBars ?? DEFAULT_LOOKBACK_BARS, nowSec), nowSec),
       ...(this._variant ? { variant: this._variant } : {}) };
     this._initialView = true;

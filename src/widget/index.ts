@@ -31,7 +31,7 @@ export { createWidget, stripView, resolveTheme, loadWindow, DEFAULT_INTERVALS, D
 export type { Widget, WidgetOptions, WidgetState, WidgetChartState, WidgetRestoreReport, WidgetEventName, WidgetWatchlistOptions, WidgetNewsOptions } from './widget';
 export { createChartGrid, CHART_GRID_PRESETS } from './grid';
 export type { ChartGrid, ChartGridOptions, ChartGridCell, ChartGridLayout, ChartGridPreset, ChartGridApplyReport, ChartGridEvents, ChartGridEventName } from './grid';
-// Hook (chart grid, 2.5.10): the layout catalogue, link groups and the grid's message keys.
+// The grid's layout catalogue, its link groups and its message keys.
 export { CHART_GRID_LAYOUTS } from './grid-layouts';
 export type { ChartGridLayoutId, ChartGridUnevenLayout, ChartGridLayoutSpec, ChartGridLayoutSlot } from './grid-layouts';
 export type { ChartGridLinkGroup } from './grid-links';
@@ -84,7 +84,7 @@ export type {
   DialogMount, DialogHandle, WidgetDialogName,
   OverlayOptions, OverlayStack, TipSpec, TipSource, TipSide, TipController, Box, Size,
 } from './context';
-// Hook (widget storage, 2.5.10): the asynchronous store contract and the IndexedDB store.
+// The asynchronous store contract and the IndexedDB store.
 export type { AsyncStorageLike, WidgetStorageOptions, WidgetStorageError } from './context';
 export { createIndexedDbWidgetStorage } from './storage';
 export type { IndexedDbWidgetStorage, IndexedDbWidgetStorageOptions } from './storage';
@@ -120,7 +120,7 @@ export type { WidgetThemeName, WidgetTokens, Rgba } from './tokens';
 export { WIDGET_CSS, WIDGET_STYLE_ID, injectWidgetStyles } from './styles';
 export { WIDGET_COMPONENT_CSS } from './component-styles';
 export { mountMobile } from './mobile';
-// Bottom bar hook: the strip under the chart, its preset ranges and the widget options it reads.
+// The strip under the chart, its preset ranges and the widget options it reads.
 export { mountBottombar, BOTTOMBAR_CSS, BOTTOMBAR_HEIGHT } from './bottombar';
 export type { BottombarContext, BottombarTarget, BottombarOptions, BottombarControls, BottombarHandle, BottombarScaleToggle, BottombarScaleState } from './bottombar';
 export type { MarketStatusReading } from './bottombar-status';

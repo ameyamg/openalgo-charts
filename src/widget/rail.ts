@@ -1,4 +1,3 @@
-import { widgetText } from './localization';
 /**
  * The drawing rail: the column of tool buttons down the left of the chart.
  *
@@ -13,6 +12,7 @@ import { widgetText } from './localization';
  * undo and redo, each following the controller's state. Preferences (pins,
  * magnet, stay, each group's last pick) persist through the widget storage.
  */
+import { widgetText } from './localization';
 import type { Chart } from 'openalgo-charts';
 import {
   hasDrawingTool, drawingShortcuts,

@@ -1,4 +1,3 @@
-import { widgetText } from '../localization';
 /**
  * Settings for one indicator instance: the descriptor's own `inputs` on one
  * tab and the generated per-plot appearance (`indicatorStyleInputs`) on the
@@ -14,6 +13,7 @@ import { widgetText } from '../localization';
  * inputs lead with the bars the study computes on, which is not a setting of
  * the descriptor but of the study (`IndicatorApi.setBarSource`).
  */
+import { widgetText } from '../localization';
 import { getIndicator, indicatorDefaults, indicatorStyleInputs } from 'openalgo-charts';
 import type { Chart, IndicatorApi, IndicatorBarSource, IndicatorDescriptor, IndicatorInput, IndicatorSettings, IndicatorStudySource } from 'openalgo-charts';
 import type { WidgetContext } from '../context';

@@ -1,4 +1,4 @@
-// Hook (chart grid, 2.5.10): the grid keeps its messages beside it in grid-text.ts.
+// The grid keeps its messages beside it, in grid-text.ts, and the catalog takes them in here.
 import type { ChartGridMessage } from './grid-text';
 
 /** English source keys keep fallback messages available without a locale bundle. */
@@ -373,7 +373,7 @@ export type WidgetBuiltinMessage =
   | "The indicator picker is not in this build"
   | "The instrument context changed. Reopen the editor for the intended instrument."
   | "The saved layout could not be restored: {error}"
-  // Hook (widget storage, 2.5.10): an asynchronous store that failed to read or write.
+  // An asynchronous store that failed to read or write.
   | "Saved chart settings could not be read, so changes are kept for this session only: {error}"
   | "Saved chart settings could not be written: {error}"
   | "The scale could not be moved"

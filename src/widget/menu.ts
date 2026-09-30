@@ -125,8 +125,8 @@ export function openMenu(ctx: Pick<WidgetContext, 'document' | 'openOverlay' | '
     // Enter picks the only remaining row, so a unique search needs no click.
     input.addEventListener('keydown', (e) => {
       if ((e as KeyboardEvent).key !== 'Enter') return;
-      // Bottom bar hook: the pick closes the menu and focus returns to its
-      // button, which the same Enter would otherwise press and reopen.
+      // The pick closes the menu and focus returns to its button, which the
+      // same Enter would otherwise press and reopen (the bottom bar's zones).
       e.preventDefault();
       const only = body.querySelectorAll('.oac-menu__row');
       if (only.length === 1) (only[0] as HTMLElement).click();

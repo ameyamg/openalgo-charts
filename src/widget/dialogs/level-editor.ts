@@ -1,4 +1,3 @@
-import { widgetText } from '../localization';
 /**
  * The level editor: a popover listing a ladder tool's levels (retracement,
  * extension, channel, fan, time zone, the Gann pair) one row each, with the
@@ -10,6 +9,7 @@ import { widgetText } from '../localization';
  * per selected drawing and the editor never touches a drawing directly. A
  * multi-selection of ladder tools edits every one of them at once.
  */
+import { widgetText } from '../localization';
 import {
   DEFAULT_FIB, LEVEL_NEUTRAL, applyDrawingSettings, cloneLevels, drawingSettingsSchema, formatRatio, gannLabel,
   levelColor, readDrawingSetting,

@@ -1,4 +1,3 @@
-import { errorText, widgetText, type WidgetTranslationOptions } from './localization';
 /**
  * The top bar: symbol, interval, chart type, indicators, settings, capture
  * and theme, left to right.
@@ -13,6 +12,7 @@ import { errorText, widgetText, type WidgetTranslationOptions } from './localiza
  * and settings buttons open the dialog tier's panels; without one registered
  * they render disabled, with their state visible, rather than dead.
  */
+import { errorText, widgetText, type WidgetTranslationOptions } from './localization';
 import { registeredChartTypes, getChartType, exportChartDataCsv, getSeriesTransform, registeredSeriesTransforms } from 'openalgo-charts';
 import { chartTypeIcon, chromeIconSvg } from 'openalgo-charts/draw';
 import { h, glyph, type WidgetContext } from './context';
@@ -137,7 +137,7 @@ export interface TopbarOptions {
   indicatorsAvailable(): boolean;
   /** Refuse CSV export while the host is replacing or recovering its data. */
   dataAvailable?(): boolean;
-  /** Hook (chart grid, 2.5.10): more capture menu rows, read on every open; a string starts a group. */
+  /** More capture menu rows, read on every open (the chart grid adds its whole-grid capture); a string starts a group. */
   captureRows?: (() => ReadonlyArray<MenuRow | string>) | undefined;
 }
 

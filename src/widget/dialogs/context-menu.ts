@@ -1,4 +1,3 @@
-import { widgetText } from '../localization';
 /**
  * The right-click menu, built from what the chart says was under the pointer.
  *
@@ -21,6 +20,7 @@ import { widgetText } from '../localization';
  * study pane also folds to its header strip. The price pane is found by
  * `primaryPaneIndex`, never assumed to be the top one.
  */
+import { widgetText } from '../localization';
 import { checkTradingCapability, getIndicator, isReplaying, PRICE_SCALE_MODES } from 'openalgo-charts';
 import type { Chart, ContextMenuEvent, ContextMenuTarget, IndicatorApi, PriceScaleId, PriceScaleMode, TradingCapabilityRequest, TradingCapabilitySource } from 'openalgo-charts';
 import { drawingSettingsSchema } from 'openalgo-charts/draw';
