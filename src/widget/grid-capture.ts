@@ -12,7 +12,8 @@
  * copying it, and the rows each chart's own capture menu adds for the whole
  * grid. Each takes the grid's state (`GridState`, grid.ts).
  */
-import { errorText, widgetText } from './localization';
+import { canCopyImage, copyCanvasImage, downloadCanvas } from './capture';
+import { widgetText } from './localization';
 import { TOKEN_PREFIX, WIDGET_FONT, widgetTokens } from './tokens';
 import { captureName, type MenuRow } from './topbar';
 import { resolveTheme } from './widget';
@@ -108,23 +109,9 @@ export const downloadAll = (s: GridState): void => {
   if (s.grid.downloadScreenshot()) report(s, widgetText(text, 'Saved a PNG of every chart'));
   else report(s, widgetText(text, 'The image could not be saved: {error}', { error: captureBlocked(s) ?? widgetText(text, 'This runtime cannot save files') }), 'error');
 };
-export const canCopy = (): boolean => {
-  const g = globalThis as { navigator?: { clipboard?: { write?: unknown } }; ClipboardItem?: unknown };
-  return g.navigator?.clipboard?.write !== undefined && g.ClipboardItem !== undefined;
-};
 export const copyAll = (s: GridState): void => {
-  const { text } = s;
   const canvas = s.grid.takeScreenshot();
-  if (canvas === null) return;
-  const fail = (error: unknown): void => report(s, widgetText(text, 'Copy failed: {error}', { error: errorText(text, error) }), 'error');
-  try {
-    canvas.toBlob(blob => {
-      if (blob === null) { report(s, widgetText(text, 'The canvas produced no image'), 'error'); return; }
-      const Item = (globalThis as unknown as { ClipboardItem: new (parts: Record<string, Blob>) => unknown }).ClipboardItem;
-      (globalThis.navigator.clipboard as unknown as { write(items: unknown[]): Promise<void> })
-        .write([new Item({ 'image/png': blob })]).then(() => report(s, widgetText(text, 'Every chart copied')), fail);
-    }, 'image/png');
-  } catch (error) { fail(error); }
+  if (canvas !== null) copyCanvasImage(s.text, canvas, widgetText(s.text, 'Every chart copied'), (message, kind) => report(s, message, kind));
 };
 /** The rows each chart's own capture menu adds for the whole grid. */
 export function captureRows(s: GridState): Array<MenuRow | string> {
@@ -133,7 +120,7 @@ export function captureRows(s: GridState): Array<MenuRow | string> {
   const blocked = captureBlocked(s);
   return [widgetText(text, 'Every chart'),
     { label: widgetText(text, 'Download PNG of every chart'), sub: blocked ?? undefined, disabled: blocked !== null, onSelect: () => downloadAll(s) },
-    { label: widgetText(text, 'Copy image of every chart'), sub: blocked ?? undefined, disabled: blocked !== null || !canCopy(), onSelect: () => copyAll(s) }];
+    { label: widgetText(text, 'Copy image of every chart'), sub: blocked ?? undefined, disabled: blocked !== null || !canCopyImage(), onSelect: () => copyAll(s) }];
 }
 
 /** `ChartGrid.takeScreenshot`. */
@@ -157,21 +144,5 @@ export function takeGridScreenshot(s: GridState): HTMLCanvasElement | null {
 }
 
 /** `ChartGrid.downloadScreenshot`. */
-export function downloadGridScreenshot(s: GridState, filename?: string): boolean {
-  const { doc } = s;
-  const canvas = s.grid.takeScreenshot();
-  if (canvas === null) return false;
-  try {
-    // A canvas tainted by a cross-origin image refuses here; the caller hears it.
-    const url = canvas.toDataURL('image/png');
-    const a = doc.createElement('a');
-    a.href = url;
-    a.download = filename ?? captureFile(s);
-    (doc.body ?? doc.documentElement).appendChild(a);
-    a.click();
-    a.remove();
-    return true;
-  } catch {
-    return false;
-  }
-}
+export const downloadGridScreenshot = (s: GridState, filename?: string): boolean =>
+  downloadCanvas(s.doc, () => s.grid.takeScreenshot(), filename ?? captureFile(s));

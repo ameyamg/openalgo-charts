@@ -54,6 +54,7 @@ import { widgetText, type WidgetTranslationOptions } from './localization';
 import { applyTokens, widgetTokens, type WidgetThemeName } from './tokens';
 import { GRID_BAR_CHARTS, createWidget, resolveTheme, type Widget, type WidgetOptions } from './widget';
 import type { GridSaved } from './grid-saved';
+import { canCopyImage } from './capture';
 import { cellDrawingStore, checkWorkspace, type ChartDrawings } from './grid-payload';
 import { CHART_GRID_LAYOUTS, focusSlot, isChartGridLayout, type ChartGridLayoutId } from './grid-layouts';
 import {
@@ -62,7 +63,7 @@ import {
 } from './grid-links';
 import type { GridBarHandle, GridBarHost } from './grid-bar';
 import {
-  canCopy, captureBlocked, captureRows, copyAll, downloadAll, downloadGridScreenshot, report, takeGridScreenshot,
+  captureBlocked, captureRows, copyAll, downloadAll, downloadGridScreenshot, report, takeGridScreenshot,
 } from './grid-capture';
 import { groupMark, installGridKeys, installHeaderDrag, neighbour } from './grid-cells';
 import { followChords, gridStorage, leaving, openStoredDesk, saveNow, saveSoon, scheduleSave } from './grid-persist';
@@ -978,7 +979,7 @@ function barHostOf(s: GridState): GridBarHost {
         return count;
       },
     },
-    capture: { blocked: () => captureBlocked(s), download: () => downloadAll(s), copy: () => copyAll(s), canCopy },
+    capture: { blocked: () => captureBlocked(s), download: () => downloadAll(s), copy: () => copyAll(s), canCopy: canCopyImage },
     get saved() { return s.saved ?? undefined; },
     openMenu: (which, anchor) => usePart(gridMenusPart, module => {
       if (which === 'layouts') module.openLayoutPicker(barHost, anchor);
