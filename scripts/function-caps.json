@@ -2,8 +2,8 @@
   "maxLines": 150,
   "caps": {
     "src/core/chart-state.ts": {
-      "ChartPersistence._restoreState": 161,
-      "ChartPersistence.restoreState": 155
+      "ChartPersistence._restoreState": 160,
+      "ChartPersistence.restoreState": 153
     },
     "src/core/chart-studies.ts": {
       "ChartStudies._indicatorHost": 210
