@@ -428,3 +428,58 @@ describe('ReplayController: wiring', () => {
     expect(series.getData()).toHaveLength(5);
   });
 });
+
+describe('ReplayController: a chart destroyed under it', () => {
+  /** Counts the `'destroy'` listeners the controller holds on `chart`. */
+  function countDestroyListeners(chart: Chart): () => number {
+    let live = 0;
+    const on = chart.on.bind(chart) as (event: 'destroy', cb: () => void) => () => void;
+    (chart as unknown as { on: typeof on }).on = (event, cb) => {
+      if (event !== 'destroy') return on(event, cb);
+      live++;
+      const off = on(event, cb);
+      let done = false;
+      return () => { if (!done) { done = true; live--; } off(); };
+    };
+    return () => live;
+  }
+
+  it('stops its timer and writes nothing more once the chart is destroyed mid-play', () => {
+    const { chart, series, data } = loaded(20);
+    const clock = new FakeClock();
+    const replay = new ReplayController(chart, { series, bars: data, startIndex: 2, now: clock.now, scheduler: clock.schedule });
+    replay.play();
+    expect(clock.timers).toBe(1);
+    let writes = 0;
+    const setData = series.setData.bind(series);
+    series.setData = (...args: Parameters<SeriesApi['setData']>) => { writes++; setData(...args); };
+
+    chart.destroy();
+    expect(clock.timers).toBe(0);
+    expect(replay.state().playing).toBe(false);
+    clock.advance(5_000);
+    // Nothing to restore to: leaving replay afterwards writes nothing either.
+    replay.stop();
+    expect(writes).toBe(0);
+  });
+
+  it('listens for the chart going away only while it owns the chart data', () => {
+    const { chart, series, data } = loaded(20);
+    const destroyListeners = countDestroyListeners(chart);
+    const clock = new FakeClock();
+    const replay = new ReplayController(chart, { series, bars: data, now: clock.now, scheduler: clock.schedule });
+    expect(destroyListeners()).toBe(1);
+    replay.stop();
+    // A stopped controller the host drops is not kept alive by the chart.
+    expect(destroyListeners()).toBe(0);
+    replay.play();
+    expect(destroyListeners()).toBe(1);
+    replay.stop();
+    replay.stop();
+    expect(destroyListeners()).toBe(0);
+    const idle = new ReplayController(chart, { series, bars: data, autoStart: false });
+    expect(destroyListeners()).toBe(0);
+    idle.stop();
+    expect(destroyListeners()).toBe(0);
+  });
+});

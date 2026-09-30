@@ -63,6 +63,12 @@ export interface ReplayChartHost {
    * may be omitted and replay drives that one.
    */
   primarySeries?(): SeriesApi | null;
+  /**
+   * Optional. When the chart reports its own end, replay listens for it while
+   * it owns the chart's data: a chart destroyed mid-session stops the playback
+   * timer and is written to no more, and nothing is restored to it.
+   */
+  on?(event: 'destroy', callback: () => void): () => void;
 }
 
 /** Everything a transport bar and a clock need, in one object. */
@@ -258,6 +264,8 @@ export class ReplayController {
   private _interval = 0;
   /** Clock reading the last advance was charged to; keeps playback drift-free. */
   private _lastAdvance = 0;
+  /** Stops listening for the chart's end; held only while replay owns its data. */
+  private _release: (() => void) | undefined;
 
   /**
    * Constructing the controller **enters replay**: it snapshots the chart's data
@@ -516,6 +524,8 @@ export class ReplayController {
     this._playing = false;
     this._stopTimer();
     if (!this._active) return;
+    this._release?.();
+    this._release = undefined;
     const transition = ++this._transition;
     this._active = false;
     this._index = this._startIndex;
@@ -598,6 +608,7 @@ export class ReplayController {
 
   private _write(shown: Bar[], forming: boolean, first: boolean): void {
     const transition = ++this._transition;
+    if (first) this._release = this._chart.on?.('destroy', this._gone);
     // Other data owners must know the boundary before the primary write can
     // paint or notify a host. A comparison added later reads the same boundary.
     const lastTime = shown[shown.length - 1]?.time ?? Number.NEGATIVE_INFINITY;
@@ -647,6 +658,19 @@ export class ReplayController {
     }
     this._advance(due);
     if (this._atEnd()) this._end();
+  };
+
+  /**
+   * The chart is gone: there is nothing to restore to and nothing to draw on,
+   * so the clock stops and the controller leaves replay without writing. A
+   * write in progress sees the transition move and goes no further.
+   */
+  private readonly _gone = (): void => {
+    this._transition++;
+    this._playing = false;
+    this._stopTimer();
+    this._active = false;
+    this._release = undefined;
   };
 
   /** True on the last step of the last bar, which is where playback stops. */

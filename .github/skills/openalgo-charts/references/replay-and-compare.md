@@ -49,7 +49,7 @@ replay.play({ speed: 2 });
 | `stepBack` | `(n = 1) => void` | Stops dead at the first bar. |
 | `play` | `({ speed? }) => void` | Re-speeds a running replay. On the last bar it emits `replay:end` and arms no timer. |
 | `pause` | `() => void` | Leaves the playhead where it is. |
-| `stop` | `() => void` | Restores data **and** viewport. Safe twice; a later `seek`/`step`/`play` re-enters from `startIndex`. |
+| `stop` | `() => void` | Restores data **and** viewport. Safe twice; a later `seek`/`step`/`play` re-enters from `startIndex`. After the chart is destroyed it does nothing: the controller already left replay, see below. |
 | `state` | `() => ReplayState` | `{ index, total, playing, speed, bar, subIndex, subSteps }`: everything a transport bar and a clock need. |
 | `seekTime` | `(utcSeconds: number) => void` | Requires `timing`; projects only observations available by that time. |
 | `time` | `() => number \| null` | Availability clock with `timing`; displayed bar timestamp otherwise. |
@@ -210,6 +210,7 @@ Every transition funnels through one private `_apply(index)` that hands the driv
 - **Pass every series that shares the timeline** (volume histogram, a comparison line) in `options.series`. The DataLayer merges all series onto one axis, so one left at full length drags future timestamps back onto it. The extras are cut by **time**, not by count.
 - **Replay drives series, not the feed.** Live ticks, periodic reconciliation, reconnect refreshes and older-history responses must all stop writing displayed series while replay is active, even while paused. Detach those writers or retain live data in a separate host buffer. On exit, `stop()` restores its captured snapshot; the host must then reconcile current live data and reseed. See [host-integration](host-integration.md).
 - **Speed is derived from the clock, not the tick count**, so a throttled timer still plays at the requested rate. One tick consumes at most 10 bars, so a backgrounded tab does not fast-forward the session when it wakes.
+- **A destroyed chart ends the session.** While replay owns the chart's data the controller listens for `'destroy'` (`ReplayChartHost.on`, optional; `Chart` has it). On it the timer stops, nothing more is written and nothing is restored. Since 2.6.0; before, a playing controller kept calling `setData` on the dead chart until the host called `stop()`. A custom host without `on` still has to stop replay itself.
 - `stop()` restores `barSpacing` and `rightOffset` together with the data. Those two plus the restored `baseIndex` *are* the visible logical range, which is why the view returns to the pixel.
 
 ## Symbol comparison
