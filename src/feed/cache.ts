@@ -49,7 +49,7 @@
  * refreshes the entry); `invalidate()` and `clear()` drop entries by hand.
  */
 import type { Bar, UTCSeconds } from '../model/bar';
-import type { BarsPage, BarsPageRequest, BarsRequest, DataFeed, MarketDepth, UnsubscribeFn, LiveBarMeta } from './types';
+import type { BarsPage, BarsPageRequest, BarsRequest, DataFeed, MarketDepth, UnsubscribeFn, LiveBarMeta, SymbolMatch, SymbolSearchRequest } from './types';
 import { nextBucketStart, tryResolveInterval } from './intervals';
 import { dataVariantKey, type DataVariantCapabilities, type DataVariantQuery } from './data-variant';
 
@@ -240,6 +240,9 @@ export class BarCache implements DataFeed {
     if (typeof feed.dataVariants === 'function') {
       this.dataVariants = (query): DataVariantCapabilities | Promise<DataVariantCapabilities> => feed.dataVariants!(query);
     }
+    if (typeof feed.searchSymbols === 'function') {
+      this.searchSymbols = (request): Promise<SymbolMatch[]> => feed.searchSymbols!(request);
+    }
   }
 
   // `...rest` is part of the signature so a caller holding the concrete
@@ -248,6 +251,7 @@ export class BarCache implements DataFeed {
   public subscribeDepth?: (req: BarsRequest, onDepth: (depth: MarketDepth) => void, ...rest: unknown[]) => UnsubscribeFn;
   public getBarsPage?: (req: BarsPageRequest) => Promise<BarsPage>;
   public dataVariants?: (query: DataVariantQuery) => DataVariantCapabilities | Promise<DataVariantCapabilities>;
+  public searchSymbols?: (request: SymbolSearchRequest) => Promise<SymbolMatch[]>;
 
   public async getBars(req: CachedBarsRequest): Promise<Bar[]> {
     throwIfAborted(req.signal);

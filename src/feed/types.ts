@@ -90,6 +90,28 @@ export interface DataFeed {
    * an implementation is free to ignore it and send the broker's default.
    */
   subscribeDepth?(req: BarsRequest, onDepth: (depth: MarketDepth) => void, opts?: { depthLevel?: number }): UnsubscribeFn;
+  /**
+   * Instruments matching what the user typed, closest first. A widget given
+   * this feed and no `symbolSearch` callback looks symbols up through it.
+   */
+  searchSymbols?(request: SymbolSearchRequest): Promise<SymbolMatch[]>;
+}
+
+/** One result of a symbol lookup. Each contract carries its own symbol and exchange. */
+export interface SymbolMatch {
+  symbol: string;
+  exchange?: string;
+  name?: string;
+  assetClass?: string;
+  iconUrl?: string;
+  contractGroup?: { label?: string; contracts: readonly SymbolMatch[] };
+}
+
+export interface SymbolSearchRequest {
+  /** What the user typed. */
+  query: string;
+  /** Cancels this lookup once a newer query replaces it. */
+  signal?: AbortSignal;
 }
 
 export interface DepthLevel {

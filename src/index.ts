@@ -253,7 +253,7 @@ export { conflationGroupSize, conflateBars, conflateItems, mergeBars } from './m
 export type { Bar, LinePoint, Whitespace, SeriesDataItem, UTCSeconds, OriginalTime } from './model/bar';
 export { isWhitespace, toBar } from './model/bar';
 
-export type { DataFeed, TradeFeed, BarsRequest, BarsPageRequest, BarsPage, BarSubscriptionOptions, LiveBarMeta, MarketDepth, DepthLevel, OrderSide, OrderType, PlaceOrder, UnsubscribeFn } from './feed/types';
+export type { DataFeed, TradeFeed, BarsRequest, BarsPageRequest, BarsPage, BarSubscriptionOptions, LiveBarMeta, MarketDepth, DepthLevel, OrderSide, OrderType, PlaceOrder, UnsubscribeFn, SymbolMatch, SymbolSearchRequest } from './feed/types';
 export type { InstrumentKey, QuoteSnapshot, QuoteRequest, QuoteStreamStatus, QuoteStreamHandlers, QuoteFeed, NewsRequest, NewsItem, NewsPage, NewsFeed } from './feed/types';
 export { Instrument, SessionCalendar } from './feed/instrument';
 export type { InstrumentMetadata, InstrumentCalendar, InstrumentSession, SessionCalendarSpec } from './feed/instrument';
