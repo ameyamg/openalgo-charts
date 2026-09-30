@@ -24,11 +24,11 @@ export interface Order {
   qty: number;
   filledQty: number;
   price: number;
-  triggerPrice?: number;
+  triggerPrice?: number | undefined;
   status: OrderStatus;
   /** Links SL/TP child orders to their position/entry. */
   parentId?: string;
-  role?: OrderRole;
+  role?: OrderRole | undefined;
 }
 
 export interface Position {

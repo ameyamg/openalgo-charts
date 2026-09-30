@@ -39,16 +39,16 @@ import type { AccountStateSource } from './account';
 
 export interface PlaceRequest {
   symbol: string;
-  exchange?: string;
+  exchange?: string | undefined;
   side: OrderSide;
   type: OrderType;
   qty: number;
-  price?: number;
-  triggerPrice?: number;
+  price?: number | undefined;
+  triggerPrice?: number | undefined;
   /** Product: CNC (delivery), NRML (F&O carry), MIS (intraday). Required by OpenAlgo. */
-  product?: 'CNC' | 'NRML' | 'MIS';
+  product?: 'CNC' | 'NRML' | 'MIS' | undefined;
   /** Idempotency token; a retry with the same token is never double-sent. */
-  clientToken?: string;
+  clientToken?: string | undefined;
   /** The account the order is for. Needs the `accounts` feature; never dropped on the way to the wire. */
   account?: string;
   /** Time in force. Omitted leaves the provider's own default. Needs the provider to list it. */
@@ -157,7 +157,7 @@ export interface OrderFeed {
   /** Optional support declaration; a configured provider can report unavailable metadata. */
   readonly capabilities?: TradingCapabilitySource;
   /** Declares preview, durations, leverage, accounts and the position commands. Omitted declares none. */
-  readonly features?: TradingFeatureSource;
+  readonly features?: TradingFeatureSource | undefined;
   place(req: PlaceRequest & { mode: TradeMode }): Promise<{ orderId: string }>;
   modify(orderId: string, patch: ModifyPatch): Promise<void>;
   cancel(orderId: string): Promise<void>;
@@ -289,9 +289,9 @@ export interface OrderEngineOptions {
 export interface PlaceResult {
   ok: boolean;
   clientId?: string;
-  state?: ClientOrderState;
+  state?: ClientOrderState | undefined;
   /** Client-owned intent. `ok: true` means SUBMITTED, never acknowledged. */
-  intent?: IntentState;
+  intent?: IntentState | undefined;
   reason?: string;
 }
 
@@ -304,13 +304,13 @@ export interface CommandResult extends PlaceResult {
 /** What the engine remembers of a request. Position commands have no side or type of their own. */
 interface TrackedRequest {
   symbol: string;
-  exchange?: string;
+  exchange?: string | undefined;
   side?: OrderSide;
   type?: OrderType;
-  qty?: number;
-  price?: number;
-  triggerPrice?: number;
-  account?: string;
+  qty?: number | undefined;
+  price?: number | undefined;
+  triggerPrice?: number | undefined;
+  account?: string | undefined;
 }
 
 interface Tracked {
@@ -400,19 +400,19 @@ const MAX_HELD_ENTRIES = 64;
 
 export class OrderEngine {
   private readonly _feed: OrderFeed;
-  private readonly _capabilities?: TradingCapabilitySource;
-  private readonly _features?: TradingFeatureSource;
+  private readonly _capabilities: TradingCapabilitySource | undefined;
+  private readonly _features: TradingFeatureSource | undefined;
   private readonly _selectedAccount?: OrderEngineOptions['selectedAccount'];
-  private readonly _confirmCommand?: (command: TradingCommand) => boolean | Promise<boolean>;
+  private readonly _confirmCommand: ((command: TradingCommand) => boolean | Promise<boolean>) | undefined;
   private readonly _clock: () => number;
   private readonly _constraints: OrderConstraints;
   private readonly _mode: TradeMode;
   private readonly _armed: boolean;
-  private readonly _gate?: GateFn;
+  private readonly _gate: GateFn | undefined;
   private readonly _minModifyMs: number;
   private readonly _now: () => number;
   private readonly _idGen: () => string;
-  private readonly _onValidationError?: (reason: string) => void;
+  private readonly _onValidationError: ((reason: string) => void) | undefined;
   private readonly _maxSettled: number;
 
   private readonly _orders = new Map<string, Tracked>();
@@ -560,7 +560,7 @@ export class OrderEngine {
   }
 
   /** Price, trigger and quantity checks, with both prices snapped. */
-  private _validate(req: PlaceRequest): { ok: true; price?: number; triggerPrice?: number } | { ok: false; reason: string } {
+  private _validate(req: PlaceRequest): { ok: true; price: number | undefined; triggerPrice: number | undefined } | { ok: false; reason: string } {
     // Quantity constraints (freeze, lot grid) bind on EVERY order type; only the
     // price checks are conditional, because a market order has no price. Gating
     // the whole validate call on `price !== undefined` left the market order, the

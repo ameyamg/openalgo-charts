@@ -103,13 +103,13 @@ interface Ledger {
   realized: number;
   positions: Map<string, Holding>;
   executions: Execution[];
-  subscribers: Set<{ onSnapshot: (s: AccountSnapshot) => void; onError?: (e: unknown) => void }>;
+  subscribers: Set<{ onSnapshot: (s: AccountSnapshot) => void; onError?: ((e: unknown) => void) | undefined }>;
 }
 
 interface Meta extends FakeOrderInfo {
   accountId: string;
   order: Order;
-  exchange?: string;
+  exchange?: string | undefined;
   duration?: OrderDuration;
   expiresAt?: number;
   leverage: number;
@@ -132,10 +132,10 @@ export class FakeBroker implements OrderFeed, AccountFeed {
   private readonly _meta = new Map<string, Meta>();
   private readonly _marks = new Map<string, number>();
   private readonly _accountMode: boolean;
-  private readonly _features?: TradingFeatureSource;
+  private readonly _features: TradingFeatureSource | undefined;
   private readonly _clock: () => number;
   private readonly _latency?: FakeBrokerOptions['latency'];
-  private _failures: Array<{ operation: FakeBrokerOperation; failure: FakeBrokerFailure; reason?: string }> = [];
+  private _failures: Array<{ operation: FakeBrokerOperation; failure: FakeBrokerFailure; reason: string | undefined }> = [];
   private _connected = true;
   private _muted = false;
 
@@ -252,7 +252,7 @@ export class FakeBroker implements OrderFeed, AccountFeed {
         throw refusal('this broker has no accounts, durations or leverage configured');
       }
       const orderId = `B${++this._idCounter}`;
-      this._orders.push({
+      const order: Order = {
         id: orderId,
         symbol: req.symbol,
         side: req.side,
@@ -263,8 +263,9 @@ export class FakeBroker implements OrderFeed, AccountFeed {
         triggerPrice: req.triggerPrice,
         status: req.type === 'MARKET' ? 'filled' : 'working',
         role: undefined,
-      });
-      this._emit(this._orders[this._orders.length - 1]);
+      };
+      this._orders.push(order);
+      this._emit(order);
       this._notify();
       return { orderId };
     }
@@ -436,7 +437,8 @@ export class FakeBroker implements OrderFeed, AccountFeed {
     }
     this._changed(ledger);
     if (lose) this._lost('bracket');
-    return { orderId: parent.id, stopLossId: legIds[0], takeProfitId: legIds[1] };
+    // The loop above pushed one id per leg, the stop's first.
+    return { orderId: parent.id, stopLossId: legIds[0]!, takeProfitId: legIds[1]! };
   }
 
   // ── AccountFeed (read path simulation) ─────────────────────────────────
@@ -537,8 +539,9 @@ export class FakeBroker implements OrderFeed, AccountFeed {
     // Out before the drop: not applied, and the client only sees the answer go missing.
     if (!this._connected) throw new Error('FakeBroker: the connection dropped before the answer');
     const i = this._failures.findIndex(f => f.operation === operation);
-    if (i < 0) return false;
-    const [failure] = this._failures.splice(i, 1);
+    const failure = this._failures[i];
+    if (failure === undefined) return false;
+    this._failures.splice(i, 1);
     if (failure.failure === 'reject') throw refusal(failure.reason ?? `${operation} refused`);
     if (failure.failure === 'timeout') throw new Error(`FakeBroker: ${failure.reason ?? `${operation} timed out`}`);
     return true;
