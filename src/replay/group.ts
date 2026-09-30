@@ -44,7 +44,11 @@ export interface ReplayGroupOptions {
   speed?: number;
   now?: () => number;
   scheduler?: ReplayScheduler;
-  /** Runs after all active charts reach a frame or transport transition. */
+  /**
+   * Runs after all active charts reach a frame or transport transition. One that
+   * throws ends replay, as any failure inside a transport call does: the group
+   * restores its charts, destroys itself and rethrows.
+   */
   onChange?: (state: ReplayGroupState) => void;
 }
 
