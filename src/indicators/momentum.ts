@@ -8,6 +8,7 @@ import { sma, rma, smaSeededEma, stdev, highest, lowest, nulls } from './calc';
 import { fromFirstValue, smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
 import { withTail, windowTail, machineTail, whole, cell, type Tail } from './tail';
 import { seeded, smooth, rsiState, rsiStep, wilder, atrStep, trueRangeAt, meanAt } from './steppers';
+import { withTimeframe } from './timeframe';
 
 type Calc = IndicatorDescriptor['calc'];
 
@@ -36,7 +37,7 @@ const src = (s: Readonly<Record<string, unknown>>): IndicatorSource => (s.source
 const constant = (n: number, value: number): (number | null)[] =>
   new Array<number | null>(n).fill(value);
 
-export const RSI: IndicatorDescriptor = withTail({
+export const RSI: IndicatorDescriptor = withTimeframe(withTail({
   id: 'rsi',
   name: 'RSI',
   category: 'Momentum',
@@ -84,9 +85,9 @@ export const RSI: IndicatorDescriptor = withTail({
       row[2] = lower;
     },
   }, bars, from, previous, store);
-});
+}));
 
-export const MACD: IndicatorDescriptor = withTail({
+export const MACD: IndicatorDescriptor = withTimeframe(withTail({
   id: 'macd',
   name: 'MACD',
   category: 'Momentum',
@@ -168,9 +169,9 @@ export const MACD: IndicatorDescriptor = withTail({
       row[2] = cell(m - sig);
     },
   }, bars, from, previous, store);
-});
+}));
 
-export const STOCHASTIC: IndicatorDescriptor = withTail({
+export const STOCHASTIC: IndicatorDescriptor = withTimeframe(withTail({
   id: 'stochastic',
   name: 'Stochastic',
   category: 'Momentum',
@@ -226,9 +227,9 @@ export const STOCHASTIC: IndicatorDescriptor = withTail({
   const smoothing = num(s, 'kSmoothing', 1);
   const d = num(s, 'dPeriod', 3);
   return whole(k) && whole(smoothing) && whole(d) ? k + smoothing + d - 3 : null;
-}));
+})));
 
-export const ADX: IndicatorDescriptor = withTail({
+export const ADX: IndicatorDescriptor = withTimeframe(withTail({
   id: 'adx',
   name: 'ADX / DMI',
   category: 'Trend',
@@ -323,7 +324,7 @@ export const ADX: IndicatorDescriptor = withTail({
       row[2] = cell(smooth(st.adx, dx, adxPeriod, false));
     },
   }, bars, from, previous, store);
-});
+}));
 
 /** ADX's three inputs at one bar: true range and the two directional moves, all absent on bar 0. */
 function directionalAt(bars: readonly Bar[], i: number): [number, number, number] {
@@ -339,7 +340,7 @@ function directionalAt(bars: readonly Bar[], i: number): [number, number, number
   return [tr, up > down && up > 0 ? up : 0, down > up && down > 0 ? down : 0];
 }
 
-export const CCI: IndicatorDescriptor = withTail({
+export const CCI: IndicatorDescriptor = withTimeframe(withTail({
   id: 'cci',
   name: 'CCI',
   category: 'Momentum',
@@ -424,7 +425,7 @@ export const CCI: IndicatorDescriptor = withTail({
     { price: 0, color: '#5a6b8c', dashed: true },
     { price: -100, color: '#26a69a', dashed: true },
   ],
-}, cciTail);
+}, cciTail));
 
 /**
  * CCI reads one window of typical prices. Its smoothing either reads a window
@@ -530,7 +531,7 @@ export const MFI: IndicatorDescriptor = {
   range: () => ({ min: 0, max: 100 }),
 };
 
-export const ATR: IndicatorDescriptor = withTail({
+export const ATR: IndicatorDescriptor = withTimeframe(withTail({
   id: 'atr',
   name: 'ATR',
   category: 'Volatility',
@@ -551,7 +552,7 @@ export const ATR: IndicatorDescriptor = withTail({
     start: wilder,
     step: (st, i, row) => { row[0] = cell(atrStep(st, trueRangeAt(bars, i), period)); },
   }, bars, from, previous, store);
-});
+}));
 
 /**
  * CM Williams Vix Fix — a synthetic VIX from price alone.

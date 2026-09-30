@@ -94,8 +94,12 @@ interface Bucket {
 const WEEK = 604800;
 const DAY = 86400;
 
-/** The bucket a bar belongs to, as a number equal for every bar in it. */
-function keyOf(b: Bucketing, time: number, zone: string, sessionStart: number | null): number {
+/**
+ * The bucket a bar belongs to, as a number equal for every bar in it. Shared
+ * with `./timeframe`, whose live tail has to cut a new bar exactly as the fold
+ * that computed the held result cut the history.
+ */
+export function keyOf(b: Bucketing, time: number, zone: string, sessionStart: number | null): number {
   if (b.mode === 'calendar') return bucketStartOf(b, time, zone);
   if (b.mode !== 'interval') return time; // unreachable: refused before the loop
   const s = b.seconds;
@@ -108,6 +112,62 @@ function keyOf(b: Bucketing, time: number, zone: string, sessionStart: number | 
   const anchor = zonedWallClockToUtcSeconds(date.year, date.month, date.day,
     Math.floor(sessionStart / 60), sessionStart % 60, 0, zone);
   return zonedDayIndex(time, zone) * 1e6 + Math.floor((time - anchor) / s);
+}
+
+/** One local day: its index since the epoch, its date, and the UTC span from its first instant to the next day's. */
+export interface LocalDay { index: number; year: number; month: number; date: number; from: number; to: number }
+
+/**
+ * The local day of each of a run of instants, asking the zone once per day
+ * rather than once per instant: a zone lookup costs about 25 times the
+ * arithmetic, and a minute history has hundreds of bars a day. The span's ends
+ * are resolved by the zone, so a clock change inside the day stays exact. The
+ * returned day is reused between calls.
+ */
+export function localDays(zone: string): (time: number) => Readonly<LocalDay> {
+  const day: LocalDay = { index: NaN, year: 0, month: 0, date: 0, from: Infinity, to: -Infinity };
+  return (time) => {
+    if (time >= day.from && time < day.to) return day;
+    const p = utcSecondsToZonedParts(time, zone);
+    const next = new Date(Date.UTC(p.year, p.month - 1, p.day + 1));
+    day.index = zonedDayIndex(time, zone);
+    day.year = p.year; day.month = p.month; day.date = p.day;
+    day.from = zonedWallClockToUtcSeconds(p.year, p.month, p.day, 0, 0, 0, zone);
+    day.to = zonedWallClockToUtcSeconds(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), 0, 0, 0, zone);
+    return day;
+  };
+}
+
+/**
+ * `keyOf` for a run of instants, through `localDays`: the same key for every
+ * bar, with the zone read once per local day. A calendar bucket pinned to
+ * another zone than the chart's can turn inside a chart day, so it keeps the
+ * per-bar reading.
+ */
+export function bucketKeys(b: Bucketing, zone: string, sessionStart: number | null): (time: number) => number {
+  const pinned = b.mode === 'calendar' && b.timezone !== undefined && b.timezone !== zone;
+  if (b.mode !== 'calendar' && b.mode !== 'interval') return (time) => keyOf(b, time, zone, sessionStart);
+  if (pinned || (b.mode === 'interval' && b.seconds % DAY !== 0 && sessionStart === null)) {
+    return (time) => keyOf(b, time, zone, sessionStart);
+  }
+  const seconds = b.mode === 'interval' ? b.seconds : 0;
+  const dayOf = localDays(zone);
+  let seen = NaN;
+  let perDay = 0;
+  return (time) => {
+    const day = dayOf(time);
+    if (day.index !== seen) {
+      seen = day.index;
+      if (b.mode === 'calendar') perDay = bucketStartOf(b, time, zone);
+      else if (sessionStart !== null && seconds % DAY !== 0) {
+        perDay = zonedWallClockToUtcSeconds(day.year, day.month, day.date, Math.floor(sessionStart / 60), sessionStart % 60, 0, zone);
+      }
+    }
+    if (b.mode === 'calendar') return perDay;
+    if (seconds % WEEK === 0) return Math.floor(Math.floor((day.index + 3) / 7) / (seconds / WEEK));
+    if (seconds % DAY === 0) return Math.floor(day.index / (seconds / DAY));
+    return day.index * 1e6 + Math.floor((time - perDay) / seconds);
+  };
 }
 
 const finite = (v: number): boolean => Number.isFinite(v);
@@ -151,10 +211,11 @@ export function securitySeries(
   // and folds each bucket's final values. A second pass reads them out.
   const buckets: Bucket[] = [];
   const of = new Array<number>(n);
+  const keyAt = bucketKeys(bucketing, zone, sessionStart);
   let prevKey = NaN;
   for (let i = 0; i < n; i++) {
     const bar = bars[i];
-    const key = keyOf(bucketing, bar.time, zone, sessionStart);
+    const key = keyAt(bar.time);
     if (i === 0 || key !== prevKey) {
       buckets.push({
         start: bar.time,
@@ -256,6 +317,7 @@ export function securityExpression(
   if (bars.length === 0) return {};
   const folded: Readonly<Bar>[] = [];
   const indices: number[] = [];
+  const keyAt = bucketKeys(bucketing, zone, session?.start ?? null);
   const out: IndicatorValues = {};
   let keys: string[] | undefined;
   let previousKey: number | undefined;
@@ -292,7 +354,7 @@ export function securityExpression(
       throw new IndicatorInputError('securityExpression: source times must be finite and strictly increasing');
     }
     previousTime = bar.time;
-    const key = keyOf(bucketing, bar.time, zone, session?.start ?? null);
+    const key = keyAt(bar.time);
     if (key !== previousKey) folded.push(Object.freeze({ ...bar }));
     else {
       const old = folded[folded.length - 1];

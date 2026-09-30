@@ -26,6 +26,7 @@ import {
   change, roc, rollingSum, swma, stoch, cci,
 } from './calc';
 import { fromFirstValue, smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
+import { withTimeframe } from './timeframe';
 
 const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
   const v = s[k];
@@ -116,7 +117,7 @@ function shifted(values: readonly (number | null)[], offset: number): (number | 
  * full of real RSI values, then two SMAs. First `K` lands at index 29 on the
  * defaults and `D` two bars later.
  */
-export const STOCHASTIC_RSI: IndicatorDescriptor = {
+export const STOCHASTIC_RSI: IndicatorDescriptor = withTimeframe({
   id: 'stochastic-rsi',
   name: 'Stochastic RSI',
   category: 'Momentum',
@@ -161,7 +162,7 @@ export const STOCHASTIC_RSI: IndicatorDescriptor = {
     { price: 20, color: '#787b86', title: 'Lower Band' },
   ],
   range: () => ({ min: 0, max: 100 }),
-};
+});
 
 /**
  * Williams Percent Range — the distance from the window's high down to the
@@ -173,7 +174,7 @@ export const STOCHASTIC_RSI: IndicatorDescriptor = {
  * `highest`/`lowest`), while the numerator reads the `source` input, so
  * the three do not have to agree.
  */
-export const WILLIAMS_PERCENT_R: IndicatorDescriptor = {
+export const WILLIAMS_PERCENT_R: IndicatorDescriptor = withTimeframe({
   id: 'williams-percent-r',
   name: 'Williams Percent Range',
   category: 'Momentum',
@@ -213,7 +214,7 @@ export const WILLIAMS_PERCENT_R: IndicatorDescriptor = {
     { price: -80, color: '#787b86', title: 'Lower Band' },
   ],
   range: () => ({ min: -100, max: 0 }),
-};
+});
 
 /**
  * Ultimate Oscillator — buying pressure over true range, measured across three

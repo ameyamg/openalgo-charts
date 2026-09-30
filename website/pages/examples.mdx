@@ -1328,6 +1328,24 @@ chart.addIndicator('demo-requested-mean');
 chart.fitContent();
 return chart;`} />
 
+### A built-in study on a higher timeframe
+
+Two sessions of one-minute bars from the 09:15 open. The grey line is EMA 20 on the chart's
+own bars; the orange steps are EMA 9 with `timeframe: '15m'`, folded from the same bars.
+Each 15-minute value appears once its bucket has closed and holds until the next one does,
+and the buckets start at 09:15.
+
+<RunnableExample height={360} tiers={['indicators']} caption="Simulated one-minute prices over two sessions." code={`${STOCK_BARS_SOURCE}
+const chart = lib.createChart(el);
+const open = 1788752700; // 2026-09-07 09:15 IST
+const first = stockBars(open, 375, 60, 1840, 20260930, 0.0006, 4000);
+const second = stockBars(open + 86400, 375, 60, first[first.length - 1].close, 20261001, 0.0006, 4000);
+chart.addSeries('candlestick').setData([...first, ...second]);
+chart.addIndicator('ema', { length: 20, color: '#8a93a6' });
+chart.addIndicator('ema', { length: 9, timeframe: '15m', color: '#e8a23a', 'ma:type': 'step', 'ma:width': 2 });
+chart.fitContent();
+return chart;`} />
+
 ### External values with explicit availability
 
 This example supplies a separate set of simulated observations. Its two-value

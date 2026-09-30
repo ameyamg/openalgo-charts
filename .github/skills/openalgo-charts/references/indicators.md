@@ -58,34 +58,34 @@ import 'openalgo-charts/indicators'; // side effect: registers all 112 built-ins
 | id | Name | Placement | Plot keys | Inputs (defaults) |
 |---|---|---|---|---|
 | `seasonality` | Seasonality | pane | `seasonality` (all-null; the output is a table) | `startYear` 2015, `cutoffPercent` 10, `tablePosition` `'Center'`, `tableWidth` 100, `tableHeight` 95, `showAvg` `true`, `showStDev` `true`, `showPos` `true`, `ignoredMonths` `'YYYY-MM, YYYY-MM'` |
-| `sma` | SMA | onchart | `ma` | `length` 9, `source` `'close'` |
-| `ema` | EMA | onchart | `ma` | `length` 9, `source` `'close'` |
-| `wma` | WMA | onchart | `ma` | `length` 9, `source` `'close'` |
-| `smma` | Smoothed Moving Average | onchart | `smma` | `length` 7, `source` `'close'` |
-| `supertrend` | Supertrend | onchart | `up`, `down` | `period` 10, `multiplier` 3 |
+| `sma` | SMA | onchart | `ma` | `length` 9, `source` `'close'`, `timeframe` `''` |
+| `ema` | EMA | onchart | `ma` | `length` 9, `source` `'close'`, `timeframe` `''` |
+| `wma` | WMA | onchart | `ma` | `length` 9, `source` `'close'`, `timeframe` `''` |
+| `smma` | Smoothed Moving Average | onchart | `smma` | `length` 7, `source` `'close'`, `timeframe` `''` |
+| `supertrend` | Supertrend | onchart | `up`, `down` | `period` 10, `multiplier` 3, `timeframe` `''` |
 | `halftrend` | HalfTrend | onchart | `up`, `down`, `atrHigh`, `atrLow`, `buySignal`, `sellSignal` | `amplitude` 2, `channelDeviation` 2, `atrPeriod` 100, `showChannels` `true`, `showSignals` `true`, `showLabels` `true` |
-| `parabolic-sar` | Parabolic SAR | onchart | `sar` | `start` 0.02, `increment` 0.02, `maximum` 0.2 |
+| `parabolic-sar` | Parabolic SAR | onchart | `sar` | `start` 0.02, `increment` 0.02, `maximum` 0.2, `timeframe` `''` |
 | `ichimoku` | Ichimoku Cloud | onchart | `conversion`, `base`, `spanA`, `spanB`, `lagging` | `conversionPeriod` 9, `basePeriod` 26, `laggingSpanPeriod` 52, `displacement` 26 |
-| `adx` | ADX / DMI | pane | `plusDi`, `minusDi`, `adx` | `period` 14, `adxPeriod` 14 |
+| `adx` | ADX / DMI | pane | `plusDi`, `minusDi`, `adx` | `period` 14, `adxPeriod` 14, `timeframe` `''` |
 | `alphatrend` | AlphaTrend | onchart | `alphatrend`, `lagged` | `coeff` 1, `AP` 14, `source` `'close'`, `showsignalsk` `true`, `novolumedata` `false` |
-| `alma` | Arnaud Legoux Moving Average | onchart | `alma` | `length` 9, `offset` 0.85, `sigma` 6 |
-| `dema` | Double EMA | onchart | `dema` | `length` 9, `source` `'close'` |
-| `hma` | Hull Moving Average | onchart | `hma` | `length` 9, `source` `'close'` |
+| `alma` | Arnaud Legoux Moving Average | onchart | `alma` | `length` 9, `offset` 0.85, `sigma` 6, `timeframe` `''` |
+| `dema` | Double EMA | onchart | `dema` | `length` 9, `source` `'close'`, `timeframe` `''` |
+| `hma` | Hull Moving Average | onchart | `hma` | `length` 9, `source` `'close'`, `timeframe` `''` |
 | `hull-suite` | Hull Suite | onchart | `mhull`, `shull` | `source` `'close'`, `mode` `'Hma'`, `length` 55, `lengthMult` 1, `switchColor` `true`, `candleCol` `false`, `visualSwitch` `true` |
 | `chande-kroll-stop` | Chande Kroll Stop | onchart | `stopLong`, `stopShort` | `p` 10, `x` 1, `q` 9 |
 | `chandelier-exit` | Chandelier Exit | onchart | `longExit`, `shortExit` | `length` 22, `atrLength` 22, `atrMultiplier` 3 |
 | `aroon` | Aroon | pane | `up`, `down` | `length` 14 |
 | `aroon-oscillator` | Aroon Oscillator | pane | `osc` | `length` 14 |
-| `kama` | Kaufman's Adaptive Moving Average | onchart | `kama` | `erLength` 10, `fastLength` 2, `slowLength` 30, `source` `'close'` |
-| `lsma` | Least Squares Moving Average | onchart | `lsma` | `length` 25, `offset` 0, `source` `'close'` |
+| `kama` | Kaufman's Adaptive Moving Average | onchart | `kama` | `erLength` 10, `fastLength` 2, `slowLength` 30, `source` `'close'`, `timeframe` `''` |
+| `lsma` | Least Squares Moving Average | onchart | `lsma` | `length` 25, `offset` 0, `source` `'close'`, `timeframe` `''` |
 | `linreg-slope` | Linear Regression Slope | pane | `slope` | `periods` 14 |
 | `ma-cross` | MA Cross | onchart | `short`, `long`, `cross` | `shortLength` 9, `longLength` 26 |
 | `cpr` | CPR with Floor Pivot | onchart | 27: `{d,w,m}` x `Pivot`, `S1`-`S3`, `R1`-`R3`, `Bc`, `Tc` | `pivotMode` `'auto'`, `showDaily` `true`, `showWeekly` `false`, `showMonthly` `false`, `displayS1R1` `false` |
-| `mcginley-dynamic` | McGinley Dynamic | onchart | `mg` | `length` 14 |
+| `mcginley-dynamic` | McGinley Dynamic | onchart | `mg` | `length` 14, `timeframe` `''` |
 | `median` | Median | onchart | `median`, `upper`, `lower`, `medianEma` | `source` `'hl2'`, `length` 3, `atrLength` 14, `atrMult` 2 |
 | `ma-ribbon` | Moving Average Ribbon | onchart | `ma1`, `ma2`, `ma3`, `ma4` | `showMa1` `true`, `ma1Type` `'SMA'`, `ma1Source` `'close'`, `ma1Length` 20, `showMa2` `true`, `ma2Type` `'SMA'`, `ma2Source` `'close'`, `ma2Length` 50, `showMa3` `true`, `ma3Type` `'SMA'`, `ma3Source` `'close'`, `ma3Length` 100, `showMa4` `true`, `ma4Type` `'SMA'`, `ma4Source` `'close'`, `ma4Length` 200 |
-| `tema` | Triple EMA | onchart | `tema` | `length` 9 |
-| `t3` | T3 Average | onchart | `t3` | `length` 5, `factor` 0.7, `highlightMovements` `true`, `source` `'close'` |
+| `tema` | Triple EMA | onchart | `tema` | `length` 9, `timeframe` `''` |
+| `t3` | T3 Average | onchart | `t3` | `length` 5, `factor` 0.7, `highlightMovements` `true`, `source` `'close'`, `timeframe` `''` |
 | `twap` | Time Weighted Average Price | onchart | `twap` | `anchor` `'session'`, `source` `'ohlc4'`, `offset` 0 |
 | `alligator` | Williams Alligator | onchart | `jaw`, `teeth`, `lips` | `jawLength` 21, `teethLength` 13, `lipsLength` 8, `jawOffset` 8, `teethOffset` 5, `lipsOffset` 3 |
 | `vortex` | Vortex Indicator | pane | `vip`, `vim` | `length` 14 |
@@ -94,18 +94,18 @@ import 'openalgo-charts/indicators'; // side effect: registers all 112 built-ins
 | `williams-fractals` | Williams Fractals | onchart | `fractals` | `periods` 2, `showUp` `true`, `showDown` `true` |
 | `consolidation-breakout` | Consolidation and Breakout | onchart | `rangeHigh`, `rangeLow` | `markbreakout` `true`, `colorinside` `true` |
 | `zigzag` | ZigZag (unreleased) | onchart | `zigzag` (swing points only; the legs are `draws` lines) | `deviation` 5 |
-| `zlema` | Zero Lag EMA (unreleased) | onchart | `zlema` | `length` 20, `source` `'close'` |
-| `vidya` | Variable Index Dynamic Average (unreleased) | onchart | `vidya` | `length` 9, `cmoLength` 9, `source` `'close'` |
+| `zlema` | Zero Lag EMA (unreleased) | onchart | `zlema` | `length` 20, `source` `'close'`, `timeframe` `''` |
+| `vidya` | Variable Index Dynamic Average (unreleased) | onchart | `vidya` | `length` 9, `cmoLength` 9, `source` `'close'`, `timeframe` `''` |
 | `high-low-52-week` | 52 Week High/Low (unreleased) | onchart | `high`, `low` | (none besides appearance) |
 
 ### Momentum (31)
 
 | id | Name | Placement | Plot keys | Inputs (defaults) |
 |---|---|---|---|---|
-| `rsi` | RSI | pane | `rsi` | `length` 14, `source` `'close'`, `overbought` 70, `oversold` 30 |
-| `macd` | MACD | pane | `histogram`, `macd`, `signal` | `fastPeriod` 12, `slowPeriod` 26, `signalPeriod` 9, `source` `'close'` |
-| `stochastic` | Stochastic | pane | `k`, `d` | `kPeriod` 14, `kSmoothing` 1, `dPeriod` 3 |
-| `cci` | CCI | pane | `cci`, `ma`, `bbUpper`, `bbLower` | `period` 20, `constant` 0.015, `maType` `'SMA'`, `maLength` 20, `bbMult` 2 |
+| `rsi` | RSI | pane | `rsi` | `length` 14, `source` `'close'`, `overbought` 70, `oversold` 30, `timeframe` `''` |
+| `macd` | MACD | pane | `histogram`, `macd`, `signal` | `fastPeriod` 12, `slowPeriod` 26, `signalPeriod` 9, `source` `'close'`, `timeframe` `''` |
+| `stochastic` | Stochastic | pane | `k`, `d` | `kPeriod` 14, `kSmoothing` 1, `dPeriod` 3, `timeframe` `''` |
+| `cci` | CCI | pane | `cci`, `ma`, `bbUpper`, `bbLower` | `period` 20, `constant` 0.015, `maType` `'SMA'`, `maLength` 20, `bbMult` 2, `timeframe` `''` |
 | `mfi` | Money Flow Index | pane | `mfi` | `period` 14 |
 | `awesome-oscillator` | Awesome Oscillator | pane | `ao` | (none) |
 | `balance-of-power` | Balance of Power | pane | `bop` | (none) |
@@ -123,9 +123,9 @@ import 'openalgo-charts/indicators'; // side effect: registers all 112 built-ins
 | `smi-ergodic-indicator` | SMI Ergodic Indicator | pane | `erg`, `sig` | `longlen` 20, `shortlen` 5, `siglen` 5 |
 | `smi-ergodic-oscillator` | SMI Ergodic Oscillator | pane | `osc` | `longlen` 20, `shortlen` 5, `siglen` 5 |
 | `smi` | Stochastic Momentum Index | pane | `smi`, `ema` | `lengthK` 10, `lengthD` 3, `lengthEMA` 3 |
-| `stochastic-rsi` | Stochastic RSI | pane | `k`, `d` | `smoothK` 3, `smoothD` 3, `lengthRSI` 14, `lengthStoch` 14, `source` `'close'` |
+| `stochastic-rsi` | Stochastic RSI | pane | `k`, `d` | `smoothK` 3, `smoothD` 3, `lengthRSI` 14, `lengthStoch` 14, `source` `'close'`, `timeframe` `''` |
 | `wavetrend` | WaveTrend Pro | pane | `mom`, `wt1`, `wt2` | `source` `'hlc3'`, `n1` 10, `n2` 21, `sigLen` 4, `obLevel1` 60, `obLevel2` 53, `osLevel1` -60, `osLevel2` -53, `filterZone` `true`, `useInner` `true`, `showMom` `true`, `showRegDiv` `true`, `showHidDiv` `false`, `lbL` 3, `lbR` 3, `rangeUpper` 60, `rangeLower` 5 |
-| `williams-percent-r` | Williams Percent Range | pane | `percentR` | `length` 14, `source` `'close'` |
+| `williams-percent-r` | Williams Percent Range | pane | `percentR` | `length` 14, `source` `'close'`, `timeframe` `''` |
 | `ultimate-oscillator` | Ultimate Oscillator | pane | `uo` | `length1` 7, `length2` 14, `length3` 28 |
 | `relative-vigor-index` | Relative Vigor Index | pane | `rvgi`, `signal` | `length` 10, `offset` 0 |
 | `woodies-cci` | Woodies CCI | pane | `hist`, `turbo`, `cci14` | `cciTurboLength` 6, `cci14Length` 14 |
@@ -138,11 +138,11 @@ import 'openalgo-charts/indicators'; // side effect: registers all 112 built-ins
 
 | id | Name | Placement | Plot keys | Inputs (defaults) |
 |---|---|---|---|---|
-| `bollinger` | Bollinger Bands | onchart | `upper`, `basis`, `lower` | `length` 20, `stdDev` 2, `source` `'close'` |
-| `atr` | ATR | pane | `atr` | `period` 14 |
+| `bollinger` | Bollinger Bands | onchart | `upper`, `basis`, `lower` | `length` 20, `stdDev` 2, `source` `'close'`, `timeframe` `''` |
+| `atr` | ATR | pane | `atr` | `period` 14, `timeframe` `''` |
 | `williams-vix-fix` | Williams VIX Fix | pane | `wvf`, `rangeHigh`, `rangeLow`, `upperBand` | `pd` 22, `bbl` 20, `mult` 2, `lb` 50, `ph` 0.85, `pl` 1.01, `hp` `false`, `sd` `false` |
-| `envelope` | Envelope | onchart | `upper`, `basis`, `lower` | `length` 20, `percent` 10, `source` `'close'`, `exponential` `false` |
-| `donchian` | Donchian Channels | onchart | `upper`, `basis`, `lower` | `length` 20, `offset` 0 |
+| `envelope` | Envelope | onchart | `upper`, `basis`, `lower` | `length` 20, `percent` 10, `source` `'close'`, `exponential` `false`, `timeframe` `''` |
+| `donchian` | Donchian Channels | onchart | `upper`, `basis`, `lower` | `length` 20, `offset` 0, `timeframe` `''` |
 | `bollinger-percent-b` | Bollinger Bands %b | pane | `percentB` | `length` 20, `source` `'close'`, `mult` 2 |
 | `bollinger-bandwidth` | Bollinger BandWidth | pane | `bandwidth`, `expansion`, `contraction` | `length` 20, `source` `'close'`, `mult` 2, `expansionLength` 125, `contractionLength` 125 |
 | `bb-trend` | BBTrend | pane | `bbtrend` | `shortLength` 20, `longLength` 50, `stdDevMult` 2 |
@@ -153,7 +153,7 @@ import 'openalgo-charts/indicators'; // side effect: registers all 112 built-ins
 | `standard-error` | Standard Error | pane | `stdErr` | `length` 14 |
 | `average-daily-range` | Average Daily Range | pane | `adr` | `length` 14 |
 | `chop-zone` | Chop Zone | pane | `chopZone` | (none) |
-| `keltner-channel` | Keltner Channels | onchart | `upper`, `basis`, `lower` | `length` 20, `mult` 2, `source` `'close'`, `exp` `true`, `bandsStyle` `'Average True Range'`, `atrlength` 10 |
+| `keltner-channel` | Keltner Channels | onchart | `upper`, `basis`, `lower` | `length` 20, `mult` 2, `source` `'close'`, `exp` `true`, `bandsStyle` `'Average True Range'`, `atrlength` 10, `timeframe` `''` |
 | `standard-error-bands` | Standard Error Bands | onchart | `upper`, `basis`, `lower` | `periods` 21, `errors` 2, `method` `'Simple'`, `averagePeriods` 3 |
 | `ma-channel` | Moving Average Channel | onchart | `upper`, `lower` | `upperLength` 20, `lowerLength` 20, `upperOffset` 0, `lowerOffset` 0 |
 | `mass-index` | Mass Index | pane | `mi` | `length` 10 |
@@ -179,7 +179,7 @@ import 'openalgo-charts/indicators'; // side effect: registers all 112 built-ins
 | `ease-of-movement` | Ease of Movement | pane | `eom` | `length` 14, `divisor` 10000 |
 | `elder-force-index` | Elder Force Index | pane | `efi` | `length` 13 |
 | `klinger-oscillator` | Klinger Oscillator | pane | `kvo`, `signal` | (none) |
-| `vwma` | Volume Weighted Moving Average | onchart | `vwma` | `length` 20, `source` `'close'`, `offset` 0 |
+| `vwma` | Volume Weighted Moving Average | onchart | `vwma` | `length` 20, `source` `'close'`, `offset` 0, `timeframe` `''` |
 | `nvi` | Negative Volume Index | pane | `nvi`, `ema` | `maLength` 255 |
 | `pvi` | Positive Volume Index | pane | `pvi`, `ema` | `maLength` 255 |
 | `pvt` | Price Volume Trend | pane | `pvt` | (none) |
@@ -1487,6 +1487,96 @@ another instrument nor reconstructs intrabar data from coarse bars. Missing buck
 are absent; the last bucket is not confirmed by wall-clock time. Session anchors
 use local wall-clock time across offset changes. Tick and volume intervals are
 rejected because time bars cannot determine their closes.
+
+## A built-in on a higher timeframe: the `timeframe` input (unreleased)
+
+29 built-ins take a `timeframe` input (`type: 'interval'`, default `''`): a 15-minute EMA
+or an hourly Supertrend on a 1-minute chart, folded from the chart's own bars, without
+changing the chart's interval and without a second data source.
+
+```ts
+const ema = chart.addIndicator('ema', { length: 20, timeframe: '15m' });
+ema.setSettings({ timeframe: '1h' });
+ema.setSettings({ timeframe: '' });   // the chart's own timeframe again
+```
+
+- **Empty (the default) is the study as it was.** The wrapped `calc` and `calcTail` are the
+  built-in's own, called with the same arguments, so the output and the live tail do not
+  change. A layout saved before the key existed loads as `''` and computes what it did;
+  `getState()` then writes `timeframe: ''` for these 29 studies only, and
+  `indicatorDefaults()` gains the key for them only.
+- **Set, it reads each completed bucket.** The bars are folded by the `securityExpression`
+  fold in `confirmed` mode: the study runs on the folded bars, and a bucket's value is
+  drawn from the first bar of the next bucket and held across it. A value never changes
+  once shown, live or on reload; the first bucket's bars are `null`. The legend reads
+  `EMA 20 close 15m`.
+- **Buckets follow the chart's calendar.** Days and weeks are cut in the chart's zone. A
+  sub-day bucket starts at the session open, read from the bars: the time of day most
+  loaded days first trade at, the earliest on a tie. An NSE hourly bucket therefore runs
+  09:15 to 10:15, not 09:30 to 10:30, and the last one of the day is 15:15 to 15:30; a
+  New York chart starts at 09:30; a round-the-clock market at midnight.
+- **A timeframe no coarser than the chart's is the chart's own**, compared with the
+  chart's declared interval (`calc` context `interval`). With no declared interval, a fold
+  that puts no two bars in one bucket is the chart's own.
+- **Refused with `IndicatorInputError`**: an unknown code, a tick or volume interval, a
+  chart whose own bars close on trade flow, and another study's output as the `source`
+  while folding. `addIndicator` throws; a later `setSettings` puts the study in the
+  `error` data status with the message, and the next good setting clears it.
+- **Live ticks.** A tick inside a bucket carries the held values; the bar that opens a
+  new bucket recomputes the fold once. A setting that reads ahead (a negative `offset` on
+  `vwma` or `donchian`) shifts a later bucket onto shown bars, so it recomputes in full
+  on every tick instead.
+- **History depth.** The fold has only the loaded bars: an hourly EMA 20 needs about 20
+  hours of bars on the chart, a daily one about 20 sessions.
+- **Transformed bars fold nothing meaningful.** A host that feeds Renko bricks, Kagi or
+  point and figure elements as the primary series gets those elements folded by their
+  times. Compute a timeframe study on time bars.
+
+The widget's study settings render the input as a select: `Chart` (the empty value), then
+the intervals the host serves (`WidgetOptions.intervals`), or the built-in tokens and every
+registered code when the host named none. `controlsFromInputs(inputs, translation,
+intervals)` takes the list as its third argument for a host building its own form, and
+`WidgetContext.intervals` carries it.
+
+**Opted in:** `sma`, `ema`, `wma`, `vwma`, `hma`, `dema`, `tema`, `alma`, `smma`, `t3`,
+`lsma`, `kama`, `mcginley-dynamic`, `zlema`, `vidya`; `bollinger`, `keltner-channel`,
+`donchian`, `envelope`; `supertrend`, `parabolic-sar`, `atr`; `rsi`, `macd`, `stochastic`,
+`stochastic-rsi`, `williams-percent-r`, `cci`, `adx`.
+
+**Left out, and why:**
+
+| Studies | Why a timeframe is not offered |
+|---|---|
+| `vwap`, `twap` | Anchored to the session (or a period) and accumulated within it: folded, the line barely moves and loses the anchor. |
+| `cpr`, `average-daily-range`, `high-low-52-week` | Already computed from daily or longer periods of the chart's bars. |
+| `obv`, `adl`, `pvt`, `nvi`, `pvi`, `net-volume` | Running totals from the first loaded bar: folding changes only the step, not the reading. |
+| `volume`, `open-interest`, `open-interest-change`, `open-interest-buildup` | Each bar's own reading; the chart's timeframe is the reading. |
+| `ichimoku`, `dpo`, `alligator` | Displaced or centred by a count of chart bars, which a fold would count in folded bars. |
+| `halftrend`, `williams-fractals`, `rsi-divergence`, `consolidation-breakout`, `alphatrend`, `wavetrend`, `zigzag` | Markers, pivots and swing lines dated at bars: folded they repeat across a bucket, and a pivot is confirmed by later bars. |
+| `hull-suite`, `seasonality` | Recolour the candles or draw a table. |
+
+The other built-ins are not in this first list. Any study that computes from the bars
+alone and reads no later bar can be given the input with `withTimeframe`.
+
+### `withTimeframe(descriptor)`
+
+Exported from `openalgo-charts/indicators`. It returns the descriptor with the `timeframe`
+input added after its ungrouped inputs (ahead of a grouped section) and a `calc` and
+`calcTail` that behave as above. The tail is not enumerable, like a built-in's own, so a
+spread of the result does not carry it.
+
+```ts
+import { registerIndicator, getIndicator } from 'openalgo-charts';
+import { withTimeframe } from 'openalgo-charts/indicators';
+
+registerIndicator(withTimeframe(getIndicator('mfi')));         // the built-in, now with a timeframe
+registerIndicator(withTimeframe({ id: 'my-range', /* ... */ })); // your own descriptor
+```
+
+It throws for a descriptor that already has a `timeframe` input or that brings its own
+data through `attach`. The wrapped `calc` must compute from the bars alone and be causal,
+as a `securityExpression` expression must: markers, tables and bar colours of a wrapped
+study are read from the aligned values, one per chart bar.
 
 ## Requested data with explicit availability
 

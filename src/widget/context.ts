@@ -1027,4 +1027,9 @@ export interface WidgetContext {
   /** The current symbol and interval, for dialogs that name them. */
   symbol(): { symbol: string; exchange: string };
   interval(): string;
+  /**
+   * The intervals the host serves, when it named them (`WidgetOptions.intervals`):
+   * a study's timeframe select offers these.
+   */
+  readonly intervals?: readonly string[] | undefined;
 }

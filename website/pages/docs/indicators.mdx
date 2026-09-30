@@ -207,7 +207,9 @@ with `chart.addIndicator('rsi', {}, { paneIndex: 2 })`.
 carries per-plot style inputs (colour, width, line style, opacity) that are not listed
 here; read them off `indicatorStyleInputs(descriptor)` rather than hardcoding them. Ids
 are exact: `addIndicator` throws on one it does not know, so guard a user-supplied id
-with `hasIndicator(id)`.
+with `hasIndicator(id)`. The moving averages, the bands and ten other studies also take a
+`timeframe`, which computes them on a higher timeframe folded from the chart's bars: see
+[a built-in on a higher timeframe](#a-built-in-on-a-higher-timeframe).
 
 ### Trend (40)
 
@@ -1995,6 +1997,80 @@ registerIndicator({
   calcTail: ema.calcTail,
 });
 ```
+
+## A built-in on a higher timeframe
+
+A 15-minute EMA or an hourly Supertrend on a 1-minute chart, without changing the chart's
+interval and without a second data source: 29 built-ins take a `timeframe` input, an
+interval whose empty default is the chart's own.
+
+```ts
+const ema = chart.addIndicator('ema', { length: 20, timeframe: '15m' });
+ema.setSettings({ timeframe: '1h' });
+ema.setSettings({ timeframe: '' });   // the chart's own timeframe again
+```
+
+Empty, which is the default, the study is exactly what it was: the same calculation and the
+same live tail, so a chart that never sets it draws what it drew before, and a layout saved
+by an earlier version loads and computes as it did. `getState()` and `indicatorDefaults()`
+carry the new key for these 29 studies only.
+
+Set, the chart's bars are folded to that interval, the study runs on the folded bars, and
+each bucket's value is drawn from the first bar of the bucket after it, then held across
+that bucket. A value appears once its period has closed and never changes after, live or on
+a reload. The bars of the first bucket are empty, and the legend names the timeframe
+(`EMA 20 close 15m`).
+
+Buckets follow the chart's calendar. Days and weeks are cut in the chart's timezone, and a
+sub-day bucket starts at the session open, which is read from the bars as the time of day
+most of the loaded days first trade at. An NSE hourly bucket therefore runs 09:15 to 10:15
+rather than 09:30 to 10:30, and the day's last is 15:15 to 15:30; a New York chart starts
+its buckets at 09:30, and a market that trades round the clock at midnight.
+
+| Case | What happens |
+|---|---|
+| A timeframe no coarser than the chart's interval | The chart's own timeframe: nothing is folded. |
+| An unknown code, a tick or volume interval, or a chart whose bars close on trade flow | Refused. `addIndicator` throws; a later `setSettings` sets the study's data status to `error` with the reason, and the next good setting clears it. |
+| The `source` set to another study's output | Refused while a timeframe is set: an output is not a bar that can be folded. |
+| A live tick inside a bucket | The held values stand. The bar that opens a new bucket recomputes the fold once. |
+| A negative `offset` on VWMA or Donchian | It shifts a later bucket onto bars already shown, so it recomputes on every tick. |
+| A short history | The fold has only the loaded bars: an hourly EMA 20 needs about 20 hours of them. |
+| Renko, Kagi or point and figure elements fed as the chart's bars | Folded by their times, which means nothing. Compute a timeframe study on time bars. |
+
+The widget's study settings show the input as a select, **Chart** first and then the
+intervals the host serves (`intervals` in the widget options), and the reference host does
+the same with its own intervals. Try the
+[higher-timeframe example](/examples#a-built-in-study-on-a-higher-timeframe).
+
+**Which studies take it.** The moving averages: SMA, EMA, WMA, VWMA, Hull, DEMA, TEMA,
+ALMA, Smoothed, T3, Least Squares, KAMA, McGinley Dynamic, Zero Lag EMA and VIDYA. The
+bands: Bollinger, Keltner, Donchian and Envelope. Then Supertrend, Parabolic SAR, ATR, RSI,
+MACD, Stochastic, Stochastic RSI, Williams Percent Range, CCI and ADX.
+
+**Which do not, and why:**
+
+| Studies | Why |
+|---|---|
+| VWAP, TWAP | Anchored to the session or a period and accumulated within it: folded, the line barely moves and loses its anchor. |
+| CPR, Average Daily Range, 52 Week High/Low | Already computed from daily or longer periods. |
+| On-Balance Volume, Accumulation/Distribution, Price Volume Trend, Negative and Positive Volume Index, Net Volume | Running totals from the first loaded bar: a fold changes the step, not the reading. |
+| Volume and the three open interest studies | Each bar's own reading, which is the chart's timeframe. |
+| Ichimoku Cloud, Detrended Price Oscillator, Williams Alligator | Displaced or centred by a count of chart bars. |
+| HalfTrend, Williams Fractals, RSI Divergence, Consolidation and Breakout, AlphaTrend, WaveTrend Pro, ZigZag | Markers, pivots and swing lines dated at bars: folded they would repeat across a bucket, and a pivot is confirmed by later bars. |
+| Hull Suite, Seasonality | Recolour the candles or draw a table. |
+
+The rest are not in this first list. `withTimeframe` from `openalgo-charts/indicators` gives
+any study that computes from the bars alone, and reads no later bar, the same input:
+
+```ts
+import { registerIndicator, getIndicator } from 'openalgo-charts';
+import { withTimeframe } from 'openalgo-charts/indicators';
+
+registerIndicator(withTimeframe(getIndicator('mfi')));   // the built-in, with a timeframe
+```
+
+It throws for a descriptor that already has a `timeframe` input or that brings its own data
+through `attach`.
 
 ## Higher timeframes: `securitySeries` (2.4.0)
 

@@ -15,6 +15,7 @@ import type { Bar, IndicatorDescriptor, IndicatorSource } from 'openalgo-charts'
 import { nulls, smaSeededEma } from './calc';
 import { withTail, machineTail, stepAll, cell, type Machine } from './tail';
 import { seeded, smooth, type Seeded } from './steppers';
+import { withTimeframe } from './timeframe';
 
 type Settings = Readonly<Record<string, unknown>>;
 
@@ -43,7 +44,7 @@ const lagOf = (length: number): number => Math.floor((length - 1) / 2);
  * ramp with an odd length the line sits on the source exactly, which is the lag
  * it exists to remove.
  */
-export const ZLEMA: IndicatorDescriptor = withTail({
+export const ZLEMA: IndicatorDescriptor = withTimeframe(withTail({
   id: 'zlema',
   name: 'Zero Lag EMA',
   category: 'Trend',
@@ -73,7 +74,7 @@ export const ZLEMA: IndicatorDescriptor = withTail({
       row[0] = cell(smooth(st, i >= lag ? x + (x - sourceValue(bars[i - lag], source)) : NaN, length, true));
     },
   }, bars, from, previous, store);
-});
+}));
 
 /**
  * The share of the last `length` one-bar changes that went one way, the
@@ -131,7 +132,7 @@ function vidyaMachine(bars: readonly Bar[], s: Settings): Machine<{ value: numbe
  * line, and a bar whose window holds a missing value is absent, with the line
  * resuming afterwards from the value it held.
  */
-export const VIDYA: IndicatorDescriptor = withTail({
+export const VIDYA: IndicatorDescriptor = withTimeframe(withTail({
   id: 'vidya',
   name: 'Variable Index Dynamic Average',
   category: 'Trend',
@@ -146,7 +147,7 @@ export const VIDYA: IndicatorDescriptor = withTail({
   calc: (bars, s) => stepAll(vidyaMachine(bars, s), bars.length),
 }, (calc) => (bars, s, from, previous, store) => machineTail(
   calc, `${int(s, 'length', 9)}|${int(s, 'cmoLength', 9)}|${src(s)}`, vidyaMachine(bars, s), bars, from, previous, store,
-));
+)));
 
 /**
  * Elder-Ray: how far buyers pushed the high above the consensus value, and how

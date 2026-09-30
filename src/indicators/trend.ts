@@ -16,6 +16,7 @@ import { sma, wma, stdev, highest, lowest, nulls, smaSeededEma } from './calc';
 import type { NumericalWindowOptions } from './statistics';
 import { withTail, whole, cell, claimOf, settle, windowTail, machineTail, type Tail } from './tail';
 import { seeded, smooth, observed, observedStep, supertrendState, supertrendStep, sarState, sarStep } from './steppers';
+import { withTimeframe } from './timeframe';
 
 type Calc = IndicatorDescriptor['calc'];
 
@@ -125,14 +126,14 @@ function emaTail(calc: Calc): Tail {
   };
 }
 
-export const SMA: IndicatorDescriptor = movingAverage('sma', 'SMA', '#4f8cff', sma, false);
-export const WMA: IndicatorDescriptor = movingAverage('wma', 'WMA', '#ab47bc', wma, false);
+export const SMA: IndicatorDescriptor = withTimeframe(movingAverage('sma', 'SMA', '#4f8cff', sma, false));
+export const WMA: IndicatorDescriptor = withTimeframe(movingAverage('wma', 'WMA', '#ab47bc', wma, false));
 // `smaSeededEma`, not the base bundle's `ema`: the plotted EMA has to open where
 // the standard definition opens, on the simple mean of the first `length` values
 // at index `length - 1`. The base `ema` seeds from bar 0 to match `openalgo.ta`
 // and is public API in its own right, so it keeps that behaviour and this
 // descriptor stops using it. Every other EMA in the tier already reads this way.
-export const EMA: IndicatorDescriptor = movingAverage('ema', 'EMA', '#f5a623', smaSeededEma, true);
+export const EMA: IndicatorDescriptor = withTimeframe(movingAverage('ema', 'EMA', '#f5a623', smaSeededEma, true));
 
 function bollinger(bars: readonly Bar[], s: Readonly<Record<string, unknown>>): Record<string, (number | null)[]> {
   const values = sourceValues(bars, src(s));
@@ -145,7 +146,7 @@ function bollinger(bars: readonly Bar[], s: Readonly<Record<string, unknown>>): 
   return { upper: nulls(upper), basis: nulls(basis), lower: nulls(lower) };
 }
 
-export const BOLLINGER: IndicatorDescriptor = withTail({
+export const BOLLINGER: IndicatorDescriptor = withTimeframe(withTail({
   id: 'bollinger',
   name: 'Bollinger Bands',
   category: 'Volatility',
@@ -167,7 +168,7 @@ export const BOLLINGER: IndicatorDescriptor = withTail({
   // The basis and the deviation both read one window of the source.
   const length = num(s, 'length', 20);
   return whole(length) ? length - 1 : null;
-}));
+})));
 
 /**
  * Which calendar boundary restarts the accumulation. The reference also offers
@@ -523,7 +524,7 @@ export const VWAP: IndicatorDescriptor = withTail({
   },
 }, vwapTail);
 
-export const SUPERTREND: IndicatorDescriptor = withTail({
+export const SUPERTREND: IndicatorDescriptor = withTimeframe(withTail({
   id: 'supertrend',
   name: 'Supertrend',
   category: 'Trend',
@@ -587,9 +588,9 @@ export const SUPERTREND: IndicatorDescriptor = withTail({
       row[2] = live && bar !== undefined ? (bar.open + bar.close) / 2 : null;
     },
   }, bars, from, previous, store);
-});
+}));
 
-export const PARABOLIC_SAR: IndicatorDescriptor = withTail({
+export const PARABOLIC_SAR: IndicatorDescriptor = withTimeframe(withTail({
   id: 'parabolic-sar',
   name: 'Parabolic SAR',
   category: 'Trend',
@@ -677,7 +678,7 @@ export const PARABOLIC_SAR: IndicatorDescriptor = withTail({
     start: () => sarState(start),
     step: (st, i, row) => { row[0] = cell(sarStep(st, bars[i], start, inc, max)); },
   }, bars, from, previous, store);
-});
+}));
 
 /** Shift a series by `k` bars: positive = forward (later), negative = backward. */
 function shift(values: readonly number[], k: number): number[] {

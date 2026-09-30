@@ -127,10 +127,10 @@ export interface FormHandle {
  */
 const BUILTIN_INTERVAL_CODES: readonly string[] = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '1d', '1w'];
 
-function intervalOptions(): { label: string; value: string }[] {
+function intervalOptions(served?: readonly string[]): { label: string; value: string }[] {
   const seen = new Set<string>();
   const out: { label: string; value: string }[] = [{ label: 'Chart', value: '' }];
-  for (const code of [...BUILTIN_INTERVAL_CODES, ...registeredIntervals().map((d) => d.code)]) {
+  for (const code of served ?? [...BUILTIN_INTERVAL_CODES, ...registeredIntervals().map((d) => d.code)]) {
     const key = code.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -144,8 +144,13 @@ function intervalOptions(): { label: string; value: string }[] {
 /**
  * Chart-settings and indicator inputs. `source` becomes a select over the
  * canonical price sources; a `colorPair` keeps its two or three keys.
+ * `intervals`, the codes the host serves, fills an `interval` select in their
+ * order; without it the select offers the built-in tokens and every
+ * registered code.
  */
-export function controlsFromInputs(inputs: readonly ChartSettingsInput[], translation?: FormTranslationOptions): FormControl[] {
+export function controlsFromInputs(
+  inputs: readonly ChartSettingsInput[], translation?: FormTranslationOptions, intervals?: readonly string[],
+): FormControl[] {
   const out: FormControl[] = [];
   for (const input of inputs) {
     const before = out.length;
@@ -178,12 +183,12 @@ export function controlsFromInputs(inputs: readonly ChartSettingsInput[], transl
         out.push({ key: input.key, kind: 'select', label: input.label, group: input.group, options: INDICATOR_SOURCES });
         break;
       case 'interval':
-        // Codes the engine can bucket by and nothing else: the built-in tokens
-        // (which the registry does not list) and whatever the host registered.
-        // The empty entry is the chart's own interval.
+        // Codes the engine can bucket by and nothing else: the host's own list,
+        // or the built-in tokens (which the registry does not list) and
+        // whatever the host registered. The empty entry is the chart's own.
         out.push({
           key: input.key, kind: 'select', label: input.label, group: input.group,
-          options: intervalOptions(),
+          options: intervalOptions(intervals),
         });
         break;
       case 'time':
