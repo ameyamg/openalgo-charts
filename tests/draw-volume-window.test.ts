@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { MEASURE } from '../src/draw/measure-tools';
 import { makeCtx } from './helpers/fake-ctx';
+import { darkTheme } from '../src/theme';
 import type { DrawContext } from '../src/draw/types';
 
 it('measures only the selected history window and reads its live volume again', () => {
@@ -14,7 +15,7 @@ it('measures only the selected history window and reads its live volume again', 
       ctx, selected: false, pts: [{ x: 10, y: 50 }, { x: 100, y: 150 }],
       drawing: { id: 'm', tool: 'measure', points: [{ time: 99_989, price: 10 }, { time: 99_999, price: 20 }], style: {}, paneIndex: 0, zIndex: 0 },
       style: { color: '#4f8cff', lineWidth: 1.5 }, formatPrice: (p: number) => p.toFixed(2),
-      rc: { dpr: 1, bars: () => bars, dataLayer: { timeToIndexFloat: (t: number) => t } },
+      rc: { dpr: 1, theme: darkTheme, bars: () => bars, dataLayer: { timeToIndexFloat: (t: number) => t } },
     } as unknown as DrawContext);
     return rec.ops.filter(o => o.type === 'fillText').map(o => o.text);
   };

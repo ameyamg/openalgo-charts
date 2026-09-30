@@ -176,8 +176,15 @@ export function arrowHead(c: DrawContext, a: ScreenPoint, b: ScreenPoint): void 
   c.ctx.fill();
 }
 
-export const UP_TINT = '#26a69a';
-export const DOWN_TINT = '#ef5350';
+/**
+ * The rising or the falling colour: the theme's own up and down colours, so a
+ * measure or a position zone reads the same as the candles beside it.
+ */
+export const tintOf = (c: DrawContext, up: boolean): string => (up ? c.rc.theme.upColor : c.rc.theme.downColor);
+
+/** A check passed or failed: a harmonic pattern's ratios, a forecast's verdict. */
+export const VALID_COLOR = '#16a34a';
+export const INVALID_COLOR = '#dc2626';
 
 // ── text layout ───────────────────────────────────────────────────────────
 

@@ -11,7 +11,9 @@ import {
   composeSettings,
 } from './schema';
 import { timeBound } from './analysis';
-import { OPACITY_FIELD, applyStroke, label, chip, grouped, arrowHead, UP_TINT, DOWN_TINT } from './tool-paint';
+import {
+  OPACITY_FIELD, applyStroke, label, chip, grouped, arrowHead, tintOf, VALID_COLOR, INVALID_COLOR,
+} from './tool-paint';
 
 /**
  * The position tools' own controls. Sizing inputs live in the style bag as
@@ -75,7 +77,7 @@ export const MEASURE: DrawingTool = {
     const chg = p[1].price - p[0].price;
     const pct = p[0].price !== 0 ? (chg / p[0].price) * 100 : 0;
     const up = chg >= 0;
-    const tint = up ? UP_TINT : DOWN_TINT;
+    const tint = tintOf(c, up);
     c.ctx.save();
     c.ctx.globalAlpha = c.style.fillOpacity ?? 0.14;
     c.ctx.fillStyle = tint;
@@ -249,8 +251,8 @@ function positionTool(id: string, name: string, long: boolean): DrawingTool {
       const yT = c.rc.priceScale.priceToY(target.price) * d;
       const yS = c.rc.priceScale.priceToY(stop.price) * d;
       const props = c.drawing.props ?? {};
-      const profitColor = typeof props.profitColor === 'string' ? props.profitColor : UP_TINT;
-      const lossColor = typeof props.lossColor === 'string' ? props.lossColor : DOWN_TINT;
+      const profitColor = typeof props.profitColor === 'string' ? props.profitColor : tintOf(c, true);
+      const lossColor = typeof props.lossColor === 'string' ? props.lossColor : tintOf(c, false);
       const band = (yA: number, yB: number, color: string): void => {
         c.ctx.save();
         c.ctx.globalAlpha = c.style.fillOpacity ?? 0.13;
@@ -342,7 +344,7 @@ export const PRICE_RANGE: DrawingTool = {
     const chg = p[1].price - p[0].price;
     const pct = p[0].price !== 0 ? (chg / p[0].price) * 100 : 0;
     const up = chg >= 0;
-    const tint = up ? UP_TINT : DOWN_TINT;
+    const tint = tintOf(c, up);
     // Span the drawn x-range so the band reads as a price zone, not a bare line.
     const x0 = Math.min(c.pts[0].x, c.pts[1].x);
     const x1 = Math.max(c.pts[0].x, c.pts[1].x) + (c.pts[0].x === c.pts[1].x ? 60 * d : 0);
@@ -426,7 +428,7 @@ export const FORECAST: DrawingTool = {
     const chg = p[1].price - p[0].price;
     const pct = p[0].price !== 0 ? (chg / p[0].price) * 100 : 0;
     const up = chg >= 0;
-    const tint = up ? UP_TINT : DOWN_TINT;
+    const tint = tintOf(c, up);
     // The cone widens with the projected distance: a forecast is less certain
     // the further out it runs, and the shape should say so.
     const spread = Math.abs(b.y - a.y) * 0.35 + 6 * d;
@@ -471,7 +473,7 @@ export const FORECAST: DrawingTool = {
         if (up ? bar.high >= p[1].price : bar.low <= p[1].price) { hit = true; break; }
       }
       chip(c, [hit ? 'SUCCESS' : 'MISSED'], b.x, b.y + 36 * d,
-        hit ? '#4a934a' : '#8a4a4a', { align: 'center', place: 'below' });
+        hit ? VALID_COLOR : INVALID_COLOR, { align: 'center', place: 'below' });
     }
   },
   distance: (x, y, h) => distToSegment(x, y, h.pts[0], h.pts[1]),

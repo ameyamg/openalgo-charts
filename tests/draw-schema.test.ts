@@ -19,6 +19,7 @@ import {
   type SettingsField, type SettingsSchema,
 } from '../src/draw/schema';
 import { RecordingContext } from './helpers/fake-ctx';
+import { darkTheme } from '../src/theme';
 import { projectAnchors } from '../src/draw/layer';
 import type { Drawing, DrawingPoint, DrawingTool, DrawContext, FibLevel } from '../src/draw/types';
 
@@ -28,7 +29,7 @@ beforeAll(() => { registerBuiltinDrawingTools(); });
 
 const RC = {
   plotWidth: 800, plotHeight: 400, dpr: 1, priceAxisWidth: 60,
-  theme: { background: '#0d0e12', lineColor: '#4f8cff' },
+  theme: { ...darkTheme, background: '#0d0e12', lineColor: '#4f8cff' },
   priceScale: { priceToY: (p: number) => 400 - p, format: (p: number) => p.toFixed(2) },
   timeScale: { indexToX: (i: number) => i },
   dataLayer: { timeToIndexFloat: (t: number) => t / 6 },

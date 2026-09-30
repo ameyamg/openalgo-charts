@@ -79,7 +79,9 @@ the entry and the other reflects, so the trade turns around with its ratio intac
 readouts are a header of direction and R:R, money at risk and position size (from
 `accountSize` and `risk` in the style bag), and each zone's move in percent, with the level
 price on request; `props.showHeader`, `showLossSize`, `showTargetLabel`, `showStopLabel`,
-`showPrices`, `profitColor` and `lossColor` are the toggles.
+`showPrices`, `profitColor` and `lossColor` are the toggles. The zones default to the theme's up and down
+candle colours, as the measure, price range, forecast and a line's readout are tinted by
+direction, so a drawing reads the same as the candles beside it on any theme.
 
 Anchor counts of `n` mean the tool collects anchors until you end it. **Freehand** tools
 (`brush`, `highlighter`) sample the cursor while the pointer is held and finish on release:

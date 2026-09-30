@@ -9,6 +9,8 @@ import {
   registerBuiltinDrawingTools,
 } from '../src/draw/tools';
 import { drawingSettingsSchema } from '../src/draw/registry';
+import { MEASURE, PRICE_RANGE, FORECAST, LONG_POSITION } from '../src/draw/measure-tools';
+import { darkTheme, lightTheme } from '../src/theme';
 import { RecordingContext } from './helpers/fake-ctx';
 import type { Drawing, DrawingPoint, DrawingStyle, DrawingText, DrawingTool, DrawContext } from '../src/draw/types';
 
@@ -17,7 +19,7 @@ beforeAll(() => { registerBuiltinDrawingTools(); });
 /** Six time units per bar, price straight onto y with 400 at the bottom. */
 const RC = {
   plotWidth: 800, plotHeight: 400, dpr: 1, priceAxisWidth: 60,
-  theme: { background: '#0d0e12', lineColor: '#4f8cff', axisText: '#9aa0a6' },
+  theme: { background: '#0d0e12', lineColor: '#4f8cff', axisText: '#9aa0a6', upColor: darkTheme.upColor, downColor: darkTheme.downColor },
   priceScale: { priceToY: (p: number) => 400 - p, format: (p: number) => p.toFixed(2) },
   timeScale: { indexToX: (i: number) => i },
   dataLayer: { timeToIndexFloat: (t: number) => t / 6 },
@@ -25,13 +27,13 @@ const RC = {
 
 const toPt = (p: DrawingPoint) => ({ x: p.time / 6, y: 400 - p.price });
 
-function paint(tool: DrawingTool, points: DrawingPoint[], style: DrawingStyle = {}, text?: DrawingText): RecordingContext {
+function paint(tool: DrawingTool, points: DrawingPoint[], style: DrawingStyle = {}, text?: DrawingText, rc: object = RC): RecordingContext {
   const rec = new RecordingContext();
   const d: Drawing = { id: 'd', tool: tool.id, paneIndex: 0, zIndex: 0, points, style: { ...tool.defaultStyle, ...style } };
   if (text !== undefined) d.text = text;
   tool.draw({
     ctx: rec as unknown as CanvasRenderingContext2D,
-    rc: RC as never,
+    rc: rc as never,
     pts: points.map(toPt),
     drawing: d,
     style: { color: '#4f8cff', lineWidth: 1.5, ...d.style },
@@ -125,5 +127,50 @@ describe('the line readout', () => {
   it('leaves the context balanced', () => {
     const rec = paint(ARROW, RISING, { showStats: true });
     expect(rec.count('save')).toBe(rec.count('restore'));
+  });
+});
+
+describe('the direction tints', () => {
+  // The default chart is the light theme, whose candles are not the dark
+  // theme's colours the tints were fixed to.
+  const LIGHT = { ...RC, theme: { ...RC.theme, upColor: lightTheme.upColor, downColor: lightTheme.downColor } };
+  const fills = (rec: RecordingContext): (string | undefined)[] =>
+    rec.ops.filter((o) => o.type === 'fillRect' || o.type === 'fill').map((o) => o.fillStyle);
+
+  it('are the theme up and down colours, as the candles beside the drawing are', () => {
+    const up = lightTheme.upColor, down = lightTheme.downColor;
+    expect(plates(paint(TREND_LINE, RISING, { showStats: true }, undefined, LIGHT))[1]!.fillStyle).toBe(up);
+    expect(plates(paint(TREND_LINE, FALLING, { showStats: true }, undefined, LIGHT))[1]!.fillStyle).toBe(down);
+    for (const tool of [MEASURE, PRICE_RANGE, FORECAST]) {
+      expect(fills(paint(tool, RISING, {}, undefined, LIGHT))[0], tool.id).toBe(up);
+      expect(fills(paint(tool, FALLING, {}, undefined, LIGHT))[0], tool.id).toBe(down);
+    }
+    // A long's profit zone and its loss zone, unless the drawing names its own.
+    const entry = { time: 300, price: 200 }, target = { time: 900, price: 260 }, stop = { time: 900, price: 170 };
+    expect(fills(paint(LONG_POSITION, [entry, target, stop], {}, undefined, LIGHT)).slice(0, 2)).toEqual([up, down]);
+  });
+
+  it('keeps the zone colours a position drawing names', () => {
+    const rec = new RecordingContext();
+    const points = [{ time: 300, price: 200 }, { time: 900, price: 260 }, { time: 900, price: 170 }];
+    LONG_POSITION.draw({
+      ctx: rec as unknown as CanvasRenderingContext2D, rc: LIGHT as never, pts: points.map(toPt),
+      drawing: { id: 'p', tool: LONG_POSITION.id, paneIndex: 0, zIndex: 0, points, style: {}, props: { profitColor: '#123456', lossColor: '#654321' } },
+      style: { color: '#4f8cff', lineWidth: 1 }, selected: false, formatPrice: (p: number) => p.toFixed(2),
+    } as DrawContext);
+    expect(fills(rec).slice(0, 2)).toEqual(['#123456', '#654321']);
+  });
+
+  it('marks the verdict of a forecast in the valid and invalid pair of the pattern tools', () => {
+    // Bars through the window: one reaches the target, and none does.
+    const bars = (high: number) => [300, 600, 900].map((time) => ({ time, open: 150, high, low: 90, close: 150 }));
+    const verdict = (high: number): string | undefined => {
+      const rec = paint(FORECAST, RISING, {}, undefined, { ...LIGHT, bars: () => bars(high) });
+      const chip = rec.ops.findIndex((o) => o.type === 'fillText' && (o.text === 'SUCCESS' || o.text === 'MISSED'));
+      const fills = rec.ops.slice(0, chip).filter((o) => o.type === 'fill');
+      return fills[fills.length - 1]?.fillStyle;
+    };
+    expect(verdict(320)).toBe('#16a34a');
+    expect(verdict(250)).toBe('#dc2626');
   });
 });

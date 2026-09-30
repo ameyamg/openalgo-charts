@@ -39,7 +39,7 @@ import { ADVANCED_GEOMETRY_TOOLS } from './advanced-geometry';
 import { PATTERN_DRAWING_TOOLS } from './pattern-tools';
 import { registerDrawingTool, LINE_SETTINGS } from './registry';
 import {
-  OPACITY_FIELD, applyStroke, withFill, label, grouped, arrowHead, UP_TINT, DOWN_TINT, shapeLabel, shapeBounds,
+  OPACITY_FIELD, applyStroke, withFill, label, grouped, arrowHead, tintOf, shapeLabel, shapeBounds,
 } from './tool-paint';
 import { FIB_RETRACEMENT, FIB_EXTENSION, FIB_CHANNEL, FIB_TIME_ZONE, FIB_FAN, GANN_FAN, GANN_BOX } from './fib-tools';
 import { MEASURE, LONG_POSITION, SHORT_POSITION, PRICE_RANGE, DATE_RANGE, FORECAST } from './measure-tools';
@@ -82,7 +82,7 @@ function lineStats(c: DrawContext & ToolAnchors<2>): void {
   const angle = (Math.atan2(a.y - b.y, b.x - a.x) * 180) / Math.PI;
   const text = `${sign}${c.formatPrice(chg)} (${sign}${pct.toFixed(2)}%)  ${grouped(bars)} bars  ${angle.toFixed(1)} deg`;
   label(c, text, (a.x + b.x) / 2, (a.y + b.y) / 2 - 10 * c.rc.dpr, c.style.color, {
-    tint: up ? UP_TINT : DOWN_TINT, center: true,
+    tint: tintOf(c, up), center: true,
   });
 }
 
