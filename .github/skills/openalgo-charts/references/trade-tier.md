@@ -239,7 +239,7 @@ feed.subscribeDepth({ symbol, exchange, interval }, (d) => ladder.setDepth(d));
 
 ## `FakeBroker`
 
-Deterministic in-memory `OrderFeed` for tests and offline demos. Members: `onBook(cb)` / `setBook(orders, positions)` (copies its inputs), `onLtp(cb)` / `emitLtp(symbol, ltp)`, `onDepth(cb)` / `emitDepth(symbol, depth)`, `place`/`modify`/`cancel` (broker ids `B1`, `B2`, …), `fill(orderId)`, `orders()` / `positions()`, the test hook `rejectNextPlace = 'reason'` (next `place()` throws once), and `static makeDepth(ltp, levels, tickSize = 0.05)`.
+Deterministic in-memory `OrderFeed` for tests and offline demos. Members: `onBook(cb)` / `setBook(orders, positions)` (copies its inputs), `onLtp(cb)` / `emitLtp(symbol, ltp)`, `onDepth(cb)` / `emitDepth(symbol, depth)`, `place`/`modify`/`cancel` (broker ids `B1`, `B2`, …), `fill(orderId)`, `orders()` / `positions()`, the test hook `rejectNextPlace = 'reason'` (next `place()` throws once, as an answer lost on its way back: the engine settles it as ambiguous and keeps the token; for a broker's refusal use `failNext('place', 'reject')` with `accounts`), and `static makeDepth(ltp, levels, tickSize = 0.05)`.
 
 `new FakeBroker()` (no options) is the original book simulator and declares no `features`: `place()` marks `MARKET` orders `'filled'` and everything else `'working'`, appends to the order book and never updates `positions` (seed those with `setBook`). A request carrying `account`, `duration`, `expiresAt` or `leverage` is refused, and the engine refuses every newer operation against it.
 

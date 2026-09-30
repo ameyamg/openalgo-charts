@@ -29,7 +29,7 @@ export type PointFigureBoxMode = 'fixed' | 'percent' | 'atr';
 export interface PointFigureOptions {
   /** Box size for `mode: 'fixed'`. Required unless another mode is chosen. */
   boxSize?: number | undefined;
-  /** Boxes of counter-move needed to start a new column. Default 3. */
+  /** Boxes of counter-move needed to start a new column. Default 3; floored, at least 1. */
   reversal?: number | undefined;
   /** Which prices drive the column. Default `'hl'`. */
   method?: PointFigureMethod | undefined;
@@ -37,7 +37,7 @@ export interface PointFigureOptions {
   mode?: PointFigureBoxMode | undefined;
   /** Box as a percentage of price, for `mode: 'percent'` (e.g. `0.5` = 0.5%). */
   percent?: number | undefined;
-  /** ATR lookback for `mode: 'atr'`. Default 14. */
+  /** ATR lookback for `mode: 'atr'`. Default 14; floored, at least 1. */
   atrPeriod?: number | undefined;
   /** ATR multiplier for `mode: 'atr'`. Default 1. */
   atrMultiplier?: number | undefined;

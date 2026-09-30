@@ -7,47 +7,14 @@
  * ARCHITECTURE.md 0.1. Warmup slots return `null`, never a guessed value, so a
  * plot that starts one bar early reads as the bug it is.
  */
-import {
-  trueRange, rsi, sourceValues,
-  sessionStartFlags, calendarPeriodFlags,
-  isNewZonedWeek, isNewZonedMonth,
-  utcSecondsToIstParts, IST_OFFSET_SECONDS,
-  DEFAULT_TIMEZONE, isValidTimezone,
-} from 'openalgo-charts';
-import type {
-  Bar, IndicatorDescriptor, IndicatorInput, IndicatorPlot, IndicatorSource,
-} from 'openalgo-charts';
-import { sma, nulls, barsSince } from './calc';
-import { windowMean, windowSum } from './window-mean';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string =>
-  typeof s[k] === 'string' ? (s[k] as string) : d;
-const bool = (s: Readonly<Record<string, unknown>>, k: string, d: boolean): boolean =>
-  typeof s[k] === 'boolean' ? (s[k] as boolean) : d;
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
-
-/**
- * The chart's configured zone, as it reaches an indicator.
- *
- * A `calc` is handed `(bars, settings, store)` and never the chart, so the zone
- * travels on the settings blob under the reserved `timezone` key. A blob without
- * one, which is every caller that predates the option, resolves to the shipped
- * default and computes exactly what 1.2.0 computed.
- *
- * An unrecognised name falls back rather than throwing: `chart.setTimezone`
- * already rejects a bad zone at the call site, and a `calc` that throws takes
- * the whole repaint down with it.
- */
-const zoneOf = (s: Readonly<Record<string, unknown>>): string => {
-  const v = s.timezone;
-  if (typeof v !== 'string' || v === '' || v === DEFAULT_TIMEZONE) return DEFAULT_TIMEZONE;
-  return isValidTimezone(v) ? v : DEFAULT_TIMEZONE;
-};
+import { trueRange, rsi, sourceValues, sessionStartFlags, calendarPeriodFlags } from 'openalgo-charts';
+import type { Bar, IndicatorDescriptor, IndicatorInput, IndicatorPlot } from 'openalgo-charts';
+import { sma, nulls, barsSince, mfiFromFlows } from './calc';
+import { windowMean } from './window-mean';
+import { num, int, str, flag, src, zoneOf } from './settings';
+import { crossesAbove, crossesBelow } from './statistics';
+import { shift, shiftFlags } from './series';
+import { periodBoundary } from './calendar';
 
 /** A NaN-filled column of the right length, the shape every `calc` here starts from. */
 const blank = (n: number): number[] => new Array<number>(n).fill(NaN);
@@ -63,49 +30,6 @@ type PivotPeriod = 'daily' | 'weekly' | 'monthly';
 
 const DAY_SECONDS = 86400;
 
-/**
- * The frames that are a calendar period. A daily frame is a trading session and
- * is read from the bar gaps instead, so it never reaches the calendar tests.
- */
-type CalendarFrame = Exclude<PivotPeriod, 'daily'>;
-
-/** Epoch day in IST. Cheap only because IST is a fixed offset; nothing else is. */
-const istDay = (t: number): number => Math.floor((t + IST_OFFSET_SECONDS) / DAY_SECONDS);
-
-/** Monday-based week index. Epoch day 4 is Monday 1970-01-05. */
-const istWeek = (t: number): number => Math.floor((istDay(t) - 4) / 7);
-
-/**
- * Whether `now` opens a new week or month on the calendar of `zone`. Index
- * arithmetic rather than a day-of-week test: a holiday, a half session or a feed
- * outage can drop the bar that sits on the boundary, and comparing indices still
- * catches the crossing.
- *
- * The default zone keeps the offset arithmetic it always used. Intl is the right
- * answer for an arbitrary zone and the wrong price for the one zone that has no
- * DST to get wrong: measured over twelve thousand daily bars the sweep costs
- * 38ms through Intl against 3ms through `utcSecondsToIstParts`, and on daily
- * bars this runs once per bar. The two answers are pinned identical for
- * Asia/Kolkata by `tests/indicator-timezone.test.ts`, so the branch changes
- * nothing about what the frame returns. The foundation's own `sessionStartFlags`
- * splits on the same line for the same reason.
- */
-function frameBoundary(
-  period: CalendarFrame,
-  zone: string,
-): (prev: number, now: number) => boolean {
-  if (zone !== DEFAULT_TIMEZONE) {
-    return period === 'weekly'
-      ? (prev, now): boolean => isNewZonedWeek(prev, now, zone)
-      : (prev, now): boolean => isNewZonedMonth(prev, now, zone);
-  }
-  if (period === 'weekly') return (prev, now): boolean => istWeek(prev) !== istWeek(now);
-  return (prev, now): boolean => {
-    const a = utcSecondsToIstParts(prev);
-    const b = utcSecondsToIstParts(now);
-    return a.year !== b.year || a.month !== b.month;
-  };
-}
 
 /**
  * Per-bar flags for the first bar of each pivot frame.
@@ -127,7 +51,7 @@ function pivotFrameStarts(bars: readonly Bar[], period: PivotPeriod, zone: strin
   const times = bars.map((b) => b.time);
   return period === 'daily'
     ? sessionStartFlags(times, zone)
-    : calendarPeriodFlags(times, frameBoundary(period, zone));
+    : calendarPeriodFlags(times, periodBoundary(period === 'weekly' ? 'week' : 'month', zone));
 }
 
 /**
@@ -353,19 +277,19 @@ export const CPR: IndicatorDescriptor = {
     const manual = s.pivotMode === 'manual';
     const auto = autoPivotPeriod(bars);
     const show: PivotVisibility = {
-      pivot: bool(s, 'displaypivots', true),
-      support: bool(s, 'displaysupport', true),
-      resistance: bool(s, 'displayresistance', true),
-      cpr: bool(s, 'displaycpr', true),
-      s1r1: bool(s, 'displayS1R1', false),
+      pivot: flag(s, 'displaypivots', true),
+      support: flag(s, 'displaysupport', true),
+      resistance: flag(s, 'displayresistance', true),
+      cpr: flag(s, 'displaycpr', true),
+      s1r1: flag(s, 'displayS1R1', false),
     };
     // Manual lets a user stack frames; Auto resolves to exactly one, so the
     // toggles are read only on the branch that owns them.
     const wanted: Record<PivotPeriod, boolean> = manual
       ? {
-        daily: bool(s, 'showDaily', true),
-        weekly: bool(s, 'showWeekly', false),
-        monthly: bool(s, 'showMonthly', false),
+        daily: flag(s, 'showDaily', true),
+        weekly: flag(s, 'showWeekly', false),
+        monthly: flag(s, 'showMonthly', false),
       }
       : { daily: auto === 'daily', weekly: auto === 'weekly', monthly: auto === 'monthly' };
 
@@ -381,12 +305,13 @@ export const CPR: IndicatorDescriptor = {
 // ── AlphaTrend ───────────────────────────────────────────────────────────────
 
 /**
- * Money Flow Index over an explicit typical-price series.
+ * Money Flow Index over an explicit typical-price series, for AlphaTrend.
  *
- * Neither `./calc` nor the base bundle exports one, and the catalog's MFI entry
- * is a descriptor rather than a reusable kernel, so the definition lives here.
- * First value lands at index `period`: bar 0 has no prior price to compare
- * against, so it contributes no flow in either direction.
+ * The flows follow the published script: a bar whose typical price is missing
+ * compares false both ways and adds no flow, where the MFI study marks it
+ * absent. The window sums and the ratio are the MFI study's own
+ * (`mfiFromFlows`). First value lands at index `period`: bar 0 has no prior
+ * price to compare against, so it contributes no flow in either direction.
  */
 function moneyFlowIndex(
   typical: readonly number[],
@@ -394,8 +319,6 @@ function moneyFlowIndex(
   period: number,
 ): number[] {
   const n = typical.length;
-  const out = blank(n);
-  if (period <= 0 || n === 0) return out;
   const positive = new Array<number>(n).fill(0);
   const negative = new Array<number>(n).fill(0);
   // `volume` runs alongside `typical`, and both sums keep their length.
@@ -404,16 +327,9 @@ function moneyFlowIndex(
     if (typical[i]! > typical[i - 1]!) positive[i] = flow;
     else if (typical[i]! < typical[i - 1]!) negative[i] = flow;
   }
-  const up = windowSum(positive, period);
-  const down = windowSum(negative, period);
-  for (let i = period; i < n; i++) {
-    if (!Number.isFinite(up[i]) || !Number.isFinite(down[i])) continue;
-    // A window with no down-flow has nothing to divide by, so the index pins at
-    // 100. That also covers a feed with no volume at all, where both sides are
-    // zero and the ratio is undefined rather than merely extreme.
-    out[i] = down[i] === 0 ? 100 : 100 - 100 / (1 + up[i]! / down[i]!);
-  }
-  return out;
+  // A window with no down-flow pins at 100, which also covers a feed with no
+  // volume at all, where both sides are zero.
+  return mfiFromFlows(positive, negative, period);
 }
 
 export const ALPHATREND: IndicatorDescriptor = {
@@ -488,12 +404,11 @@ export const ALPHATREND: IndicatorDescriptor = {
   calc: (bars, s) => {
     const n = bars.length;
     const level = blank(n);
-    const lagged = blank(n);
     const buy = blank(n);
     const sell = blank(n);
     if (n === 0) return { alphatrend: [], lagged: [], buySignal: [], sellSignal: [] };
 
-    const period = Math.max(1, Math.round(num(s, 'AP', 14)));
+    const period = int(s, 'AP', 14);
     const coeff = num(s, 'coeff', 1);
     const noVolume = s.novolumedata === true;
     const showSignals = s.showsignalsk !== false;
@@ -521,19 +436,10 @@ export const ALPHATREND: IndicatorDescriptor = {
         ? Math.max(bars[i]!.low - offset, prev)
         : Math.min(bars[i]!.high + offset, prev);
     }
-    for (let i = 2; i < n; i++) lagged[i] = level[i - 2]!;
-
-    const crossUp = new Array<boolean>(n).fill(false);
-    const crossDown = new Array<boolean>(n).fill(false);
-    for (let i = 1; i < n; i++) {
-      const a = level[i]!;
-      const b = lagged[i]!;
-      const pa = level[i - 1]!;
-      const pb = lagged[i - 1]!;
-      if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(pa) || !Number.isFinite(pb)) continue;
-      if (a > b && pa <= pb) crossUp[i] = true;
-      else if (a < b && pa >= pb) crossDown[i] = true;
-    }
+    const lagged = shift(level, 2);
+    // A cross needs both lines real on this bar and the one before.
+    const crossUp = crossesAbove(level, lagged);
+    const crossDown = crossesBelow(level, lagged);
 
     if (showSignals) {
       // The published script gates each signal on how long ago the *other* side
@@ -541,8 +447,8 @@ export const ALPHATREND: IndicatorDescriptor = {
       // shifted counters are what make that comparison strict; before either
       // side has ever fired they are NaN, and every comparison against NaN is
       // false, which suppresses the very first signal exactly as the original.
-      const shiftedUp = crossUp.map((_, i) => i > 0 && crossUp[i - 1]!);
-      const shiftedDown = crossDown.map((_, i) => i > 0 && crossDown[i - 1]!);
+      const shiftedUp = shiftFlags(crossUp, 1);
+      const shiftedDown = shiftFlags(crossDown, 1);
       const sinceUp = barsSince(crossUp);
       const sinceDown = barsSince(crossDown);
       const sinceShiftedUp = barsSince(shiftedUp);
@@ -588,7 +494,7 @@ export const RANGE_ANALYSIS: IndicatorDescriptor = {
     }
     return {
       range: nulls(range),
-      avgRange: nulls(sma(range, Math.max(1, Math.round(num(s, 'avgLength', 3))))),
+      avgRange: nulls(sma(range, int(s, 'avgLength', 3))),
     };
   },
 };

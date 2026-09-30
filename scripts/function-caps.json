@@ -1,0 +1,123 @@
+{
+  "maxLines": 150,
+  "caps": {
+    "src/core/chart-input.ts": {
+      "ChartInput._onPointerUp": 157
+    },
+    "src/core/chart-state.ts": {
+      "ChartPersistence._restoreState": 161,
+      "ChartPersistence.restoreState": 155
+    },
+    "src/core/chart-studies.ts": {
+      "ChartStudies._indicatorHost": 210
+    },
+    "src/core/pane.ts": {
+      "Pane.paintBase": 232
+    },
+    "src/indicators/external.ts": {
+      "createTier2Indicator": 298
+    },
+    "src/indicators/requested-indicator.ts": {
+      "createRequestedIndicator": 199
+    },
+    "src/model/conflation.ts": {
+      "createLodColumns": 196
+    },
+    "src/primitives/indicator-draws.ts": {
+      "IndicatorDrawings.draw": 164
+    },
+    "src/primitives/markers.ts": {
+      "SeriesMarkers.draw": 219
+    },
+    "src/primitives/table.ts": {
+      "ChartTable.draw": 151
+    },
+    "src/profile/market-profile-primitive.ts": {
+      "MarketProfile._drawSession": 229
+    },
+    "src/render/axis.ts": {
+      "drawTimeAxis": 155
+    },
+    "src/widget/bottombar-shell.ts": {
+      "wire": 156
+    },
+    "src/widget/bottombar.ts": {
+      "mountBottombar": 376
+    },
+    "src/widget/color-picker.ts": {
+      "createColorPicker": 186
+    },
+    "src/widget/context.ts": {
+      "createOverlayStack": 168
+    },
+    "src/widget/date-navigation-dialog.ts": {
+      "openDateNavigation": 166
+    },
+    "src/widget/dialogs/context-menu.ts": {
+      "contextMenuEntries": 172
+    },
+    "src/widget/dialogs/drawing-coordinates.ts": {
+      "mountDrawingCoordinates": 189
+    },
+    "src/widget/dialogs/drawing-properties.ts": {
+      "mountDrawingProperties": 222
+    },
+    "src/widget/dialogs/indicator-picker.ts": {
+      "mountIndicatorPicker": 169
+    },
+    "src/widget/dialogs/indicator-settings.ts": {
+      "mountIndicatorSettings": 230
+    },
+    "src/widget/dialogs/level-editor.ts": {
+      "mountLevelEditor": 195
+    },
+    "src/widget/drawing-toolbar.ts": {
+      "mountDrawingToolbar": 332
+    },
+    "src/widget/form.ts": {
+      "renderForm": 538
+    },
+    "src/widget/indicator-input-controls.ts": {
+      "mountIndicatorInputControls": 180
+    },
+    "src/widget/keymap-editor.ts": {
+      "mountShortcutsPanel": 288
+    },
+    "src/widget/layouts-menu.ts": {
+      "mountLayoutsMenu": 379
+    },
+    "src/widget/layouts-templates-menu.ts": {
+      "openTemplatesMenu": 162
+    },
+    "src/widget/layouts.ts": {
+      "createLayoutsController": 387
+    },
+    "src/widget/mobile.ts": {
+      "mountMobile": 473
+    },
+    "src/widget/news-panel.ts": {
+      "mountNewsPanel": 194
+    },
+    "src/widget/objects-panel.ts": {
+      "createObjectsPanelContent": 450
+    },
+    "src/widget/rail.ts": {
+      "mountRail": 645
+    },
+    "src/widget/statusline.ts": {
+      "mountStatusline": 209
+    },
+    "src/widget/symbol-picker.ts": {
+      "mountSymbolPicker": 205
+    },
+    "src/widget/topbar.ts": {
+      "mountTopbar": 335
+    },
+    "src/widget/watchlist-panel.ts": {
+      "mountWatchlistPanel": 572
+    },
+    "src/widget/widget.ts": {
+      "WidgetImpl.constructor": 329
+    }
+  }
+}

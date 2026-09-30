@@ -1,4 +1,4 @@
-/** Optional, DOM-free named workspace and indicator-template contracts. */
+/** Optional, DOM-free contracts for named workspaces, indicator templates, watchlists and drawing templates. */
 export {
   WORKSPACE_VERSION, WorkspaceDocumentError, parseWorkspaceDocument, parseWorkspacePayload,
   parseIndicatorTemplate, parseIndicatorTemplatePayload, parseIndicatorStates, migrateWidgetWorkspace,

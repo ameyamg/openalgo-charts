@@ -11,15 +11,9 @@
  * unit-testable and derivable from intraday OHLCV bars alone.
  */
 import type { Bar } from '../model/bar';
-import { bucketPrice, priceBuckets } from './profile-model';
-import {
-  DEFAULT_TIMEZONE,
-  IST_OFFSET_SECONDS,
-  utcSecondsToIstParts,
-  utcSecondsToZonedParts,
-  zonedDayIndex,
-  zonedWallClockToUtcSeconds,
-} from '../feed/time';
+import { bucketPrice, priceBuckets, valueArea } from './profile-model';
+import { partsIn, minuteOfDay, sessionKey } from './profile-calendar';
+import { DEFAULT_TIMEZONE, zonedWallClockToUtcSeconds } from '../feed/time';
 
 export type MarketProfileSession = 'day' | 'week' | 'month' | 'composite';
 
@@ -74,7 +68,10 @@ export const TRADING_HOURS: Record<string, SessionWindow> = {
 };
 
 export interface MarketProfileOptions {
-  /** Instrument tick size — the finest price increment (Nifty: 0.1). */
+  /**
+   * Instrument tick size: the finest price increment (Nifty: 0.1). One that
+   * is not above 0 falls back to the default, 0.05.
+   */
   tickSize: number;
   /**
    * Ticks per TPO row, so row height is `tickSize * rowTicks`. This is the
@@ -245,8 +242,6 @@ export function tpoLetter(period: number): string {
   return m < 26 ? String.fromCharCode(65 + m) : String.fromCharCode(97 + (m - 26));
 }
 
-const DAY_SECONDS = 86400;
-
 /**
  * The clock a window's minutes are counted on: its own when it names one, the
  * chart's configured zone otherwise.
@@ -259,37 +254,6 @@ const DAY_SECONDS = 86400;
  */
 function windowZone(w: SessionWindow | undefined, zone: string): string {
   return w?.zone ?? zone;
-}
-
-/**
- * Calendar parts of an instant on `zone`'s clock.
- *
- * The default takes the fixed-offset arithmetic. These helpers run once per bar
- * over a whole history and Intl costs roughly 25x the arithmetic, so the branch
- * hands every existing caller back the speed it had. It cannot change an answer:
- * IST is a fixed offset, and tests/profile-timezone.test.ts pins the two paths
- * together rather than assuming they agree.
- */
-function partsIn(utcSeconds: number, zone: string): { year: number; month: number; day: number; hour: number; minute: number } {
-  return zone === DEFAULT_TIMEZONE
-    ? utcSecondsToIstParts(utcSeconds)
-    : utcSecondsToZonedParts(utcSeconds, zone);
-}
-
-/** Minutes from local midnight in `zone`. */
-function minuteOfDay(utcSeconds: number, zone: string): number {
-  if (zone === DEFAULT_TIMEZONE) {
-    const s = (((utcSeconds + IST_OFFSET_SECONDS) % DAY_SECONDS) + DAY_SECONDS) % DAY_SECONDS;
-    return Math.floor(s / 60);
-  }
-  const p = utcSecondsToZonedParts(utcSeconds, zone);
-  return p.hour * 60 + p.minute;
-}
-
-/** Whole days since 1970-01-01 on `zone`'s calendar. */
-function dayIndexIn(utcSeconds: number, zone: string): number {
-  if (zone === DEFAULT_TIMEZONE) return Math.floor((utcSeconds + IST_OFFSET_SECONDS) / DAY_SECONDS);
-  return zonedDayIndex(utcSeconds, zone);
 }
 
 /**
@@ -326,30 +290,6 @@ function windowOpenOn(utcSeconds: number, w: SessionWindow, zone: string, dayOff
   );
 }
 
-/**
- * Session group key for the chosen mode, on `zone`'s calendar.
- *
- * An identity, not a timestamp: bars sharing a key share a profile and nothing
- * outside this module reads the value, so a day index is both cheaper than a
- * midnight and immune to the 169-hour week a DST changeover produces.
- */
-function sessionKey(utcSeconds: number, mode: MarketProfileSession, zone: string, w?: SessionWindow): number {
-  if (mode === 'composite') return 0;
-  if (mode === 'month') {
-    const p = partsIn(utcSeconds, zone);
-    return p.year * 12 + (p.month - 1);
-  }
-  let dayIndex = dayIndexIn(utcSeconds, zone);
-  // An overnight window belongs to the day it *opened* on, so the evening and
-  // the following morning form one session instead of two half-profiles.
-  if (w !== undefined && w.startMinute > w.endMinute && minuteOfDay(utcSeconds, zone) < w.endMinute) {
-    dayIndex -= 1;
-  }
-  if (mode === 'day') return dayIndex;
-  // Monday-start weeks. 1970-01-01 was a Thursday, hence the +3 before the divide.
-  return Math.floor((dayIndex + 3) / 7);
-}
-
 /** Internal identity shared by the renderer's per-session display overrides. */
 export function profileSessionIdentity(time: number, options: MarketProfileOptions): string {
   const zone = windowZone(options.window, options.timezone ?? DEFAULT_TIMEZONE);
@@ -364,28 +304,16 @@ interface LevelAcc {
 }
 
 /**
- * POC + value area over a level list, expanding from the POC outward. Both
- * callers pass a non-empty list, and every index stays in 0..levels.length - 1:
- * the loop bound and the guards on each step keep it there.
+ * POC + value area over a level list, by TPO count. Both callers pass a
+ * non-empty list, so the indices `valueArea` hands back are rows of it.
  */
 function pocAndValueArea(
   levels: readonly { price: number; count: number }[],
   vaPct: number,
 ): { poc: number; vah: number; val: number } {
-  const total = levels.reduce((s, l) => s + l.count, 0);
-  let pocIdx = 0;
-  for (let i = 1; i < levels.length; i++) if (levels[i]!.count > levels[pocIdx]!.count) pocIdx = i;
-  let upper = pocIdx;
-  let lower = pocIdx;
-  let acc = levels[pocIdx]!.count;
-  const target = total * vaPct;
-  while (acc < target && (upper > 0 || lower < levels.length - 1)) {
-    const up = upper > 0 ? levels[upper - 1]!.count : -1;
-    const down = lower < levels.length - 1 ? levels[lower + 1]!.count : -1;
-    if (up >= down) { upper -= 1; acc += levels[upper]!.count; }
-    else { lower += 1; acc += levels[lower]!.count; }
-  }
-  return { poc: levels[pocIdx]!.price, vah: levels[upper]!.price, val: levels[lower]!.price };
+  const counts = levels.map((l) => l.count);
+  const va = valueArea(counts, counts.reduce((s, c) => s + c, 0) * vaPct);
+  return { poc: levels[va.poc]!.price, vah: levels[va.upper]!.price, val: levels[va.lower]!.price };
 }
 
 /** Length of the run of consecutive single prints from `from`, walking `step`. */
@@ -452,6 +380,31 @@ function classifyOpen(
   return 'auction';
 }
 
+/** The repaired options one computation reads, resolved once. */
+interface Resolved {
+  /** The row grid, not the instrument grid: this is what TPOs are counted on. */
+  row: number;
+  blockSec: number;
+  vaPct: number;
+  ibPeriods: number;
+  tailEdges: number;
+  win: SessionWindow | undefined;
+  /**
+   * One clock for the whole profile: the window's when it names one, so a
+   * windowed session stays a session however the chart is displayed.
+   */
+  cal: string;
+}
+
+/**
+ * Market profiles for `bars`, one per session (see {@link MarketProfileOptions}).
+ * Out-of-range options are repaired rather than refused: a `tickSize` not
+ * above 0 falls back to 0.05; `rowTicks`, `initialBalancePeriods` and
+ * `compositeSessions` are floored to a whole number of at least 1;
+ * `blockMinutes` is rounded to whole seconds, at least one; and
+ * `valueAreaPercent` is clamped to 0..1. `result.options` echoes the repaired
+ * `rowTicks`. The footprint, which shares `rowTicks`, throws instead.
+ */
 export function computeMarketProfile(
   bars: readonly Bar[],
   options: Partial<MarketProfileOptions> = {},
@@ -459,19 +412,33 @@ export function computeMarketProfile(
   const o: MarketProfileOptions = { ...DEFAULT_MARKET_PROFILE_OPTIONS, ...options };
   const baseTick = o.tickSize > 0 ? o.tickSize : DEFAULT_MARKET_PROFILE_OPTIONS.tickSize;
   const rowTicks = Math.max(1, Math.floor(o.rowTicks));
-  // The row grid, not the instrument grid: this is what TPOs are counted on.
-  const row = baseTick * rowTicks;
-  const blockSec = Math.max(1, Math.round(o.blockMinutes * 60));
-  const vaPct = Math.min(1, Math.max(0, o.valueAreaPercent));
-  const ibPeriods = Math.max(1, Math.floor(o.initialBalancePeriods));
-  const merge = Math.max(1, Math.floor(o.compositeSessions));
-  const win = o.window;
   const zone = o.timezone ?? DEFAULT_TIMEZONE;
-  // One clock for the whole profile: the window's when it names one, so a
-  // windowed session stays a session however the chart is displayed.
-  const cal = windowZone(win, zone);
+  const r: Resolved = {
+    row: baseTick * rowTicks,
+    blockSec: Math.max(1, Math.round(o.blockMinutes * 60)),
+    vaPct: Math.min(1, Math.max(0, o.valueAreaPercent)),
+    ibPeriods: Math.max(1, Math.floor(o.initialBalancePeriods)),
+    tailEdges: o.tailEdges,
+    win: o.window,
+    cal: windowZone(o.window, zone),
+  };
+  const sessions: MarketProfileSessionResult[] = [];
+  for (const g of groupSessions(bars, o, zone, r.cal)) {
+    const session = buildSession(g, r);
+    if (session !== null) sessions.push(session);
+  }
+  // Echo the zone actually used, so a caller can read back what it resolved to.
+  return { sessions, options: { ...o, rowTicks, timezone: zone } };
+}
 
-  // Group bars by session, preserving first-seen order (bars assumed ascending).
+/**
+ * The bars of each profile, in first-seen order (bars assumed ascending):
+ * grouped by session key on `cal`, less those outside the window, and with
+ * `compositeSessions` consecutive keys folded into one.
+ */
+function groupSessions(bars: readonly Bar[], o: MarketProfileOptions, zone: string, cal: string): Bar[][] {
+  const win = o.window;
+  const merge = Math.max(1, Math.floor(o.compositeSessions));
   const groups = new Map<number, Bar[]>();
   const order: number[] = [];
   for (const b of bars) {
@@ -495,139 +462,150 @@ export function computeMarketProfile(
   } else {
     for (const k of order) bucketsOfBars.push(groups.get(k) as Bar[]);
   }
+  return bucketsOfBars;
+}
 
-  const sessions: MarketProfileSessionResult[] = [];
-  for (const g of bucketsOfBars) {
-    // From here on g has a first and a last bar, and once `levels` is known
-    // not to be empty, a first and a last level; loop indexes stay in range.
-    if (g.length === 0) continue;
-    // Anchor periods to the session's own window start, not the first bar —
-    // otherwise a session whose first bar arrives late shifts every letter.
-    const first = g[0]!.time;
-    let anchor = first;
-    if (win !== undefined && win.startMinute !== win.endMinute) {
-      const d = windowOpenOn(first, win, cal, 0);
-      anchor = d <= first ? d : windowOpenOn(first, win, cal, -1);
-    }
-
-    const map = new Map<number, LevelAcc>();
-    const byPeriod = new Map<number, MarketProfilePeriod>();
-    let maxPeriod = 0;
-    let ibHigh = -Infinity;
-    let ibLow = Infinity;
-    let totalVolume = 0;
-    let high = -Infinity;
-    let low = Infinity;
-
-    for (const b of g) {
-      const period = Math.max(0, Math.floor((b.time - anchor) / blockSec));
-      if (period > maxPeriod) maxPeriod = period;
-      if (period < ibPeriods) { ibHigh = Math.max(ibHigh, b.high); ibLow = Math.min(ibLow, b.low); }
-      high = Math.max(high, b.high);
-      low = Math.min(low, b.low);
-      const vol = b.volume ?? 0;
-      totalVolume += vol;
-
-      let p = byPeriod.get(period);
-      if (p === undefined) {
-        p = { index: period, letter: tpoLetter(period), startTime: b.time, endTime: b.time,
-          high: b.high, low: b.low, volume: 0 };
-        byPeriod.set(period, p);
-      }
-      p.endTime = b.time;
-      p.high = Math.max(p.high, b.high);
-      p.low = Math.min(p.low, b.low);
-      p.volume += vol;
-
-      const cells = priceBuckets(b.low, b.high, row);
-      const vShare = vol / Math.max(1, cells.length);
-      for (const price of cells) {
-        let a = map.get(price);
-        if (a === undefined) { a = { periods: new Set<number>(), volume: 0 }; map.set(price, a); }
-        a.periods.add(period);
-        a.volume += vShare;
-      }
-    }
-    const periodDetail = Array.from(byPeriod.values()).sort((a, b) => a.index - b.index);
-
-    const levels: MarketProfileLevel[] = Array.from(map.entries())
-      .map(([price, a]) => {
-        const ps = Array.from(a.periods).sort((x, y) => x - y);
-        return { price, count: ps.length, periods: ps, volume: a.volume,
-          letters: ps.map(tpoLetter).join('') };
-      })
-      .sort((x, y) => y.price - x.price);
-    if (levels.length === 0) continue;
-
-    const va = pocAndValueArea(levels, vaPct);
-
-    // Developing POC / VA: recount using only the periods closed so far.
-    const developing: DevelopingValue[] = [];
-    for (const p of periodDetail) {
-      const upto: { price: number; count: number }[] = [];
-      for (const l of levels) {
-        let n = 0;
-        for (const q of l.periods) if (q <= p.index) n++;
-        if (n > 0) upto.push({ price: l.price, count: n });
-      }
-      if (upto.length === 0) continue;
-      developing.push({ periodIndex: p.index, time: p.endTime, ...pocAndValueArea(upto, vaPct) });
-    }
-
-    const singlePrints: number[] = [];
-    for (let i = 1; i < levels.length - 1; i++) if (levels[i]!.count === 1) singlePrints.push(levels[i]!.price);
-
-    // Tails: a run of single prints hanging off an extreme, long enough to matter.
-    let buyingTail: { high: number; low: number } | null = null;
-    let sellingTail: { high: number; low: number } | null = null;
-    if (o.tailEdges > 0) {
-      const top = tailRun(levels, 0, 1);
-      // A run of `top` levels from the top, at least one long since tailEdges is positive.
-      if (top >= o.tailEdges) sellingTail = { high: levels[0]!.price, low: levels[top - 1]!.price };
-      const bot = tailRun(levels, levels.length - 1, -1);
-      if (bot >= o.tailEdges) {
-        buyingTail = { high: levels[levels.length - bot]!.price, low: levels[levels.length - 1]!.price };
-      }
-    }
-
-    const ib = {
-      high: Number.isFinite(ibHigh) ? ibHigh : levels[0]!.price,
-      low: Number.isFinite(ibLow) ? ibLow : levels[levels.length - 1]!.price,
-    };
-    const rangeExtension = { up: Math.max(0, high - ib.high), down: Math.max(0, ib.low - low) };
-
-    let volumePoc = levels[0]!.price;
-    let maxVol = -1;
-    for (const l of levels) if (l.volume > maxVol) { maxVol = l.volume; volumePoc = l.price; }
-
-    sessions.push({
-      startTime: first,
-      endTime: g[g.length - 1]!.time,
-      label: win?.name,
-      levels,
-      poc: va.poc, vah: va.vah, val: va.val,
-      high, low,
-      open: g[0]!.open,
-      close: g[g.length - 1]!.close,
-      periods: maxPeriod + 1,
-      periodDetail,
-      initialBalance: ib,
-      rangeExtension,
-      singlePrints,
-      buyingTail,
-      sellingTail,
-      poorHigh: levels[0]!.count > 1,
-      poorLow: levels[levels.length - 1]!.count > 1,
-      developing,
-      dayType: classifyDay(ib, high, low, rangeExtension, levels, va.poc),
-      openType: classifyOpen(g[0]!.open, periodDetail[0], periodDetail[1], high, low),
-      volumePoc,
-      totalVolume,
-    });
+/** One session's profile and its analytics, or null when it holds no row. */
+function buildSession(g: readonly Bar[], r: Resolved): MarketProfileSessionResult | null {
+  // From here on g has a first and a last bar, and once `levels` is known
+  // not to be empty, a first and a last level; loop indexes stay in range.
+  if (g.length === 0) return null;
+  // Anchor periods to the session's own window start, not the first bar:
+  // otherwise a session whose first bar arrives late shifts every letter.
+  const first = g[0]!.time;
+  let anchor = first;
+  const win = r.win;
+  if (win !== undefined && win.startMinute !== win.endMinute) {
+    const d = windowOpenOn(first, win, r.cal, 0);
+    anchor = d <= first ? d : windowOpenOn(first, win, r.cal, -1);
   }
 
-  // Echo the zone actually used, so a caller can read back what it resolved to.
-  return { sessions, options: { ...o, rowTicks, timezone: zone } };
+  const map = new Map<number, LevelAcc>();
+  const byPeriod = new Map<number, MarketProfilePeriod>();
+  let maxPeriod = 0;
+  let ibHigh = -Infinity;
+  let ibLow = Infinity;
+  let totalVolume = 0;
+  let high = -Infinity;
+  let low = Infinity;
+
+  for (const b of g) {
+    const period = Math.max(0, Math.floor((b.time - anchor) / r.blockSec));
+    if (period > maxPeriod) maxPeriod = period;
+    if (period < r.ibPeriods) { ibHigh = Math.max(ibHigh, b.high); ibLow = Math.min(ibLow, b.low); }
+    high = Math.max(high, b.high);
+    low = Math.min(low, b.low);
+    const vol = b.volume ?? 0;
+    totalVolume += vol;
+
+    let p = byPeriod.get(period);
+    if (p === undefined) {
+      p = { index: period, letter: tpoLetter(period), startTime: b.time, endTime: b.time,
+        high: b.high, low: b.low, volume: 0 };
+      byPeriod.set(period, p);
+    }
+    p.endTime = b.time;
+    p.high = Math.max(p.high, b.high);
+    p.low = Math.min(p.low, b.low);
+    p.volume += vol;
+
+    const cells = priceBuckets(b.low, b.high, r.row);
+    const vShare = vol / Math.max(1, cells.length);
+    for (const price of cells) {
+      let a = map.get(price);
+      if (a === undefined) { a = { periods: new Set<number>(), volume: 0 }; map.set(price, a); }
+      a.periods.add(period);
+      a.volume += vShare;
+    }
+  }
+  const periodDetail = Array.from(byPeriod.values()).sort((a, b) => a.index - b.index);
+
+  const levels: MarketProfileLevel[] = Array.from(map.entries())
+    .map(([price, a]) => {
+      const ps = Array.from(a.periods).sort((x, y) => x - y);
+      return { price, count: ps.length, periods: ps, volume: a.volume,
+        letters: ps.map(tpoLetter).join('') };
+    })
+    .sort((x, y) => y.price - x.price);
+  if (levels.length === 0) return null;
+
+  const va = pocAndValueArea(levels, r.vaPct);
+
+  const singlePrints: number[] = [];
+  for (let i = 1; i < levels.length - 1; i++) if (levels[i]!.count === 1) singlePrints.push(levels[i]!.price);
+
+  const ib = {
+    high: Number.isFinite(ibHigh) ? ibHigh : levels[0]!.price,
+    low: Number.isFinite(ibLow) ? ibLow : levels[levels.length - 1]!.price,
+  };
+  const rangeExtension = { up: Math.max(0, high - ib.high), down: Math.max(0, ib.low - low) };
+
+  let volumePoc = levels[0]!.price;
+  let maxVol = -1;
+  for (const l of levels) if (l.volume > maxVol) { maxVol = l.volume; volumePoc = l.price; }
+
+  return {
+    startTime: first,
+    endTime: g[g.length - 1]!.time,
+    label: win?.name,
+    levels,
+    poc: va.poc, vah: va.vah, val: va.val,
+    high, low,
+    open: g[0]!.open,
+    close: g[g.length - 1]!.close,
+    periods: maxPeriod + 1,
+    periodDetail,
+    initialBalance: ib,
+    rangeExtension,
+    singlePrints,
+    ...tailsOf(levels, r.tailEdges),
+    poorHigh: levels[0]!.count > 1,
+    poorLow: levels[levels.length - 1]!.count > 1,
+    developing: developingValues(levels, periodDetail, r.vaPct),
+    dayType: classifyDay(ib, high, low, rangeExtension, levels, va.poc),
+    openType: classifyOpen(g[0]!.open, periodDetail[0], periodDetail[1], high, low),
+    volumePoc,
+    totalVolume,
+  };
+}
+
+/** Developing POC / VA: the profile recounted with only the periods closed so far. */
+function developingValues(
+  levels: readonly MarketProfileLevel[], periodDetail: readonly MarketProfilePeriod[], vaPct: number,
+): DevelopingValue[] {
+  const developing: DevelopingValue[] = [];
+  for (const p of periodDetail) {
+    const upto: { price: number; count: number }[] = [];
+    for (const l of levels) {
+      let n = 0;
+      for (const q of l.periods) if (q <= p.index) n++;
+      if (n > 0) upto.push({ price: l.price, count: n });
+    }
+    if (upto.length === 0) continue;
+    developing.push({ periodIndex: p.index, time: p.endTime, ...pocAndValueArea(upto, vaPct) });
+  }
+  return developing;
+}
+
+/**
+ * Tails: a run of single prints hanging off an extreme, long enough to matter.
+ * `levels` is not empty, and `tailEdges` of 0 disables both.
+ */
+function tailsOf(
+  levels: readonly MarketProfileLevel[], tailEdges: number,
+): { buyingTail: { high: number; low: number } | null; sellingTail: { high: number; low: number } | null } {
+  let buyingTail: { high: number; low: number } | null = null;
+  let sellingTail: { high: number; low: number } | null = null;
+  if (tailEdges > 0) {
+    const top = tailRun(levels, 0, 1);
+    // A run of `top` levels from the top, at least one long since tailEdges is positive.
+    if (top >= tailEdges) sellingTail = { high: levels[0]!.price, low: levels[top - 1]!.price };
+    const bot = tailRun(levels, levels.length - 1, -1);
+    if (bot >= tailEdges) {
+      buyingTail = { high: levels[levels.length - bot]!.price, low: levels[levels.length - 1]!.price };
+    }
+  }
+  return { buyingTail, sellingTail };
 }
 
 /**

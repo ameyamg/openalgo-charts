@@ -27,6 +27,7 @@ import type { LayoutsController } from './layouts';
 import { layoutNeedsAttention, layoutStatusText } from './layouts-widget';
 import { lazyPart, partFailed, usePart, type PartSlot } from './lazy';
 import { ariaKeys } from './keymap';
+import { canCopyImage, copyCanvasImage, downloadCanvas } from './capture';
 
 /** The chart data dialog, fetched when it first opens. Internal. */
 export const dataExportPart = lazyPart(() => import('./chart-data-export-dialog'));
@@ -529,26 +530,18 @@ export function mountTopbar(ctx: WidgetContext, host: HTMLElement, opts: TopbarO
       }
       if (!dataAvailable()) throw new Error(widgetText(ctx, 'Wait for this chart to finish loading its data'));
     };
-    const clip = (globalThis as { navigator?: { clipboard?: { write?: unknown } }; ClipboardItem?: unknown });
-    const canCopy = clip.navigator?.clipboard?.write !== undefined && clip.ClipboardItem !== undefined;
+    const canCopy = canCopyImage();
     openMenu(ctx, anchor, [
       { label: widgetText(ctx, 'Download PNG'), onSelect: () => {
-        ctx.chart.downloadScreenshot(captureName(s.symbol, s.interval) + '.png');
-        ctx.status(widgetText(ctx, 'Saved a PNG of the chart'));
+        const ok = downloadCanvas(doc, () => ctx.chart.takeScreenshot(), captureName(s.symbol, s.interval) + '.png');
+        ctx.status(ok ? widgetText(ctx, 'Saved a PNG of the chart') : widgetText(ctx, 'This runtime cannot save files'), ok ? 'info' : 'error');
       } },
       { label: widgetText(ctx, 'Download SVG'), sub: widgetText(ctx, 'text stays text'), onSelect: () => {
         const ok = downloadText(doc, captureName(s.symbol, s.interval) + '.svg', ctx.chart.exportSVG(), 'image/svg+xml');
         ctx.status(ok ? widgetText(ctx, 'Saved an SVG of the chart') : widgetText(ctx, 'This runtime cannot save files'), ok ? 'info' : 'error');
       } },
       { label: widgetText(ctx, 'Copy image'), sub: canCopy ? widgetText(ctx, 'paste it anywhere') : widgetText(ctx, 'needs https or localhost'), disabled: !canCopy, onSelect: () => {
-        const canvas = ctx.chart.takeScreenshot();
-        canvas.toBlob((blob) => {
-          if (blob === null) { ctx.status(widgetText(ctx, 'The canvas produced no image'), 'error'); return; }
-          const Item = (globalThis as { ClipboardItem: new (parts: Record<string, Blob>) => unknown }).ClipboardItem;
-          (globalThis.navigator.clipboard as unknown as { write(items: unknown[]): Promise<void> })
-            .write([new Item({ 'image/png': blob })])
-            .then(() => ctx.status(widgetText(ctx, 'Chart copied')), (err: unknown) => ctx.status(widgetText(ctx, 'Copy failed: {error}', { error: errorText(ctx, err) }), 'error'));
-        }, 'image/png');
+        copyCanvasImage(ctx, ctx.chart.takeScreenshot(), widgetText(ctx, 'Chart copied'), (message, kind) => ctx.status(message, kind));
       } },
       { label: widgetText(ctx, 'Download chart data (CSV)'), disabled: !dataAvailable(), onSelect: () => {
         const failed = (error: unknown): void => ctx.status(widgetText(ctx, 'Data export failed: {error}', { error: errorText(ctx, error) }), 'error');

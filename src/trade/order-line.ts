@@ -9,6 +9,7 @@
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from 'openalgo-charts';
 import type { Order } from './types';
 import { contrastText, withAlpha, shade, drawPillGroup } from '../render/pill';
+import { drawAxisTag } from './axis-tag';
 
 const TAG_H = 18;
 const GAP = 2;
@@ -110,12 +111,9 @@ export class WorkingOrderLine implements IPrimitive {
     const padX = 6 * dpr;
     const r = 3 * dpr;
 
-    // compact right-axis tag: just the price, colored by side
+    // compact axis tag: just the price, colored by side
     const px = rc.priceScale.format(price);
-    ctx.fillStyle = pending ? withAlpha(side, 0.7) : side;
-    ctx.fillRect(xEnd + 1, y - boxH / 2, ctx.measureText(px).width + padX * 2, boxH);
-    ctx.fillStyle = contrastText(side);
-    ctx.fillText(px, xEnd + 1 + padX, y);
+    drawAxisTag(ctx, rc, y, px, { fill: pending ? withAlpha(side, 0.7) : side, text: contrastText(side) }, { height: boxH, padX });
 
     // segmented pill group on the line: [SIDE][qty][TYPE price ±dist][✕]
     const surface = rc.theme.background === 'transparent' ? withAlpha(side, 0.14) : rc.theme.background;

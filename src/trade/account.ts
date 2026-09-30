@@ -20,6 +20,7 @@
 import type { Order, OrderSide, Position } from './types';
 import type { TradeMode } from './order-engine';
 import { checkTradingFeature, type OrderDuration, type TradingFeature, type TradingFeatureSource } from './features';
+import { errorText, nonEmpty } from './text';
 
 export interface TradingAccount {
   readonly id: string;
@@ -147,9 +148,7 @@ const CANCELLED = 'The account changed before the read finished';
 const DISCONNECTED = 'The connection dropped; account figures may be out of date';
 const MONEY_FIELDS = ['balance', 'equity', 'marginUsed', 'marginAvailable', 'unrealizedPnl', 'realizedPnl', 'leverage'] as const;
 
-const message = (error: unknown): string => String((error as Error)?.message ?? error);
 const isMode = (value: unknown): value is TradeMode => value === 'live' || value === 'analyzer';
-const nonEmpty = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
 
 function readAccount(raw: unknown): TradingAccount | null {
   if (typeof raw !== 'object' || raw === null) return null;
@@ -297,7 +296,7 @@ export class AccountManager implements AccountStateSource {
       listed = (Array.isArray(raw) ? raw : []).map(readAccount).filter((a): a is TradingAccount => a !== null && a.mode === this._mode);
     } catch (error) {
       if (this._state.generation !== generation || this._destroyed) return { ok: false, reason: CANCELLED, cancelled: true };
-      const reason = `Could not list accounts: ${message(error)}`;
+      const reason = `Could not list accounts: ${errorText(error)}`;
       this._set(keep === null ? { status: 'error', reason } : { status: 'stale', reason: DISCONNECTED });
       return { ok: false, reason };
     } finally {
@@ -342,7 +341,7 @@ export class AccountManager implements AccountStateSource {
       snapshot = read;
     } catch (error) {
       if (this._state.generation !== generation || this._destroyed) return { ok: false, reason: CANCELLED, cancelled: true };
-      const reason = `Could not load account ${accountId}: ${message(error)}`;
+      const reason = `Could not load account ${accountId}: ${errorText(error)}`;
       this._set(keep === null ? { status: 'error', reason } : { status: 'stale', reason: DISCONNECTED });
       return { ok: false, reason };
     } finally {
@@ -451,7 +450,7 @@ export class AccountManager implements AccountStateSource {
       return { ok: true, accountId, rows, dropped: list.length - rows.length };
     } catch (error) {
       if (this._destroyed || this._state.generation !== generation) return { ok: false, reason: CANCELLED, cancelled: true };
-      return { ok: false, reason: message(error) };
+      return { ok: false, reason: errorText(error) };
     } finally {
       this._aborts.delete(abort);
     }

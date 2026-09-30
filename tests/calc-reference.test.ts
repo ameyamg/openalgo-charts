@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   sma, smaSeededEma, change, roc, dev, percentRank, alma, vwma,
-  highestBars, lowestBars, rollingSum, cumulative, linreg,
+  highestBars, lowestBars, rollingSum, cumulative, linreg, percentileNearestRank, valueWhen,
 } from '../src/indicators/calc';
 import { ema } from '../src/indicators/ema';
 
@@ -184,6 +184,45 @@ describe('the reference-compatible calc helpers', () => {
       const out = linreg([1, 2, 3, 4, 5], 4);
       expect(out.slice(0, 3).every(Number.isNaN)).toBe(true);
       expect(Number.isFinite(out[3])).toBe(true);
+    });
+  });
+
+  // Out-of-range arguments give warmup-style NaN slots, never an undefined in a
+  // number[] and never a throw from inside the kernel.
+  describe('arguments outside their range', () => {
+    const closes = [101.2, 100.8, 102.4, 103.1, 102.9, 104.6, 103.8];
+    const allNumbers = (out: readonly number[]): boolean => out.every((v) => typeof v === 'number');
+
+    it('percentileNearestRank above 100 or NaN reads NaN', () => {
+      for (const percentage of [150, NaN]) {
+        const out = percentileNearestRank(closes, 3, percentage);
+        expect(out).toHaveLength(closes.length);
+        expect(allNumbers(out)).toBe(true);
+        expect(out.every(Number.isNaN)).toBe(true);
+      }
+      // Below 0 still ranks the window's lowest, as it always has.
+      expect(percentileNearestRank(closes, 3, -20)[2]).toBe(100.8);
+    });
+
+    it('valueWhen with a fractional or negative occurrence, or a shorter source, reads NaN', () => {
+      const cond = closes.map((c, i) => i > 0 && c > closes[i - 1]!);
+      for (const occurrence of [0.5, -1]) {
+        const out = valueWhen(cond, closes, occurrence);
+        expect(allNumbers(out)).toBe(true);
+        expect(out.every(Number.isNaN)).toBe(true);
+      }
+      const short = valueWhen(cond, closes.slice(0, 4), 0);
+      expect(allNumbers(short)).toBe(true);
+      expect(short[5]).toBeNaN();
+      expect(short[3]).toBe(103.1);
+    });
+
+    it('alma with a fractional or non-finite period reads NaN instead of throwing', () => {
+      for (const period of [2.5, NaN, Infinity]) {
+        const out = alma(closes, period, 0.85, 6);
+        expect(out).toHaveLength(closes.length);
+        expect(out.every(Number.isNaN)).toBe(true);
+      }
     });
   });
 });

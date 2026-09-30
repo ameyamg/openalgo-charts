@@ -13,94 +13,14 @@
  * bundle (`openalgo-charts`), not deep paths — see the note in
  * `src/indicators/index.ts`.
  */
-import {
-  atr, sourceValues, sessionStartFlags, DEFAULT_TIMEZONE, isValidTimezone,
-} from 'openalgo-charts';
-import type { Bar, IndicatorDescriptor, IndicatorInput, IndicatorSource } from 'openalgo-charts';
+import { atr, sourceValues, sessionStartFlags } from 'openalgo-charts';
+import type { IndicatorDescriptor, IndicatorInput } from 'openalgo-charts';
 import { sma, rma, nulls, smaSeededEma, vwma, percentileNearestRank } from './calc';
 import { emaOfGapped, smoothingMa } from './smoothing';
 import { withTimeframe } from './timeframe';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** the reference `input.int` is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Readonly<Record<string, unknown>>, k: string, d: number, min = 1): number =>
-  Math.max(min, Math.round(num(s, k, d)));
-/** An offset is a displacement, so it is the one integer setting that may be negative. */
-const offsetOf = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.round(num(s, k, d));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const flag = (s: Readonly<Record<string, unknown>>, k: string, d: boolean): boolean => {
-  const v = s[k];
-  return typeof v === 'boolean' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
-
-/**
- * The chart's configured zone, as it reaches an indicator.
- *
- * A `calc` is handed `(bars, settings, store)` and never the chart, so the zone
- * travels on the settings blob under the reserved `timezone` key. A blob without
- * one, which is every caller that predates the option, resolves to the shipped
- * default and computes exactly what 1.2.0 computed.
- *
- * An unrecognised name falls back rather than throwing: `chart.setTimezone`
- * already rejects a bad zone at the call site, and a `calc` that throws takes
- * the whole repaint down with it.
- */
-const zoneOf = (s: Readonly<Record<string, unknown>>): string => {
-  const v = s.timezone;
-  if (typeof v !== 'string' || v === '' || v === DEFAULT_TIMEZONE) return DEFAULT_TIMEZONE;
-  return isValidTimezone(v) ? v : DEFAULT_TIMEZONE;
-};
-
-/** the reference `nz(volume)`: a bar the feed gave no volume for traded nothing. */
-const volumes = (bars: readonly Bar[]): number[] =>
-  bars.map((b) => (typeof b.volume === 'number' && Number.isFinite(b.volume) ? b.volume : 0));
-
-/**
- * the reference `plot(..., offset = n)`: a positive `n` draws the value `n` bars later,
- * so the value computed on bar `i` lands in slot `i + n`. This library has no
- * per-plot offset, so the displacement is baked into the returned column: the
- * first `n` slots are null and the last `n` slots carry the shifted tail.
- */
-function shift(values: readonly number[], k: number): number[] {
-  const n = values.length;
-  const out = new Array<number>(n).fill(NaN);
-  // Callers shift by whole bars, so a `j` inside [0, n) is an index.
-  for (let i = 0; i < n; i++) {
-    const j = i - k;
-    if (j >= 0 && j < n) out[i] = values[j]!;
-  }
-  return out;
-}
-
-/**
- * the reference `cross(a, b)`: `crossover(a, b) or crossunder(a, b)`. Both
- * sides of the comparison must be real on both bars — an `na` comparison in
- * the reference is false, which is why nothing fires while either average is warming up.
- */
-function crossings(a: readonly number[], b: readonly number[]): boolean[] {
-  const n = a.length;
-  const out = new Array<boolean>(n).fill(false);
-  // The one caller passes two averages of the same bars, so `b` is as long as `a`.
-  for (let i = 1; i < n; i++) {
-    const prevA = a[i - 1]!;
-    const prevB = b[i - 1]!;
-    const curA = a[i]!;
-    const curB = b[i]!;
-    if (!Number.isFinite(prevA) || !Number.isFinite(prevB)) continue;
-    if (!Number.isFinite(curA) || !Number.isFinite(curB)) continue;
-    out[i] = (curA > curB && prevA <= prevB) || (curA < curB && prevA >= prevB);
-  }
-  return out;
-}
+import { num, int, offsetOf, str, flag, src, zoneOf } from './settings';
+import { crosses } from './statistics';
+import { shift, volumeOf, zip } from './series';
 
 /**
  * `close` is hard-coded in the reference (`sma(close, ...)`, not an
@@ -135,8 +55,10 @@ export const MA_CROSS: IndicatorDescriptor = {
   calc: (bars, s) => {
     const closes = sourceValues(bars, 'close');
     const short = sma(closes, int(s, 'shortLength', 9));
-    const long = sma(closes, int(s, 'longLength', 21));
-    const hit = crossings(short, long);
+    const long = sma(closes, int(s, 'longLength', 26));
+    // the reference `cross(a, b)`: both averages real on this bar and the one before,
+    // so nothing fires while either is warming up.
+    const hit = crosses(short, long);
     return {
       short: nulls(short),
       long: nulls(long),
@@ -233,7 +155,7 @@ export const MEDIAN: IndicatorDescriptor = {
     opacity: 0.9,
   }],
   calc: (bars, s) => {
-    const values = sourceValues(bars, src(s));
+    const values = sourceValues(bars, src(s, 'source', 'hl2'));
     const length = int(s, 'length', 3);
     const mult = num(s, 'atrMult', 2);
     const median = percentileNearestRank(values, length, 50);
@@ -246,8 +168,8 @@ export const MEDIAN: IndicatorDescriptor = {
     return {
       median: nulls(median),
       // Both series hold one value per bar, as every calc helper returns.
-      upper: nulls(median.map((v, i) => v + mult * range[i]!)),
-      lower: nulls(median.map((v, i) => v - mult * range[i]!)),
+      upper: nulls(zip(median, range, (v, r) => v + mult * r)),
+      lower: nulls(zip(median, range, (v, r) => v - mult * r)),
       medianEma: nulls(emaOfGapped(median, length)),
     };
   },
@@ -307,7 +229,7 @@ export const MA_RIBBON: IndicatorDescriptor = {
     style: { color: l.color, lineWidth: 1.5 },
   })),
   calc: (bars, s) => {
-    const vols = volumes(bars);
+    const vols = bars.map(volumeOf);
     const out: Record<string, (number | null)[]> = {};
     for (const { lane, length } of RIBBON_LANES) {
       if (!flag(s, `showMa${lane}`, true)) {
@@ -395,7 +317,7 @@ export const TWAP: IndicatorDescriptor = {
     style: { color: '#dd7a28', lineWidth: 1.5 },
   }],
   calc: (bars, s) => {
-    const values = sourceValues(bars, src(s));
+    const values = sourceValues(bars, src(s, 'source', 'ohlc4'));
     const perSession = s.anchor !== 'continuous';
     // Read from the bar gaps rather than a fixed midnight, so the average
     // restarts when the exchange opens and not partway through its afternoon.
@@ -442,7 +364,7 @@ export const VWMA: IndicatorDescriptor = withTimeframe({
     style: { color: '#2962ff', lineWidth: 1.5 },
   }],
   calc: (bars, s) => {
-    const ma = vwma(sourceValues(bars, src(s)), volumes(bars), int(s, 'length', 20));
+    const ma = vwma(sourceValues(bars, src(s)), bars.map(volumeOf), int(s, 'length', 20));
     return { vwma: nulls(shift(ma, offsetOf(s, 'offset', 0))) };
   },
 });
@@ -492,9 +414,9 @@ export const ALLIGATOR: IndicatorDescriptor = {
     // `hl2` is hard-coded in the reference, so there is no source setting.
     const values = sourceValues(bars, 'hl2');
     return {
-      jaw: nulls(shift(rma(values, int(s, 'jawLength', 13)), offsetOf(s, 'jawOffset', 8))),
-      teeth: nulls(shift(rma(values, int(s, 'teethLength', 8)), offsetOf(s, 'teethOffset', 5))),
-      lips: nulls(shift(rma(values, int(s, 'lipsLength', 5)), offsetOf(s, 'lipsOffset', 3))),
+      jaw: nulls(shift(rma(values, int(s, 'jawLength', 21)), offsetOf(s, 'jawOffset', 8))),
+      teeth: nulls(shift(rma(values, int(s, 'teethLength', 13)), offsetOf(s, 'teethOffset', 5))),
+      lips: nulls(shift(rma(values, int(s, 'lipsLength', 8)), offsetOf(s, 'lipsOffset', 3))),
     };
   },
 };
@@ -541,7 +463,7 @@ function generalizedDouble(values: readonly number[], length: number, factor: nu
   const e1 = emaOfGapped(values, length);
   if (factor === 0) return e1;
   const e2 = emaOfGapped(e1, length);
-  return e1.map((v, i) => v * (1 + factor) - e2[i]! * factor);
+  return zip(e1, e2, (v, e) => v * (1 + factor) - e * factor);
 }
 
 /**

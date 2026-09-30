@@ -510,6 +510,11 @@ export function createTier2Indicator(d: Tier2Descriptor): IndicatorDescriptor {
       const abort = (): void => { if (state.generation === generation) cancel(); cleanup(); };
       stopLive();
       ctx.signal?.addEventListener('abort', abort, { once: true });
+      // Request notifications go with `requestState`: the revisions they
+      // announce are read from it. A host without it is an older host whose
+      // bars and identity arrive through data notifications, which `refresh`
+      // reads by range. The requested indicator needs a native host for its
+      // snapshots, so it takes request notifications whenever they exist.
       unsubscribeChanges = ctx.requestState !== undefined && ctx.subscribeRequestChanges !== undefined
         ? ctx.subscribeRequestChanges(() => refresh()) : ctx.subscribeDataChanges?.(() => refresh()) ?? (() => {});
       ctx.setDataRetry?.(() => refresh(true));

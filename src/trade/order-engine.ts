@@ -5,7 +5,7 @@
  * (sandbox) mode. Network-agnostic: it talks to an injected OrderFeed (the
  * FakeBroker simulates it in tests/demos).
  *
- * Two lifecycles are tracked per order and they are deliberately not merged:
+ * Three lifecycles are tracked per order and they are deliberately not merged:
  *
  *   state         the historical `ClientOrderState`. Existing consumers read it
  *                 and its meaning is unchanged, including the parts that are
@@ -32,274 +32,19 @@
  */
 import { transition, isTerminal, type ClientOrderState, type OrderEvent } from './order-state-machine';
 import { validateOrder, validatePrice, validateQuantity, type OrderConstraints, type ValidationResult } from './validation';
-import type { OrderRole, OrderSide, OrderStatus, OrderType } from './types';
+import type { OrderSide, OrderStatus, OrderType } from './types';
 import { checkTradingCapability, type TradingCapabilities, type TradingCapabilityRequest, type TradingCapabilityResult, type TradingCapabilitySource } from 'openalgo-charts';
 import { checkTradingFeature, ORDER_DURATIONS, type OrderDuration, type TradingFeature, type TradingFeatureRequest, type TradingFeatureSource } from './features';
-import type { AccountStateSource } from './account';
+import { errorText, nonEmpty } from './text';
+import {
+  isBrokerRejection, isPreflightFailure,
+  type BracketOrderRequest, type BracketReceipt, type BrokerOrderUpdate, type ClosePositionRequest, type CommandReceipt, type CommandResult,
+  type GateFn, type IntentState, type MarketOrderOptions, type ModifyOptions, type ModifyPatch, type OrderEngineOptions, type OrderFeed,
+  type OrderKind, type OrderPreview, type PlaceRequest, type PlaceResult, type PositionCommandRequest, type PreviewResult,
+  type ReversePositionRequest, type TradeMode, type TradingCommand,
+} from './order-types';
 
-export interface PlaceRequest {
-  symbol: string;
-  exchange?: string | undefined;
-  side: OrderSide;
-  type: OrderType;
-  qty: number;
-  price?: number | undefined;
-  triggerPrice?: number | undefined;
-  /** Product: CNC (delivery), NRML (F&O carry), MIS (intraday). Required by OpenAlgo. */
-  product?: 'CNC' | 'NRML' | 'MIS' | undefined;
-  /** Idempotency token; a retry with the same token is never double-sent. */
-  clientToken?: string | undefined;
-  /** The account the order is for. Needs the `accounts` feature; never dropped on the way to the wire. */
-  account?: string;
-  /** Time in force. Omitted leaves the provider's own default. Needs the provider to list it. */
-  duration?: OrderDuration;
-  /** When a `GTD` order lapses, UTC seconds. Only with `GTD`. */
-  expiresAt?: number;
-  /** Margin multiplier to request. Needs the `leverage` feature. */
-  leverage?: number;
-}
-
-/** What a provider says an order would cost before it is placed. Absent fields were not reported. */
-export interface OrderPreview {
-  readonly accountId?: string;
-  readonly estimatedPrice?: number;
-  readonly estimatedValue?: number;
-  readonly marginRequired?: number;
-  readonly marginAvailableAfter?: number;
-  readonly fees?: number;
-  readonly currency?: string;
-  readonly warnings?: readonly string[];
-  /** Set when the provider would refuse the order, and why. */
-  readonly rejectReason?: string;
-  /** UTC seconds. */
-  readonly asOf?: number;
-}
-
-export type PreviewResult =
-  | { ok: true; preview: OrderPreview; request: PlaceRequest }
-  | { ok: false; reason: string; unsupported?: boolean; stale?: boolean };
-
-/** Identifies the position a command acts on. */
-export interface PositionCommandRequest {
-  symbol: string;
-  exchange?: string;
-  product?: 'CNC' | 'NRML' | 'MIS';
-  account?: string;
-  /** Idempotency token for this command alone. */
-  clientToken?: string;
-}
-
-export interface ClosePositionRequest extends PositionCommandRequest {
-  /** How much to close. Omitted closes the whole position; a quantity is a partial close. */
-  qty?: number;
-}
-
-export type ReversePositionRequest = PositionCommandRequest;
-
-/** An entry whose stop and target legs the provider places and links itself. */
-export interface BracketOrderRequest extends PlaceRequest {
-  /** Trigger of the protective stop leg. */
-  stopLoss: number;
-  /** Limit price of the target leg. */
-  takeProfit: number;
-}
-
-/** The broker's handle on a position command. `commandId` is what its order stream reports on. */
-export interface CommandReceipt {
-  commandId: string;
-  orderIds?: readonly string[];
-}
-
-export interface BracketReceipt {
-  orderId: string;
-  stopLossId?: string;
-  takeProfitId?: string;
-}
-
-export type TradingCommandKind = 'close' | 'reverse' | 'bracket';
-
-/** What a command confirmation is asked to approve. The request carries the account it will use. */
-export type TradingCommand =
-  | { kind: 'close'; request: Readonly<ClosePositionRequest> }
-  | { kind: 'reverse'; request: Readonly<ReversePositionRequest> }
-  | { kind: 'bracket'; request: Readonly<BracketOrderRequest> };
-
-export type OrderKind = 'order' | TradingCommandKind | 'bracket-stop' | 'bracket-target';
-
-/**
- * One authoritative order row from the broker, with the client token it echoes
- * when it has one. An `Order` row spreads into it as it is.
- */
-export interface BrokerOrderUpdate {
-  id: string;
-  clientToken?: string;
-  status: OrderStatus;
-  /** For a leg the provider placed and linked itself: the broker id of its entry. */
-  parentId?: string;
-  /** For such a leg: `sl` for the stop, `tp` for the target. With `parentId`, it finds a leg that echoes no token. */
-  role?: OrderRole;
-}
-
-/** Fields a modify may change. Whole-order feeds fill the rest from their cache. */
-export interface ModifyPatch {
-  price?: number;
-  triggerPrice?: number;
-  qty?: number;
-}
-
-/**
- * The minimal broker write interface the `OrderEngine` drives: place / modify /
- * cancel. `OpenAlgoTradeFeed` implements this. Distinct from the base-tier
- * `TradeFeed` (a higher-level place + subscribe shape in `openalgo-charts`):
- * implement `OrderFeed` for the engine's write path.
- */
-export interface OrderFeed {
-  /** Optional support declaration; a configured provider can report unavailable metadata. */
-  readonly capabilities?: TradingCapabilitySource | undefined;
-  /** Declares preview, durations, leverage, accounts and the position commands. Omitted declares none. */
-  readonly features?: TradingFeatureSource | undefined;
-  place(req: PlaceRequest & { mode: TradeMode }): Promise<{ orderId: string }>;
-  modify(orderId: string, patch: ModifyPatch): Promise<void>;
-  cancel(orderId: string): Promise<void>;
-  /** Read-only: what the order would cost. Must not place anything. */
-  previewOrder?(req: PlaceRequest & { mode: TradeMode }): Promise<OrderPreview>;
-  closePosition?(req: ClosePositionRequest & { mode: TradeMode }): Promise<CommandReceipt>;
-  reversePosition?(req: ReversePositionRequest & { mode: TradeMode }): Promise<CommandReceipt>;
-  /**
-   * `legClientTokens` are the client tokens the engine gives the stop and
-   * target legs. A provider that echoes them on the legs' rows lets a bracket
-   * whose answer was lost be reconciled leg by leg.
-   */
-  placeBracket?(req: BracketOrderRequest & { mode: TradeMode; legClientTokens: { stopLoss: string; takeProfit: string } }): Promise<BracketReceipt>;
-}
-
-export type TradeMode = 'live' | 'analyzer';
-export type GateFn = (req: PlaceRequest) => boolean | Promise<boolean>;
-
-/**
- * Client-owned lifecycle of an intent, kept apart from the broker's own view.
- *
- *   BLOCKED            never sent: validation failed, the gate declined, or the
- *                      feed proved the request never left
- *   SUBMITTING         in flight
- *   SUBMITTED          transport returned success. NOT an order yet.
- *   AMBIGUOUS          transport failed, or a fresh book does not mention it.
- *                      May or may not be live at the exchange. Absorbing until
- *                      the broker speaks.
- *   ACKNOWLEDGED       the broker has accounted for it
- *   MODIFY_SUBMITTING  a modify is in flight
- *   CANCEL_SUBMITTING  a cancel is in flight
- *   RECONCILING        our picture may be behind; a snapshot is being fetched
- *   SETTLED            the broker reported a final state
- */
-export type IntentState =
-  | 'BLOCKED'
-  | 'SUBMITTING'
-  | 'SUBMITTED'
-  | 'AMBIGUOUS'
-  | 'ACKNOWLEDGED'
-  | 'MODIFY_SUBMITTING'
-  | 'CANCEL_SUBMITTING'
-  | 'RECONCILING'
-  | 'SETTLED';
-
-/**
- * What a feed throws when the request PROVABLY never left: it failed before the
- * socket was written (bad arguments, no context cached, offline, DNS). Only this
- * marker releases an idempotency token, because only this proves there is
- * nothing live to double up on. See the catch in `placeOrder`.
- */
-export interface PreflightFailure {
-  readonly preflight: true;
-}
-
-/** True when a thrown value declares itself a pre-flight failure. */
-export function isPreflightFailure(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as { preflight?: unknown }).preflight === true;
-}
-
-/**
- * What a feed throws when the broker ANSWERED and refused: the request arrived
- * and was turned down, so nothing is live. That is an authoritative outcome,
- * unlike a transport failure, and it settles the intent as rejected. The token
- * stays claimed because the request did leave; a retry is a new decision.
- */
-export interface BrokerRejection {
-  readonly rejected: true;
-}
-
-/** True when a thrown value is the broker's explicit refusal rather than a lost answer. */
-export function isBrokerRejection(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as { rejected?: unknown }).rejected === true;
-}
-
-/** Extra fields for the one-click market order, which a chart button cannot otherwise set. */
-export interface MarketOrderOptions {
-  exchange?: string;
-  product?: 'CNC' | 'NRML' | 'MIS';
-  /** Idempotency token, so a double-clicked button places one order, not two. */
-  clientToken?: string;
-}
-
-export interface ModifyOptions {
-  /**
-   * Explicit stop trigger. Omitted, the trigger follows the order type: SL-M
-   * treats the dragged level as the trigger, SL carries its trigger at the
-   * offset the order was placed with, and the rest have none.
-   */
-  triggerPrice?: number;
-}
-
-export interface OrderEngineOptions {
-  feed: OrderFeed;
-  /** Host restrictions combined with the feed's, rechecked before every write. */
-  capabilities?: TradingCapabilitySource;
-  constraints: OrderConstraints;
-  mode?: TradeMode;
-  /** Armed = fire immediately; otherwise the gate must approve each order. */
-  armed?: boolean;
-  gate?: GateFn;
-  minModifyIntervalMs?: number;
-  now?: () => number;
-  idGen?: () => string;
-  /** Called for modify validation and unsupported modify/cancel operations. */
-  onValidationError?: (reason: string) => void;
-  /**
-   * How many settled orders stay readable before the oldest are dropped. A
-   * trading session is a long-lived page and the per-order maps used to grow
-   * for its whole life. 0 drops each order the moment it settles.
-   */
-  maxSettledOrders?: number;
-  /** Host restrictions on the newer operations, combined with the feed's `features`; either can refuse. */
-  features?: TradingFeatureSource;
-  /**
-   * The account selection. When set, every order and command is stamped with
-   * it, one naming another account is refused, and a change while confirming
-   * sends nothing. Pass the account view itself (an `AccountManager`) and a
-   * selection from the other ledger is refused as well: a bare id cannot say
-   * whether it is a live account about to take a sandbox order.
-   */
-  selectedAccount?: (() => string | null | undefined) | Pick<AccountStateSource, 'getState'>;
-  /** Approves close, reverse and bracket commands when not armed. Omitted declines them. */
-  confirmCommand?: (command: TradingCommand) => boolean | Promise<boolean>;
-  /** Wall clock in UTC seconds, for expiry checks. Default `Date.now() / 1000`. */
-  clock?: () => number;
-}
-
-export interface PlaceResult {
-  ok: boolean;
-  clientId?: string;
-  state?: ClientOrderState | undefined;
-  /** Client-owned intent. `ok: true` means SUBMITTED, never acknowledged. */
-  intent?: IntentState | undefined;
-  reason?: string;
-}
-
-export interface CommandResult extends PlaceResult {
-  kind: TradingCommandKind;
-  /** Client ids of a bracket's legs the provider has named, in its receipt or on its order stream. */
-  legs?: { stopLoss?: string; takeProfit?: string };
-}
+export * from './order-types';
 
 /** What the engine remembers of a request. Position commands have no side or type of their own. */
 interface TrackedRequest {
@@ -339,8 +84,6 @@ const LEG_KEY = { stop: 'stopLoss', target: 'takeProfit' } as const;
 /** A position command whose outcome is not yet known holds the position against another. */
 const UNRESOLVED: ReadonlySet<IntentState> = new Set<IntentState>(['SUBMITTING', 'SUBMITTED', 'AMBIGUOUS', 'RECONCILING']);
 
-const nonEmpty = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
-const errorText = (err: unknown): string => String((err as Error)?.message ?? err);
 const PREVIEW_NUMBERS = ['estimatedPrice', 'estimatedValue', 'marginRequired', 'marginAvailableAfter', 'fees', 'asOf'] as const;
 
 /** A readable preview, or the name of the first field that is not. */
@@ -660,6 +403,21 @@ export class OrderEngine {
     return preflight ? message : `${message} (may have reached the broker; check the order book before retrying)`;
   }
 
+  /**
+   * A modify or cancel threw. It may still have been applied: only a
+   * pre-flight failure rules that out, and leaves the order where it was last
+   * known to be, unless it has moved on from `pending` since.
+   */
+  private _writeFailed(o: Tracked, err: unknown, pending: IntentState, previousState: ClientOrderState, previousIntent: IntentState): void {
+    if (isPreflightFailure(err)) {
+      if (o.intent === pending) { o.state = previousState; o.intent = previousIntent; }
+      this._onValidationError?.(errorText(err));
+    } else {
+      o.state = transition(o.state, 'reject');
+      o.intent = 'AMBIGUOUS';
+    }
+  }
+
   /** `ok` after a failure only when the broker's own stream already reports the write as accepted. */
   private _outcome(o: Tracked, reason?: string): PlaceResult {
     const ok = reason === undefined || (o.brokerStatus !== undefined && o.brokerStatus !== 'rejected');
@@ -681,21 +439,11 @@ export class OrderEngine {
     if (refusal !== null) return { ok: false, reason: refusal, intent: 'BLOCKED' };
     this._sentTokens.add(token);
 
-    if (!this._armed) {
-      let approved = false;
-      try {
-        approved = await (this._gate ? this._gate({ ...req }) : Promise.resolve(false));
-      } catch (err) {
-        // The gate runs before any network call, so nothing can be live.
-        this._sentTokens.delete(token);
-        throw err;
-      }
-      if (!approved) {
-        // Declining is a pre-flight outcome: the request provably never left, so
-        // the token is free and the same one may be offered again.
-        this._sentTokens.delete(token);
-        return { ok: false, reason: 'not confirmed', intent: 'BLOCKED' };
-      }
+    // The gate runs before any network call, so a gate that throws or declines
+    // frees the token (see `_confirmed`): the request provably never left.
+    const gate = this._gate;
+    if (!this._armed && !(await this._confirmed([token], gate ? () => gate({ ...req }) : undefined))) {
+      return { ok: false, reason: 'not confirmed', intent: 'BLOCKED' };
     }
 
     // Capabilities, features and the account can all change while the user
@@ -1057,16 +805,7 @@ export class OrderEngine {
       if (patch.price !== undefined) o.req = { ...o.req, price: patch.price };
       if (patch.triggerPrice !== undefined) o.req = { ...o.req, triggerPrice: patch.triggerPrice };
     } catch (err) {
-      if (revision !== o.writeRevision) return;
-      // A failed modify may still have been applied; only a pre-flight failure
-      // rules that out and leaves the order where we last knew it to be.
-      if (isPreflightFailure(err)) {
-        if (o.intent === 'MODIFY_SUBMITTING') { o.state = previousState; o.intent = previousIntent; }
-        this._onValidationError?.(String((err as Error).message ?? err));
-      } else {
-        o.state = transition(o.state, 'reject');
-        o.intent = 'AMBIGUOUS';
-      }
+      if (revision === o.writeRevision) this._writeFailed(o, err, 'MODIFY_SUBMITTING', previousState, previousIntent);
     }
   }
 
@@ -1094,14 +833,7 @@ export class OrderEngine {
       this._cancelOcoPeer(o);
       this._settle(o);
     } catch (err) {
-      if (revision !== o.writeRevision) return;
-      if (isPreflightFailure(err)) {
-        if (o.intent === 'CANCEL_SUBMITTING') { o.state = previousState; o.intent = previousIntent; }
-        this._onValidationError?.(String((err as Error).message ?? err));
-      } else {
-        o.state = transition(o.state, 'reject');
-        o.intent = 'AMBIGUOUS';
-      }
+      if (revision === o.writeRevision) this._writeFailed(o, err, 'CANCEL_SUBMITTING', previousState, previousIntent);
     }
   }
 

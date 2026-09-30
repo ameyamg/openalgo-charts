@@ -149,3 +149,4 @@ interface VolumeProfileSessionResult {
 | buySell / delta look empty | `deltaFromBarDirection: false` | Enable it (default) so volume is split |
 | One profile for many days | `session: 'composite'` | Use `session: 'day'` (or `week` / `month`) |
 | Value area looks off | `valueAreaPercent` passed as a percent | Use a fraction (0.7), not 70 |
+| Value area differs from the drawing tool's | The fixed range volume profile drawing takes `valueArea` as a percent (70) | Divide by 100 when copying a value between the two |

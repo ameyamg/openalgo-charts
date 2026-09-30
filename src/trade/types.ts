@@ -5,7 +5,7 @@
 export type OrderSide = 'BUY' | 'SELL';
 export type OrderType = 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
 
-/** Lifecycle states (§9.5). Phase 8 reconciles read-only; Phase 9 drives writes. */
+/** Lifecycle states (§9.5): the trade controller reconciles them from book snapshots, and the order engine moves them as it writes. */
 export type OrderStatus =
   | 'pending'   // submitted, not yet acknowledged
   | 'working'   // live in the book

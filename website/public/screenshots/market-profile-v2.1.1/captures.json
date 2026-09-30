@@ -2,9 +2,9 @@
   "sources": {
     "examples/market-profile/index.html": "7a7bcdf6173ddf1fd16e664ee721a92fbc2e91678e679024c21f947c5b90dd68",
     "examples/market-profile/themes.js": "2cbc8488168ee94bc836ea816b8edb499803fd0184fe9d4b2f534d6096462a98",
-    "src/profile/market-profile-primitive.ts": "976b093c83d43d0fe021cfd06d5207f32b7b09f016e70418c94589f1994a1afd",
-    "src/profile/market-profile.ts": "364ba7bbe1572d63a2de2489960e7dfd8e592a96a08fece06caa3331168b05d1",
-    "src/profile/compact-text.ts": "ee9fc47425287de46697c8e62b296bb664fcbcdf8c2fb3d54fa85f0e02819db6",
+    "src/profile/market-profile-primitive.ts": "6e601abd87aea3c65bf298c1547a771cd47a6fb15f8af02700dfbc8759479e45",
+    "src/profile/market-profile.ts": "82f88d6939f58d378eb94c89de633685ba011064b4a65de4c57e3fb97a93b4e6",
+    "src/profile/compact-text.ts": "cbac1c0aef17e1877d8b149ee14f7bc5453f88e269731ac9ebd506bf8cb8ba14",
     "src/primitives/watermark.ts": "c9a623266c895e02a9c0ca8092d80e148394600ca2e2a54916b976c466727acf",
     "src/primitives/openalgo-glyph.ts": "0df8b26e60a6214420570f80b9bc4ffc3c2fdabb9fc416a6058a589110faea51"
   },
