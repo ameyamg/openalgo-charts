@@ -19,9 +19,9 @@ import { widgetText } from '../localization';
  * look as the tool's default or by name, and applies a saved one, when the
  * widget was given a template store.
  */
-import { applyDrawingSettings, drawingSettingsSchema, getDrawingTool, readDrawingSettings } from 'openalgo-charts/draw';
+import { applyDrawingSettings, drawingSettingsSchema, readDrawingSettings } from 'openalgo-charts/draw';
 import type { Drawing, DrawingTool, SettingsSchema } from 'openalgo-charts/draw';
-import { editableIds, type WidgetContext } from '../context';
+import { drawingToolOf, editableIds, type WidgetContext } from '../context';
 import { drawingActionState, runDrawingAction, type DrawingAction } from '../drawing-actions';
 import { commandChord } from '../keymap';
 import {
@@ -103,10 +103,6 @@ export function resolvedDrawingValues(d: Drawing, schema: SettingsSchema, tool: 
   return out;
 }
 
-function toolOf(id: string): DrawingTool | null {
-  try { return getDrawingTool(id); } catch { return null; }
-}
-
 const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
 
 /**
@@ -127,7 +123,7 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
     return { el: doc.createElement('div'), close: () => {}, isOpen: () => false };
   }
   let schema = commonSchema(live.map((d) => d.tool));
-  let tool = toolOf(live[0]!.tool);
+  let tool = drawingToolOf(live[0]!.tool);
   let form: FormHandle | null = null;
   let shownWhy: string | null = null;
 
@@ -293,7 +289,7 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
     live = drawingsOf();
     if (live.length === 0) { handle.close(); return; }
     schema = commonSchema(live.map((d) => d.tool));
-    tool = toolOf(live[0]!.tool);
+    tool = drawingToolOf(live[0]!.tool);
     frame.setTitle(titleOf());
     renderTools();
     renderPane();

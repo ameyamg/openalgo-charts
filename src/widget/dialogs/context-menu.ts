@@ -25,7 +25,7 @@ import { checkTradingCapability, getIndicator, isReplaying, PRICE_SCALE_MODES } 
 import type { Chart, ContextMenuEvent, ContextMenuTarget, IndicatorApi, PriceScaleId, PriceScaleMode, TradingCapabilityRequest, TradingCapabilitySource } from 'openalgo-charts';
 import { drawingSettingsSchema } from 'openalgo-charts/draw';
 import type { Drawing } from 'openalgo-charts/draw';
-import type { WidgetContext } from '../context';
+import { historyStep, type WidgetContext } from '../context';
 import { drawingActionState, runDrawingAction } from '../drawing-actions';
 import { ariaKeys, commandChord } from '../keymap';
 import { boxInRoot, chromeGlyph, el, openPanel, placePanel, stopOwnKeys, type PanelHandle } from '../form';
@@ -493,11 +493,7 @@ export function mountContextMenu(ctx: WidgetContext, anchor?: HTMLElement, opts:
           // One row is one step, including what the chart does not announce
           // (an axis mode, an auto-fit switch). A row that changes nothing
           // (fit, copy, an order) records nothing.
-          if (item.run !== undefined) {
-            const run = item.run;
-            if (ctx.history !== undefined) ctx.history.transact(() => run(), item.id);
-            else run();
-          }
+          if (item.run !== undefined) historyStep(ctx, item.id, item.run);
           if (item.keepOpen === true) paint(rows.indexOf(row));
           else handle.close();
         });

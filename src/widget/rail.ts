@@ -15,11 +15,11 @@ import { widgetText } from './localization';
  */
 import type { Chart } from 'openalgo-charts';
 import {
-  getDrawingTool, hasDrawingTool, drawingShortcuts,
+  hasDrawingTool, drawingShortcuts,
   iconSprite, iconUse, chromeIconSvg, toolCursor, DRAWING_TOOL_ICONS,
   type MagnetMode,
 } from 'openalgo-charts/draw';
-import { h, glyph, editableIds, historyPress, historyReady, TIP_DWELL_MS, type TipSpec, type WidgetContext } from './context';
+import { h, glyph, drawingToolOf, editableIds, historyPress, historyReady, TIP_DWELL_MS, type TipSpec, type WidgetContext } from './context';
 import { commandChord } from './keymap';
 import { chromeGlyph } from './form';
 import { openMenu, type MenuRow } from './menu';
@@ -113,7 +113,7 @@ export const RAIL_GROUPS: readonly RailGroup[] = [
 
 /** A tool's display name from the registry, or the id itself for one the registry lacks. */
 export const toolName = (id: string | null): string =>
-  (id !== null && hasDrawingTool(id) ? getDrawingTool(id).name : String(id ?? 'Cursor'));
+  (id === null ? null : drawingToolOf(id))?.name ?? String(id ?? 'Cursor');
 
 export interface RailPrefs {
   favorites: string[];

@@ -19,8 +19,8 @@
  * freehand stroke has a point per sample, so neither lists its anchors.
  */
 import { utcSecondsToZonedParts, zonedWallClockToUtcSeconds } from 'openalgo-charts';
-import { getDrawingTool, type Drawing, type DrawingPoint } from 'openalgo-charts/draw';
-import { editableIds, type WidgetContext } from '../context';
+import type { Drawing, DrawingPoint } from 'openalgo-charts/draw';
+import { drawingToolOf, editableIds, type WidgetContext } from '../context';
 import { el } from '../form';
 import { widgetText } from '../localization';
 import { MIN_PRICE_DIGITS } from '../statusline';
@@ -239,8 +239,8 @@ export function mountDrawingCoordinates(
       root.append(head, el(doc, 'p', 'oac-coords__zone', widgetText(ctx, 'Times are on the chart clock, {zone}.', { zone })));
     }
     for (const d of drawings) {
-      let tool: ReturnType<typeof getDrawingTool> | null = null;
-      try { tool = getDrawingTool(d.tool); } catch { /* an unregistered tool still has its anchors */ }
+      // An unregistered tool still has its anchors.
+      const tool = drawingToolOf(d.tool);
       if (rebuild && drawings.length > 1) root.appendChild(el(doc, 'div', 'oac-head', widgetText(ctx, `schema.drawing.${d.tool}.name`, {}, tool?.name ?? d.tool)));
       if (d.space === 'viewport') { if (rebuild) note(widgetText(ctx, 'Pinned to the screen: its anchors are not a time and a price.')); continue; }
       if (tool?.freehand === true) { if (rebuild) note(widgetText(ctx, 'A freehand stroke has {count} points. Move it on the chart.', { count: d.points.length })); continue; }

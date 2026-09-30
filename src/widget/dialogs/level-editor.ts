@@ -12,10 +12,10 @@ import { widgetText } from '../localization';
  */
 import {
   DEFAULT_FIB, LEVEL_NEUTRAL, applyDrawingSettings, cloneLevels, drawingSettingsSchema, formatRatio, gannLabel,
-  getDrawingTool, levelColor, readDrawingSetting,
+  levelColor, readDrawingSetting,
 } from 'openalgo-charts/draw';
-import type { Drawing, DrawingTool, FibLevel, SettingsSchema } from 'openalgo-charts/draw';
-import type { WidgetContext } from '../context';
+import type { Drawing, FibLevel, SettingsSchema } from 'openalgo-charts/draw';
+import { drawingToolOf, type WidgetContext } from '../context';
 import { button, chromeGlyph, el, openPanel, placePanel, selectionPoint, stopOwnKeys, type PanelHandle } from '../form';
 import { createColorPicker, type ColorPickerHandle } from '../color-picker';
 
@@ -59,10 +59,6 @@ export function ladderDrawings(ctx: WidgetContext, ids: readonly string[]): { dr
   return { drawings, schema: drawings.length === 0 ? null : drawingSettingsSchema(drawings[0]!.tool) }; // length checked first
 }
 
-function toolOf(id: string): DrawingTool | null {
-  try { return getDrawingTool(id); } catch { return null; }
-}
-
 /**
  * Open the editor for the selected ladder drawings, below `anchor` when there
  * is one (the properties dialog's button), else beside the selection.
@@ -76,7 +72,7 @@ export function mountLevelEditor(ctx: WidgetContext, anchor?: HTMLElement, opts:
     return { el: doc.createElement('div'), close: () => {}, isOpen: () => false };
   }
   const primary = drawings[0]!; // the schema is null exactly when there are no drawings
-  const tool = toolOf(primary.tool);
+  const tool = drawingToolOf(primary.tool);
   const levelsField = schema.fields.find((f) => f.kind === 'levels');
   const labelsField = schema.fields.find((f) => f.path === 'style.showLabels');
   const levelsPath = levelsField?.path ?? 'style.levels';

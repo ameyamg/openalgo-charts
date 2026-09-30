@@ -11,10 +11,10 @@ import { widgetText } from '../localization';
  * event stops at the box, or the chart under it would take the press as a
  * pan and the widget's chords would read a Backspace as "delete the drawing".
  */
-import { drawingSettingsSchema, getDrawingTool } from 'openalgo-charts/draw';
+import { drawingSettingsSchema } from 'openalgo-charts/draw';
 import type { Drawing, DrawingText } from 'openalgo-charts/draw';
 import type { Chart } from 'openalgo-charts';
-import type { WidgetContext } from '../context';
+import { drawingToolOf, type WidgetContext } from '../context';
 import { boxInRoot, el, openPanel, type PanelHandle } from '../form';
 
 export interface TextEditorOptions {
@@ -183,7 +183,7 @@ export function mountTextEditor(ctx: WidgetContext, _anchor?: HTMLElement, opts:
   if (!isTextContent(d)) return declined(ctx, widgetText(ctx, 'Select a text drawing first'), opts.onDone);
   // A box whose commit the controller would refuse is not offered.
   if (d.policy?.editable === false) return declined(ctx, widgetText(ctx, 'read-only'), opts.onDone);
-  const tool = ((): { defaultText?: DrawingText } | null => { try { return getDrawingTool(d.tool); } catch { return null; } })();
+  const tool = drawingToolOf(d.tool);
   const fallback = tool?.defaultText?.value !== undefined && tool.defaultText.value !== '' ? tool.defaultText.value : widgetText(ctx, 'Text');
   const t: TextLike = d.text ?? { value: '' };
   const size = t.fontSize ?? TEXT_SIZE;

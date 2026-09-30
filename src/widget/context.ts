@@ -13,7 +13,7 @@
  * through which the dialog tier makes its mount functions known.
  */
 import type { AlertController, Chart, ChartObjects, ChartTheme, DataVariant } from 'openalgo-charts';
-import type { DrawingController } from 'openalgo-charts/draw';
+import { getDrawingTool, hasDrawingTool, type DrawingController, type DrawingTool } from 'openalgo-charts/draw';
 import type { Keymap } from './keymap';
 import type { ToastHandle, ToastKind } from './toast';
 import type { WidgetThemeName } from './tokens';
@@ -59,6 +59,11 @@ export function glyph(doc: Document, svg: string, kind: 'tool' | 'chrome'): HTML
  */
 export function editableIds(draw: DrawingController, ids: readonly string[]): string[] {
   return ids.filter((id) => draw.get(id)?.policy?.editable !== false);
+}
+
+/** The registered tool a drawing names, or null for one this build does not carry. */
+export function drawingToolOf(id: string): DrawingTool | null {
+  return hasDrawingTool(id) ? getDrawingTool(id) : null;
 }
 
 /**

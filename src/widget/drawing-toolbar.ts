@@ -17,9 +17,9 @@
  * transaction on the chart history), so one click is one undo step, and a
  * selection the user may not edit shows its controls greyed with the reason.
  */
-import { applyDrawingSettings, chromeIconSvg, drawingSettingsSchema, getDrawingTool, LINE_STYLE_OPTIONS } from 'openalgo-charts/draw';
-import type { Drawing, DrawingTool, SettingsField } from 'openalgo-charts/draw';
-import { editableIds, historyStep, type WidgetContext } from './context';
+import { applyDrawingSettings, chromeIconSvg, drawingSettingsSchema, LINE_STYLE_OPTIONS } from 'openalgo-charts/draw';
+import type { Drawing, SettingsField } from 'openalgo-charts/draw';
+import { drawingToolOf, editableIds, historyStep, type WidgetContext } from './context';
 import { drawingActionState, runDrawingAction, type DrawingAction } from './drawing-actions';
 import { commandChord } from './keymap';
 import { createColorPicker } from './color-picker';
@@ -71,16 +71,12 @@ export function valueAcross(drawings: readonly Drawing[], field: SettingsField, 
   let first: unknown;
   let seen = false;
   for (const d of drawings) {
-    const tool = toolOf(d.tool);
+    const tool = drawingToolOf(d.tool);
     const value = resolvedDrawingValues(d, { fields: [field] }, tool, themeLine)[field.path];
     if (!seen) { first = value; seen = true; continue; }
     if (JSON.stringify(value) !== JSON.stringify(first)) return MIXED;
   }
   return seen ? first : undefined;
-}
-
-function toolOf(id: string): DrawingTool | null {
-  try { return getDrawingTool(id); } catch { return null; }
 }
 
 let sequence = 0;
@@ -261,7 +257,7 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
       color.el.classList.toggle('is-mixed', now === MIXED);
       if (now !== MIXED) color.write(now);
       // Two of the colours in use, split corner to corner: mixed, without a word.
-      const [a, b] = [...new Set(live.map((d) => String(resolvedDrawingValues(d, { fields: [colorField] }, toolOf(d.tool), theme)['style.color'])))];
+      const [a, b] = [...new Set(live.map((d) => String(resolvedDrawingValues(d, { fields: [colorField] }, drawingToolOf(d.tool), theme)['style.color'])))];
       colorTrigger.style.backgroundImage = now === MIXED ? `linear-gradient(135deg, ${a} 0 50%, ${b ?? a} 50% 100%)` : '';
       colorTrigger.setAttribute('aria-label', now === MIXED
         ? widgetText(ctx, 'Color: {value}', { value: widgetText(ctx, 'mixed') })
