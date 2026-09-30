@@ -126,7 +126,13 @@ export class FakeBroker implements OrderFeed, AccountFeed {
   private readonly _orderListeners: Array<(order: Order, info: FakeOrderInfo) => void> = [];
   private _idCounter = 0;
   private _execCounter = 0;
-  /** Set to a reason to make the next place() reject (test hook). */
+  /**
+   * Test hook: set to a reason to make the next `place()` throw it once, as a
+   * plain error. That is an answer lost on its way back, not a refusal: the
+   * engine settles the order as ambiguous and keeps its token, since it may
+   * have reached the broker. For a broker's refusal, construct with
+   * `accounts` and call `failNext('place', 'reject', reason)`.
+   */
   public rejectNextPlace: string | null = null;
 
   private readonly _ledgers = new Map<string, Ledger>();
@@ -283,7 +289,7 @@ export class FakeBroker implements OrderFeed, AccountFeed {
     const meta = this._meta.get(orderId);
     const lose = meta === undefined ? false : await this._enter('modify', meta.accountId);
     const o = this._orders.find((x) => x.id === orderId);
-    if (o === undefined) throw new Error('unknown order');
+    if (o === undefined) throw new Error('FakeBroker: unknown order');
     if (meta !== undefined) this._live(o);
     if (patch.price !== undefined) o.price = patch.price;
     if (patch.triggerPrice !== undefined) o.triggerPrice = patch.triggerPrice;
