@@ -14,6 +14,7 @@ import type { IndicatorDescriptor } from 'openalgo-charts';
 import { sma, stdev, highest, lowest, nulls, smaSeededEma, rollingSum, roc, linreg } from './calc';
 import { withTail, windowTail } from './tail';
 import { num, int, offsetOf, str, src } from './settings';
+import { shift } from './series';
 
 /**
  * the reference `color.new(c, t)` transparency, where 0 is opaque and 100 invisible.
@@ -47,18 +48,6 @@ function bands(values: readonly number[], length: number, mult: number): {
     lower[i] = middle[i]! - d;
   }
   return { middle, upper, lower };
-}
-
-/** the reference `plot(..., offset = n)`: move the drawn series `n` bars to the right. */
-function shift(values: readonly number[], by: number): number[] {
-  const n = values.length;
-  if (by === 0) return values.slice();
-  const out = new Array<number>(n).fill(NaN);
-  for (let i = 0; i < n; i++) {
-    const j = i + by;
-    if (j >= 0 && j < n) out[j] = values[i]!;
-  }
-  return out;
 }
 
 /**

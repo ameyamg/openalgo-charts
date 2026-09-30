@@ -14,53 +14,13 @@
  * `src/indicators/index.ts`.
  */
 import { atr, sourceValues, sessionStartFlags } from 'openalgo-charts';
-import type { Bar, IndicatorDescriptor, IndicatorInput } from 'openalgo-charts';
+import type { IndicatorDescriptor, IndicatorInput } from 'openalgo-charts';
 import { sma, rma, nulls, smaSeededEma, vwma, percentileNearestRank } from './calc';
 import { emaOfGapped, smoothingMa } from './smoothing';
 import { withTimeframe } from './timeframe';
 import { num, int, offsetOf, str, flag, src, zoneOf } from './settings';
-
-/** the reference `nz(volume)`: a bar the feed gave no volume for traded nothing. */
-const volumes = (bars: readonly Bar[]): number[] =>
-  bars.map((b) => (typeof b.volume === 'number' && Number.isFinite(b.volume) ? b.volume : 0));
-
-/**
- * the reference `plot(..., offset = n)`: a positive `n` draws the value `n` bars later,
- * so the value computed on bar `i` lands in slot `i + n`. This library has no
- * per-plot offset, so the displacement is baked into the returned column: the
- * first `n` slots are null and the last `n` slots carry the shifted tail.
- */
-function shift(values: readonly number[], k: number): number[] {
-  const n = values.length;
-  const out = new Array<number>(n).fill(NaN);
-  // Callers shift by whole bars, so a `j` inside [0, n) is an index.
-  for (let i = 0; i < n; i++) {
-    const j = i - k;
-    if (j >= 0 && j < n) out[i] = values[j]!;
-  }
-  return out;
-}
-
-/**
- * the reference `cross(a, b)`: `crossover(a, b) or crossunder(a, b)`. Both
- * sides of the comparison must be real on both bars — an `na` comparison in
- * the reference is false, which is why nothing fires while either average is warming up.
- */
-function crossings(a: readonly number[], b: readonly number[]): boolean[] {
-  const n = a.length;
-  const out = new Array<boolean>(n).fill(false);
-  // The one caller passes two averages of the same bars, so `b` is as long as `a`.
-  for (let i = 1; i < n; i++) {
-    const prevA = a[i - 1]!;
-    const prevB = b[i - 1]!;
-    const curA = a[i]!;
-    const curB = b[i]!;
-    if (!Number.isFinite(prevA) || !Number.isFinite(prevB)) continue;
-    if (!Number.isFinite(curA) || !Number.isFinite(curB)) continue;
-    out[i] = (curA > curB && prevA <= prevB) || (curA < curB && prevA >= prevB);
-  }
-  return out;
-}
+import { crosses } from './statistics';
+import { shift, volumeOf } from './series';
 
 /**
  * `close` is hard-coded in the reference (`sma(close, ...)`, not an
@@ -96,7 +56,9 @@ export const MA_CROSS: IndicatorDescriptor = {
     const closes = sourceValues(bars, 'close');
     const short = sma(closes, int(s, 'shortLength', 9));
     const long = sma(closes, int(s, 'longLength', 26));
-    const hit = crossings(short, long);
+    // the reference `cross(a, b)`: both averages real on this bar and the one before,
+    // so nothing fires while either is warming up.
+    const hit = crosses(short, long);
     return {
       short: nulls(short),
       long: nulls(long),
@@ -267,7 +229,7 @@ export const MA_RIBBON: IndicatorDescriptor = {
     style: { color: l.color, lineWidth: 1.5 },
   })),
   calc: (bars, s) => {
-    const vols = volumes(bars);
+    const vols = bars.map(volumeOf);
     const out: Record<string, (number | null)[]> = {};
     for (const { lane, length } of RIBBON_LANES) {
       if (!flag(s, `showMa${lane}`, true)) {
@@ -402,7 +364,7 @@ export const VWMA: IndicatorDescriptor = withTimeframe({
     style: { color: '#2962ff', lineWidth: 1.5 },
   }],
   calc: (bars, s) => {
-    const ma = vwma(sourceValues(bars, src(s)), volumes(bars), int(s, 'length', 20));
+    const ma = vwma(sourceValues(bars, src(s)), bars.map(volumeOf), int(s, 'length', 20));
     return { vwma: nulls(shift(ma, offsetOf(s, 'offset', 0))) };
   },
 });

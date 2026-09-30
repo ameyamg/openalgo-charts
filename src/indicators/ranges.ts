@@ -28,6 +28,7 @@ import {
 import { fromFirstValue, smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
 import { withTimeframe } from './timeframe';
 import { num, int, offsetOf, str, src } from './settings';
+import { shift } from './series';
 
 /**
  * the reference `ema`, written the way the reference manual defines it:
@@ -70,24 +71,6 @@ function seededEma(values: readonly number[], period: number, holdFrom: number):
       continue;
     }
     out[i] = prev;
-  }
-  return out;
-}
-
-/**
- * the reference `plot(..., offset = n)` draws bar `i`'s value `n` bars to the right.
- * Plots here have no offset of their own, so the displacement is folded into the
- * column: index `i` holds whatever the chart should paint at bar `i`. Values
- * pushed past either end of the series are dropped, which is why an offset
- * shortens the visible line.
- */
-function shifted(values: readonly (number | null)[], offset: number): (number | null)[] {
-  if (offset === 0) return values.slice();
-  const n = values.length;
-  const out = new Array<number | null>(n).fill(null);
-  for (let i = 0; i < n; i++) {
-    const at = i + offset;
-    if (at >= 0 && at < n) out[at] = values[i] as number | null;
   }
   return out;
 }
@@ -292,8 +275,8 @@ export const RELATIVE_VIGOR_INDEX: IndicatorDescriptor = {
     const signal = fromFirstValue(rvgi, (t) => swma(t));
     const offset = offsetOf(s, 'offset', 0);
     return {
-      rvgi: shifted(nulls(rvgi), offset),
-      signal: shifted(nulls(signal), offset),
+      rvgi: nulls(shift(rvgi, offset)),
+      signal: nulls(shift(signal, offset)),
     };
   },
 };
@@ -396,7 +379,7 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
 
     const offset = offsetOf(s, 'offset', 0);
     return {
-      rvi: shifted(nulls(rvi), offset),
+      rvi: nulls(shift(rvi, offset)),
       ma: nulls(ma),
       bbUpper: nulls(ma.map((v, i) => v + band[i]!)),
       bbLower: nulls(ma.map((v, i) => v - band[i]!)),

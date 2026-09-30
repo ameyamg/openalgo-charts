@@ -39,34 +39,10 @@ import {
 import { windowMean } from './window-mean';
 import { fromFirstValue } from './smoothing';
 import { num, int, str, src } from './settings';
-
-/**
- * A column holding one value on every bar, warmup included. The two shaded
- * bands are fills between such columns: `fills` resolves its keys out of the
- * `calc` result rather than out of the declared plots, so a level that is never
- * plotted can still anchor a band, and it must stay non-null throughout because
- * the shading covers the whole pane and not just the stretch that prints.
- */
-const constant = (n: number, value: number): (number | null)[] =>
-  new Array<number | null>(n).fill(value);
+import { constant, shift, shiftFlags } from './series';
 
 /** The same colour at 60 percent opacity, for the dimmer hidden-divergence plates. */
 const dim = (hex: string): string => (/^#[0-9a-f]{6}$/i.test(hex) ? `${hex}99` : hex);
-
-/** The reading `k` bars back, with no value before the series starts. */
-function shift(values: readonly number[], k: number): number[] {
-  const out = new Array<number>(values.length).fill(NaN);
-  // Callers shift by a whole `k` of zero or more, so `i - k` is in [0, i].
-  for (let i = k; i < values.length; i++) out[i] = values[i - k]!;
-  return out;
-}
-
-/** `shift` for a condition series. An out-of-range flag reads as false. */
-function shiftFlags(flags: readonly boolean[], k: number): boolean[] {
-  const out = new Array<boolean>(flags.length).fill(false);
-  for (let i = k; i < flags.length; i++) out[i] = flags[i - k]!;
-  return out;
-}
 
 export const WAVETREND: IndicatorDescriptor = {
   id: 'wavetrend',

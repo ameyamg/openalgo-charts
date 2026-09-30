@@ -18,6 +18,8 @@ import type { Bar, IndicatorDescriptor, IndicatorInput, IndicatorPlot } from 'op
 import { sma, nulls, barsSince } from './calc';
 import { windowMean, windowSum } from './window-mean';
 import { num, int, str, flag, src, zoneOf } from './settings';
+import { crossesAbove, crossesBelow } from './statistics';
+import { shift, shiftFlags } from './series';
 
 /** A NaN-filled column of the right length, the shape every `calc` here starts from. */
 const blank = (n: number): number[] => new Array<number>(n).fill(NaN);
@@ -458,7 +460,6 @@ export const ALPHATREND: IndicatorDescriptor = {
   calc: (bars, s) => {
     const n = bars.length;
     const level = blank(n);
-    const lagged = blank(n);
     const buy = blank(n);
     const sell = blank(n);
     if (n === 0) return { alphatrend: [], lagged: [], buySignal: [], sellSignal: [] };
@@ -491,19 +492,10 @@ export const ALPHATREND: IndicatorDescriptor = {
         ? Math.max(bars[i]!.low - offset, prev)
         : Math.min(bars[i]!.high + offset, prev);
     }
-    for (let i = 2; i < n; i++) lagged[i] = level[i - 2]!;
-
-    const crossUp = new Array<boolean>(n).fill(false);
-    const crossDown = new Array<boolean>(n).fill(false);
-    for (let i = 1; i < n; i++) {
-      const a = level[i]!;
-      const b = lagged[i]!;
-      const pa = level[i - 1]!;
-      const pb = lagged[i - 1]!;
-      if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(pa) || !Number.isFinite(pb)) continue;
-      if (a > b && pa <= pb) crossUp[i] = true;
-      else if (a < b && pa >= pb) crossDown[i] = true;
-    }
+    const lagged = shift(level, 2);
+    // A cross needs both lines real on this bar and the one before.
+    const crossUp = crossesAbove(level, lagged);
+    const crossDown = crossesBelow(level, lagged);
 
     if (showSignals) {
       // The published script gates each signal on how long ago the *other* side
@@ -511,8 +503,8 @@ export const ALPHATREND: IndicatorDescriptor = {
       // shifted counters are what make that comparison strict; before either
       // side has ever fired they are NaN, and every comparison against NaN is
       // false, which suppresses the very first signal exactly as the original.
-      const shiftedUp = crossUp.map((_, i) => i > 0 && crossUp[i - 1]!);
-      const shiftedDown = crossDown.map((_, i) => i > 0 && crossDown[i - 1]!);
+      const shiftedUp = shiftFlags(crossUp, 1);
+      const shiftedDown = shiftFlags(crossDown, 1);
       const sinceUp = barsSince(crossUp);
       const sinceDown = barsSince(crossDown);
       const sinceShiftedUp = barsSince(shiftedUp);

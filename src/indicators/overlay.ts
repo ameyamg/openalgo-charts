@@ -19,6 +19,7 @@ import { emaOfGapped } from './smoothing';
 import { withTail, windowTail, whole } from './tail';
 import { withTimeframe } from './timeframe';
 import { num, int, offsetOf, str, src } from './settings';
+import { shift } from './series';
 
 const highs = (bars: readonly { high: number }[]): number[] => bars.map((b) => b.high);
 const lows = (bars: readonly { low: number }[]): number[] => bars.map((b) => b.low);
@@ -45,18 +46,6 @@ function extremeStrict(values: readonly number[], period: number, wantHigh: bool
       if (wantHigh ? v > best : v < best) best = v;
     }
     if (live) out[i] = best;
-  }
-  return out;
-}
-
-/** the reference `plot(..., offset = n)`: positive draws the value `n` bars later. */
-function shift(values: readonly number[], k: number): number[] {
-  const n = values.length;
-  const out = new Array<number>(n).fill(NaN);
-  // Every caller shifts by whole bars, so a `j` inside [0, n) is an index.
-  for (let i = 0; i < n; i++) {
-    const j = i - k;
-    if (j >= 0 && j < n) out[i] = values[j]!;
   }
   return out;
 }

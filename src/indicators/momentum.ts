@@ -10,20 +10,9 @@ import { withTail, windowTail, machineTail, whole, cell, type Tail } from './tai
 import { seeded, smooth, rsiState, rsiStep, wilder, atrStep, trueRangeAt, meanAt } from './steppers';
 import { withTimeframe } from './timeframe';
 import { num, int, str, src } from './settings';
+import { constant } from './series';
 
 type Calc = IndicatorDescriptor['calc'];
-
-/**
- * A column holding one value on every bar, warmup slots included.
- *
- * The shaded band between two reference levels is a fill between two such
- * columns: `fills` resolves its keys out of the `calc` result rather than out
- * of the declared plots, so a level that is never plotted can still anchor a
- * band. It must stay non-null throughout, because the background covers the
- * whole pane and not just the stretch where the study prints.
- */
-const constant = (n: number, value: number): (number | null)[] =>
-  new Array<number | null>(n).fill(value);
 
 export const RSI: IndicatorDescriptor = withTimeframe(withTail({
   id: 'rsi',

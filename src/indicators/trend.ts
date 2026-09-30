@@ -16,6 +16,7 @@ import { withTail, whole, cell, claimOf, settle, windowTail, machineTail, type T
 import { seeded, smooth, observed, observedStep, supertrendState, supertrendStep, sarState, sarStep } from './steppers';
 import { withTimeframe } from './timeframe';
 import { num, int, offsetOf, str, src, zoneOf } from './settings';
+import { shift } from './series';
 
 type Calc = IndicatorDescriptor['calc'];
 
@@ -205,17 +206,6 @@ function anchorRestarts(bars: readonly Bar[], anchor: VwapAnchor, zone: string):
   const times = bars.map((b) => b.time);
   if (anchor === 'session') return sessionStartFlags(times, zone);
   return calendarPeriodFlags(times, periodBoundary(anchor, zone));
-}
-
-/** Shift a column forward by `by` bars, the way a plot offset would draw it. */
-function shiftColumn(col: readonly number[], by: number): number[] {
-  if (by === 0) return col.slice();
-  const out = new Array<number>(col.length).fill(NaN);
-  for (let i = 0; i < col.length; i++) {
-    const to = i + by;
-    if (to >= 0 && to < col.length) out[to] = col[i]!;
-  }
-  return out;
 }
 
 const HOUR = 3600;
@@ -488,13 +478,13 @@ export const VWAP: IndicatorDescriptor = withTail({
     const m3 = num(s, 'bandMult3', 3);
 
     return {
-      vwap: nulls(shiftColumn(vwap, offset)),
-      upper1: nulls(shiftColumn(band(b1, m1, 1), offset)),
-      lower1: nulls(shiftColumn(band(b1, m1, -1), offset)),
-      upper2: nulls(shiftColumn(band(b2, m2, 1), offset)),
-      lower2: nulls(shiftColumn(band(b2, m2, -1), offset)),
-      upper3: nulls(shiftColumn(band(b3, m3, 1), offset)),
-      lower3: nulls(shiftColumn(band(b3, m3, -1), offset)),
+      vwap: nulls(shift(vwap, offset)),
+      upper1: nulls(shift(band(b1, m1, 1), offset)),
+      lower1: nulls(shift(band(b1, m1, -1), offset)),
+      upper2: nulls(shift(band(b2, m2, 1), offset)),
+      lower2: nulls(shift(band(b2, m2, -1), offset)),
+      upper3: nulls(shift(band(b3, m3, 1), offset)),
+      lower3: nulls(shift(band(b3, m3, -1), offset)),
     };
   },
 }, vwapTail);
@@ -654,18 +644,6 @@ export const PARABOLIC_SAR: IndicatorDescriptor = withTimeframe(withTail({
     step: (st, i, row) => { row[0] = cell(sarStep(st, bars[i]!, start, inc, max)); },
   }, bars, from, previous, store);
 }));
-
-/** Shift a series by `k` bars: positive = forward (later), negative = backward. */
-function shift(values: readonly number[], k: number): number[] {
-  const n = values.length;
-  const out = new Array<number>(n).fill(NaN);
-  // Callers shift by whole bars, so a `j` inside [0, n) is an index.
-  for (let i = 0; i < n; i++) {
-    const j = i - k;
-    if (j >= 0 && j < n) out[i] = values[j]!;
-  }
-  return out;
-}
 
 export const ICHIMOKU: IndicatorDescriptor = {
   id: 'ichimoku',

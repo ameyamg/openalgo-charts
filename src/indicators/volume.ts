@@ -2,20 +2,13 @@
  * Tier-1 volume indicators, computed from the chart's own OHLCV.
  * Part of the lazy `openalgo-charts/indicators` tier.
  */
-import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
+import type { IndicatorDescriptor } from 'openalgo-charts';
 import { nulls, sma, stdev } from './calc';
 import { smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
 import { withTail, machineTail, claimOf, settle, whole, cell } from './tail';
 import { seeded, smooth } from './steppers';
 import { num, int, str } from './settings';
-
-/**
- * A bar's volume for a running total: a bar the feed gave no usable volume for
- * traded nothing, as the flow studies read it. `?? 0` covered only an absent
- * volume, so one NaN reached the total and blanked it for the rest of the history.
- */
-const vol = (b: Bar): number =>
-  typeof b.volume === 'number' && Number.isFinite(b.volume) ? b.volume : 0;
+import { volumeOf } from './series';
 
 export const VOLUME: IndicatorDescriptor = {
   id: 'volume',
@@ -115,13 +108,13 @@ export const OBV: IndicatorDescriptor = withTail({
       if (i > 0) {
         const bar = bars[i]!;
         const prev = bars[i - 1]!;
-        const v = vol(bar);
+        const v = volumeOf(bar);
         if (bar.close > prev.close) acc += v;
         else if (bar.close < prev.close) acc -= v;
       }
       out[i] = acc;
     }
-    return { obv: nulls(out), ...obvSmoothing(out, bars.map(vol), s) };
+    return { obv: nulls(out), ...obvSmoothing(out, bars.map(volumeOf), s) };
   },
 }, (calc) => (bars, s, from, previous, store) => {
   // The running total resumes. An exponential or Wilder smoothing resumes with
@@ -139,7 +132,7 @@ export const OBV: IndicatorDescriptor = withTail({
       if (i > 0) {
         const bar = bars[i]!;
         const prev = bars[i - 1]!;
-        const v = vol(bar);
+        const v = volumeOf(bar);
         if (bar.close > prev.close) st.acc += v;
         else if (bar.close < prev.close) st.acc -= v;
       }
@@ -158,7 +151,7 @@ export const OBV: IndicatorDescriptor = withTail({
   // The machine above writes `obv`.
   const run: number[] = [];
   for (let j = start; j < bars.length; j++) run.push((j < from ? held[j] : tail.obv![j - from]) ?? NaN);
-  const smoothed = settle(claim, obvSmoothing(run, bars.slice(start).map(vol), s), from - start, previous, from);
+  const smoothed = settle(claim, obvSmoothing(run, bars.slice(start).map(volumeOf), s), from - start, previous, from);
   return smoothed === null ? null : { obv: tail.obv!, ...smoothed };
 });
 
@@ -184,7 +177,7 @@ export const ADL: IndicatorDescriptor = {
       // A doji bar (high === low) has an undefined money-flow multiplier;
       // the standard treatment is to contribute nothing.
       if (span > 0) {
-        const term = (((b.close - b.low) - (b.high - b.close)) / span) * vol(b);
+        const term = (((b.close - b.low) - (b.high - b.close)) / span) * volumeOf(b);
         if (!Number.isFinite(term)) continue;
         acc += term;
       }

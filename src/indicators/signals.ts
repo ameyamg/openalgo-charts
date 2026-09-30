@@ -25,21 +25,7 @@ import {
   nulls, rollingSum, correlation, pivotHigh, pivotLow, barsSince, valueWhen,
 } from './calc';
 import { num, int, str, flag, src } from './settings';
-
-/** The reading `k` bars back, with no value before the series starts. */
-function shift(values: readonly number[], k: number): number[] {
-  const out = new Array<number>(values.length).fill(NaN);
-  // Callers shift by a whole `k` of zero or more, so `i - k` is in [0, i].
-  for (let i = k; i < values.length; i++) out[i] = values[i - k]!;
-  return out;
-}
-
-/** `shift` for a condition series. An out-of-range flag reads as false. */
-function shiftFlags(flags: readonly boolean[], k: number): boolean[] {
-  const out = new Array<boolean>(flags.length).fill(false);
-  for (let i = k; i < flags.length; i++) out[i] = flags[i - k]!;
-  return out;
-}
+import { shift, shiftFlags } from './series';
 
 /**
  * Vortex Indicator: how much of the window's total travel was spent reaching up

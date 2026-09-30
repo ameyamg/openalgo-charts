@@ -26,10 +26,7 @@ import { sourceValues } from 'openalgo-charts';
 import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
 import { cumulative, highest, nulls, smaSeededEma, rollingSum, sma } from './calc';
 import { int, str, src } from './settings';
-
-/** the reference `nz(volume)`: a bar the feed gave no volume for traded nothing. */
-const vol = (b: Bar): number =>
-  typeof b.volume === 'number' && Number.isFinite(b.volume) ? b.volume : 0;
+import { volumeOf } from './series';
 
 /** A moving average over a window, in the shape every helper in `./calc` shares. */
 type Smoother = (values: readonly number[], period: number) => number[];
@@ -86,7 +83,7 @@ function volumeIndex(bars: readonly Bar[], on: 'falling' | 'rising'): number[] {
       const prev = bars[i - 1]!;
       const prevClose = prev.close;
       const close = bar.close;
-      const moved = on === 'falling' ? vol(bar) < vol(prev) : vol(bar) > vol(prev);
+      const moved = on === 'falling' ? volumeOf(bar) < volumeOf(prev) : volumeOf(bar) > volumeOf(prev);
       // A zero or missing previous close, or a missing close, makes the
       // percentage change undefined. Compounding a NaN in would destroy every
       // later bar of a running product, so the index holds instead, exactly as
@@ -178,7 +175,7 @@ export const PVT: IndicatorDescriptor = {
     for (let i = 1; i < bars.length; i++) {
       const prevClose = bars[i - 1]!.close;
       if (prevClose === 0 || !Number.isFinite(prevClose)) continue;
-      term[i] = ((bars[i]!.close - prevClose) / prevClose) * vol(bars[i]!);
+      term[i] = ((bars[i]!.close - prevClose) / prevClose) * volumeOf(bars[i]!);
     }
     // `cumulative` reads a non-finite term as 0, which is what bar 0 needs: it
     // has no previous close, so it contributes nothing and the total opens at 0
@@ -242,7 +239,7 @@ export const PVO: IndicatorDescriptor = {
   ],
   calc: (bars, s) => {
     const n = bars.length;
-    const volumes = bars.map(vol);
+    const volumes = bars.map(volumeOf);
     const osc = smootherFor(str(s, 'oscType', 'EMA'));
     const fast = osc(volumes, int(s, 'fastLength', 12));
     const slow = osc(volumes, int(s, 'slowLength', 26));
