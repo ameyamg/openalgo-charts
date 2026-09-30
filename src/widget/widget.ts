@@ -1209,7 +1209,11 @@ class WidgetImpl implements Widget {
       if (state.reason === 'live' && tail !== undefined && before[0]?.time === state.bars[0]?.time &&
         (before.length === state.bars.length || before.length + 1 === state.bars.length)) this._series.update(tail);
       else {
-        this._series.setData(state.bars);
+        // A page of older history reaches a transformed series as a prepend, so the
+        // sizes it resolved from the loaded history stand and no brick is resized.
+        const older = transformed && state.reason === 'prepend' && before.length > 0 ? state.bars.filter(bar => bar.time < before[0].time) : [];
+        if (older.length > 0 && older.length + before.length === state.bars.length) this._series.prependData(older);
+        else this._series.setData(state.bars);
         this._anchoring = true;
         if (state.bars.length > 0) {
           if (this._initialView) {

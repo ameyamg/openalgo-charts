@@ -166,4 +166,24 @@ describe('widget chart types the chart transforms', () => {
     mountIndicatorSettings(widget.context, undefined, { instanceId: study.id });
     expect(root.querySelector(`#oac-ind-${study.id}--bars`)).toBeNull();
   });
+
+  it('keeps the brick size when a page of older history arrives', async () => {
+    const recent = walk.slice(120), older = walk.slice(0, 120);
+    const widget = fixture({
+      symbol: 'AAA', exchange: 'X', interval: '1m', chartType: 'renko', now: () => walk[walk.length - 1].time + 30,
+      feed: { getBars: async () => recent.slice(), getBarsPage: async () => ({ bars: older.slice(), hasMore: false }) },
+    });
+    await flush();
+    const box = (): number => Math.abs(widget.chart.primaryBars()[0].close - widget.chart.primaryBars()[0].open);
+    const loaded = box();
+    await widget.dataController!.loadMore();
+    await flush();
+    expect(widget.series.getData()).toEqual(walk);
+    // The size resolved at the load stands: a page of history does not resize every brick.
+    expect(box()).toBe(loaded);
+    const run = getSeriesTransform('renko').create({});
+    run.setData(recent);
+    run.prepend(older);
+    expect(widget.chart.primaryBars()).toEqual(run.elements());
+  });
 });
