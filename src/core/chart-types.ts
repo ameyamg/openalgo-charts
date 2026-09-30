@@ -21,6 +21,7 @@ import type {
 } from '../render/backend';
 import type { PriceScaleId, PriceFormat } from '../model/series';
 import type { SeriesType } from '../model/chart-type-registry';
+import type { SeriesTransformSpec } from '../model/series-transform';
 import type { IndicatorBarsProvider, IndicatorBarsProviderAccess } from '../model/indicator-registry';
 import type { SeriesStyle } from '../render/series-style';
 import type { Bar } from '../model/bar';
@@ -389,6 +390,13 @@ export interface AddSeriesOptions {
    * value into disagreement, which is the one thing a formatter must never do.
    */
   priceFormat?: PriceFormat;
+  /**
+   * Have the chart apply a price-driven transform to the bars this series is
+   * given, as `Chart.setSeriesTransform` does. The series draws with `type`,
+   * so a host passes the transform's own renderer (`getSeriesTransform(type).renderer`)
+   * unless it wants another. An unknown type or invalid option throws.
+   */
+  transform?: SeriesTransformSpec;
 }
 
 /** Compact volume/number formatter (1.2K / 3.4M / 5.6B). */

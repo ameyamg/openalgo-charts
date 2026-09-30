@@ -131,6 +131,8 @@ export type {
   DrawAnchor,
 } from './model/indicator-registry';
 export type { IndicatorApi, IndicatorHost } from './model/indicator-instance';
+// Which bars a study computes on under a transformed chart.
+export type { IndicatorBarSource } from './model/indicator-bar-source';
 // What a user may do with a study, and the host's way past it.
 export { parseIndicatorPolicy } from './model/indicator-policy';
 export type { IndicatorPolicy, IndicatorEditOptions } from './model/indicator-policy';

@@ -23,6 +23,7 @@ import { cloneIndicatorSettings, planIndicatorDependencies } from '../model/indi
 import { getIndicator, hasIndicator, type IndicatorDescriptor } from '../model/indicator-registry';
 import { IndicatorInstance, parseIndicatorPlotPriceScales, validateIndicatorScaleAssignment } from '../model/indicator-instance';
 import { parseIndicatorPolicy } from '../model/indicator-policy';
+import { parseIndicatorBarSource } from '../model/indicator-bar-source';
 import type { AlertsDocument } from '../alerts/types';
 import { parseAlertsDocument } from '../alerts/document';
 import {
@@ -89,6 +90,7 @@ export interface PersistenceHost {
   setVisibleLogicalRange: Chart['setVisibleLogicalRange'];
   navigationOptions: Chart['navigationOptions'];
   readonly _input: Chart['_input'];
+  readonly _series: Chart['_series'];
   gridOptions: Chart['gridOptions'];
   setGridOptions: Chart['setGridOptions'];
   canvasOptions: Chart['canvasOptions'];
@@ -147,7 +149,8 @@ export class ChartPersistence {
     this._host._panes.forEach((pane, paneIndex) => {
       for (const record of pane.series()) {
         const style = Object.fromEntries(Object.entries(record.style).filter(([, value]) => value !== undefined));
-        series.push({ type: record.type, style, paneIndex, priceScaleId: record.scaleId });
+        const transform = this._host._series._transformOf(record.dataId);
+        series.push({ type: record.type, style, paneIndex, priceScaleId: record.scaleId, ...(transform === undefined ? {} : { transform }) });
       }
     });
 
@@ -199,6 +202,7 @@ export class ChartPersistence {
         ...(Object.keys(i.plotPriceScaleIds()).length ? { plotPriceScaleIds: i.plotPriceScaleIds() } : {}),
         // Restrictions only: an unrestricted study saves what it always did.
         ...(Object.keys(i.policy()).length ? { policy: { ...i.policy() } } : {}),
+        ...(i.barSource() === 'underlying' ? { barSource: 'underlying' as const } : {}),
       })),
       ...(typeof this._host._sourceAbove === 'string' ? { sourceAbove: this._host._sourceAbove } : {}),
     };
@@ -284,6 +288,7 @@ export class ChartPersistence {
             if (!property?.enumerable || !('value' in property)) throw new Error('Invalid indicator plot price scale map field');
           }
           if (spec.priceScaleId !== undefined && !this._host._validPriceScaleId(spec.priceScaleId)) throw new Error('Invalid indicator price scale');
+          if (spec.barSource !== undefined) parseIndicatorBarSource(spec.barSource);
           if (spec.instanceId === undefined) continue;
           if (typeof spec.instanceId !== 'string' || !spec.instanceId.trim() || reservedIds.has(spec.instanceId)) {
             throw new Error('Invalid or duplicate indicator instance id');
@@ -429,7 +434,7 @@ export class ChartPersistence {
         const descriptor = studies.descriptors.get(id)!;
         const instance = new IndicatorInstance(
           this._host._indicatorHost(preservedFormats), descriptor, spec.settings, spec.paneIndex,
-          spec.instanceId, reservedIds, spec.priceScaleId, spec.plotPriceScaleIds, spec.policy,
+          spec.instanceId, reservedIds, spec.priceScaleId, spec.plotPriceScaleIds, spec.policy, spec.barSource,
         );
         reservedIds.add(instance.id);
         this._host._indicators.push(instance);

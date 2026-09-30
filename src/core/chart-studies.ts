@@ -34,6 +34,7 @@ import {
 } from '../model/indicator-instance';
 import { parseIndicatorPolicy, type IndicatorEditOptions, type IndicatorPolicy } from '../model/indicator-policy';
 import { validateIndicatorInputs } from '../model/indicator-inputs';
+import { parseIndicatorBarSource, type IndicatorBarSource } from '../model/indicator-bar-source';
 import type { SeriesStyle } from '../render/series-style';
 import type { Bar } from '../model/bar';
 import type { IPrimitive } from '../primitives/primitive';
@@ -139,7 +140,7 @@ export class ChartStudies {
     settings: Readonly<IndicatorSettings>,
     options: {
       paneIndex?: number; priceScaleId?: PriceScaleId; plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>;
-      policy?: IndicatorPolicy; instanceId?: string;
+      policy?: IndicatorPolicy; instanceId?: string; barSource?: IndicatorBarSource;
     },
   ): IndicatorApi {
     const instanceId = options.instanceId;
@@ -147,6 +148,7 @@ export class ChartStudies {
     if (instanceId !== undefined && this._host._indicators.some(item => item.id === instanceId)) throw new Error(`Indicator instance id already in use: ${instanceId}`);
     if (options.priceScaleId !== undefined && !this._host._validPriceScaleId(options.priceScaleId)) throw new TypeError('Invalid indicator price scale');
     const policy = options.policy === undefined ? undefined : parseIndicatorPolicy(options.policy);
+    const barSource = options.barSource === undefined ? undefined : parseIndicatorBarSource(options.barSource);
     const descriptor = getIndicator(indicatorId);
     const validatedSettings = cloneIndicatorSettings(settings);
     validateIndicatorInputs(descriptor.inputs, validatedSettings);
@@ -169,6 +171,7 @@ export class ChartStudies {
       options.priceScaleId,
       plotPriceScaleIds,
       policy,
+      barSource,
     );
     this._host._indicators.push(instance);
     // Its first pass ran in the constructor, outside a flush.
@@ -439,6 +442,7 @@ export class ChartStudies {
       removeIndicatorTable: (table): void => this._host.removePrimitive(table),
       sourceBars: (): readonly Bar[] =>
         this._host._firstDataId.value === null ? [] : this._host._dataLayer.seriesBars(this._host._firstDataId.value),
+      underlyingBars: () => this._host._series._underlying(this._host._firstDataId.value),
       sourceState: () => {
         const state = this._host._seriesProvenance.get(this._host._firstDataId.value ?? -1)?.snapshot();
         const replay = replayWindow(this._chart);

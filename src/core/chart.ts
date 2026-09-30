@@ -43,12 +43,14 @@ import { DataLayer, type SessionCalendarSource } from '../model/data-layer';
 import { type SeriesApi, type SeriesRecord, type PriceScaleId } from '../model/series';
 import { type SeriesProvenance } from '../model/series-provenance';
 import { type SeriesType } from '../model/chart-type-registry';
+import type { SeriesTransformSpec } from '../model/series-transform';
 import {
   type IndicatorBarsProvider, type IndicatorBarsProviderAccess, type IndicatorSettings,
 } from '../model/indicator-registry';
 
 import { type IndicatorInstance, type IndicatorApi, type IndicatorHost } from '../model/indicator-instance';
 import { type IndicatorEditOptions, type IndicatorPolicy } from '../model/indicator-policy';
+import type { IndicatorBarSource } from '../model/indicator-bar-source';
 import type { AlertsDocument } from '../alerts/types';
 import { copyAlert, parseAlertsDocument, validateAlert } from '../alerts/document';
 import type { ChartDataContext } from '../model/indicator-registry';
@@ -548,7 +550,10 @@ export class Chart {
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
   }
 
-  /** Readonly source bars, without allocating a history copy on each live update. */
+  /**
+   * The primary series' bars as drawn, without allocating a history copy on each live
+   * update: a transformed series' elements, which its handle's `getData` does not return.
+   */
   public primaryBars(): readonly Bar[] {
     const id = this._firstDataId.value;
     return id === null ? [] : this._dataLayer.seriesBars(id);
@@ -719,12 +724,35 @@ export class Chart {
   /**
    * Change a live series' renderer without replacing its handle, data or attachments.
    * Explicit styles survive; inherited renderer defaults give way to the new type.
-   * Transform renderers expect host-prepared bars and never transform data here.
+   * It never transforms data: a `point-figure` or `kagi` renderer draws the bars
+   * it is given, which is how a host that prepares its own elements keeps
+   * working, and `setSeriesTransform` is how the chart applies one itself.
    * Returns false for an unchanged type or a foreign, removed or destroyed handle.
    * An unregistered type throws before any state changes.
    */
   public setSeriesType(series: SeriesApi, type: SeriesType): boolean {
     return this._series._setSeriesType(series, type, true);
+  }
+
+  /**
+   * Have the chart apply a price-driven transform (Heikin Ashi, Renko, range
+   * bars, line break, point and figure or Kagi, once `openalgo-charts/transform`
+   * is imported) to a series, or draw its bars as given again with null. The
+   * series keeps taking the host's own bars through `setData`, `update` and
+   * `prependData`, and `getData` hands those back; the chart draws the elements
+   * and forms them again on every tick. Studies read the elements unless one is
+   * set to the underlying bars (`IndicatorApi.setBarSource`). A new transform
+   * type selects its renderer; `setSeriesType` afterwards keeps the transform.
+   * Returns false for an unchanged choice or an unavailable handle. An unknown
+   * type or an invalid option throws before anything changes.
+   */
+  public setSeriesTransform(series: SeriesApi, spec: SeriesTransformSpec | null): boolean {
+    return this._series._setSeriesTransform(series, spec, true);
+  }
+
+  /** The transform a series was given, or null for none and for a handle not live on this chart. */
+  public seriesTransform(series: SeriesApi): SeriesTransformSpec | null {
+    return this._series._seriesTransform(series);
   }
 
   /**
@@ -826,13 +854,17 @@ export class Chart {
    * the studies that read its output and the alerts that name it find it
    * again. An id a study on this chart holds now throws, since two studies
    * cannot answer to one id; the id of a removed study is free to take back.
+   *
+   * `options.barSource` `'underlying'` has a study on a transformed chart
+   * compute on the host's bars rather than the elements drawn (see
+   * `IndicatorApi.setBarSource`).
    */
   public addIndicator(
     indicatorId: string,
     settings: Readonly<IndicatorSettings> = {},
     options: {
       paneIndex?: number; priceScaleId?: PriceScaleId; plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>;
-      policy?: IndicatorPolicy; instanceId?: string;
+      policy?: IndicatorPolicy; instanceId?: string; barSource?: IndicatorBarSource;
     } = {},
   ): IndicatorApi {
     return this._studies.addIndicator(indicatorId, settings, options);
