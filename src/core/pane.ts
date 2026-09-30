@@ -58,13 +58,14 @@ import { backendDegradation, type IRenderBackend, type RendererFallbackReason } 
 import { Canvas2dBackend } from '../render/canvas2d-backend';
 import type { ChartTheme } from '../theme';
 import { DEFAULT_TIMEZONE, formatZonedCrosshairLabel } from '../feed/time';
+import type { LooseOptional } from '../helpers/types';
 
 export interface PaneRenderContext {
   timeScale: TimeScale;
   dataLayer: DataLayer;
   /** Restrict the primary series' scale, wherever that series is placed. */
   priceOnlyAutoScale?: boolean;
-  primaryDataId?: SeriesRecord['dataId'];
+  primaryDataId?: SeriesRecord['dataId'] | undefined;
   dpr: number;
   priceAxisWidth: number;
   /** Left inset (px) reserved chart-wide for a left price axis; 0/absent when none. */
@@ -103,7 +104,7 @@ export interface PaneRenderContext {
    */
   canvasOptions?: CanvasOptions;
   /** Optional custom time label formatter (UTC seconds -> string). Defaults to IST. */
-  timeFormatter?: (utcSeconds: number, tickMark?: TickMarkType) => string;
+  timeFormatter?: ((utcSeconds: number, tickMark?: TickMarkType) => string) | undefined;
   /**
    * IANA zone the time axis and crosshair label in. Absent means the shipped
    * default ('Asia/Kolkata'); an explicit `timeFormatter` outranks it, because a
@@ -114,12 +115,12 @@ export interface PaneRenderContext {
    * The corner clock between the two axis strips. Absent draws nothing, which
    * is the shipped chart: it is chrome a host asks for.
    */
-  sessionClock?: SessionClockOptions;
+  sessionClock?: SessionClockOptions | undefined;
   /**
    * The countdown row inside the last-price tag. Absent leaves the tag the one
    * line it has always been.
    */
-  barCountdown?: BarCountdownOptions;
+  barCountdown?: BarCountdownOptions | undefined;
   /** externalId of the primitive under the pointer (hover visual state). */
   hoverId?: string | null;
   hoverKey?: string | null;
@@ -554,8 +555,8 @@ export class Pane {
     const members = new Set(ordered);
     const local = ordered.filter(record => this._series.includes(record));
     this._hitEpoch++;
-    let index = 0;
-    for (let i = 0; i < this._series.length; i++) if (members.has(this._series[i])) this._series[i] = local[index++];
+    let index = 0; // one `local` entry for each member slot below
+    for (let i = 0; i < this._series.length; i++) if (members.has(this._series[i]!)) this._series[i] = local[index++]!;
   }
 
   /** Name the chart's price source on this pane, or null when it is elsewhere or gone. */
@@ -585,8 +586,8 @@ export class Pane {
     const members = new Set(ordered);
     const local = ordered.filter(primitive => this._primitives.includes(primitive));
     this._hitEpoch++;
-    let index = 0;
-    for (let i = 0; i < this._primitives.length; i++) if (members.has(this._primitives[i])) this._primitives[i] = local[index++];
+    let index = 0; // one `local` entry for each member slot below
+    for (let i = 0; i < this._primitives.length; i++) if (members.has(this._primitives[i]!)) this._primitives[i] = local[index++]!;
   }
 
   /** Transfer ownership without ending an attached primitive's lifetime. */
@@ -743,7 +744,7 @@ export class Pane {
         }
         return [];
       },
-    };
+    } satisfies LooseOptional<PrimitiveRenderContext> as PrimitiveRenderContext; // an undefined `priceAxisOffset` reads as absent: no axis to sit beside
   }
 
   private _boundPrimitiveContext(primitive: IPrimitive, context: PrimitiveRenderContext, ctx: PaneRenderContext): PrimitiveRenderContext {
@@ -752,7 +753,7 @@ export class Pane {
     const slot = this.axisSlots(ctx).find(slot => slot.scaleId === id);
     return { ...context, priceScale: this._scaleFor(id), priceAxisSide: slot?.side ?? 'hidden',
       priceAxisWidth: slot?.width ?? 0,
-      priceAxisOffset: slot ? slot.x + (slot.side === 'left' ? slot.width : 0) : undefined };
+      priceAxisOffset: slot ? slot.x + (slot.side === 'left' ? slot.width : 0) : undefined } satisfies LooseOptional<PrimitiveRenderContext> as PrimitiveRenderContext;
   }
 
   /** What a frame draws and the pointer can reach: only the legend rows of a collapsed pane. */
@@ -787,7 +788,7 @@ export class Pane {
     this._checkHitBoxes(ctx);
     let best: PrimitiveHit | null = null, bestRank = 0;
     for (let i = 0; i < live.length; i++) {
-      const p = live[i];
+      const p = live[i]!;
       if (!p.hitTest || p === except) continue;
       // The kept box first, so a primitive the point is nowhere near costs a
       // read and four comparisons: not even its render context is built.
@@ -980,7 +981,7 @@ export class Pane {
       const layer = ctx.dataLayer, bars = layer.seriesBars(s.dataId), span = SPAN;
       if (!visibleSpan(layer, bars, range.from - shift, range.to - shift, span)) continue;
       for (let i = span.start; i < bars.length; i++) {
-        const bar = bars[i];
+        const bar = bars[i]!;
         if (bar.time > span.lastTime) break;
         if (layer.timeToIndex(bar.time) === undefined) continue;
         const ext = entry.extents(bar, s.style);
@@ -1054,7 +1055,7 @@ export class Pane {
       const layer = ctx.dataLayer, bars = layer.seriesBars(s.dataId), span = SPAN;
       if (!visibleSpan(layer, bars, range.from - shift, range.to - shift, span)) continue;
       for (let i = span.start; i < bars.length; i++) {
-        const bar = bars[i];
+        const bar = bars[i]!;
         if (bar.time > span.lastTime) break;
         if (layer.timeToIndex(bar.time) === undefined) continue;
         if (isFinite(bar.close)) return bar.close; // whitespace bars are NaN
@@ -1173,11 +1174,11 @@ export class Pane {
       if (s.style.colorByPreviousClose === true && items.length > 0) {
         const at = buffer.firstIndex() - 1;
         const before = ctx.dataLayer.visibleBars(s.dataId, at, at);
-        if (before.length > 0) items[0].prevClose = before[0].bar.close;
+        if (before.length > 0) items[0]!.prevClose = before[0]!.bar.close; // both lengths checked
       }
       let maxVolume = 0;
       for (let i = 0; i < items.length; i++) {
-        const volume = items[i].bar.volume ?? 0;
+        const volume = items[i]!.bar.volume ?? 0;
         if (volume > maxVolume) maxVolume = volume;
       }
       const rc: SeriesRenderContext = { plotHeight: layout.plotHeight, maxVolume, theme: ctx.theme };
@@ -1268,7 +1269,7 @@ export class Pane {
         g.restore();
       } else drawPriceAxis(g, scale, columnLayout, dpr, axisStyle, reserved);
       for (let i = 0; i < tags.length; i++) {
-        if (allowed[tagBase + i]) drawSeriesValueTag(g, scale, tags[i].price, tags[i].color, columnLayout, dpr, axisStyle, side);
+        if (allowed[tagBase + i]) drawSeriesValueTag(g, scale, tags[i]!.price, tags[i]!.color, columnLayout, dpr, axisStyle, side);
       }
     });
 

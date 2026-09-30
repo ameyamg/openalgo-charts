@@ -19,7 +19,9 @@
  * `widget.draw` stops being assignable to a host's own controller variable.
  *
  * Last, a host compiles against the built declarations, so the draw tier's
- * events on the chart bus are known to arrive typed (see the note at the end).
+ * events on the chart bus are known to arrive typed, and every declaration
+ * holds for a host that compiles as strictly as the library does (see the
+ * notes at the end).
  *
  * Runs after `build` in `npm run verify`.
  */
@@ -110,19 +112,27 @@ try {
 // notice: the draw names would fall back to the deprecated string overload and
 // compile anyway. So compile a host against the built declarations, where
 // `chart.on('draw:add', ...)` must be typed and a wrong field must not compile.
+//
+// The host compiles with the two flags src is held to (tsconfig.json), and
+// with every tier's declarations among its inputs and skipLibCheck off, so an
+// error inside the declarations themselves fails here too. A host that turns
+// those flags on reads our declarations that way; before 2.6.0 one of them,
+// OpenAlgoTradeFeed against OrderFeed, did not compile for it.
 const HOST = 'tests/types/chart-events-host.ts';
 const DIST_PATHS = {
   'openalgo-charts': ['dist/index.d.ts'],
   ...Object.fromEntries(Object.keys(TIERS).map((file) => [`openalgo-charts/${file.split('/')[1]}`, [file]])),
 };
-const program = ts.createProgram([HOST], {
-  strict: true, noEmit: true, skipLibCheck: true, types: [],
+const hostOptions = {
+  strict: true, noUncheckedIndexedAccess: true, exactOptionalPropertyTypes: true,
+  noEmit: true, skipLibCheck: false, types: [],
   target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler,
   lib: ['lib.es2020.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
   baseUrl: process.cwd(), paths: DIST_PATHS,
-});
-const loaded = program.getSourceFiles().map((f) => f.fileName.replace(/\\/g, '/'));
-if (!loaded.some((f) => f.endsWith('/dist/draw/index.d.ts'))) {
+};
+const program = ts.createProgram([HOST, ...Object.values(DIST_PATHS).flat()], hostOptions);
+const draw = ts.resolveModuleName('openalgo-charts/draw', HOST, hostOptions, ts.sys).resolvedModule;
+if (!draw?.resolvedFileName.replace(/\\/g, '/').endsWith('/dist/draw/index.d.ts')) {
   console.error(`check-dts: ${HOST} did not resolve openalgo-charts/draw to dist/draw/index.d.ts`);
   failed = true;
 }
@@ -135,4 +145,4 @@ if (typeErrors.length > 0) {
 }
 
 if (failed) process.exit(1);
-console.log(`check-dts: ${Object.keys(TIERS).length} tier declarations, shared capability identity and the typed event map clean`);
+console.log(`check-dts: ${Object.keys(TIERS).length} tier declarations, shared capability identity and the typed event map clean under both strict flags`);

@@ -155,7 +155,7 @@ export interface ModifyPatch {
  */
 export interface OrderFeed {
   /** Optional support declaration; a configured provider can report unavailable metadata. */
-  readonly capabilities?: TradingCapabilitySource;
+  readonly capabilities?: TradingCapabilitySource | undefined;
   /** Declares preview, durations, leverage, accounts and the position commands. Omitted declares none. */
   readonly features?: TradingFeatureSource | undefined;
   place(req: PlaceRequest & { mode: TradeMode }): Promise<{ orderId: string }>;

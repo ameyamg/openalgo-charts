@@ -25,7 +25,7 @@ function ends(bars: readonly Bar[], resolve: ReplayBarEndTime): number[] {
   return bars.map((bar, index) => {
     const time = bar.time, end = resolve(bar, index), next = bars[index + 1]?.time;
     if (!Number.isFinite(time) || !Number.isFinite(end) || end < time
-      || (index > 0 && time <= bars[index - 1].time)
+      || (index > 0 && time <= bars[index - 1]!.time)
       || (next !== undefined && end > next)) {
       throw new Error('openalgo-charts: replay time must be finite, ordered and within its candle interval');
     }
@@ -47,13 +47,15 @@ export class ReplayTimeline {
     this.ends = ends(bars, timing.barEndTime);
     if (subs.length && !timing.subBarEndTime) throw new Error('openalgo-charts: replay timing needs subBarEndTime');
     const subEnds = subs.length ? ends(subs, timing.subBarEndTime!) : [];
+    // `this.ends` and `subEnds` hold one time per bar and per sub-bar, and every
+    // read below is inside the list it indexes.
     let cursor = 0;
     for (let index = 0; index < bars.length; index++) {
-      const full = bars[index], end = this.ends[index], from = this.points.length;
-      while (cursor < subs.length && subs[cursor].time < full.time) cursor++;
+      const full = bars[index]!, end = this.ends[index]!, from = this.points.length;
+      while (cursor < subs.length && subs[cursor]!.time < full.time) cursor++;
       let partial: Bar | undefined, covered = full.time, gap = false;
-      while (cursor < subs.length && subs[cursor].time < end) {
-        const sub = subs[cursor], available = subEnds[cursor++];
+      while (cursor < subs.length && subs[cursor]!.time < end) {
+        const sub = subs[cursor]!, available = subEnds[cursor++]!;
         // A gap or straddling observation cannot establish the whole candle's
         // high/low. Keep the last known prefix until the full bar is available.
         if (sub.time !== covered || available > end) gap = true;
@@ -85,8 +87,8 @@ export class ReplayTimeline {
       const count = this.points.length - from;
       this.steps[index] = count;
       for (let i = from; i < this.points.length; i++) {
-        this.points[i].subIndex = i - from;
-        this.points[i].subSteps = count;
+        this.points[i]!.subIndex = i - from;
+        this.points[i]!.subSteps = count;
       }
     }
   }
@@ -96,7 +98,7 @@ export class ReplayTimeline {
     let from = 0, to = this.points.length;
     while (from < to) {
       const mid = (from + to) >>> 1;
-      if (this.points[mid].time <= time) from = mid + 1;
+      if (this.points[mid]!.time <= time) from = mid + 1; // from <= mid < to <= length
       else to = mid;
     }
     return from - 1;

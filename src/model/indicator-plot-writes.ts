@@ -32,6 +32,8 @@ import type { IndicatorPlot, IndicatorSettings, IndicatorValues } from './indica
  */
 const IN_PLACE = 8;
 
+type List = unknown[];
+
 interface PlotRecord {
   /** The pass that last wrote the series whole or in place. */
   pass: number;
@@ -74,14 +76,14 @@ export class PlotWrites {
   public begin(bars: readonly Bar[]): void {
     const times = this._times, m = times.length, n = bars.length;
     let kept = this._ordered && n >= m;
-    for (let i = 0; i < m && kept; i++) kept = bars[i].time === times[i];
+    for (let i = 0; i < m && kept; i++) kept = bars[i]!.time === times[i];
     if (!kept) {
       times.length = 0;
       this._ordered = true;
     }
-    for (let i = times.length; i < n; i++) {
-      const time = bars[i].time;
-      if (i > 0 && !(time > times[i - 1])) this._ordered = false;
+    for (let i = times.length; i < n; i++) { // `times` holds the first `i` of them
+      const time = bars[i]!.time;
+      if (i > 0 && !(time > times[i - 1]!)) this._ordered = false;
       times.push(time);
     }
     this._kept = kept && this._ordered ? m : -1;
@@ -102,7 +104,7 @@ export class PlotWrites {
     const { colorBy, colorParts } = plot;
     const coloured = colorBy !== undefined || colorParts !== undefined;
     const [rec, m] = this._claim(series, 1, 1);
-    const value = rec.cols[0], body = rec.colors[0];
+    const value = rec.cols[0]!, body = rec.colors[0]!; // the one list each that _claim made
     const changed: number[] = [];
     let whole = m < 0;
     for (let i = 0; i < n; i++) {
@@ -119,7 +121,7 @@ export class PlotWrites {
       if (coloured) body[i] = paint;
     }
     const point = (i: number): { time: number; value: number; color?: string } => {
-      const p: { time: number; value: number; color?: string } = { time: bars[i].time, value: value[i] as number };
+      const p: { time: number; value: number; color?: string } = { time: bars[i]!.time, value: value[i] as number };
       if (body[i] !== undefined) p.color = body[i] as string;
       return p;
     };
@@ -145,13 +147,13 @@ export class PlotWrites {
     });
     const { colorBy, colorParts } = plot;
     const [rec, m] = this._claim(series, 4, 3);
-    const [open, high, low, close] = rec.cols, [color, wick, border] = rec.colors;
+    const [open, high, low, close] = rec.cols as [List, List, List, List], [color, wick, border] = rec.colors as [List, List, List];
     const changed: number[] = [];
     let whole = m < 0;
-    for (let i = 0; i < n; i++) {
-      const c = cols[3][i];
+    for (let i = 0; i < n; i++) { // four columns of `n` values each, checked above
+      const c = cols[3]![i] as number | null;
       const value = c === null ? NaN : c;
-      const o = cols[0][i] ?? NaN, h = cols[1][i] ?? NaN, l = cols[2][i] ?? NaN;
+      const o = cols[0]![i] ?? NaN, h = cols[1]![i] ?? NaN, l = cols[2]![i] ?? NaN;
       let body: unknown, wickColor: unknown, borderColor: unknown;
       if (Number.isFinite(value)) {
         body = colorBy?.({ value, index: i, values, settings });
@@ -169,7 +171,7 @@ export class PlotWrites {
       color[i] = body; wick[i] = wickColor; border[i] = borderColor;
     }
     const point = (i: number): Bar => {
-      const bar: Bar = { time: bars[i].time, open: open[i] as number, high: high[i] as number, low: low[i] as number, close: close[i] as number };
+      const bar: Bar = { time: bars[i]!.time, open: open[i] as number, high: high[i] as number, low: low[i] as number, close: close[i] as number };
       if (color[i] !== undefined) bar.color = color[i] as string;
       if (wick[i] !== undefined) bar.wickColor = wick[i] as string;
       if (border[i] !== undefined) bar.borderColor = border[i] as string;
@@ -195,6 +197,7 @@ export class PlotWrites {
     return [rec, m];
   }
 
+  // `point` is asked for indices below `n` only, so it reads the pass's bars in range.
   private _commit(series: SeriesApi, rec: PlotRecord, whole: boolean, changed: readonly number[], n: number,
     point: (i: number) => SeriesDataItem): void {
     if (whole) {

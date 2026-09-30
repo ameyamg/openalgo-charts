@@ -85,7 +85,8 @@ function cloneEvent(event: ChartEvent): ChartEvent {
 }
 
 interface Entry { event: ChartEvent; key: string }
-interface Badge { x: number; firstX: number; entries: Entry[] }
+/** A badge starts from one entry and only ever gains more. */
+interface Badge { x: number; firstX: number; entries: [Entry, ...Entry[]] }
 interface Position { id: string; x: number; y: number; r: number; entries: Entry[] }
 
 export class EventMarkers implements IPrimitive {

@@ -40,6 +40,7 @@ import {
 import { validateIndicatorInputs } from '../model/indicator-inputs';
 import type { ChartSettingsState } from '../model/chart-settings';
 import { isValidTimezone } from '../feed/time';
+import type { LooseOptional } from '../helpers/types';
 
 interface PreparedIndicatorRestore {
   specs: IndicatorState[];
@@ -179,10 +180,11 @@ export class ChartPersistence {
       trading: { ...this._host._tradingSettings },
       // The two switches, never the clock function: a callback does not survive
       // JSON, and the host that supplied one supplies it again on the way back.
+      // Either is undefined only where the host passed that at construction.
       axisChrome: {
         sessionClock: this._host._axisChrome.sessionClock,
         barCountdown: this._host._axisChrome.barCountdown,
-      },
+      } satisfies LooseOptional<NonNullable<ChartSettingsState['axisChrome']>> as NonNullable<ChartSettingsState['axisChrome']>,
       events: this._host.eventOptions(),
       crosshairMode: this._host._crosshairMode,
       crosshairSnapToBar: this._host._crosshairSnapToBar,
@@ -243,10 +245,10 @@ export class ChartPersistence {
       if (options.preserveScaleFormats !== undefined) {
         const selectors = options.preserveScaleFormats;
         if (!Array.isArray(selectors)) throw new Error('Invalid preserved scale formats');
-        const properties = Object.getOwnPropertyDescriptors(selectors);
+        const properties = Object.getOwnPropertyDescriptors(selectors); // read below by its own keys
         if (Reflect.ownKeys(properties).some(key => key !== 'length' && (typeof key !== 'string'
           || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= selectors.length
-          || !('value' in properties[key])))) throw new Error('Invalid preserved scale formats');
+          || !('value' in properties[key]!)))) throw new Error('Invalid preserved scale formats');
         for (let index = 0; index < selectors.length; index++) {
           const selector = properties[index]?.value as unknown;
           if (!plain(selector) || typeof selector.paneIndex !== 'number' || !Number.isInteger(selector.paneIndex) || selector.paneIndex < 0
@@ -406,7 +408,7 @@ export class ChartPersistence {
     if (panes) {
       for (let i = 0; i < panes.length; i++) this._host._layout._ensurePane(i);
       this._host.setPrimaryPaneIndex(primaryPane);
-      panes.forEach((ps, i) => { this._host._panes[i].weight = ps.weight; });
+      panes.forEach((ps, i) => { this._host._panes[i]!.weight = ps.weight; }); // made just above
     }
     if (panes || studies) {
       // A layout that does not fold a pane opens it, and the price pane never
@@ -510,7 +512,7 @@ export class ChartPersistence {
     // occupy a pane. Walk backwards so removal keeps the remaining indices valid.
     // A study pane above the price pane is as prunable as one below it.
     for (let i = this._host._panes.length - 1; i >= 0; i--) {
-      const pane = this._host._panes[i];
+      const pane = this._host._panes[i]!;
       if (pane !== this._host._primaryPane && pane.series().length === 0 && !this._host._indicators.some(study => study.paneIndex === i)
         && pane.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive))) this._host.removePane(i);
     }

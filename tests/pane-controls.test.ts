@@ -523,3 +523,29 @@ describe('sub-plot indicators survive their pane changing slot', () => {
     expect(chart.panes().some((p) => p === moved)).toBe(false);
   });
 })
+
+describe('a pane index that names no slot', () => {
+  // A slot is a whole number of 0 or more. Anything else used to add panes up
+  // to it, find none there and throw a TypeError from inside, leaving the
+  // stray pane behind on a chart the call never changed.
+  it('is refused by addSeries before the chart changes', () => {
+    const { chart } = makeChart();
+    chart.addSeries('candlestick').setData(bars(20));
+    for (const paneIndex of [1.5, -1, Number.NaN]) {
+      expect(() => chart.addSeries('line', { paneIndex })).toThrow(RangeError);
+      expect(chart.panes()).toHaveLength(1);
+    }
+    chart.addSeries('line', { paneIndex: 1 }).setData(bars(20));
+    expect(chart.panes()).toHaveLength(2);
+  });
+
+  it('is refused by the primitive adders before the chart changes', () => {
+    const { chart } = makeChart();
+    chart.addSeries('candlestick').setData(bars(20));
+    for (const paneIndex of [1.5, -1, Number.NaN]) {
+      expect(() => chart.addPriceLine({ id: 'level', price: 100, color: '#26a69a' }, paneIndex)).toThrow(RangeError);
+      expect(() => chart.addPrimitive(new PaneLegend({ id: 'row', title: 'Row', actions: [] }), paneIndex)).toThrow(RangeError);
+      expect(chart.panes()).toHaveLength(1);
+    }
+  });
+});

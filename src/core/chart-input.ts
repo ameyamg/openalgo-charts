@@ -335,7 +335,7 @@ export class ChartInput {
       return slot ? { kind: 'price-scale', id: null, side: slot.side, scaleId: slot.scaleId } : { kind: 'empty', id: null };
     }
 
-    const pane = this._host._panes[p.pane];
+    const pane = this._host._panes[p.pane]!; // `_project` only names a pane that exists
     const context = this._host._renderContext(p.pane);
     const hit = this._hitAt(p.pane, p.x, p.localY);
     // A strip plots nothing, so nothing on it can be under the pointer.
@@ -384,11 +384,11 @@ export class ChartInput {
     // Later series paint above earlier series, so their context actions win overlaps.
     const records = pane.series();
     for (let position = records.length - 1; position >= 0; position--) {
-      const record = records[position];
+      const record = records[position]!; // walks the list from its end
       if (record.style.visible === false) continue;
       const bars = this._host._dataLayer.visibleBars(record.dataId, index, index);
       if (bars.length === 0) continue;
-      const ext = getChartType(record.type).extents(bars[0].bar, record.style);
+      const ext = getChartType(record.type).extents(bars[0]!.bar, record.style);
       if (!isFinite(ext.min) || !isFinite(ext.max)) continue;
       const scale = pane.scaleOf(record);
       const a = scale.priceToY(ext.max);
@@ -423,7 +423,7 @@ export class ChartInput {
   private _project(x: number, y: number, layout: { top: number; height: number }[]): { x: number; y: number; pane: number; localY: number; paneHeight: number } {
     // Map Y to a pane by cumulative weighted heights, matching the DOM/canvas layout.
     let pane = 0;
-    for (let i = 0; i < layout.length; i++) if (y >= layout[i].top) pane = i;
+    for (let i = 0; i < layout.length; i++) if (y >= layout[i]!.top) pane = i;
     const pl = layout[pane] ?? { top: 0, height: this._host._height };
     return { x, y, pane, localY: y - pl.top, paneHeight: pl.height };
   }
@@ -498,10 +498,11 @@ export class ChartInput {
       this._paneResize = {
         a, b,
         startY: p.y,
-        aWeight: this._host._panes[a].weight,
-        bWeight: this._host._panes[b].weight,
-        aHeight: layout[a].height,
-        bHeight: layout[b].height,
+        // `_dividerAt` names two panes that exist, and the layout has a box for each.
+        aWeight: this._host._panes[a]!.weight,
+        bWeight: this._host._panes[b]!.weight,
+        aHeight: layout[a]!.height,
+        bHeight: layout[b]!.height,
       };
       this._dragging = false;
       return;
@@ -521,7 +522,7 @@ export class ChartInput {
       this._dragging = false;
       if (!slot || this._host._navigation.zoomEnabled === false) { this._axisDrag = 'empty'; return; }
       this._axisDrag = 'price';
-      this._axisDragScale = this._host._panes[p.pane].scaleFor(slot.scaleId);
+      this._axisDragScale = this._host._panes[p.pane]!.scaleFor(slot.scaleId); // a projected point is on a pane
       this._axisStartCoord = p.localY;
       const r = this._axisDragScale.priceRange();
       this._axisStartMin = r.min;
@@ -576,7 +577,7 @@ export class ChartInput {
       this._host._ensureScaled(p.pane);
       this._dragFrom = {
         time: this._host._xToTime(p.x),
-        price: this._dragPriceScale?.yToPrice(p.localY) ?? this._host._panes[p.pane].yToPrice(p.localY),
+        price: this._dragPriceScale?.yToPrice(p.localY) ?? this._host._panes[p.pane]!.yToPrice(p.localY),
       };
       this._setHover(hit); // active state + cursor even when no hover preceded (touch)
       // Hide the crosshair while dragging a line: a frozen crosshair at the
@@ -653,7 +654,7 @@ export class ChartInput {
       const factor = Math.exp(dy * 0.005);
       const centre = (this._axisStartMin + this._axisStartMax) / 2;
       const half = ((this._axisStartMax - this._axisStartMin) / 2) * factor;
-      const ps = this._axisDragScale ?? this._host._panes[this._downPane].priceScale;
+      const ps = this._axisDragScale ?? this._host._panes[this._downPane]!.priceScale; // the pane the press landed on
       ps.setPriceRange({ min: centre - half, max: centre + half });
       ps.setAutoScale(false);
       this._host.invalidate((m) => m.invalidatePane(this._downPane, { level: InvalidationLevel.Light, autoScale: false }));
@@ -668,8 +669,8 @@ export class ChartInput {
       const sum = r.aWeight + r.bWeight;
       const min = Math.min(24, total / 4);
       const aH = Math.max(min, Math.min(total - min, r.aHeight + (p.y - r.startY)));
-      this._host._panes[r.a].weight = (aH / total) * sum;
-      this._host._panes[r.b].weight = sum - this._host._panes[r.a].weight;
+      this._host._panes[r.a]!.weight = (aH / total) * sum; // the two panes the press found at the divider
+      this._host._panes[r.b]!.weight = sum - this._host._panes[r.a]!.weight;
       this._host._layout._relayout();
       this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
       return;
@@ -693,7 +694,7 @@ export class ChartInput {
     if (this._dragId !== null) {
       const localY = p.y - (this._host._paneLayout()[this._downPane]?.top ?? 0);
       if (Math.abs(p.x - this._downX) > 3 || Math.abs(localY - this._downLocalY) > 3) this._dragMoved = true;
-      const price = this._dragPriceScale?.yToPrice(localY) ?? this._host._panes[this._downPane].yToPrice(localY);
+      const price = this._dragPriceScale?.yToPrice(localY) ?? this._host._panes[this._downPane]!.yToPrice(localY); // the press's pane
       const time = this._host._xToTime(p.x);
       this._dragCb?.(this._dragId, price, time);
       const drag: ChartDragEvent = {
@@ -810,7 +811,7 @@ export class ChartInput {
     if (this._dragId !== null) {
       const p = this._localPoint(e);
       const localY = p.y - (this._host._paneLayout()[this._downPane]?.top ?? 0);
-      const price = this._dragPriceScale?.yToPrice(localY) ?? this._host._panes[this._downPane].yToPrice(localY);
+      const price = this._dragPriceScale?.yToPrice(localY) ?? this._host._panes[this._downPane]!.yToPrice(localY); // the press's pane
       const time = this._host._xToTime(p.x);
       this._dragEndCb?.(this._dragId, price, time);
       const end: ChartDragEndEvent = {
@@ -1017,7 +1018,7 @@ export class ChartInput {
       const slot = this._axisAt(p.pane, p.x);
       if (!slot) return;
       this._host._motion._stopZoomGlide();
-      const pane = this._host._panes[p.pane];
+      const pane = this._host._panes[p.pane]!; // a projected point is on a pane
       const scale = pane.scaleFor(slot.scaleId);
       scale.scaleAtY(p.localY, Math.exp(-wheelLogFactor(delta.y)));
       this._host.invalidate(m => m.invalidateGlobal(InvalidationLevel.Full));
@@ -1080,9 +1081,9 @@ export class ChartInput {
     this._cancelPrimitiveDrag('pinch');
     this._brandingPress = null;
     this._indicatorTogglePress = null;
-    const pts = [...this._pointers.values()];
-    this._pinch = pinchState(pts[0], pts[1]);
-    this._pinchPane = pts[0].pane;
+    const pts = [...this._pointers.values()]; // a second pointer down is what begins a pinch
+    this._pinch = pinchState(pts[0]!, pts[1]!);
+    this._pinchPane = pts[0]!.pane;
     // abort any single-pointer interaction so it doesn't fight the pinch
     this._dragging = false; this._axisDrag = null; this._axisDragScale = null; this._dragId = null; this._pointerMoved = true;
     this._dragPriceScale = null;
@@ -1092,7 +1093,7 @@ export class ChartInput {
   private _updatePinch(): void {
     const pts = [...this._pointers.values()];
     if (pts.length < 2 || this._pinch === null) return;
-    const cur = pinchState(pts[0], pts[1]);
+    const cur = pinchState(pts[0]!, pts[1]!);
     const d = pinchDelta(this._pinch, cur);
     this._pinch = cur;
     const zoom = this._host._navigation.zoomEnabled !== false && d.factor !== 1;
@@ -1251,7 +1252,7 @@ export class ChartInput {
       this._host._onPointerLeave();
       return;
     }
-    const pane = this._host._panes[paneIndex];
+    const pane = this._host._panes[paneIndex]!; // the pane the pointer was projected onto
     const hit = this._hitAt(paneIndex, x, localY);
     // A pane boundary beats a primitive hit: the divider is a thin target and
     // the legend rows sit right below one.
@@ -1272,7 +1273,7 @@ export class ChartInput {
     if (this._host._firstDataId.value !== null) {
       const bars = this._host._dataLayer.visibleBars(this._host._firstDataId.value, index, index);
       if (bars.length > 0) {
-        hoveredBar = bars[0].bar;
+        hoveredBar = bars[0]!.bar;
         // Magnet only snaps within the pane that holds the price series, never
         // in the volume/indicator panes (their scale isn't a price scale).
         if (this._host._crosshairMode === 'magnet' && paneIndex === this._host._layout._firstPaneSlot()) {

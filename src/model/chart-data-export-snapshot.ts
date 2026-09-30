@@ -61,7 +61,7 @@ export function captureCsvSnapshot(chart: Chart, selection: boolean | string[], 
     }
   }
   const current = chart.primaryBars();
-  if (bars.length !== current.length || bars.some((bar, index) => allFields.some(field => !Object.is(bar[field], current[index][field])))) {
+  if (bars.length !== current.length || bars.some((bar, index) => allFields.some(field => !Object.is(bar[field], current[index]![field])))) {
     throw new Error('Chart data changed during CSV snapshot');
   }
   const replay = replayWindow(chart);
@@ -69,7 +69,7 @@ export function captureCsvSnapshot(chart: Chart, selection: boolean | string[], 
     ? Array.from({ length: chart.dataLayer.length }, (_, index) => chart.dataLayer.indexToTime(index)!)
       .filter(time => !replay || time <= replay.time)
     : [];
-  if (axisTimes.some((time, index) => !Number.isFinite(time) || (index > 0 && time <= axisTimes[index - 1]))) {
+  if (axisTimes.some((time, index) => !Number.isFinite(time) || (index > 0 && time <= axisTimes[index - 1]!))) {
     throw new Error('CSV axis times must be finite and increasing');
   }
   const context = Object.freeze({ axisTimes: Object.freeze(axisTimes), ...(replay ? { replay: Object.freeze({ ...replay }) } : {}) });
@@ -82,7 +82,8 @@ export function captureCsvSnapshot(chart: Chart, selection: boolean | string[], 
   });
   bars.forEach((bar, index) => {
     if (alignment === 'source' && !withinCsvRange(bar.time, range)) return;
-    comparisons.forEach(({ item }, column) => { comparisonColumns[column].values[index] = finiteCsvValue(item.barAt(bar.time)?.close); });
+    // One column per comparison, in the same order.
+    comparisons.forEach(({ item }, column) => { comparisonColumns[column]!.values[index] = finiteCsvValue(item.barAt(bar.time)?.close); });
   });
   columns.push(...comparisonColumns);
   return { times: bars.map(bar => bar.time), columns, context };

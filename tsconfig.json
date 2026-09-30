@@ -9,7 +9,8 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "exactOptionalPropertyTypes": false,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "isolatedModules": true,
@@ -30,6 +31,6 @@
       "openalgo-charts/workspace": ["./src/workspace/index.ts"]
     }
   },
-  "include": ["src", "tests"],
-  "exclude": ["node_modules", "dist", "tests/e2e"]
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
 }

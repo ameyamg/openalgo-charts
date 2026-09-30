@@ -142,8 +142,9 @@ type MarkerTextStyle = Pick<SeriesMarker, 'fontFamily' | 'bold' | 'italic' | 'te
 function labelLayout(ctx: CanvasRenderingContext2D, up: boolean, anchorY: number, text: string, fontPx: number) {
   const padX = fontPx * 0.5;
   const lines = text.indexOf('\n') < 0 ? undefined : text.split('\n');
-  let textW = ctx.measureText(lines === undefined ? text : lines[0]).width;
-  if (lines !== undefined) for (let i = 1; i < lines.length; i++) textW = Math.max(textW, ctx.measureText(lines[i]).width);
+  // A split returns one part at least, and the loop stays inside the parts.
+  let textW = ctx.measureText(lines === undefined ? text : lines[0]!).width;
+  if (lines !== undefined) for (let i = 1; i < lines.length; i++) textW = Math.max(textW, ctx.measureText(lines[i]!).width);
   const lh = fontPx * LINE_H;
   const w = textW + padX * 2;
   const h = fontPx + fontPx * 0.64 + (lines === undefined ? 0 : lh * (lines.length - 1));
@@ -204,7 +205,7 @@ function paintLabel(ctx: CanvasRenderingContext2D, up: boolean, cx: number, anch
     return;
   }
   const first = top + h / 2 - (lh * (lines.length - 1)) / 2;
-  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], tx, first + lh * i);
+  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i]!, tx, first + lh * i);
 }
 
 /**
@@ -216,10 +217,11 @@ function barAtTime(bars: readonly Bar[], time: number): Bar | undefined {
   let lo = 0;
   let hi = bars.length - 1;
   while (lo <= hi) {
+    // mid stays inside [lo, hi], and the walk forward checks the length first.
     let mid = (lo + hi) >> 1;
-    const t = bars[mid].time;
+    const t = bars[mid]!.time;
     if (t === time) {
-      while (mid + 1 < bars.length && bars[mid + 1].time === time) mid++;
+      while (mid + 1 < bars.length && bars[mid + 1]!.time === time) mid++;
       return bars[mid];
     }
     if (t < time) lo = mid + 1;
@@ -337,7 +339,7 @@ export class SeriesMarkers implements IPrimitive {
   private readonly _priceScale: (() => PriceScale) | undefined;
   private _markers: SeriesMarker[] = [];
   private _host: PrimitiveHost | null = null;
-  private _lastPositions: { id: string; x: number; y: number; clip?: { width: number; height: number } }[] = [];
+  private _lastPositions: { id: string; x: number; y: number; clip?: { width: number; height: number } | undefined }[] = [];
   /** The widest row of each text mark measured so far, for this marker set and `_widthDpr`. */
   private _widths = new Map<SeriesMarker, number>();
   private _widthDpr = 0;
@@ -451,10 +453,13 @@ export class SeriesMarkers implements IPrimitive {
       fontPx, effectiveMarkerPx(m.size, rc.timeScale.barSpacing) * dpr);
 
     ctx.save();
+    // Every walk over the marks stays inside the list: the loop bounds hold `i`,
+    // `first` is short of the length once the early return below has passed, and
+    // a mark's predecessor is read only after the first one.
     // The first mark that may be painted; none before it is.
     let first = markers.length;
     for (let i = 0; i < markers.length; i++) {
-      const m = markers[i];
+      const m = markers[i]!;
       const index = rc.dataLayer.timeToIndex(m.time);
       if (index === undefined) continue;
       if (isStyled(m)) {
@@ -469,14 +474,14 @@ export class SeriesMarkers implements IPrimitive {
     }
     if (first === markers.length) { ctx.restore(); return; }
     // Marks at one time stack in order, so the first bar's earlier marks count too.
-    while (first > 0 && markers[first - 1].time === markers[first].time) first--;
+    while (first > 0 && markers[first - 1]!.time === markers[first]!.time) first--;
     const from = Math.max(0, Math.floor((first - LANE_WINDOW) / LANE_WINDOW) * LANE_WINDOW);
 
     // The widest half of any text mark laid out, which bounds how far left of
     // its own x a later box can start.
     let widest = 0;
     for (let i = from; i < markers.length; i++) {
-      const m = markers[i];
+      const m = markers[i]!;
       const index = rc.dataLayer.timeToIndex(m.time);
       if (index === undefined) continue;
       if (!isStyled(m) && index > range.to + 1) {
@@ -490,23 +495,23 @@ export class SeriesMarkers implements IPrimitive {
     let start = from;
     let reach = -Infinity;
     for (let i = from; i < first; i++) {
-      const m = markers[i];
+      const m = markers[i]!;
       const index = rc.dataLayer.timeToIndex(m.time);
       if (index === undefined) continue;
       const x = rc.timeScale.indexToX(index) * dpr;
-      if (x - widest >= reach && (i === from || markers[i - 1].time !== m.time)) start = i;
+      if (x - widest >= reach && (i === from || markers[i - 1]!.time !== m.time)) start = i;
       const fontPx = laneFont(m);
       if (fontPx > 0) reach = Math.max(reach, x + halfOf(m, fontPx));
     }
     if (first > start) {
-      const index = rc.dataLayer.timeToIndex(markers[first].time);
+      const index = rc.dataLayer.timeToIndex(markers[first]!.time);
       if (index !== undefined && rc.timeScale.indexToX(index) * dpr - widest >= reach) start = first;
     }
     const laneGap = 2 * dpr;
     const lanes: Record<-1 | 1, LaneBox[]> = { [-1]: [], [1]: [] };
 
     for (let i = start; i < markers.length; i++) {
-      const m = markers[i];
+      const m = markers[i]!;
       const styled = isStyled(m);
       const index = rc.dataLayer.timeToIndex(m.time);
       if (index === undefined) continue;
@@ -613,7 +618,7 @@ export class SeriesMarkers implements IPrimitive {
           const lines = m.text.split('\n');
           const lh = fontPx * LINE_H;
           for (let i = 0; i < lines.length; i++) {
-            ctx.fillText(lines[below ? i : lines.length - 1 - i], tx, below ? ty + lh * i : ty - lh * i);
+            ctx.fillText(lines[below ? i : lines.length - 1 - i]!, tx, below ? ty + lh * i : ty - lh * i);
           }
         }
       }

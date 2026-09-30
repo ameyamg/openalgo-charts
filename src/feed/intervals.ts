@@ -123,8 +123,9 @@ function builtinBucketing(trimmed: string): IntervalBucketing | null {
   if (/^\d*\s*M$/.test(trimmed)) return null;
   const m = BUILTIN_TOKEN.exec(trimmed);
   if (m === null) return null;
+  // Both groups take part in every match, and the second admits only the units listed.
   const n = m[1] === '' ? 1 : Number(m[1]);
-  return { mode: 'interval', seconds: n * UNIT_SECONDS[m[2].toLowerCase()] };
+  return { mode: 'interval', seconds: n * UNIT_SECONDS[m[2]!.toLowerCase()]! };
 }
 
 // ---------------------------------------------------------------------------

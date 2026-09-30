@@ -40,25 +40,25 @@ const MAX_LOOKUPS = 512;
 /**
  * The lower median of some gaps, sorting them in place. Lower, because a
  * closure only ever lengthens a gap: after Thursday, Friday and Monday the
- * answer is one day, not three.
+ * answer is one day, not three. Every caller passes at least one gap.
  */
 function lowerMedian(gaps: number[]): number {
   gaps.sort((a, b) => a - b);
-  return gaps[(gaps.length - 1) >> 1];
+  return gaps[(gaps.length - 1) >> 1]!;
 }
 
 function gapsOf(t: readonly number[]): number[] {
   const gaps: number[] = [];
-  for (let i = 1; i < t.length; i++) gaps.push(t[i] - t[i - 1]);
+  for (let i = 1; i < t.length; i++) gaps.push(t[i]! - t[i - 1]!);
   return gaps;
 }
 
-/** Largest index in `a[0..hi]` whose value is at most `v`; the caller ensures `a[0] <= v`. */
+/** Largest index in `a[0..hi]` whose value is at most `v`; the caller ensures `a[0] <= v` and `hi < a.length`. */
 function floorIndex(a: readonly number[], v: number, hi: number): number {
   let lo = 0;
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;
-    if (a[mid] <= v) lo = mid;
+    if (a[mid]! <= v) lo = mid;
     else hi = mid - 1;
   }
   return lo;
@@ -95,17 +95,18 @@ function sessionSlots(w: readonly number[], calendar: SessionCalendarSource, med
   let lookups = 0;
   const from = (time: number): InstrumentSession | null | undefined =>
     ++lookups > MAX_LOOKUPS ? undefined : calendar.sessionFrom(time);
-  let s = from(w[0]);
+  // `w` is the plan's tail, two bars or more, and `opens` gets one entry per bar.
+  let s = from(w[0]!);
   if (!s) return null;
   const same: number[] = [], opens = [s.open];
-  let lead = s.open - w[0];
+  let lead = s.open - w[0]!;
   for (let i = 1; i < w.length; i++) {
-    if (w[i] < s.close) same.push(w[i] - w[i - 1]);
-    else if (!(s = from(w[i]))) return null;
+    if (w[i]! < s.close) same.push(w[i]! - w[i - 1]!);
+    else if (!(s = from(w[i]!))) return null;
     opens.push(s.open);
-    lead = Math.max(lead, s.open - w[i]);
+    lead = Math.max(lead, s.open - w[i]!);
   }
-  const last = w[w.length - 1];
+  const last = w[w.length - 1]!;
   let session = s, cur = last;
   if (same.length > 0) {
     const step = lowerMedian(same);
@@ -121,7 +122,7 @@ function sessionSlots(w: readonly number[], calendar: SessionCalendarSource, med
     // the latest bar in a window like it. A window no bar has shown, such as
     // a special session or an opening the clocks moved, takes the last bar's.
     const offsets = new Map<number, number>();
-    for (let i = 0; i < w.length; i++) offsets.set(opens[i] % DAY, offsetOf(w[i], opens[i]));
+    for (let i = 0; i < w.length; i++) offsets.set(opens[i]! % DAY, offsetOf(w[i]!, opens[i]!));
     const fallback = offsetOf(last, session.open);
     return () => {
       let t = cur + step;
@@ -153,12 +154,13 @@ function sessionSlots(w: readonly number[], calendar: SessionCalendarSource, med
 
 /** One more future bar time, or the end of generation and the spacing that replaces it. */
 function grow(p: FuturePlan): void {
+  // A plan's slots start with the last bar's time and only grow.
   const s = p.slots, m = s.length - 1;
   let t: number | null = NaN;
   if (m < MAX_SLOTS) {
     try { t = p.next!(); } catch { t = null; }
   }
-  if (t !== null && t > s[m]) {
+  if (t !== null && t > s[m]!) {
     s.push(t);
     return;
   }
@@ -166,14 +168,14 @@ function grow(p: FuturePlan): void {
   // A budget ran out: continue at the pace the calendar set, weekends and
   // nights included. A calendar with nothing more, or one that threw, leaves
   // the median, which is the answer without a calendar.
-  if (t !== null && Number.isNaN(t) && m > 0) p.step = (s[m] - s[0]) / m;
+  if (t !== null && Number.isNaN(t) && m > 0) p.step = (s[m]! - s[0]!) / m;
 }
 
 function futureSlot(p: FuturePlan, k: number): number {
   const s = p.slots;
   while (s.length <= k && p.next) grow(p);
   const m = s.length - 1;
-  return k <= m ? s[k] : s[m] + (k - m) * p.step;
+  return k <= m ? s[k]! : s[m]! + (k - m) * p.step;
 }
 
 interface SeriesEntry {
@@ -200,7 +202,7 @@ function indexOfTime(bars: readonly Bar[], time: number): number {
   let hi = bars.length - 1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    const t = bars[mid].time;
+    const t = bars[mid]!.time;
     if (t === time) return mid;
     if (t < time) lo = mid + 1;
     else if (t > time) hi = mid - 1;
@@ -227,13 +229,13 @@ function sortedUniqueByTime(bars: readonly Bar[]): Bar[] {
   // A study's plots and most feeds arrive in time order already, so that case
   // is checked for first rather than paid a sort for.
   let ordered = true;
-  for (let i = 1; i < bars.length && ordered; i++) ordered = bars[i].time > bars[i - 1].time;
+  for (let i = 1; i < bars.length && ordered; i++) ordered = bars[i]!.time > bars[i - 1]!.time;
   if (ordered) return bars.slice();
   const out = bars.slice().sort((a, b) => a.time - b.time);
   let w = 0;
-  for (let r = 0; r < out.length; r++) {
-    if (w > 0 && out[r].time === out[w - 1].time) out[w - 1] = out[r];
-    else out[w++] = out[r];
+  for (let r = 0; r < out.length; r++) { // `w` never passes `r`
+    if (w > 0 && out[r]!.time === out[w - 1]!.time) out[w - 1] = out[r]!;
+    else out[w++] = out[r]!;
   }
   out.length = w;
   return out;
@@ -414,37 +416,40 @@ export class DataLayer {
   public indexToTimeFloat(index: number): number {
     const t = this._sortedTimes;
     const n = t.length;
+    // Each read below sits inside the length the branch before it checked.
     if (n === 0) return NaN;
-    if (n === 1) return t[0];
-    if (index <= 0) return t[0] + index * (t[1] - t[0]);
+    if (n === 1) return t[0]!;
+    if (index <= 0) return t[0]! + index * (t[1]! - t[0]!);
     if (index >= n - 1) {
       const p = this._plan(), d = index - (n - 1), k = Math.floor(d), a = futureSlot(p, k);
       return d === k ? a : a + (d - k) * (futureSlot(p, k + 1) - a);
     }
     const i = Math.floor(index);
-    return t[i] + (index - i) * (t[i + 1] - t[i]);
+    return t[i]! + (index - i) * (t[i + 1]! - t[i]!);
   }
 
   /** UTC seconds → fractional logical index. The inverse of `indexToTimeFloat`. */
   public timeToIndexFloat(time: number): number {
     const t = this._sortedTimes;
     const n = t.length;
+    // As above; the slots start at t[n - 1], and `time` below the last slot or
+    // the last bar puts `k` and `lo` one short of the end.
     if (n === 0) return NaN;
     if (n === 1) return 0;
-    if (time <= t[0]) {
-      const step = t[1] - t[0];
-      return step > 0 ? (time - t[0]) / step : 0;
+    if (time <= t[0]!) {
+      const step = t[1]! - t[0]!;
+      return step > 0 ? (time - t[0]!) / step : 0;
     }
-    if (time >= t[n - 1]) {
+    if (time >= t[n - 1]!) {
       const p = this._plan(), s = p.slots;
-      while (p.next && s[s.length - 1] <= time) grow(p);
+      while (p.next && s[s.length - 1]! <= time) grow(p);
       const m = s.length - 1;
-      if (time >= s[m]) return n - 1 + m + (time - s[m]) / p.step;
+      if (time >= s[m]!) return n - 1 + m + (time - s[m]!) / p.step;
       const k = floorIndex(s, time, m);
-      return n - 1 + k + (time - s[k]) / (s[k + 1] - s[k]);
+      return n - 1 + k + (time - s[k]!) / (s[k + 1]! - s[k]!);
     }
     const lo = floorIndex(t, time, n - 1);
-    return lo + (time - t[lo]) / (t[lo + 1] - t[lo]);
+    return lo + (time - t[lo]!) / (t[lo + 1]! - t[lo]!);
   }
 
   /**
@@ -466,7 +471,8 @@ export class DataLayer {
         // A calendar that cannot answer, such as a window in a daylight-saving
         // gap, must not stop a chart painting: the median answers instead.
       }
-      p = this._future = { version: this._version, tail, slots: [tail[tail.length - 1]], next, step: median };
+      // Only the two readers above ask, and both hold two bars or more.
+      p = this._future = { version: this._version, tail, slots: [tail[tail.length - 1]!], next, step: median };
     }
     return p;
   }
@@ -513,15 +519,15 @@ export class DataLayer {
     let end = bars.length;
     while (start < end) {
       const mid = (start + end) >> 1;
-      if (bars[mid].time < loTime) start = mid + 1;
+      if (bars[mid]!.time < loTime) start = mid + 1;
       else end = mid;
     }
     const out: IndexedBar[] = [];
     for (let i = start; i < bars.length; i++) {
-      const t = bars[i].time;
+      const t = bars[i]!.time;
       if (t > hiTime) break;
       const index = this._indexByTime.get(t);
-      if (index !== undefined) out.push({ index, bar: bars[i] });
+      if (index !== undefined) out.push({ index, bar: bars[i]! });
     }
     return out;
   }
@@ -530,7 +536,7 @@ export class DataLayer {
   public lastIndexedBar(id: SeriesId): IndexedBar | null {
     const entry = this._series.get(id);
     if (entry === undefined || entry.bars.length === 0) return null;
-    const bar = entry.bars[entry.bars.length - 1];
+    const bar = entry.bars[entry.bars.length - 1]!;
     const index = this._indexByTime.get(bar.time);
     return index === undefined ? null : { index, bar };
   }
@@ -556,19 +562,20 @@ export class DataLayer {
     // and their counts stand. A refresh, or a refresh with a bar appended,
     // leaves nothing or one bar past it.
     let p = 0;
-    while (p < prev.length && p < next.length && prev[p].time === next[p].time) p++;
+    while (p < prev.length && p < next.length && prev[p]!.time === next[p]!.time) p++;
     // Count the new bars before releasing the old, so a time both hold never
     // passes through zero. `next` is sorted, so `added` comes out sorted.
     let added: number[] | null = null;
-    for (let i = p; i < next.length; i++) if (this._retain(next[i].time)) (added ??= []).push(next[i].time);
+    for (let i = p; i < next.length; i++) if (this._retain(next[i]!.time)) (added ??= []).push(next[i]!.time);
     let removed = false;
     for (let i = p; i < prev.length; i++) {
-      const t = prev[i].time, n = this._timeRefs.get(t) ?? 0;
+      const t = prev[i]!.time, n = this._timeRefs.get(t) ?? 0;
       if (n <= 1) { this._timeRefs.delete(t); removed = true; } else this._timeRefs.set(t, n - 1);
     }
     if (added === null && !removed) return;
-    const edge = this._sortedTimes.length > 0 ? this._sortedTimes[this._sortedTimes.length - 1] : -Infinity;
-    if (!removed && added !== null && added[0] > edge) {
+    const edge = this._sortedTimes.length > 0 ? this._sortedTimes[this._sortedTimes.length - 1]! : -Infinity;
+    // `added` is null until its first push, so it is never empty here.
+    if (!removed && added !== null && added[0]! > edge) {
       for (const t of added) this._appendTime(t);
       return;
     }
@@ -586,25 +593,26 @@ export class DataLayer {
     if (added.some(Number.isNaN) || old.some(Number.isNaN)) {
       const all = Array.from(this._timeRefs.keys()).sort((a, b) => a - b);
       this._indexByTime.clear();
-      for (let k = 0; k < all.length; k++) this._indexByTime.set(all[k], k);
+      for (let k = 0; k < all.length; k++) this._indexByTime.set(all[k]!, k);
       this._sortedTimes = all;
       this._version++;
       return;
     }
     const merged: number[] = [];
     let i = 0, j = 0;
+    // The loop condition and the test that picks a side keep `i` and `j` in range.
     while (i < old.length || j < added.length) {
-      if (j >= added.length || (i < old.length && old[i] < added[j])) {
-        const t = old[i++];
+      if (j >= added.length || (i < old.length && old[i]! < added[j]!)) {
+        const t = old[i++]!;
         if (!removed || this._timeRefs.has(t)) merged.push(t);
         else this._indexByTime.delete(t);
       } else {
-        merged.push(added[j++]);
+        merged.push(added[j++]!);
       }
     }
     let first = 0;
     while (first < merged.length && first < old.length && merged[first] === old[first]) first++;
-    for (let k = first; k < merged.length; k++) this._indexByTime.set(merged[k], k);
+    for (let k = first; k < merged.length; k++) this._indexByTime.set(merged[k]!, k);
     this._sortedTimes = merged;
     this._version++;
   }

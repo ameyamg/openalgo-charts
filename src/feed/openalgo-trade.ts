@@ -20,7 +20,8 @@
 import type { OrderFeed, PlaceRequest, PreflightFailure, TradeMode } from '../trade/order-engine';
 import type { Order, OrderSide, OrderStatus, OrderType, Position } from '../trade/types';
 import { validateQuantity, type OrderConstraints } from '../trade/validation';
-import { assertTradingCapability, type TradingCapabilitySource } from './trading-capabilities';
+import { assertTradingCapability, type TradingCapabilityRequest, type TradingCapabilitySource } from './trading-capabilities';
+import type { LooseOptional } from '../helpers/types';
 
 /**
  * An error that says the request PROVABLY never left this process.
@@ -379,8 +380,9 @@ export class OpenAlgoTradeFeed implements OrderFeed {
   public async modify(orderId: string, changes: { price?: number; triggerPrice?: number; qty?: number }): Promise<void> {
     const patch = { ...changes };
     const ctx = this._ctx.get(orderId);
+    // An order with no cached context asks without a symbol, which a request reads as absent.
     assertTradingCapability(this.capabilities, { operation: 'modify', orderId,
-      symbol: ctx?.symbol, exchange: ctx?.exchange, type: ctx?.pricetype });
+      symbol: ctx?.symbol, exchange: ctx?.exchange, type: ctx?.pricetype } satisfies LooseOptional<TradingCapabilityRequest> as TradingCapabilityRequest);
     if (ctx === undefined) {
       // Pre-flight: nothing can be built, so nothing is sent, so the order is
       // exactly where it was and the caller may retry once it has the book.
@@ -415,8 +417,8 @@ export class OpenAlgoTradeFeed implements OrderFeed {
 
   public async cancel(orderId: string): Promise<void> {
     const ctx = this._ctx.get(orderId);
-    assertTradingCapability(this.capabilities, { operation: 'cancel', orderId,
-      symbol: ctx?.symbol, exchange: ctx?.exchange, type: ctx?.pricetype });
+    assertTradingCapability(this.capabilities, { operation: 'cancel', orderId, // see modify
+      symbol: ctx?.symbol, exchange: ctx?.exchange, type: ctx?.pricetype } satisfies LooseOptional<TradingCapabilityRequest> as TradingCapabilityRequest);
     await this._post('/api/v1/cancelorder', { orderid: orderId, strategy: this._strategy });
   }
 
@@ -435,7 +437,7 @@ export class OpenAlgoTradeFeed implements OrderFeed {
     const orders: DecodedOrder[] = [];
     const quarantined: QuarantinedRow[] = [];
     for (let i = 0; i < rows.length; i++) {
-      const raw = rows[i];
+      const raw = rows[i]!;
       const res = decodeOrder(raw, `orders[${i}]`);
       if (!res.ok) { quarantined.push({ issue: res.issue, raw }); continue; }
       orders.push(res.order);

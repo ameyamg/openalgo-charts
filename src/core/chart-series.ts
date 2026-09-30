@@ -193,25 +193,27 @@ export class ChartSeries {
     preservedFormats?: PreservedScaleFormats): SeriesApi {
     // Built first, so an invalid transform throws before the series exists.
     const transform = options.transform === undefined ? undefined : this._newTransform(options.transform);
+    // The pane next, so an index that names no slot throws before the series exists too.
+    // Past this line the slot holds a pane, so each read of it below finds one.
+    const paneIndex = options.paneIndex ?? this._host._primaryIndex();
+    this._host._layout._ensurePane(paneIndex);
     const dataId = this._host._dataLayer.createSeries();
     if (transform !== undefined) this._transforms.set(dataId, transform);
     const provenance = new SeriesProvenance(dataId);
     this._host._seriesProvenance.set(dataId, provenance);
-    const paneIndex = options.paneIndex ?? this._host._primaryIndex();
-    this._host._layout._ensurePane(paneIndex);
     const record = createSeriesRecord(dataId, type, options.style, options.priceScaleId ?? 'right');
     // A pane starts quoting the instrument the moment the host plots a price on
     // it, which is how a second symbol on a pane of its own keeps a tick-sized
     // axis. Indicator plots come through here with `claimPrimary` false, so an
     // oscillator can never promote the pane it draws in.
-    if (claimPrimary && getChartType(type).isPriceSeries) this._host._scales._claimPricePane(this._host._panes[paneIndex]);
+    if (claimPrimary && getChartType(type).isPriceSeries) this._host._scales._claimPricePane(this._host._panes[paneIndex]!);
     // The first price-type series drives the magnet crosshair + OHLC legend.
     const isPrimary = claimPrimary && this._host._firstDataId.value === null && getChartType(type).isPriceSeries;
     if (isPrimary) {
       this._host._firstDataId.value = dataId;
-      this._host._firstPane = this._host._panes[paneIndex];
+      this._host._firstPane = this._host._panes[paneIndex]!;
     }
-    this._host._panes[paneIndex].addSeries(record);
+    this._host._panes[paneIndex]!.addSeries(record);
     this._host._layout._recomputeAxisColumns(); // reserve/free the axis columns
     /**
      * The pane this series lives on, held BY IDENTITY rather than by the index
@@ -236,7 +238,7 @@ export class ChartSeries {
      */
     const inheritedStyle = { ...getChartType(type).defaultStyle };
     for (const key of Object.keys(options.style ?? {}) as (keyof SeriesStyle)[]) delete inheritedStyle[key];
-    const owner = { pane: this._host._panes[paneIndex], priceFormat: options.priceFormat, inheritedStyle, indicatorOwned: !claimPrimary };
+    const owner = { pane: this._host._panes[paneIndex]!, priceFormat: options.priceFormat, inheritedStyle, indicatorOwned: !claimPrimary };
     const scale = owner.pane.scaleOf(record);
     const preserveFormat = preservedFormats?.get(owner.pane)?.has(record.scaleId) === true;
     this._applySeriesPriceFormat(scale, options.priceFormat, preserveFormat);
@@ -294,7 +296,7 @@ export class ChartSeries {
     if (!owner.indicatorOwned) this._host._studies._reconcileIndicatorRanges();
     if (isPrimary) {
       this._host._primary = { api, record };
-      this._host._panes[paneIndex].setSourceSeries(record);
+      this._host._panes[paneIndex]!.setSourceSeries(record);
       // A source added after a layout placed it goes where the layout says.
       if (this._host._sourceAbove !== undefined) this._host._primitives._placeSource();
       this._host._emit('objects:change', {});
@@ -432,9 +434,10 @@ export class ChartSeries {
     const wasAtRight = scale.rightOffset >= 0;
     let first = run.update(bar);
     const next = run.elements();
-    while (first < count && first < next.length && sameElement(shown[first], next[first])) first++;
-    const inPlace = first >= count || (first === count - 1 && next.length >= count && next[first].time === shown[first].time);
-    if (inPlace) for (let i = first; i < next.length; i++) layer.update(dataId, next[i]);
+    // Every read below is inside both lists: `first` stays under `count` and `next.length`.
+    while (first < count && first < next.length && sameElement(shown[first]!, next[first]!)) first++;
+    const inPlace = first >= count || (first === count - 1 && next.length >= count && next[first]!.time === shown[first]!.time);
+    if (inPlace) for (let i = first; i < next.length; i++) layer.update(dataId, next[i]!);
     else layer.setSeriesData(dataId, next);
     const tail = next[next.length - 1]?.time;
     this._host._seriesProvenance.get(dataId)?.record(!inPlace ? 'correction' : next.length > count ? 'append' : 'replace', tail, options);

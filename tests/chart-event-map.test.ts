@@ -11,8 +11,9 @@
  * code in src subscribes through the deprecated string overload.
  *
  * The overloads themselves are checked by type: this file is type-checked with
- * the rest of `tests` (tsconfig.json), so an `expectTypeOf` that does not hold,
- * or a `@ts-expect-error` over a line that compiles, fails `npm run typecheck`.
+ * the rest of `tests` (tests/tsconfig.json), so an `expectTypeOf` that does
+ * not hold, or a `@ts-expect-error` over a line that compiles, fails
+ * `npm run typecheck`.
  */
 /// <reference types="vite/client" />
 import ts from 'typescript';

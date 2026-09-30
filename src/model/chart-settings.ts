@@ -41,6 +41,7 @@ import type { TradingColors, TradingSettings } from '../core/trading-controller'
 import type { PriceScaleMode } from '../scale/price-scale';
 import { DEFAULT_TIMEZONE, isValidTimezone } from '../feed/time';
 import { filterLinkAppearance } from '../link/appearance';
+import type { LooseOptional } from '../helpers/types';
 
 /**
  * Tabs of the settings dialog. Five groups, chosen so a trader finds a setting
@@ -184,7 +185,7 @@ function selectCtl(
   tooltip?: string,
 ): Control {
   return {
-    input: { key, type: 'select', label, default: def, options, group, tooltip },
+    input: { key, type: 'select', label, default: def, options, group, tooltip } satisfies LooseOptional<ChartSettingsInput> as ChartSettingsInput, // no tooltip reads as none
     fields: [{ key, read: get, write: (c, v) => set(c, String(v)) }],
   };
 }
@@ -308,7 +309,7 @@ function priceShared(): Control[] {
     selectCtl(
       'symbol.precision', 'Precision', 'Values', 'default', PRECISIONS,
       (c) => { const p = sty(c).precision; return p === undefined ? 'default' : String(p); },
-      (c, v) => setSty(c, { precision: v === 'default' ? undefined : Number(v) }),
+      (c, v) => setSty(c, { precision: v === 'default' ? undefined : Number(v) } satisfies LooseOptional<Partial<SeriesStyle>> as Partial<SeriesStyle>), // undefined clears it
     ),
     boolCtl(
       'symbol.priceLineVisible', 'Price line', 'Values', true,
@@ -470,7 +471,7 @@ function priceControls(chart: Chart): Control[] {
       out.push(selectCtl(
         'symbol.lineStyle', 'Line style', 'Line', 'solid', LINE_STYLES,
         (c) => sty(c).lineStyle ?? 'solid',
-        (c, v) => setSty(c, { lineStyle: v as SeriesStyle['lineStyle'] }),
+        (c, v) => setSty(c, { lineStyle: v as NonNullable<SeriesStyle['lineStyle']> }),
       ));
     }
     if (type === 'area') {
@@ -650,7 +651,7 @@ function axesControls(chart: Chart): Control[] {
     ),
     boolCtl(
       'scales.autoScale', 'Auto-fit to the data', 'Price scale', true,
-      (c) => c.panes()[c.primaryPaneIndex()].priceScale.autoScale,
+      (c) => c.panes()[c.primaryPaneIndex()]!.priceScale.autoScale, // a chart always holds its price pane
       (c, v) => c.setAutoScale(v),
     ),
     boolCtl(

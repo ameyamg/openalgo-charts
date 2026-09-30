@@ -73,7 +73,7 @@ export function detectMac(): boolean {
 export function parseCombo(combo: string): { mods: string[]; key: string } | null {
   const parts = combo.split('+').map((p) => p.trim()).filter((p) => p.length > 0);
   if (parts.length === 0) return null;
-  const key = parts[parts.length - 1];
+  const key = parts[parts.length - 1]!; // not empty, checked above
   if (!/^[A-Za-z0-9]+$/.test(key) || MOD_SET.has(key)) return null;
   const mods: string[] = [];
   for (const m of parts.slice(0, -1)) {

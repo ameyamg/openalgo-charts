@@ -179,14 +179,14 @@ export function drawCandles(
   const uniformTier = style.widthScale ? null : candleTier(bodyW, wickW, style);
 
   for (let i = 0; i < items.length; i++) {
-    const { x, bar } = items[i];
+    const { x, bar } = items[i]!; // i, and i - 1 when positive, index items
     // Previous-close colouring needs the bar before this one. The first drawn
     // bar has none in `items`, so it takes the caller's `prevClose` (the bar
     // left of the visible range) and otherwise falls back to open-vs-close:
     // the first bar of history has nothing to compare against, and inventing a
     // reference would make it lie. A non-finite reference (a whitespace gap)
     // falls back too, or every bar after a gap would go down off a NaN test.
-    const ref = i > 0 ? items[i - 1].bar.close : items[i].prevClose;
+    const ref = i > 0 ? items[i - 1]!.bar.close : items[i]!.prevClose;
     const up = style.colorByPreviousClose === true && ref !== undefined && Number.isFinite(ref)
       ? bar.close >= ref
       : bar.close >= bar.open;

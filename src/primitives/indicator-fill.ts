@@ -41,7 +41,7 @@ export interface IndicatorFillOptions {
    * `colorUp`/`colorDown`. A point carrying its own `color` still overrides it.
    * Unset leaves the two-colour fill exactly as it was.
    */
-  gradient?: FillGradient;
+  gradient?: FillGradient | undefined;
 }
 
 /** One bar's pair of values; `null` where either plot has no value yet. */
@@ -56,12 +56,12 @@ export interface FillPoint {
    * split at the bar where the colour changes, or at the preceding intersection
    * if the plots cross into that bar. Overrides both point and band gradients.
    */
-  color?: string;
+  color?: string | undefined;
   /**
    * Price-anchored gradient starting at this bar, or at the preceding intersection
    * when the plots cross into it. Undefined uses the band's gradient.
    */
-  gradient?: FillGradient;
+  gradient?: FillGradient | undefined;
 }
 
 function sameGradient(a: FillGradient | undefined, b: FillGradient | undefined): boolean {
@@ -147,13 +147,14 @@ export class IndicatorFill implements IPrimitive {
     // Walk the series accumulating one polygon per constant-sign run. A gap
     // (either value missing) closes the current run — bridging it would fill
     // across a stretch where the indicator has no opinion.
-    let run: { up: boolean; color?: string; gradient?: FillGradient; top: number[]; bot: number[]; xs: number[] } | null = null;
+    let run: { up: boolean; color?: string | undefined; gradient?: FillGradient | undefined; top: number[]; bot: number[]; xs: number[] } | null = null;
     const flush = (): void => {
       if (run !== null && run.xs.length >= 2) {
+        // xs, top and bot grow together, so every index inside xs reads all three.
         ctx.beginPath();
-        ctx.moveTo(run.xs[0], run.top[0]);
-        for (let i = 1; i < run.xs.length; i++) ctx.lineTo(run.xs[i], run.top[i]);
-        for (let i = run.xs.length - 1; i >= 0; i--) ctx.lineTo(run.xs[i], run.bot[i]);
+        ctx.moveTo(run.xs[0]!, run.top[0]!);
+        for (let i = 1; i < run.xs.length; i++) ctx.lineTo(run.xs[i]!, run.top[i]!);
+        for (let i = run.xs.length - 1; i >= 0; i--) ctx.lineTo(run.xs[i]!, run.bot[i]!);
         ctx.closePath();
         if (run.gradient === undefined || run.color !== undefined) {
           ctx.fillStyle = run.color ?? (run.up ? this._opts.colorUp : this._opts.colorDown);
@@ -167,7 +168,7 @@ export class IndicatorFill implements IPrimitive {
     };
 
     for (let i = 0; i < this._points.length; i++) {
-      const p = this._points[i];
+      const p = this._points[i]!;
       if (p.a === null || p.b === null || !Number.isFinite(p.a) || !Number.isFinite(p.b)) {
         flush();
         continue;

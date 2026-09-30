@@ -51,7 +51,7 @@ export function visibleSpan(layer: DataLayer, bars: readonly Bar[], from: number
   let end = bars.length;
   while (start < end) {
     const mid = (start + end) >> 1;
-    if (bars[mid].time < loTime) start = mid + 1;
+    if (bars[mid]!.time < loTime) start = mid + 1; // start <= mid < end <= bars.length
     else end = mid;
   }
   out.start = start;
@@ -74,6 +74,13 @@ const POOL_KEEP = 4096;
 
 /** Scratch for the visible walk: `build` runs start to end without yielding, so one serves every series. */
 const SPAN: VisibleSpan = { start: 0, lastTime: 0 };
+
+/**
+ * A pooled item. `prevClose` and `edgeX` hold undefined rather than being
+ * absent, which a renderer reads the same, so the pool says so and hands the
+ * item on as a `DrawItem`.
+ */
+type PooledItem = Omit<DrawItem, 'prevClose' | 'edgeX'> & { prevClose?: number | undefined; edgeX?: number | undefined };
 
 /** What maps a price to media-px y: a price scale. */
 interface PriceMapper {
@@ -114,7 +121,7 @@ export interface SeriesDrawItems {
 export function createSeriesDrawItems(): SeriesDrawItems {
   const items: DrawItem[] = [];
   /** Item objects, reused: the first `count` of them are this frame's. */
-  const pool: DrawItem[] = [];
+  const pool: PooledItem[] = [];
   let count = 0, first = -1;
   let mapper: PriceMapper | null = null;
   const push = (x: number, bar: Bar): void => {
@@ -130,7 +137,7 @@ export function createSeriesDrawItems(): SeriesDrawItems {
     item.bar = bar;
     item.prevClose = undefined;
     item.edgeX = undefined;
-    items[n] = item;
+    items[n] = item as DrawItem;
   };
   /**
    * The neighbour beyond an edge, marked with that edge's x. Made once with
@@ -140,7 +147,7 @@ export function createSeriesDrawItems(): SeriesDrawItems {
     const index = layer.timeToIndex(bar.time);
     if (index === undefined) return;
     push(timeScale.indexToX(index + shift), bar);
-    items[count - 1].edgeX = edgeX;
+    items[count - 1]!.edgeX = edgeX; // the item push just wrote
   };
   const lodColumns = createLodColumns(push);
   return {
@@ -153,12 +160,15 @@ export function createSeriesDrawItems(): SeriesDrawItems {
       first = -1;
       const bars = layer.seriesBars(id);
       if (visibleSpan(layer, bars, from, to, SPAN)) {
+        // SPAN.start is at most bars.length, and each read of `bars` below is
+        // under bars.length: past SPAN.start after the test on it, in the loop,
+        // or after the test on `i`.
         const last = SPAN.lastTime;
-        if (edges && SPAN.start > 0) pushEdge(layer, bars[SPAN.start - 1], shift, timeScale, 0);
+        if (edges && SPAN.start > 0) pushEdge(layer, bars[SPAN.start - 1]!, shift, timeScale, 0);
         if (lod !== null) lodColumns.begin(lod.kind, lod.dpr, lod.factor);
         let i = SPAN.start;
         for (; i < bars.length; i++) {
-          const bar = bars[i];
+          const bar = bars[i]!;
           if (bar.time > last) break;
           const index = layer.timeToIndex(bar.time);
           if (index === undefined) continue;
@@ -168,12 +178,13 @@ export function createSeriesDrawItems(): SeriesDrawItems {
           else push(x, bar);
         }
         if (lod !== null) lodColumns.end();
-        if (edges && i < bars.length) pushEdge(layer, bars[i], shift, timeScale, timeScale.width);
+        if (edges && i < bars.length) pushEdge(layer, bars[i]!, shift, timeScale, timeScale.width);
       }
       if (items.length !== count) {
         // Items this frame did not reach let go of their bars, so a pool sized
-        // for yesterday's history does not keep that history alive.
-        for (let i = count; i < items.length; i++) pool[i].bar = NO_BAR;
+        // for yesterday's history does not keep that history alive. Every item
+        // came from the pool, so the pool is at least as long as `items`.
+        for (let i = count; i < items.length; i++) pool[i]!.bar = NO_BAR;
         items.length = count;
       }
       // A view zoomed back in from a very wide one gives the spare items back.

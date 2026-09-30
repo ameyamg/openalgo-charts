@@ -109,7 +109,8 @@ export function watermarkRect(
 
 export class LogoWatermark implements IPrimitive {
   private _opts: Required<Omit<LogoWatermarkOptions, 'src' | 'image' | 'tint' | 'label' | 'labelColor' | 'background' | 'borderColor' | 'href' | 'padding'>>
-    & Pick<LogoWatermarkOptions, 'src' | 'image' | 'tint' | 'label' | 'labelColor' | 'background' | 'borderColor' | 'href'>
+    // The constructor copies each absent one as undefined, which every reader treats as unset.
+    & { [K in 'src' | 'image' | 'tint' | 'label' | 'labelColor' | 'background' | 'borderColor' | 'href']?: LogoWatermarkOptions[K] | undefined }
     & { padding: { x: number; y: number } };
   /** 0..1 reveal progress, eased toward hover state each frame. */
   private _reveal = 0;

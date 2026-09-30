@@ -94,10 +94,11 @@ export function partitionPhases(from: number, to: number, windows: readonly Phas
   }
   edges.sort((a, b) => a[0] - b[0]);
   const open = PHASE_ORDER.map(() => 0), out: { phase: SessionPhase; start: number; end: number }[] = [];
+  // `e` is read inside `edges`, and every rank is an index of `PHASE_ORDER`, so of `open`.
   for (let t = from, e = 0; t < to;) {
-    while (e < edges.length && edges[e][0] <= t) open[edges[e][1]] += edges[e++][2];
-    const next = e < edges.length ? edges[e][0] : to, rank = open.findIndex(count => count > 0);
-    const phase = rank < 0 ? 'closed' : PHASE_ORDER[rank], last = out[out.length - 1];
+    while (e < edges.length && edges[e]![0] <= t) open[edges[e]![1]]! += edges[e++]![2];
+    const next = e < edges.length ? edges[e]![0] : to, rank = open.findIndex(count => count > 0);
+    const phase = rank < 0 ? 'closed' : PHASE_ORDER[rank]!, last = out[out.length - 1];
     if (last?.phase === phase) last.end = next;
     else out.push({ phase, start: t, end: next });
     t = next;
@@ -166,8 +167,8 @@ export function calendarMarketPhase(source: SessionPhaseSource): MarketPhaseFn {
       from = t - DAY; to = t + 7 * DAY; hint = 0;
       try { spans = source.phaseSpans(from, to); } catch { spans = []; }
     }
-    if (spans[hint] && t < spans[hint].start) hint = 0;
-    while (hint < spans.length && t >= spans[hint].end) hint++;
+    if (spans[hint] && t < spans[hint]!.start) hint = 0;
+    while (hint < spans.length && t >= spans[hint]!.end) hint++;
     const phase = spans[hint]?.phase;
     return phase === 'pre' || phase === 'regular' || phase === 'post' ? phase : null;
   };

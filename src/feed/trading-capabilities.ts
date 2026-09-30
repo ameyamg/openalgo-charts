@@ -33,7 +33,7 @@ export type TradingCapabilityResult = { supported: true } | { supported: false; 
 const OPERATION_WORDS: Record<TradingOperation, string> = { place: 'placing orders', modify: 'modifying orders', cancel: 'cancelling orders' };
 const TYPE_WORDS: Record<OrderType, string> = { MARKET: 'Market orders', LIMIT: 'Limit orders', SL: 'Stop-loss orders', 'SL-M': 'Stop-loss market orders' };
 const MODE_WORDS = { live: 'Live trading', analyzer: 'Analyzer mode' } as const;
-const capital = (words: string): string => words[0].toUpperCase() + words.slice(1);
+const capital = (words: string): string => words[0]!.toUpperCase() + words.slice(1); // only ever handed a word
 
 /** Shared by host controls and the write boundary. Never grants broker authority. */
 export function checkTradingCapability(

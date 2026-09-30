@@ -6,6 +6,7 @@
  * deterministic (no Date/rAF) so it is fully unit-testable.
  */
 import type { Bar, UTCSeconds } from '../model/bar';
+import type { LooseOptional } from '../helpers/types';
 
 export type VolumeMode = 'ltq-sum' | 'day-delta';
 export type LateTickPolicy = 'foldIntoBar' | 'dropOlderThanPrevBar';
@@ -117,13 +118,14 @@ export class CandleBuilder {
     if (current === null || authoritative.time !== current.time) return null;
     const volume = current.volume === undefined && authoritative.volume === undefined
       ? undefined : Math.max(current.volume ?? 0, authoritative.volume ?? 0);
-    const merged: Bar = {
+    // Bar stays exact for hosts; an undefined volume here is a bar without one.
+    const merged = {
       ...current,
       open: this._provisional ? authoritative.open : current.open,
       high: Math.max(current.high, authoritative.high),
       low: Math.min(current.low, authoritative.low),
       volume,
-    };
+    } satisfies LooseOptional<Bar> as Bar;
     // In day-delta mode the volume is recomputed from the cumulative on every
     // tick, so the baseline moves with it or the next tick would shrink it back.
     if (this._opts.volumeMode === 'day-delta' && this._hasCum && volume !== undefined) {

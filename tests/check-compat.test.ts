@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { comparePackages, deprecations, KINDS } from '../scripts/check-compat.mjs';
 
-// Same root derivation as strict-tiers.test.ts: the suite carries no Node typings.
+// Same root derivation as line-caps.test.ts: the suite carries no Node typings.
 const ROOT = decodeURIComponent(new URL('..', import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
 const FIXTURE = `${ROOT}scripts/fixtures/compat/`;
 const RETIRED = [{ names: ['retiredHelper'], removedIn: '3.0.0' }];

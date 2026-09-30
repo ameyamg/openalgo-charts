@@ -22,7 +22,7 @@ type Caption = Extract<IndicatorDrawing, { kind: 'label' | 'box' }>;
 /** A drawn label or box the pointer can rest on, in media px. */
 interface HitRect {
   id: string;
-  tooltip?: string;
+  tooltip?: string | undefined;
   x: number;
   y: number;
   w: number;
@@ -42,21 +42,23 @@ type ScreenPoint = [number, number];
 type CubicSegment = [number, number, number, number, number, number];
 
 function smoothPath(xs: number[], ys: number[], closed: boolean): { points: ScreenPoint[]; segments: CubicSegment[] } | null {
+  // xs and ys hold one entry per point, and every index into `points` below is
+  // taken inside its length or wrapped modulo it.
   const points: ScreenPoint[] = [];
   for (let i = 0; i < xs.length; i++) {
     const previous = points[points.length - 1];
-    if (!previous || previous[0] !== xs[i] || previous[1] !== ys[i]) points.push([xs[i], ys[i]]);
+    if (!previous || previous[0] !== xs[i] || previous[1] !== ys[i]) points.push([xs[i]!, ys[i]!]);
   }
-  if (closed && points.length > 1 && points[0][0] === points[points.length - 1][0]
-    && points[0][1] === points[points.length - 1][1]) points.pop();
+  if (closed && points.length > 1 && points[0]![0] === points[points.length - 1]![0]
+    && points[0]![1] === points[points.length - 1]![1]) points.pop();
   if (points.length < 2) return null;
   const segments: CubicSegment[] = [];
   if (points.length > 2) {
     const n = points.length;
     for (let i = 0; i < (closed ? n : n - 1); i++) {
-      const a = points[i], b = points[(i + 1) % n];
-      const before = points[closed ? (i + n - 1) % n : Math.max(0, i - 1)];
-      const after = points[closed ? (i + 2) % n : Math.min(n - 1, i + 2)];
+      const a = points[i]!, b = points[(i + 1) % n]!;
+      const before = points[closed ? (i + n - 1) % n : Math.max(0, i - 1)]!;
+      const after = points[closed ? (i + 2) % n : Math.min(n - 1, i + 2)]!;
       // Cubic controls take one third of the half-chord tangent. Repeated open
       // endpoints avoid inventing an extra anchor; closed paths wrap the seam.
       const segment: CubicSegment = [
@@ -116,7 +118,7 @@ function drawPlate(
   ctx.fill();
   ctx.fillStyle = textColor ?? contrastText(bg);
   const tx = style?.textAlign === 'center' ? bx + w / 2 : style?.textAlign === 'right' ? bx + w - padX : bx + padX;
-  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], tx, by + padY + lh * (i + 0.5));
+  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i]!, tx, by + padY + lh * (i + 0.5));
   if (clip) ctx.restore();
   return { x: bx, y: by, w, h };
 }
@@ -221,10 +223,11 @@ export class IndicatorDrawings implements IPrimitive {
         const ys = new Array<number>(pts.length);
         let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
         let valid = true;
+        // Every loop here stays inside the points, and xs and ys are sized to them.
         for (let i = 0; i < pts.length; i++) {
-          if (!Number.isFinite(pts[i].time) || !Number.isFinite(pts[i].price)) { valid = false; break; }
-          const px = x(pts[i]);
-          const py = y(pts[i]);
+          if (!Number.isFinite(pts[i]!.time) || !Number.isFinite(pts[i]!.price)) { valid = false; break; }
+          const px = x(pts[i]!);
+          const py = y(pts[i]!);
           if (!Number.isFinite(px) || !Number.isFinite(py)) { valid = false; break; }
           xs[i] = px; ys[i] = py;
           if (px < x0) x0 = px;
@@ -238,9 +241,9 @@ export class IndicatorDrawings implements IPrimitive {
         if (smooth && path === null) continue;
         if (path) {
           for (const segment of path.segments) {
-            for (let i = 0; i < segment.length; i += 2) {
-              x0 = Math.min(x0, segment[i]); x1 = Math.max(x1, segment[i]);
-              y0 = Math.min(y0, segment[i + 1]); y1 = Math.max(y1, segment[i + 1]);
+            for (let i = 0; i < segment.length; i += 2) { // a segment is three x, y pairs
+              x0 = Math.min(x0, segment[i]!); x1 = Math.max(x1, segment[i]!);
+              y0 = Math.min(y0, segment[i + 1]!); y1 = Math.max(y1, segment[i + 1]!);
             }
           }
         }
@@ -253,13 +256,13 @@ export class IndicatorDrawings implements IPrimitive {
           ctx.beginPath(); ctx.rect(0, 0, w, h); ctx.clip();
         }
         ctx.beginPath();
-        ctx.moveTo(xs[0], ys[0]);
+        ctx.moveTo(xs[0]!, ys[0]!);
         if (path && path.segments.length > 0) {
           for (const segment of path.segments) ctx.bezierCurveTo(...segment);
         } else if (path) {
-          ctx.lineTo(path.points[1][0], path.points[1][1]);
+          ctx.lineTo(path.points[1]![0], path.points[1]![1]); // a path has two points at least
         } else {
-          for (let i = 1; i < pts.length; i++) ctx.lineTo(xs[i], ys[i]);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(xs[i]!, ys[i]!);
         }
         if (item.closed === true) ctx.closePath();
         if (item.fillColor !== undefined) {
@@ -384,7 +387,7 @@ export class IndicatorDrawings implements IPrimitive {
     // Later items paint over earlier ones, so the last rect under the pointer
     // is the one the user sees.
     for (let i = this._hits.length - 1; i >= 0; i--) {
-      const r = this._hits[i];
+      const r = this._hits[i]!;
       if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
         return { externalId: r.id, zOrder: 'normal', distance: 0, cursor: r.tooltip === undefined ? 'pointer' : 'default' };
       }

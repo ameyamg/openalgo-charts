@@ -11,6 +11,7 @@ import { drawCandles, DEFAULT_CANDLE_STYLE, type CandleStyle } from '../render/c
 import { drawBars, drawColumns } from '../render/bars';
 import { drawLine, drawArea, drawBaseline, drawHlcArea } from '../render/line';
 import { drawHistogram, type HistogramStyle } from '../render/histogram';
+import type { LooseOptional } from '../helpers/types';
 
 export type SeriesType =
   | 'candlestick'
@@ -101,9 +102,10 @@ function candleStyle(s: SeriesStyle, theme: ChartTheme, extra: Partial<CandleSty
     borderVisible: s.borderVisible ?? DEFAULT_CANDLE_STYLE.borderVisible,
     bodyVisible: s.bodyVisible ?? true,
     wickVisible: s.wickVisible ?? DEFAULT_CANDLE_STYLE.wickVisible,
+    // Unset stays unset: the renderer reads only `=== true`.
     colorByPreviousClose: s.colorByPreviousClose,
     ...extra,
-  };
+  } satisfies LooseOptional<CandleStyle> as CandleStyle;
 }
 
 const hiLo = (bar: Bar): { min: number; max: number } => ({ min: bar.low, max: bar.high });
