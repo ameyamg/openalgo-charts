@@ -191,7 +191,7 @@ export class ChartObjects {
     this._options = options;
     if (chart.isDestroyed) { this._destroyed = true; return; }
     for (const event of ['objects:change', 'indicatorRemoved', 'paneRemoved', 'paneMoved',
-      'paneAdded', 'data:context', 'indicator:data-status', 'drawing:change', 'drawing:select']) {
+      'paneAdded', 'data:context', 'indicator:data-status', 'drawing:change', 'drawing:select'] as const) {
       this._off.push(chart.on(event, () => this.refresh()));
     }
     let hasData = chart.dataLayer.length > 0;

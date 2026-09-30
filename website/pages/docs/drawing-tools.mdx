@@ -367,6 +367,13 @@ fire alongside them for a host that tracks a multi-selection, and `drawing:hover
 [study input anchor](/docs/indicators#a-time-and-a-price-that-belong-together) is a step
 of the same undo history and emits `drawing:change` with empty `ids`, so a host's Undo
 button refreshes on the event it already listens to.
+
+The two families are two granularities of one model, and both stay: `draw:add`,
+`draw:update` and `draw:remove` fire once per drawing and carry it, while `drawing:change`
+fires once per mutation with the ids; `draw:select` names the primary selection and
+`drawing:select` the whole of it. Importing the tier adds all of these names to
+`ChartEventMap`, so a listener's payload is typed (`DrawingEvent`, `DrawingIdsEvent` and
+the rest, exported from `openalgo-charts/draw`). See [Events](/docs/events#typed-payloads).
 (`{ id }`) when the unselected drawing under the pointer changes. A `drawing:change` that
 closes a recorded undo step carries that step's number as `step`; a host's forced edit, a
 linked chart's commit, a restore and a move along the branches carry none

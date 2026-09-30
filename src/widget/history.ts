@@ -51,7 +51,7 @@
 import { applyChartSettings, DEFAULT_PRICE_SCALE_OPTIONS, filterLinkAppearance, readChartSettings } from 'openalgo-charts';
 import type {
   Chart, ChartSettingsValues, IndicatorApi, IndicatorPolicy, IndicatorSettings, IPrimitive, Pane, PriceAxisSide, PriceScaleId, PriceScaleMode,
-  PriceScaleOptions, SeriesApi,
+  PriceScaleOptions, SeriesApi, LinkAppearanceValues, ChartEventMap,
 } from 'openalgo-charts';
 import { DRAWING_STATE_VERSION, type Drawing, type DrawingChangeEvent, type DrawingController, type DrawingsDocument } from 'openalgo-charts/draw';
 import { chartTypeOf, isSource, renameSources, same, setChartTypeOf } from './history-values';
@@ -244,7 +244,7 @@ interface Entry {
 // too. What else it announces (a chart setting, auto-fit) is read only in a
 // transaction's full capture, and an observed one finds nothing there.
 const OBSERVED = ['objects:change', 'indicatorRemoved', 'paneAdded', 'paneRemoved', 'paneMoved', 'paneCollapsed',
-  'paneResized', 'priceAxisMoved', 'priceAxisPlacementChanged', 'layout:change'];
+  'paneResized', 'priceAxisMoved', 'priceAxisPlacementChanged', 'layout:change'] as const;
 
 /**
  * What the chart lets a step do, read against the chart the stretch starts
@@ -686,7 +686,7 @@ export class ChartHistory {
   private _listen(): void {
     const chart = this._chart;
     if (chart.isDestroyed) return;
-    const on = (event: string, fn: (payload: unknown) => void): void => { this._off.push(chart.on(event, fn)); };
+    const on = <K extends keyof ChartEventMap>(event: K, fn: (payload: ChartEventMap[K]) => void): void => { this._off.push(chart.on(event, fn)); };
     for (const event of OBSERVED) on(event, () => this._observe(event));
     // A press that grabs something starts an action of its own: whatever came
     // before it in the same turn is a step already, not part of the drag's.
@@ -1247,7 +1247,7 @@ export class ChartHistory {
   }
 
   /** The chart settings a linked chart follows, as the chart reads now. */
-  private _look(): Record<string, unknown> {
+  private _look(): LinkAppearanceValues {
     return this._chart.isDestroyed ? {} : filterLinkAppearance(readChartSettings(this._chart));
   }
 

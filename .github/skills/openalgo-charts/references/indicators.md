@@ -1243,7 +1243,7 @@ retry on a later eligible live revision, not a repeated read. Independent
 successful alerts keep their checkpoints. Subscriber exceptions occur after
 native dispatch is committed and do not retry that delivery.
 
-For a signal arriving from outside the calculation entirely (a subscription your `attach(ctx)` opened), use `ctx.emit(event, payload)` on the attach context instead. That is the imperative half, it puts anything on the same bus, and it has no watermark.
+For a signal arriving from outside the calculation entirely (a subscription your `attach(ctx)` opened), use `ctx.emit(event, payload)` on the attach context instead. That is the imperative half, it puts anything on the same bus, and it has no watermark. A host listening for your name gets it typed once the name is merged into `ChartEventMap` (`declare module 'openalgo-charts' { interface ChartEventMap { 'mystudy:signal': MyPayload } }`); without that, `chart.on` takes it through the deprecated string overload.
 
 ## Pane shading and price-bar colours (1.8.1)
 

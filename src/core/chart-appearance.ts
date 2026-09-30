@@ -63,7 +63,7 @@ export interface AppearanceHost {
   setTimeFormatter: Chart['setTimeFormatter'];
   setTimezone: Chart['setTimezone'];
   invalidate: Chart['invalidate'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
 }
 
 export class ChartAppearance {
@@ -92,7 +92,7 @@ export class ChartAppearance {
       this._host.addPrimitive(this._host._branding, { anchor: 'chart-bottom' });
     }
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Light));
-    this._host.emit('branding:changed', this._host.brandingOptions());
+    this._host._emit('branding:changed', this._host.brandingOptions());
   }
 
   public setWatermarkOptions(options: boolean | ChartWatermarkOptions): void {

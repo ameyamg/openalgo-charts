@@ -96,7 +96,7 @@ export function mountDataStatus(
   // An indicator can publish its first status inside its constructor, before
   // Chart has added the instance to its public collection.
   const changed = (): void => { render(); queueMicrotask(render); };
-  const cleanups = ['indicator:data-status', 'indicatorRemoved'].map(event => ctx.chart.on(event, changed));
+  const cleanups = (['indicator:data-status', 'indicatorRemoved'] as const).map(event => ctx.chart.on(event, changed));
   render();
   return {
     el,

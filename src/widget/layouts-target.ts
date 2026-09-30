@@ -45,7 +45,7 @@ const WIDGET_EVENTS = ['symbol', 'interval', 'variant', 'theme', 'layout'] as co
 const CHART_EVENTS = [
   'alert:created', 'alert:updated', 'alert:removed', 'alert:triggered', 'alert:expired',
   'replay:start', 'replay:stop', 'replay:end',
-];
+] as const;
 
 /** Alert fields the chart advances as bars close; see the module notes. */
 const ALERT_BOOKKEEPING = ['lastClosedTime', 'lastTouchedTime', 'lastTriggeredAt', 'lastTriggeredTime'] as const;

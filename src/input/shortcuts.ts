@@ -6,6 +6,7 @@
  * localStorage persistence. Pure and testable - `resolve(event)` and
  * `handleKey(combo)` map input to a command id without needing a real DOM.
  */
+import { dispatch } from '../helpers/dispatch';
 
 export type ShortcutScope = 'hover' | 'global';
 export type ShortcutPreset = 'default' | 'alt';
@@ -271,7 +272,7 @@ export class ShortcutManager {
 
   public emitTrigger(command: string, combo = ''): void {
     const e: ShortcutTriggerEvent = { command, combo, isCustom: this._custom.has(command) };
-    for (const l of this._listeners) l(e);
+    dispatch(this._listeners, e);
   }
 
   public on(cb: (e: ShortcutTriggerEvent) => void): () => void {

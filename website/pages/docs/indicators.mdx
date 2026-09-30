@@ -1849,7 +1849,9 @@ to compare same-time ticks, confirmation, resets and replay.
 
 For a signal that arrives from outside the calculation entirely (a subscription your
 `attach` opened), use the imperative half instead: `ctx.emit(event, payload)` on
-[the attach context](#the-attach-context) puts anything you like on the same bus.
+[the attach context](#the-attach-context) puts anything you like on the same bus. Declare
+the name in `ChartEventMap` so a host's `chart.on` is typed for it; see
+[typed payloads](/docs/events#typed-payloads).
 
 ### Calculation errors (2.4.0)
 

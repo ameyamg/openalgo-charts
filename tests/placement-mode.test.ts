@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Chart } from '../src/core/chart';
+import { Chart, type ChartClickEvent } from '../src/core/chart';
 import { fakeDocument, pointer, type FakeElement } from './helpers/fake-dom';
 
 /**
@@ -38,8 +38,8 @@ function mount() {
     { time: 1120, open: 12, high: 14, low: 10, close: 13 },
   ]);
 
-  const clicks: Record<string, unknown>[] = [];
-  chart.on('click', (p) => clicks.push(p as Record<string, unknown>));
+  const clicks: ChartClickEvent[] = [];
+  chart.on('click', (p) => clicks.push(p));
 
   const el = container as unknown as FakeElement;
   const drag = (from: [number, number], to: [number, number]) => {
@@ -70,7 +70,7 @@ describe('placement mode', () => {
     expect(clicks[1].viaDrag).toBe(true);
     // Distinct anchors — identical ones collapse the shape to nothing.
     expect(clicks[0].point).toEqual({ x: 120, y: 100 });
-    expect((clicks[1].point as { x: number }).x).toBe(400);
+    expect(clicks[1].point.x).toBe(400);
     expect(clicks[0].price).not.toBe(clicks[1].price);
     expect(clicks[0].time).not.toBe(clicks[1].time);
   });

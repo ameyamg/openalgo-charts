@@ -43,6 +43,8 @@ that names no removal release, so none can stay open-ended.
 | `chart.movePriceAxis(pane, from, to)` | 3.0.0 | `chart.setPriceAxisPlacement(pane, scaleId, side)`, which keeps the scale's id |
 | `movable` in `chart.priceAxisState(...)` | 3.0.0 | Nothing: placement needs no such check |
 | The `priceAxisMoved` event, which only `movePriceAxis` emits | 3.0.0 | `priceAxisPlacementChanged`, which `setPriceAxisPlacement` emits |
+| `chart.on`, `once` and `off` given a name outside `ChartEventMap` | 3.0.0 | A `ChartEventMap` name, which types the listener; declare an event of your own by merging it into `ChartEventMap` |
+| `chart.emit(name, payload)` | 3.0.0 | `chart.setDataContext` for an instrument, `group.setSymbol`, `setInterval` and `setChartType` for a link group, and your own emitter for events of your own |
 
 ```ts
 // before
@@ -58,10 +60,14 @@ controller, the IST helpers such as `formatIstTime` and `utcSecondsToIstParts`
 `levels` hook written against the settings-only form, the `topic` field on an
 inbound market-data frame, and the readers that upgrade older saved documents.
 
-Not decided yet: the `draw:*` events the draw tier emits beside `drawing:select`
-and `drawing:change`, where `draw:select` carries one id rather than the whole
-selection. They are settled together with a typed event map in a later release;
-until then both sets are emitted and supported.
+Kept on purpose as well: the `draw:*` events beside `drawing:select` and
+`drawing:change`. They are two granularities of one model, not an old and a new form:
+`draw:*` fires once per drawing and carries it, `drawing:*` once per change with the ids.
+The event names that predate the `namespace:action` rule keep their spelling too.
+
+Not decided yet: what the tiers' structural hosts (`DrawingChartHost`, `AlertChartHost`
+and the rest) require in place of `emit` once `chart.emit` goes in 3.0.0. They keep it
+through 2.x.
 
 ## Documents, hosts and releases
 

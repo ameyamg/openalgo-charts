@@ -25,7 +25,7 @@ import type {
 } from './types';
 import type {
   DrawingChartHost, DrawingControllerOptions, DrawingGestureOptions, DrawingPlacementOptions,
-  DrawingChangeKind, DrawingChangeEvent, DrawingEditOptions,
+  DrawingChangeKind, DrawingChangeEvent, DrawingEditOptions, DrawingEvent, DrawingToolEvent,
 } from './controller-types';
 import { DrawingLayer, placeViewportAnchors, sortByZIndex, type DrawingPointerKind } from './layer';
 import { getDrawingTool, hasDrawingTool, viewportDrawingTool } from './tools';
@@ -357,7 +357,7 @@ export class DrawingController {
 
   /** `draw:tool`, carrying the space only when it is not the default, as the payload always has. */
   private _emitTool(): void {
-    this._chart.emit('draw:tool', this._toolSpace === 'viewport' ? { tool: this._tool, space: 'viewport' } : { tool: this._tool });
+    this._chart.emit('draw:tool', (this._toolSpace === 'viewport' ? { tool: this._tool, space: 'viewport' } : { tool: this._tool }) satisfies DrawingToolEvent);
   }
 
   /**
@@ -749,7 +749,7 @@ export class DrawingController {
       }
     }
     this._sync();
-    this._chart.emit('drawing:change', { ids: [id], kind: drawing === null ? 'remove' : index < 0 ? 'add' : 'update', linked: true });
+    this._chart.emit('drawing:change', { ids: [id], kind: drawing === null ? 'remove' : index < 0 ? 'add' : 'update', linked: true } satisfies DrawingChangeEvent);
   }
 
   /** A linked drag paints over its committed drawing without changing saved state. */
@@ -770,7 +770,7 @@ export class DrawingController {
     if (next.every((d, i) => d === this._drawings[i])) return;
     this._drawings = next;
     this._sync();
-    this._chart.emit('drawing:change', { ids: ordered.map(d => d.id), kind: 'reorder', linked: true });
+    this._chart.emit('drawing:change', { ids: ordered.map(d => d.id), kind: 'reorder', linked: true } satisfies DrawingChangeEvent);
   }
 
   /** Supported numeric levels, independent of whether the queried time lies on the shape. */
@@ -1518,8 +1518,8 @@ export class DrawingController {
     for (const id of ids) {
       const drawing = this.get(id);
       const old = previous.get(id);
-      if (drawing !== undefined) this._chart.emit(old === undefined ? 'draw:add' : 'draw:update', { drawing, history: true });
-      else if (old !== undefined) this._chart.emit('draw:remove', { drawing: old, history: true });
+      if (drawing !== undefined) this._chart.emit(old === undefined ? 'draw:add' : 'draw:update', { drawing, history: true } satisfies DrawingEvent);
+      else if (old !== undefined) this._chart.emit('draw:remove', { drawing: old, history: true } satisfies DrawingEvent);
     }
     this._emitChange(ids, kind);
     return true;

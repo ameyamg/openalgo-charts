@@ -552,7 +552,7 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
     }
   }
 
-  for (const event of ['draw:tool', 'draw:select', 'drawing:select', 'drawing:change', 'draw:add', 'draw:remove', 'draw:update']) {
+  for (const event of ['draw:tool', 'draw:select', 'drawing:select', 'drawing:change', 'draw:add', 'draw:remove', 'draw:update'] as const) {
     offs.push(ctx.chart.on(event, refresh));
   }
   if (ctx.history !== undefined) offs.push(ctx.history.subscribe(refresh));

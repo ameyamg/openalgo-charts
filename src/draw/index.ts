@@ -201,6 +201,14 @@ export type {
 // controller to something other than a Chart can state what it must provide.
 export type { DrawingChartHost } from './controller';
 
+// The tier's payloads on the chart bus. './events' adds the `draw:*` and
+// `drawing:*` names to the base's `ChartEventMap` by declaration merging, so
+// importing the tier types `chart.on('draw:add', ...)`. It holds types alone.
+export type {
+  DrawingEvent, DrawingListEvent, DrawingIdsEvent, DrawingIdEvent, DrawingToolEvent, DrawingModeEvent,
+} from './controller-types';
+import './events';
+
 // Where a study's price input is picked and anchored. The controller draws a
 // paired input's anchor there; a host's own settings form asks the same
 // question before it offers a pick.

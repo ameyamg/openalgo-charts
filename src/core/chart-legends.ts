@@ -64,7 +64,7 @@ export interface LegendsHost {
   paneCollapsed: Chart['paneCollapsed'];
   maximizePane: Chart['maximizePane'];
   invalidate: Chart['invalidate'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
 }
 
 export class ChartLegends {
@@ -224,13 +224,13 @@ export class ChartLegends {
       // host's. Everything it needs to *generate* one is on the descriptor
       // (`inputs`), and applying it is `indicator.setSettings(patch)`.
       case 'settings':
-        if (indicator.policy().configurable !== false) this._host.emit('indicatorSettings', { instanceId, indicatorId: indicator.indicatorId, paneIndex });
+        if (indicator.policy().configurable !== false) this._host._emit('indicatorSettings', { instanceId, indicatorId: indicator.indicatorId, paneIndex });
         return true;
       // Same payload as the gear, and for the same reason: the engine holds no
       // code and no DOM, so it says which indicator was asked about and the
       // host decides what to show.
       case 'source':
-        this._host.emit('indicatorSource', { instanceId, indicatorId: indicator.indicatorId, paneIndex });
+        this._host._emit('indicatorSource', { instanceId, indicatorId: indicator.indicatorId, paneIndex });
         return true;
       default: return false;
     }

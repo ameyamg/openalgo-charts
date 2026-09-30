@@ -79,7 +79,7 @@ chart.trading.on('trading:position_close', async ({ positionId }) => {
 });
 ```
 
-The payload argument is typed `unknown` on both buses; destructure with a local cast or an `as` in TypeScript.
+On `chart.on` the payload is typed by the name (`TradingOrderModifyEvent`, `TradingBracketModifyEvent`, or `ChartEventMap['trading:order_cancel']` and so on), so destructure it directly. `chart.trading.on` still types it `unknown`; cast there, or subscribe on the chart.
 
 ## `TradingPosition`
 

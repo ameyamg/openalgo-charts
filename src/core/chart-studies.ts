@@ -106,7 +106,8 @@ export interface StudiesHost {
   removePane: Chart['removePane'];
   invalidate: Chart['invalidate'];
   on: Chart['on'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
+  _bus: Chart['_bus'];
 }
 
 export class ChartStudies {
@@ -179,7 +180,7 @@ export class ChartStudies {
     this._host._legendStack._restackLegends();
     this._host._indicatorReservedIds.add(instance.id);
     this._queueIndicatorDependents(instance.id, true);
-    this._host.emit('objects:change', {});
+    this._host._emit('objects:change', {});
     return instance;
   }
 
@@ -248,7 +249,7 @@ export class ChartStudies {
     this._host._primitives._reanchorSource();
     this._host._legendStack._syncLegendPanes();
     // Alert visuals resolve the instance's new pane before we decide whether its old pane is empty.
-    this._host.emit('objects:change', {});
+    this._host._emit('objects:change', {});
     // Retain a pane holding drawings or host visuals even after its last plot moves.
     const source = this._host._panes[previous];
     if (source !== this._host._primaryPane && source.series().length === 0 && source.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive))) this._host.removePane(previous);
@@ -256,7 +257,7 @@ export class ChartStudies {
     this._host._layout._recomputeAxisColumns();
     this._host._layout._relayout();
     this._host.invalidate(m => m.invalidateGlobal(InvalidationLevel.Full));
-    this._host.emit('objects:change', {});
+    this._host._emit('objects:change', {});
     return true;
   }
 
@@ -272,7 +273,7 @@ export class ChartStudies {
     [this._host._indicators[index], this._host._indicators[target]] = [this._host._indicators[target], this._host._indicators[index]];
     this._reorderIndicatorResources();
     this._host.invalidate(m => m.invalidateGlobal(InvalidationLevel.Full));
-    this._host.emit('objects:change', {});
+    this._host._emit('objects:change', {});
     return true;
   }
 
@@ -313,7 +314,7 @@ export class ChartStudies {
     this._host._indicatorReservedIds.add(instanceId);
     this._host._indicatorRefreshes.delete(instanceId);
     this._queueIndicatorDependents(instanceId, true);
-    this._host.emit('indicatorRemoved', { instanceId, indicatorId, paneIndex });
+    this._host._emit('indicatorRemoved', { instanceId, indicatorId, paneIndex });
     // An indicator pane that just emptied has nothing left to show. This lived
     // in the legend's close handler, so only the on-chart × pruned the pane: a
     // host removing the same indicator from its own UI left it behind, and
@@ -378,7 +379,7 @@ export class ChartStudies {
         (series?.priceScale() ?? this._host._panes[paneIndex]?.priceScale)?.format(value),
       policyChanged: (): void => {
         this._host._legendStack._restackLegends();
-        this._host.emit('objects:change', {});
+        this._host._emit('objects:change', {});
       },
       addIndicatorLegend: (o): PaneLegend => {
         // A row starts with its own show / settings / delete. Stacking it gives
@@ -494,7 +495,7 @@ export class ChartStudies {
         replay: replayWindow(this._chart),
       }),
       subscribeRequestChanges: listener => {
-        const subscriptions = ['data:context', 'data:range', 'data:requests'].map(event => this._host.on(event, listener));
+        const subscriptions = (['data:context', 'data:range', 'data:requests'] as const).map(event => this._host.on(event, listener));
         subscriptions.push(observeReplayWindow(this._chart, listener));
         return () => { for (const unsubscribe of subscriptions) unsubscribe(); };
       },
@@ -520,7 +521,8 @@ export class ChartStudies {
       setBarColors: (colors, owner): void => this._setBarColors(colors, owner),
       // Indicator alerts land on the same bus as every other chart event, so a
       // host wires one listener rather than a second subscription mechanism.
-      emit: (event, payload): void => this._host.emit(event, payload),
+      // A descriptor may name any event (`ctx.emit`), so this skips the map's check.
+      emit: (event, payload): void => this._host._bus.emit(event, payload),
       setPaneRange: (paneIndex, range): void => {
         const pane = this._host._panes[paneIndex];
         if (pane === undefined) return;
@@ -556,7 +558,7 @@ export class ChartStudies {
       this._host._scaleMutationDepth--;
       this._host.invalidate(mask => mask.invalidateGlobal(InvalidationLevel.Full));
     }
-    this._host.emit('objects:change', {});
+    this._host._emit('objects:change', {});
     return true;
   }
 
@@ -670,7 +672,7 @@ export class ChartStudies {
    * value, which is the frame and the public `indicators()` accessor.
    */
   public _invalidateIndicators(): void {
-    this._host.emit('data:range', {});
+    this._host._emit('data:range', {});
     if (this._host._indicators.length === 0) return;
     this._host._indicatorsDirty = true;
     this._host._loop.requestFrame();

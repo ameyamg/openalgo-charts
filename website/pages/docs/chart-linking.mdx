@@ -244,9 +244,10 @@ group.add(chartA, {
 
 group.add(chartB, { symbol: 'RELIANCE', onSymbol: loadInto(chartB) });
 
-// Tell the group the user changed the instrument on chartA. Either form works:
+// Tell the group the user changed the instrument on chartA.
 group.setSymbol(chartA, 'INFY');
-chartA.emit('symbol', 'INFY');                   // or { symbol: 'INFY' }
+// The host event still works in 2.x; chart.emit is deprecated and goes in 3.0.0.
+// chartA.emit('symbol', 'INFY');                // or { symbol: 'INFY' }
 ```
 
 - A member **without `onSymbol`** broadcasts its own changes but never receives anyone
@@ -281,7 +282,7 @@ group.add(chartA, {
 group.add(chartB, { interval: '5m', onInterval: applyIntervalToSecondChart });
 
 group.setInterval(chartA, '1h');
-// Equivalent host event: chartA.emit('interval', '1h').
+// Equivalent host event, deprecated with chart.emit (removed in 3.0.0): chartA.emit('interval', '1h').
 group.interval(); // the group's current token, or null
 ```
 
@@ -314,7 +315,7 @@ for (const { chart, series } of cells) {
 }
 
 chartA.setSeriesType(seriesA, 'bar');
-group.setChartType(chartA, 'bar');   // or chartA.emit('chartType', 'bar')
+group.setChartType(chartA, 'bar');   // or chartA.emit('chartType', 'bar'), deprecated with chart.emit
 group.chartType();                   // 'bar', kept even while the channel is off
 ```
 

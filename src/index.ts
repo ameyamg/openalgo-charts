@@ -11,6 +11,13 @@ export type {
   PointerModifiers, PointerKind, PointerSample, PointerInfo,
   ChartClickEvent, ChartEventClick, ChartDragEvent, ChartDragEndEvent, RendererFallbackEvent,
 } from './core/chart';
+// The bus's inventory: every name `chart.on` takes and its payload. A tier or a
+// host adds names by declaration merging into `ChartEventMap`.
+export type {
+  ChartEventMap, EmptyEvent, ChartHoverEvent, ChartDragCancelEvent, ChartViewportEvent, ChartResizeEvent, LazyLoadEvent,
+  PaneEvent, PaneMovedEvent, PaneMaximizedEvent, PaneCollapsedEvent, PriceAxisPlacementChangedEvent,
+  IndicatorInstanceEvent, IndicatorDataStatusEvent, TimezoneChangedEvent, PickStartEvent, PickEndEvent,
+} from './core/chart-events';
 // vector export: the serialising context behind `chart.exportSVG`, exported so
 // a host can run its own primitives or a bare renderer into one.
 export { SvgContext, SvgLinearGradient } from './render/svg-export';
@@ -368,6 +375,8 @@ export type {
   TradingOrder,
   TradingTrade,
   TradingSyncPayload,
+  TradingOrderModifyEvent,
+  TradingBracketModifyEvent,
   TradingColors,
   TradingSettings,
   PositionSide,
@@ -412,7 +421,7 @@ export type {
   BarCondition, BarConditionContext,
   AlertDrawingValue, AlertDrawingLevel, AlertDrawingInfo, AlertDrawingProvider,
   DrawingAlertSource,
-  AlertsDocument,
+  AlertsDocument, AlertChangeEvent, AlertRemovedEvent, AlertErrorEvent, AlertsChangedEvent, AlertsRestoredEvent,
 } from './alerts/types';
 export { parseAlertsDocument } from './alerts/document';
 export { registerBarCondition, unregisterBarCondition, getBarCondition, registeredBarConditions } from './alerts/bar-conditions';

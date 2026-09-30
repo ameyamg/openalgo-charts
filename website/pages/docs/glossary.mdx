@@ -599,9 +599,10 @@ See also: [Keyboard Shortcuts](/docs/keyboard-shortcuts)
 
 A unified pub/sub interface on the `Chart` object. `chart.on(event, cb)` subscribes to
 named events; `chart.off(event, cb)` unsubscribes; `chart.once(event, cb)`
-auto-unsubscribes after one firing; `chart.emit(event, payload)` dispatches. Core events:
-`ready`, `crosshair:move`, `click`, `pan`, `zoom`, `resize`, `lazy-load`. The trading
-layer routes its own `trading:*` events through the same bus.
+auto-unsubscribes after one firing. `ChartEventMap` declares every name with its payload,
+so the listener is typed by the name; `chart.emit(event, payload)` is deprecated (removed in
+3.0.0). Core events include `ready`, `crosshair:move`, `click`, `pan`, `zoom`, `resize` and
+`lazy-load`. The trading layer routes its own `trading:*` events through the same bus.
 
 See also: [Events](/docs/events)
 

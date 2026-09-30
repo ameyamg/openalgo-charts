@@ -63,7 +63,7 @@ export interface PrimitivesHost {
   removePrimitive: Chart['removePrimitive'];
   invalidate: Chart['invalidate'];
   on: Chart['on'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
 }
 
 export class ChartPrimitives {
@@ -98,7 +98,7 @@ export class ChartPrimitives {
         const click = payload as ChartClickEvent;
         if (!click.id || click.viaDrag || click.paneIndex !== this._host._eventPane) return;
         const details = this._host._eventMarkers?.detailsForHit(click.id);
-        if (details) this._host.emit('event:click', { ...details,
+        if (details) this._host._emit('event:click', { ...details,
           point: { x: click.point.x, y: click.point.y + (this._host._paneLayout()[click.paneIndex]?.top ?? 0) },
           paneIndex: click.paneIndex } satisfies ChartEventClick);
       });
@@ -110,7 +110,7 @@ export class ChartPrimitives {
     if (this._host._eventMarkers === null && this._host._events.length === 0) return;
     const visible = this._eventVisible as Record<string, boolean | undefined>;
     this._ensureEventMarkers().setEvents(this._host._events.filter((e) => visible[e.type] !== false));
-    this._host.emit('events:change', undefined);
+    this._host._emit('events:change', undefined);
   }
 
   public seriesStack(paneIndex: number): string[] {
@@ -145,7 +145,7 @@ export class ChartPrimitives {
     if (at >= 0) this._host._sourceAbove = at === 0 ? null : next[at - 1].slice('indicator:'.length);
     this._host._studies._reorderIndicatorResources();
     this._host.invalidate(m => m.invalidateGlobal(InvalidationLevel.Full));
-    this._host.emit('objects:change', {});
+    this._host._emit('objects:change', {});
     return true;
   }
 

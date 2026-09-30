@@ -369,11 +369,11 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
   const reposition = (): void => { if (!destroyed && !bar.hidden) place(); };
 
   const offs: Array<() => void> = [];
-  for (const event of ['draw:select', 'drawing:select', 'draw:update', 'draw:remove', 'draw:add', 'draw:restore', 'drawing:change', 'draw:tool']) {
+  for (const event of ['draw:select', 'drawing:select', 'draw:update', 'draw:remove', 'draw:add', 'draw:restore', 'drawing:change', 'draw:tool'] as const) {
     offs.push(chart.on(event, refresh));
   }
   // A tick that moves the autoscale, and a scale setter, move the drawing as surely as a pan.
-  for (const event of ['pan', 'zoom', 'resize', 'paneResized', 'paneMoved', 'paneCollapsed', 'paneMaximized', 'paneAdded', 'paneRemoved', 'data:update', 'layout:change']) {
+  for (const event of ['pan', 'zoom', 'resize', 'paneResized', 'paneMoved', 'paneCollapsed', 'paneMaximized', 'paneAdded', 'paneRemoved', 'data:update', 'layout:change'] as const) {
     offs.push(chart.on(event, reposition));
   }
   // Dragging or wheeling a price axis rescales it with no chart event at all.
@@ -391,7 +391,7 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
   }
   // A drag moves the drawing under the bar; it comes back where the drawing lands.
   offs.push(chart.on('draw:preview', () => { if (!dragging) { dragging = true; hide(); } }));
-  for (const event of ['draw:preview-clear', 'drag:end', 'drag:cancel']) {
+  for (const event of ['draw:preview-clear', 'drag:end', 'drag:cancel'] as const) {
     offs.push(chart.on(event, () => { if (dragging) { dragging = false; refresh(); } }));
   }
   offs.push(ctx.bus.on('theme', refresh));

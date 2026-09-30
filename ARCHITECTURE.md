@@ -78,6 +78,7 @@ forwarding object is built.
 | File | Holds |
 |---|---|
 | `chart-types.ts` | The public option, event and payload types, re-exported from `chart.ts` |
+| `chart-events.ts` | `ChartEventMap`, every name on the bus with its payload (the draw tier merges its own in from `src/draw/events.ts`), and the listener registry behind `on`, `once`, `off` and the engine's typed `_emit` |
 | `chart-series.ts` | Series creation, series type changes, price formats and the data writes behind a series handle |
 | `chart-studies.ts` | The study host: adding, moving and removing studies, the `IndicatorHost` they run against, bar colours and the recompute queue |
 | `chart-panes.ts` | The pane stack and its layout: creating, removing, moving, maximizing and folding panes, axis columns and divider hits |

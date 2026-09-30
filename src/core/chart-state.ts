@@ -106,7 +106,7 @@ export interface PersistenceHost {
   setTimezone: Chart['setTimezone'];
   _validPriceScaleId: Chart['_validPriceScaleId'];
   _reserveAlertStudyIds: Chart['_reserveAlertStudyIds'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
   _withinLayoutChange: Chart['_withinLayoutChange'];
   _mutateTimeScale: Chart['_mutateTimeScale'];
   invalidate: Chart['invalidate'];
@@ -342,7 +342,7 @@ export class ChartPersistence {
     const generation = ++this._restoreGeneration;
     const previousPriceOnly = this._host._priceOnlyAutoScale;
     const previousLegendCollapsed = this._host._indicatorLegendCollapsed;
-    this._host.emit('state:restore:start', {});
+    this._host._emit('state:restore:start', {});
     const before = this._host._timeScale.visibleRange();
     try {
       // A start listener can synchronously install a newer layout on this chart.
@@ -355,7 +355,7 @@ export class ChartPersistence {
         this._host._mutateTimeScale(() => this._restoreState(s, alerts, reservedIds, panes, primaryPane ?? 0, studies, preservedFormats)));
       if (report.applied && generation === this._restoreGeneration && (previousPriceOnly !== this._host._priceOnlyAutoScale
         || previousLegendCollapsed !== this._host._indicatorLegendCollapsed)) {
-        this._host.emit('objects:change', {});
+        this._host._emit('objects:change', {});
       }
       return report;
     }
@@ -364,7 +364,7 @@ export class ChartPersistence {
       // Restore listeners can replace the viewport after its last internal paint.
       this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
       this._host._emitViewportIfMoved(before);
-      this._host.emit('state:restore:end', {});
+      this._host._emit('state:restore:end', {});
     }
   }
 
@@ -503,7 +503,7 @@ export class ChartPersistence {
     // case that needs it: a host that swaps studies keeps its drawings, and a
     // study pane above the price pane empties, which moves the price pane up.
     this._host._drawingState = s.drawings;
-    this._host.emit('drawings:restore', s.drawings ?? []);
+    this._host._emit('drawings:restore', s.drawings ?? []);
 
     // Unavailable studies leave empty panes, but a live study can have no plot
     // series. Keep its pane and host primitives; chart furniture alone does not
@@ -525,8 +525,8 @@ export class ChartPersistence {
       if (this._host._panes.includes(pane)) pane.setRatioLock(id, true, reference.barSpacing, reference.height);
     }
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
-    this._host.emit('alerts:restore', alerts ?? { version: 1, alerts: [] });
-    this._host.emit('objects:change', {});
+    this._host._emit('alerts:restore', alerts ?? { version: 1, alerts: [] });
+    this._host._emit('objects:change', {});
     return { applied: true, series: s.series ?? [], indicators };
   }
 }
