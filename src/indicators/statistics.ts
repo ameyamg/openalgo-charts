@@ -21,18 +21,25 @@ export interface RollingVarianceOptions extends NumericalWindowOptions {
   sample?: boolean;
 }
 
-function missingPolicy(options: NumericalWindowOptions): 'propagate' | 'skip' {
-  const missing = options.missing ?? 'propagate';
+/**
+ * The one check for a window period and a `NumericalWindowOptions`, shared by
+ * these statistics and the option path of ./calc, so one mistake gets one
+ * error whichever family it reaches: RangeError for a period that is not a
+ * positive safe integer (`undefined` when the helper takes none), TypeError
+ * for options that are not an object or name another policy.
+ */
+export function windowPolicy(period: number | undefined, options: NumericalWindowOptions): 'propagate' | 'skip' {
+  if (period !== undefined && (!Number.isSafeInteger(period) || period <= 0)) {
+    throw new RangeError('Missing-value window period must be a positive safe integer');
+  }
+  if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+    throw new TypeError('Missing-value options must be an object');
+  }
+  const missing = options.missing === undefined ? 'propagate' : options.missing;
   if (missing !== 'propagate' && missing !== 'skip') {
-    throw new TypeError('Numerical missing policy must be propagate or skip');
+    throw new TypeError('Missing-value policy must be propagate or skip');
   }
   return missing;
-}
-
-function validatePeriod(period: number): void {
-  if (!Number.isSafeInteger(period) || period <= 0) {
-    throw new RangeError('Numerical period must be a positive safe integer');
-  }
 }
 
 /** `evaluate` is handed exactly `period` finite values, so it may read any index below `period`. */
@@ -42,8 +49,7 @@ function rolling(
   options: NumericalWindowOptions,
   evaluate: (window: readonly number[]) => number,
 ): number[] {
-  validatePeriod(period);
-  const missing = missingPolicy(options);
+  const missing = windowPolicy(period, options);
   const out = new Array<number>(values.length).fill(NaN);
   const window: number[] = [];
   for (let i = 0; i < values.length; i++) {
@@ -276,7 +282,7 @@ export function centerOfGravity(
 function runningExtreme(
   values: readonly number[], options: NumericalWindowOptions, high: boolean,
 ): number[] {
-  const missing = missingPolicy(options);
+  const missing = windowPolicy(undefined, options);
   const out = new Array<number>(values.length).fill(NaN);
   let best = NaN;
   let poisoned = false;
@@ -319,7 +325,7 @@ function crossing(
   direction: 'above' | 'below' | 'either',
 ): boolean[] {
   if (a.length !== b.length) throw new RangeError('Numerical crossing arrays must have equal lengths');
-  const missing = missingPolicy(options);
+  const missing = windowPolicy(undefined, options);
   const out = new Array<boolean>(a.length).fill(false);
   let previousA = NaN;
   let previousB = NaN;
@@ -380,8 +386,7 @@ export function crosses(
 function beyondHistory(
   values: readonly number[], period: number, options: NumericalWindowOptions, above: boolean,
 ): boolean[] {
-  validatePeriod(period);
-  const missing = missingPolicy(options);
+  const missing = windowPolicy(period, options);
   const out = new Array<boolean>(values.length).fill(false);
   const history: number[] = [];
   for (let i = 0; i < values.length; i++) {

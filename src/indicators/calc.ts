@@ -21,7 +21,7 @@
  * use O(n + sum of evaluated window lengths) time and O(n) working storage.
  */
 
-import type { NumericalWindowOptions } from './statistics';
+import { windowPolicy, type NumericalWindowOptions } from './statistics';
 import { windowMean, windowSum } from './window-mean';
 
 // An index read marked `!` sits in a loop whose bounds keep it inside the
@@ -32,20 +32,6 @@ import { windowMean, windowSum } from './window-mean';
 
 interface Observation { value: number; index: number }
 
-function checkedPolicy(period: number, options: NumericalWindowOptions): 'skip' | 'propagate' {
-  if (!Number.isSafeInteger(period) || period <= 0) {
-    throw new RangeError('Missing-value period must be a positive safe integer');
-  }
-  if (options === null || typeof options !== 'object' || Array.isArray(options)) {
-    throw new TypeError('Missing-value options must be an object');
-  }
-  const policy = options.missing === undefined ? 'propagate' : options.missing;
-  if (policy !== 'skip' && policy !== 'propagate') {
-    throw new TypeError('Missing-value policy must be skip or propagate');
-  }
-  return policy;
-}
-
 /**
  * Opt-in windows require positive safe-integer periods and finite observations.
  * Keeping original indices lets skipped gaps age an extreme's bar offset.
@@ -55,7 +41,7 @@ function observationWindows(
   evaluate: (window: readonly Observation[], index: number) => number,
   previousOnly = false,
 ): number[] {
-  const policy = checkedPolicy(period, options);
+  const policy = windowPolicy(period, options);
   const out = new Array<number>(values.length).fill(NaN);
   const window: Observation[] = [];
   let missing = 0;
@@ -94,7 +80,7 @@ function varyingWindows(
   previousOnly = false,
 ): number[] {
   checkedParameterSeries(periods, values.length, 1, 'Window length');
-  const policy = checkedPolicy(1, options === undefined ? {} : options);
+  const policy = windowPolicy(1, options === undefined ? {} : options);
   const out = new Array<number>(values.length).fill(NaN);
   const history: Observation[] = [];
   let consecutive = 0;
@@ -229,7 +215,7 @@ function observationExtreme(window: readonly Observation[], high: boolean): Obse
 function observedSmoothing(
   values: readonly number[], period: number, options: NumericalWindowOptions, currentWeight: number,
 ): number[] {
-  const policy = checkedPolicy(period, options);
+  const policy = windowPolicy(period, options);
   const out = new Array<number>(values.length).fill(NaN);
   let count = 0;
   const seed: number[] = [];
