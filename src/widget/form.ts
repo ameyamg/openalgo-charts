@@ -405,6 +405,12 @@ export interface DialogFrameSpec extends WidgetTranslationOptions {
   className?: string;
   /** The close affordance top right. Escape and the scrim are the overlay stack's. */
   onClose(): void;
+  /**
+   * The close as the word rather than the icon, for a compact list panel whose
+   * rows act through words too and which carries no glyph (the objects panel,
+   * the alerts list). Default: the icon every form dialog shows.
+   */
+  closeText?: boolean;
 }
 
 let frameSeq = 0;
@@ -426,7 +432,7 @@ export function dialogFrame(doc: Document, spec: DialogFrameSpec): DialogFrame {
   const head = el(doc, 'div', 'oac-dialog__head');
   const title = el(doc, 'span', 'oac-dialog__title', spec.title);
   title.id = titleId;
-  const closeButton = button(doc, { label: widgetText(spec, 'Close'), icon: 'close', iconOnly: true, onClick: () => spec.onClose() });
+  const closeButton = button(doc, { label: widgetText(spec, 'Close'), ...(spec.closeText === true ? {} : { icon: 'close', iconOnly: true }), onClick: () => spec.onClose() });
   head.appendChild(title);
   head.appendChild(closeButton);
 

@@ -522,9 +522,7 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
 /** Open the object tree in the existing popup interface. */
 export function mountObjectsPanel(ctx: WidgetContext, anchor?: HTMLElement, opts: ObjectsPanelOptions = {}): PanelHandle {
   const content = createObjectsPanelContent(ctx, opts);
-  const frame = dialogFrame(ctx.document, { translate: ctx.translate, title: widgetText(ctx, 'Objects'), className: 'oac-objects', onClose: () => handle.close() });
-  frame.closeButton.textContent = widgetText(ctx, 'Close');
-  frame.closeButton.classList.remove('oac-btn--icon');
+  const frame = dialogFrame(ctx.document, { translate: ctx.translate, title: widgetText(ctx, 'Objects'), className: 'oac-objects', onClose: () => handle.close(), closeText: true });
   frame.body.appendChild(content.element);
   frame.actions.appendChild(button(ctx.document, { label: widgetText(ctx, 'Done'), variant: 'primary', onClick: () => handle.close() }));
   const handle = openPanel(ctx, frame.el, {

@@ -125,8 +125,6 @@ export function mountAlertEditor(ctx: WidgetContext, anchor?: HTMLElement, opts:
     opts.onClose?.();
   }
   const frame = dialogFrame(ctx.document, { translate: ctx.translate, title: existing ? widgetText(ctx, 'Edit alert') : widgetText(ctx, 'Create alert'), className: 'oac-alert-editor', onClose: close });
-  frame.closeButton.textContent = widgetText(ctx, 'Close');
-  frame.closeButton.classList.remove('oac-btn--icon');
   const context = el(ctx.document, 'p', 'oac-alert-context', [initialContext?.symbol, initialContext?.exchange, initialContext?.interval].filter(Boolean).join(' / '));
   const fields = el(ctx.document, 'div');
   const availability = el(ctx.document, 'p', 'oac-alert-help');
@@ -238,9 +236,7 @@ export function mountAlertsPanel(ctx: WidgetContext, anchor?: HTMLElement, opts:
     panel?.close();
     opts.onClose?.();
   }
-  const frame = dialogFrame(ctx.document, { translate: ctx.translate, title: widgetText(ctx, 'Alerts'), className: 'oac-alerts', onClose: close });
-  frame.closeButton.textContent = widgetText(ctx, 'Close');
-  frame.closeButton.classList.remove('oac-btn--icon');
+  const frame = dialogFrame(ctx.document, { translate: ctx.translate, title: widgetText(ctx, 'Alerts'), className: 'oac-alerts', onClose: close, closeText: true });
   const list = el(ctx.document, 'div', 'oac-alerts__list');
   list.setAttribute('role', 'list');
   list.setAttribute('aria-label', widgetText(ctx, 'Chart alerts'));
