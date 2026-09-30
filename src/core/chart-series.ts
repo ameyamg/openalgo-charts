@@ -193,12 +193,13 @@ export class ChartSeries {
     preservedFormats?: PreservedScaleFormats): SeriesApi {
     // Built first, so an invalid transform throws before the series exists.
     const transform = options.transform === undefined ? undefined : this._newTransform(options.transform);
+    // The pane next, so an index that names no slot throws before the series exists too.
+    const paneIndex = options.paneIndex ?? this._host._primaryIndex();
+    this._host._layout._ensurePane(paneIndex);
     const dataId = this._host._dataLayer.createSeries();
     if (transform !== undefined) this._transforms.set(dataId, transform);
     const provenance = new SeriesProvenance(dataId);
     this._host._seriesProvenance.set(dataId, provenance);
-    const paneIndex = options.paneIndex ?? this._host._primaryIndex();
-    this._host._layout._ensurePane(paneIndex);
     const record = createSeriesRecord(dataId, type, options.style, options.priceScaleId ?? 'right');
     // A pane starts quoting the instrument the moment the host plots a price on
     // it, which is how a second symbol on a pane of its own keeps a tick-sized

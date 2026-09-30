@@ -368,7 +368,8 @@ export interface AddSeriesOptions {
   /**
    * Target pane index. Omitted means the primary price pane wherever it sits
    * (slot 0 until something moves it, see `Chart.primaryPaneIndex`). Higher
-   * panes are created on demand.
+   * panes are created on demand. An index that is not a whole number of 0 or
+   * more throws a `RangeError` and adds nothing.
    */
   paneIndex?: number;
   /** Style overrides merged onto the chart type's defaults. */

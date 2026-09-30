@@ -112,6 +112,9 @@ export class ChartPanes {
   }
 
   public _ensurePane(index: number): void {
+    // A slot is a whole number of 0 or more. Any other index would add panes up
+    // to it and still find none there, so it is refused before anything moves.
+    if (!Number.isSafeInteger(index) || index < 0) throw new RangeError('Invalid pane index');
     const added: number[] = [];
     while (this._host._panes.length <= index) {
       // price pane (0) takes full weight; lower panes (volume/indicators) are shorter
