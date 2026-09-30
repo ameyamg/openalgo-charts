@@ -397,7 +397,9 @@ chart.on('click', ({ id }) => {
 });
 ```
 
-`chart.subscribeClick(cb)` is the typed equivalent (`cb(externalId)`).
+`chart.subscribeClick(cb)` is the hit-only form (`cb(externalId)`). Like `on`, it takes any
+number of subscribers and returns the function that unsubscribes one; before 2.6.0 each call
+replaced the previous callback.
 
 ### hover
 

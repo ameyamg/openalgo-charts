@@ -71,6 +71,7 @@ import { type LogoWatermark, type LogoWatermarkOptions } from '../primitives/wat
 import type { TickSchedule } from '../feed/tick-schedule';
 import { DEFAULT_TIMEZONE, isValidTimezone } from '../feed/time';
 import { roundToTick } from '../helpers/math';
+import { dispatch, subscribe } from '../helpers/dispatch';
 // Last, so the runtime modules imported above still load in the order they did.
 import { ChartPersistence, type PersistenceHost, type PreservedScaleFormats } from './chart-state';
 import { ChartStudies, type StudiesHost } from './chart-studies';
@@ -635,8 +636,9 @@ export class Chart {
 
   /**
    * Whether the trade layer exists yet. Reading `chart.trading` creates one,
-   * and creating one claims the click/drag subscriptions, so anything that
-   * merely inspects the chart (a settings dialog) asks this first.
+   * which subscribes to clicks and drags and so makes every `ns-resize` price
+   * line draggable, so anything that merely inspects the chart (a settings
+   * dialog) asks this first.
    */
   public hasTrading(): boolean {
     return this._trading !== null;
@@ -1052,9 +1054,16 @@ export class Chart {
     return typeof value === 'string' && (value === 'right' || value === 'left' || value === '' || value.startsWith('overlay:'));
   }
 
-  /** Subscribe to clicks on hit-testable primitives (markers, events, lines). */
-  public subscribeClick(cb: (externalId: string) => void): void {
-    this._input._clickCb = cb;
+  /**
+   * Subscribe to clicks on hit-testable primitives (markers, events, lines),
+   * with the primitive's `externalId`. Every subscriber hears every click, the
+   * trade layer's among them; the function returned unsubscribes this one.
+   *
+   * Before 2.6.0 each call replaced the previous callback, so a host that
+   * subscribes again on the same chart calls the returned function first.
+   */
+  public subscribeClick(cb: (externalId: string) => void): () => void {
+    return subscribe(this._input._clickCbs, cb);
   }
 
   /**
@@ -1062,9 +1071,11 @@ export class Chart {
    * fires with the hovered bar of the primary price series on every move, and
    * with all-null fields when the pointer leaves the plot. A linked crosshair
    * also updates the readout, with source 'linked' and no pointer coordinates.
+   * Several may subscribe, as with `subscribeClick`; the function returned
+   * unsubscribes this one.
    */
-  public subscribeCrosshairMove(cb: (e: CrosshairMoveEvent) => void): void {
-    this._input._crosshairCb = cb;
+  public subscribeCrosshairMove(cb: (e: CrosshairMoveEvent) => void): () => void {
+    return subscribe(this._input._crosshairCbs, cb);
   }
 
   /**
@@ -1082,7 +1093,7 @@ export class Chart {
       : this._dataLayer.visibleBars(this._firstDataId.value, index, index)[0]?.bar ?? null;
     const readout: CrosshairMoveEvent = { source: 'linked', time, index,
       bar, price: null, point: null, paneIndex: null };
-    this._input._crosshairCb?.(readout);
+    dispatch(this._input._crosshairCbs, readout);
     this._emit('crosshair:readout', readout);
   }
 
@@ -1098,13 +1109,19 @@ export class Chart {
    * extrapolated past the right edge — so a two-axis drag (a trendline endpoint,
    * a projection) has a usable time even where the gapless axis has no bar.
    * Price-only consumers can simply ignore it.
+   *
+   * Several may subscribe, as with `subscribeClick`; the function returned
+   * unsubscribes this pair. While any subscription holds, a price line whose
+   * cursor is `ns-resize` drags instead of panning the chart.
    */
   public subscribeDrag(
     onDrag: (externalId: string, price: number, time: number) => void,
     onDragEnd?: (externalId: string, price: number, time: number) => void,
-  ): void {
-    this._input._dragCb = onDrag;
-    this._input._dragEndCb = onDragEnd ?? null;
+  ): () => void {
+    return subscribe(this._input._dragCbs, (d) => {
+      if (!d.end) onDrag(d.id, d.price, d.time);
+      else onDragEnd?.(d.id, d.price, d.time);
+    });
   }
 
   /**

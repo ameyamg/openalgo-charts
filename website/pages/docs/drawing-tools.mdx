@@ -383,8 +383,8 @@ linked chart's commit, a restore and a move along the branches carry none
 
 <Callout type="info">
 The controller listens on the **event bus** (`click`, `crosshair:move`, `drag`, `drag:end`),
-not the single-slot `subscribeClick` / `subscribeDrag` callbacks, so your app keeps using
-those for its own order lines without the two fighting over one channel.
+not `subscribeClick` / `subscribeDrag`, so a drawing never arms an order line's drag. Your app
+can use either for its own order lines.
 </Callout>
 
 ## Interaction

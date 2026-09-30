@@ -133,7 +133,7 @@ Notes:
 - **`draw:*` and `drawing:*` are two granularities, both kept.** `draw:add`, `draw:update` and `draw:remove` fire once per drawing and carry it; `drawing:change` fires once per mutation, after them, with the ids. `draw:select` names the primary selection, `drawing:select` the whole of it, and both fire together. Render one drawing's properties from the first family; refresh a list or an undo control from the second.
 - **`trading:*` names carry the prefix on both buses.** `chart.on('trading:order_modify', cb)` and `chart.trading.on('trading:order_modify', cb)` are equivalent; `chart.trading.on('order_modify', cb)` never fires.
 - **`crosshair:move`, `pan`, `zoom` and `drag` fire at pointer rate.** Do only light work in the handler; defer anything heavy to rAF or a debounce.
-- Typed alternatives exist for three of these and coexist with the bus: `chart.subscribeCrosshairMove(cb)` (`CrosshairMoveEvent`), `chart.subscribeClick(cb)` (hit-only, `cb(externalId)`), `chart.subscribeDrag(onDrag, onDragEnd)` (`(id, price, time)`).
+- Typed alternatives exist for three of these and coexist with the bus: `chart.subscribeCrosshairMove(cb)` (`CrosshairMoveEvent`), `chart.subscribeClick(cb)` (hit-only, `cb(externalId)`), `chart.subscribeDrag(onDrag, onDragEnd)` (`(id, price, time)`). Since 2.6.0 each takes several subscribers and returns an unsubscribe; before, a second call replaced the first.
 - Keyboard shortcuts are **not** on this bus, subscribe via `chart.shortcuts?.on(cb)`. See [interactions](interactions.md).
 
 ## Object inventory lifecycle

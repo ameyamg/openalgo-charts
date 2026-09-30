@@ -35,7 +35,7 @@ chart.trading.syncState({ positions, orders, trades });
 - Its `PriceLine`s and marker primitive always land on **the price pane** (`new TradingController(this)` routes through `chart.addPrimitive`, whose pane defaults to the price pane). That is pane 0, unless the chart was built with `movablePrimaryPane` and the price pane was moved below its studies; the lines follow it there.
 - `chart.tradeHost(paneIndex)` is the *other* host shape (`addPrimitive`/`removePrimitive` only) and is for the trade tier's `TradeController`, not for `chart.trading`.
 
-**Touching `chart.trading` steals `chart.subscribeClick` and `chart.subscribeDrag`.** Both are single-slot setters (`this._clickCb = cb`), and the `TradingController` constructor calls them. Register your own callbacks and the trading layer goes deaf; access `chart.trading` afterwards and your callbacks are dropped. Use `chart.on('click' | 'drag' | 'drag:end' | 'hover', cb)` (the multi-listener bus) for app-side handling alongside `chart.trading`.
+**`chart.trading` subscribes to `chart.subscribeClick` and `chart.subscribeDrag` beside the host.** Since 2.6.0 both take several subscribers and return an unsubscribe, so a host callback registered before or after `chart.trading` leaves cancel and modify working, and the host hears the same ids. Before 2.6.0 they were single slots and the last registration silenced the other. Building the layer also makes every `ns-resize` price line on the chart draggable, which is why inspecting code asks `chart.hasTrading()` first.
 
 ## Worked example: full round trip
 

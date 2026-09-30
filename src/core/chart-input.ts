@@ -35,6 +35,7 @@ import { ShortcutManager } from '../input/shortcuts';
 import { pinchState, pinchDelta, type PinchState } from '../input/touch';
 import type { PrimitiveHit } from '../primitives/primitive';
 import { INDICATOR_LEGEND_TOGGLE } from '../primitives/indicator-legend-toggle';
+import { dispatch } from '../helpers/dispatch';
 import type { LogoWatermark } from '../primitives/watermark';
 import type { TimeNavigatorOptions } from '../primitives/time-navigator';
 
@@ -52,6 +53,13 @@ const KINETIC_VELOCITY_HALFLIFE_MS = 50;
  */
 type PointerLike = Partial<Pick<PointerEvent,
   'shiftKey' | 'altKey' | 'ctrlKey' | 'metaKey' | 'pointerType' | 'pressure' | 'buttons'>>;
+
+/**
+ * One call to a `subscribeDrag` subscription: a move, or the release. One
+ * entry per subscription, rather than one per callback, so unsubscribing is
+ * one removal.
+ */
+export interface SubscribedDrag { end: boolean; id: string; price: number; time: number }
 
 /** The three pointer facts every gesture payload carries. */
 function pointerInfo(e: PointerLike): PointerInfo {
@@ -180,8 +188,9 @@ export class ChartInput {
   /** Native double clicks can join a consumed count press to a newly empty plot row. */
   private _lastPressOnIndicatorToggle = false;
   private _previousPressOnIndicatorToggle = false;
-  public _clickCb: ((externalId: string) => void) | null = null;
-  public _crosshairCb: ((e: CrosshairMoveEvent) => void) | null = null;
+  /** `subscribeClick` and `subscribeCrosshairMove` subscribers: the host's and the trade layer's alike. */
+  public readonly _clickCbs = new Set<(externalId: string) => void>();
+  public readonly _crosshairCbs = new Set<(e: CrosshairMoveEvent) => void>();
   public _readoutTime: number | null = null;
   public _pointerMoved = false;
   /** While true, pointer gestures place anchors instead of panning. */
@@ -201,8 +210,8 @@ export class ChartInput {
   public _overlayFrozen = false; // native context menu open: keep the save-image snapshot
   /** The navigator's buttons as configured, before the navigation policy withholds any. */
   public _timeNavButtons: TimeNavigatorOptions['buttons'] = [];
-  public _dragCb: ((externalId: string, price: number, time: number) => void) | null = null;
-  public _dragEndCb: ((externalId: string, price: number, time: number) => void) | null = null;
+  /** `subscribeDrag` subscribers. While there is one, an `ns-resize` price line drags. */
+  public readonly _dragCbs = new Set<(drag: SubscribedDrag) => void>();
   // axis-drag rescale (price axis = vertical, time axis = horizontal)
   public _axisDrag: 'price' | 'time' | 'empty' | null = null;
   /** The scale a price-axis drag is rescaling: either side's, whichever strip was grabbed. */
@@ -569,7 +578,7 @@ export class ChartInput {
     // `draggable` primitives (drawing anchors/shapes) arm regardless of a host
     // callback: they publish through the `drag` event bus. The `ns-resize`
     // form is the original price-line path and still needs `subscribeDrag`.
-    if (hit && (hit.draggable === true || (hit.cursor === 'ns-resize' && this._dragCb !== null))) {
+    if (hit && (hit.draggable === true || (hit.cursor === 'ns-resize' && this._dragCbs.size > 0))) {
       this._dragId = hit.externalId;
       this._dragPriceScale = hit.priceScale ?? null;
       this._dragCancelOnEscape = hit.cancelOnEscape === true;
@@ -696,7 +705,7 @@ export class ChartInput {
       if (Math.abs(p.x - this._downX) > 3 || Math.abs(localY - this._downLocalY) > 3) this._dragMoved = true;
       const price = this._dragPriceScale?.yToPrice(localY) ?? this._host._panes[this._downPane]!.yToPrice(localY); // the press's pane
       const time = this._host._xToTime(p.x);
-      this._dragCb?.(this._dragId, price, time);
+      dispatch(this._dragCbs, { end: false, id: this._dragId, price, time });
       const drag: ChartDragEvent = {
         id: this._dragId, price, time, paneIndex: this._downPane,
         // The grab origin, so a consumer's delta starts at the press instead of
@@ -813,7 +822,7 @@ export class ChartInput {
       const localY = p.y - (this._host._paneLayout()[this._downPane]?.top ?? 0);
       const price = this._dragPriceScale?.yToPrice(localY) ?? this._host._panes[this._downPane]!.yToPrice(localY); // the press's pane
       const time = this._host._xToTime(p.x);
-      this._dragEndCb?.(this._dragId, price, time);
+      dispatch(this._dragCbs, { end: true, id: this._dragId, price, time });
       const end: ChartDragEndEvent = {
         id: this._dragId, price, time, paneIndex: this._downPane,
         point: { x: p.x, y: localY },
@@ -826,7 +835,7 @@ export class ChartInput {
       // click by any reasonable reading.
       if (!this._dragMoved) {
         const id = this._dragId;
-        this._clickCb?.(id);
+        dispatch(this._clickCbs, id);
         const click: ChartClickEvent = {
           id, price, time,
           paneIndex: this._downPane,
@@ -885,7 +894,7 @@ export class ChartInput {
       // Pane-legend buttons are the chart's own chrome: handle them here so
       // the host doesn't have to re-implement remove/hide/move/maximize.
       if (hit && this._host._handleLegendAction(hit.externalId)) return;
-      if (hit) this._clickCb?.(hit.externalId);
+      if (hit) dispatch(this._clickCbs, hit.externalId);
       // The event carries position and fires on empty plot too, which is what a
       // tool that *places* something (a drawing, an alert) needs; `id` is null
       // there. `subscribeClick` stays hit-only for back-compat.
@@ -994,7 +1003,7 @@ export class ChartInput {
       // Pointer left the plot: legends fall back to the latest bar.
       for (const indicator of this._host._indicators) indicator.updateLegendValues();
       const cleared = { time: null, index: null, price: null, bar: null, point: null, paneIndex: null };
-      this._crosshairCb?.(cleared);
+      dispatch(this._crosshairCbs, cleared);
       this._host._emit('crosshair:readout', cleared);
       this._host._emit('crosshair:move', cleared);
     }
@@ -1289,7 +1298,7 @@ export class ChartInput {
     for (const indicator of this._host._indicators) indicator.updateLegendValues(index);
     // global crosshair → repaint every pane's overlay (cheap; base untouched)
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Cursor));
-    if (this._crosshairCb !== null || this._host._bus.has('crosshair:move') || this._host._bus.has('crosshair:readout')) {
+    if (this._crosshairCbs.size > 0 || this._host._bus.has('crosshair:move') || this._host._bus.has('crosshair:readout')) {
       const time = this._host._dataLayer.indexToTime(index);
       const move: CrosshairMoveEvent = {
         time: time ?? null,
@@ -1307,7 +1316,7 @@ export class ChartInput {
         // set of the hover payload is what hosts and tests pin.
         ...(this._pointers.size > 0 ? { samples: this._dragSamples(source) } : {}),
       };
-      this._crosshairCb?.(move);
+      dispatch(this._crosshairCbs, move);
       this._host._emit('crosshair:readout', move);
       this._host._emit('crosshair:move', move);
     }

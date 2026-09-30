@@ -112,8 +112,8 @@ export interface TradingHost {
   /**
    * Optional: the instrument's tick schedule when the layer is built. The
    * layer is built on first use, often after the instrument was applied, and
-   * applying one cannot build the layer early: its click and drag
-   * subscriptions would replace the host's own.
+   * applying one does not build it early: building it subscribes to drags,
+   * which makes every `ns-resize` price line on the chart draggable.
    */
   tickSchedule?(): TickSchedule | null;
 }

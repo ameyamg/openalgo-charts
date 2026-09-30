@@ -20,3 +20,9 @@ export function dispatch<T>(listeners: Iterable<(payload: T) => void> | undefine
     }
   }
 }
+
+/** Add `listener` to `listeners`; the function returned takes that one out again. */
+export function subscribe<T>(listeners: Set<T>, listener: T): () => void {
+  listeners.add(listener);
+  return (): void => { listeners.delete(listener); };
+}

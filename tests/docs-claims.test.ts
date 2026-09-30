@@ -172,7 +172,7 @@ describe('what the overlay canvas carries', () => {
     })));
     // The trading layer's own drag path: the chart hands it the callbacks.
     let onDrag: ((id: string, price: number, time: number) => void) | undefined;
-    vi.spyOn(chart, 'subscribeDrag').mockImplementation((drag) => { onDrag = drag; });
+    vi.spyOn(chart, 'subscribeDrag').mockImplementation((drag) => { onDrag = drag; return () => {}; });
     chart.trading.setOrders([{ id: 'o1', type: 'limit', side: 'buy', price: 120, size: 1 }]);
     expect(onDrag).toBeDefined();
     const moved = vi.spyOn(PriceLine.prototype, 'setPrice');
