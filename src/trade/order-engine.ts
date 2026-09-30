@@ -36,6 +36,7 @@ import type { OrderRole, OrderSide, OrderStatus, OrderType } from './types';
 import { checkTradingCapability, type TradingCapabilities, type TradingCapabilityRequest, type TradingCapabilityResult, type TradingCapabilitySource } from 'openalgo-charts';
 import { checkTradingFeature, ORDER_DURATIONS, type OrderDuration, type TradingFeature, type TradingFeatureRequest, type TradingFeatureSource } from './features';
 import type { AccountStateSource } from './account';
+import { errorText, nonEmpty } from './text';
 
 export interface PlaceRequest {
   symbol: string;
@@ -339,8 +340,6 @@ const LEG_KEY = { stop: 'stopLoss', target: 'takeProfit' } as const;
 /** A position command whose outcome is not yet known holds the position against another. */
 const UNRESOLVED: ReadonlySet<IntentState> = new Set<IntentState>(['SUBMITTING', 'SUBMITTED', 'AMBIGUOUS', 'RECONCILING']);
 
-const nonEmpty = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
-const errorText = (err: unknown): string => String((err as Error)?.message ?? err);
 const PREVIEW_NUMBERS = ['estimatedPrice', 'estimatedValue', 'marginRequired', 'marginAvailableAfter', 'fees', 'asOf'] as const;
 
 /** A readable preview, or the name of the first field that is not. */
@@ -660,6 +659,21 @@ export class OrderEngine {
     return preflight ? message : `${message} (may have reached the broker; check the order book before retrying)`;
   }
 
+  /**
+   * A modify or cancel threw. It may still have been applied: only a
+   * pre-flight failure rules that out, and leaves the order where it was last
+   * known to be, unless it has moved on from `pending` since.
+   */
+  private _writeFailed(o: Tracked, err: unknown, pending: IntentState, previousState: ClientOrderState, previousIntent: IntentState): void {
+    if (isPreflightFailure(err)) {
+      if (o.intent === pending) { o.state = previousState; o.intent = previousIntent; }
+      this._onValidationError?.(errorText(err));
+    } else {
+      o.state = transition(o.state, 'reject');
+      o.intent = 'AMBIGUOUS';
+    }
+  }
+
   /** `ok` after a failure only when the broker's own stream already reports the write as accepted. */
   private _outcome(o: Tracked, reason?: string): PlaceResult {
     const ok = reason === undefined || (o.brokerStatus !== undefined && o.brokerStatus !== 'rejected');
@@ -681,21 +695,11 @@ export class OrderEngine {
     if (refusal !== null) return { ok: false, reason: refusal, intent: 'BLOCKED' };
     this._sentTokens.add(token);
 
-    if (!this._armed) {
-      let approved = false;
-      try {
-        approved = await (this._gate ? this._gate({ ...req }) : Promise.resolve(false));
-      } catch (err) {
-        // The gate runs before any network call, so nothing can be live.
-        this._sentTokens.delete(token);
-        throw err;
-      }
-      if (!approved) {
-        // Declining is a pre-flight outcome: the request provably never left, so
-        // the token is free and the same one may be offered again.
-        this._sentTokens.delete(token);
-        return { ok: false, reason: 'not confirmed', intent: 'BLOCKED' };
-      }
+    // The gate runs before any network call, so a gate that throws or declines
+    // frees the token (see `_confirmed`): the request provably never left.
+    const gate = this._gate;
+    if (!this._armed && !(await this._confirmed([token], gate ? () => gate({ ...req }) : undefined))) {
+      return { ok: false, reason: 'not confirmed', intent: 'BLOCKED' };
     }
 
     // Capabilities, features and the account can all change while the user
@@ -1057,16 +1061,7 @@ export class OrderEngine {
       if (patch.price !== undefined) o.req = { ...o.req, price: patch.price };
       if (patch.triggerPrice !== undefined) o.req = { ...o.req, triggerPrice: patch.triggerPrice };
     } catch (err) {
-      if (revision !== o.writeRevision) return;
-      // A failed modify may still have been applied; only a pre-flight failure
-      // rules that out and leaves the order where we last knew it to be.
-      if (isPreflightFailure(err)) {
-        if (o.intent === 'MODIFY_SUBMITTING') { o.state = previousState; o.intent = previousIntent; }
-        this._onValidationError?.(String((err as Error).message ?? err));
-      } else {
-        o.state = transition(o.state, 'reject');
-        o.intent = 'AMBIGUOUS';
-      }
+      if (revision === o.writeRevision) this._writeFailed(o, err, 'MODIFY_SUBMITTING', previousState, previousIntent);
     }
   }
 
@@ -1094,14 +1089,7 @@ export class OrderEngine {
       this._cancelOcoPeer(o);
       this._settle(o);
     } catch (err) {
-      if (revision !== o.writeRevision) return;
-      if (isPreflightFailure(err)) {
-        if (o.intent === 'CANCEL_SUBMITTING') { o.state = previousState; o.intent = previousIntent; }
-        this._onValidationError?.(String((err as Error).message ?? err));
-      } else {
-        o.state = transition(o.state, 'reject');
-        o.intent = 'AMBIGUOUS';
-      }
+      if (revision === o.writeRevision) this._writeFailed(o, err, 'CANCEL_SUBMITTING', previousState, previousIntent);
     }
   }
 
