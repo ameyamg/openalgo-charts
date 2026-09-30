@@ -109,7 +109,8 @@ function openRows(host: GridBarHost, anchor: HTMLElement, label: string, build: 
   menu.addEventListener('keydown', e => {
     const rows = Array.from(menu.querySelectorAll<HTMLElement>('.oac-menu__row'));
     const at = rows.indexOf(doc.activeElement as HTMLElement);
-    const to = e.key === 'ArrowDown' ? (at + 1) % rows.length : e.key === 'ArrowUp' ? (at - 1 + rows.length) % rows.length
+    // From no row (the menu itself), down starts at the first row and up at the last.
+    const to = e.key === 'ArrowDown' ? (at + 1) % rows.length : e.key === 'ArrowUp' ? (at < 0 ? rows.length - 1 : (at - 1 + rows.length) % rows.length)
       : e.key === 'Home' ? 0 : e.key === 'End' ? rows.length - 1 : -1;
     if (to < 0 || rows.length === 0) return;
     e.preventDefault();
