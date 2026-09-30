@@ -20,7 +20,7 @@
 // so this survives as `from 'openalgo-charts'` and stays one identity.
 import type { AlertDrawingValue, AlertDrawingInfo } from 'openalgo-charts';
 import type {
-  Drawing, DrawingInput, DrawingPatch, DrawingPoint, DrawingStyle, DrawingTool, DrawingsDocument,
+  Drawing, DrawingInput, DrawingPatch, DrawingPoint, DrawingPolicy, DrawingStyle, DrawingTool, DrawingsDocument,
   MagnetMode, ScreenPoint, DrawingGroup, DrawingSpace, DrawingStackTarget, ViewportPoint,
 } from './types';
 import type {
@@ -538,10 +538,10 @@ export class DrawingController {
     const target = index + direction;
     if (target < 0 || target >= band.length) return false;
     this._pushUndo();
-    [band[index], band[target]] = [band[target], band[index]];
+    [band[index], band[target]] = [band[target]!, band[index]!]; // the drawing is in its band; target is checked
     const members = new Set(band);
     let cursor = 0;
-    this._drawings = this._drawings.map(item => members.has(item) ? band[cursor++] : item);
+    this._drawings = this._drawings.map(item => members.has(item) ? band[cursor++]! : item); // one per member
     band.forEach((item, position) => { item.zIndex = slot === 'below' ? position - band.length : position; });
     this._sync();
     for (const item of band) this._chart.emit('draw:update', { drawing: item });
@@ -743,9 +743,9 @@ export class DrawingController {
       const was = JSON.stringify(this._drawings[index]?.policy);
       if (index < 0) this._drawings.push(copy);
       else this._drawings[index] = copy;
-      // A policy the other chart's host changed holds here too, history included.
+      // A policy the other chart's host changed holds here too, history included; a removed one is written as undefined.
       if (JSON.stringify(copy.policy) !== was) {
-        this._rebase(document => { for (const d of document.drawings) if (d.id === id) d.policy = copy.policy; });
+        this._rebase(document => { for (const d of document.drawings) if (d.id === id) (d as { policy?: DrawingPolicy | undefined }).policy = copy.policy; });
       }
     }
     this._sync();
@@ -766,7 +766,7 @@ export class DrawingController {
     const ordered = [...new Set(ids)].map(id => this.get(id)).filter((d): d is Drawing => d !== undefined);
     const selected = new Set(ordered.map(d => d.id));
     let index = 0;
-    const next = this._drawings.map(d => selected.has(d.id) ? ordered[index++] : d);
+    const next = this._drawings.map(d => selected.has(d.id) ? ordered[index++]! : d); // one per selected
     if (next.every((d, i) => d === this._drawings[i])) return;
     this._drawings = next;
     this._sync();
@@ -1075,7 +1075,7 @@ export class DrawingController {
 
   /** The primary selection: the first id picked, or null. */
   public selected(): string | null {
-    return this._selection.length === 0 ? null : this._selection[0];
+    return this._selection.length === 0 ? null : this._selection[0]!;
   }
 
   /** Every selected id, in the order they were picked. */
@@ -1304,7 +1304,7 @@ export class DrawingController {
       const paneIndex = this._clampPane(e.paneIndex);
       // A paste never lands hidden: a range leaving out this chart's interval
       // would make the paste look like it did nothing, so it is not carried.
-      return { ...e, paneIndex, ...this._offsetAnchors(e, paneIndex), ...(shown(e) ? {} : { intervals: undefined }) };
+      return { ...e, paneIndex, ...this._offsetAnchors(e, paneIndex), ...(shown(e) ? {} : { intervals: undefined }) } as DrawingInput; // `_insert` reads no range there
     });
     this._pushUndo();
     const created = prepared.map((p) => this._insert(p));
@@ -1500,7 +1500,7 @@ export class DrawingController {
     this._drawings = this._drawings.filter(d => !changed.has(d.id) || right.has(d.id))
       .map(d => changed.has(d.id) ? historyPatch(d, left.get(d.id), right.get(d.id)) as Drawing : d);
     for (let i = 0; i < after.length; i++) {
-      const drawing = after[i];
+      const drawing = after[i]!; // i is in range
       // An edit cannot resurrect somebody else's deletion. Only history which
       // actually removed an id can restore it here.
       if (!changed.has(drawing.id) || previous.has(drawing.id) || left.has(drawing.id)) continue;
@@ -1512,7 +1512,7 @@ export class DrawingController {
       .map(id => this.get(id)).filter((d): d is Drawing => d !== undefined);
     const moving = new Set(reordered.map(d => d.id));
     let position = 0;
-    this._drawings = this._drawings.map(d => moving.has(d.id) ? reordered[position++] : d);
+    this._drawings = this._drawings.map(d => moving.has(d.id) ? reordered[position++]! : d); // one per moving
     this._pruneSelection();
     this._sync();
     for (const id of ids) {
@@ -1690,7 +1690,7 @@ export class DrawingController {
   private _onHover(p: { id?: string | null }): void {
     const id = p.id ?? null;
     this._gestures.hover(id);
-    const hit = id !== null && id.startsWith('draw:') ? id.slice('draw:'.length).split('#')[0] : null;
+    const hit = id !== null && id.startsWith('draw:') ? id.slice('draw:'.length).split('#')[0]! : null; // a split has a first part
     // What cannot be selected is not a target for the keys either.
     this._setHovered(hit !== null && this._selectable(hit) ? hit : null);
   }
@@ -1750,7 +1750,7 @@ export class DrawingController {
     } else if (paneIndex !== this._pendingPane) {
       return;                       // a stroke belongs to the pane it started in
     } else {
-      const last = this._pending[this._pending.length - 1];
+      const last = this._pending[this._pending.length - 1]!; // not empty on this branch
       if (last.time === point.time && last.price === point.price) return;
     }
     this._pending.push(point);
@@ -1891,7 +1891,7 @@ export class DrawingController {
     // Shift, Ctrl or Cmd adds to the selection.
     const additive = (['shift', 'ctrl', 'meta'] as const).some(key => held(p, key));
     if (p.id !== null && p.id.startsWith('draw:')) {
-      this.select(p.id.slice('draw:'.length).split('#')[0], additive);
+      this.select(p.id.slice('draw:'.length).split('#')[0]!, additive); // a split has a first part
       return;
     }
     // A click on empty space clears, unless it is the additive gesture, which
@@ -1931,7 +1931,7 @@ export class DrawingController {
   private _lockedPoint(point: DrawingPoint, paneIndex: number): DrawingPoint | null {
     if (!this._shift || this._tool === null || this._pending.length !== 1) return null;
     if (getDrawingTool(this._tool).angleLock !== true || paneIndex !== this._pendingPane) return null;
-    return this._screen.lockAngle(this._pending[0], point, paneIndex);
+    return this._screen.lockAngle(this._pending[0]!, point, paneIndex); // exactly one, checked above
   }
 
   /**
@@ -1988,7 +1988,7 @@ export class DrawingController {
 
   private _onDrag(p: DragPayload): void {
     if (!p.id.startsWith('draw:')) return;
-    const [rawId, handleStr] = p.id.slice('draw:'.length).split('#');
+    const [rawId, handleStr] = p.id.slice('draw:'.length).split('#') as [string, ...string[]]; // a split has a first part
     const d = this.get(rawId);
     if (d === undefined || d.locked === true || pinned(d) || !this._selectable(rawId)) return;
     const handle = handleStr === undefined ? null : Number(handleStr);
@@ -2136,7 +2136,7 @@ export class DrawingController {
       // A handle lands under the pointer, held on the plot, and then the box
       // is kept inside it: a note's one handle is its corner, and the rest of
       // the note has to stay where it can be seen and grabbed again too.
-      const anchors = start.items[0].viewportPoints ?? [];
+      const anchors = start.items[0]!.viewportPoints ?? []; // a handle drag carries its one drawing
       const at = this._screen.gesturePlot(p, d.paneIndex);
       const frame = this._screen.plotFrame(d.paneIndex);
       if (handle >= 0 && handle < anchors.length && at !== null && frame !== null) {
@@ -2146,17 +2146,17 @@ export class DrawingController {
         // Where the box reaches an edge before the handle does (a label above
         // a box), the handle stops short instead of pushing the other corners
         // away from the edge it was dragged to.
-        placed[handle] = placeViewportAnchors(d, placed.map((q) => ({ x: q.x / width, y: q.y / height })), width, height)[handle];
+        placed[handle] = placeViewportAnchors(d, placed.map((q) => ({ x: q.x / width, y: q.y / height })), width, height)[handle]!;
         d.viewportPoints = this._screen.pinPlot(d, placed, frame);
       }
     } else if (handle >= 0 && handle < d.points.length) {
-      const item = start.items[0];
+      const item = start.items[0]!; // a handle drag carries its one drawing, and handle is one of its anchors
       const target: DrawingPoint = { time: p.time, price: p.price };
       // Shift on the handle of a two-anchor line locks it to the 45 degree
       // step about the other anchor, the same way placement does, and the
       // lock wins over the magnet there too.
       const locked = this._shift && item.points.length === 2 && hasDrawingTool(d.tool) && getDrawingTool(d.tool).angleLock === true
-        ? this._screen.lockAngle(item.points[1 - handle], target, d.paneIndex) : null;
+        ? this._screen.lockAngle(item.points[1 - handle]!, target, d.paneIndex) : null;
       const landed = locked ?? this._snapPoint(target, d.paneIndex, barAt(this._chart, target.time)) ?? target;
       const moved = item.points.map((q, i) => (i === handle ? { ...q, ...landed } : { ...q }));
       // A tool with a constraint reads the whole set after the one anchor

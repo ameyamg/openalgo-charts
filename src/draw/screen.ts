@@ -193,12 +193,12 @@ export class DrawingScreen {
       || p.point === null || p.point === undefined) {
       return [end];
     }
-    const tail = samples[samples.length - 1];
+    const tail = samples[samples.length - 1]!; // two or more, by the check above
     const shift = p.point.y - tail.y;
     if (!Number.isFinite(shift)) return [end];
     const out: DrawingPoint[] = [];
     for (let i = 0; i < samples.length - 1; i++) {
-      const s = samples[i];
+      const s = samples[i]!; // i is in range
       const time = toTime.call(this._chart, s.x);
       const price = toPrice.call(this._chart, s.y + shift, paneIndex);
       if (price === null || !Number.isFinite(time) || !Number.isFinite(price)) continue;
@@ -232,9 +232,9 @@ export class DrawingScreen {
     const out: DrawingPoint[] = [];
     let j = 0;
     for (const k of kept) {
-      while (j < px.length && (px[j].x !== k.x || px[j].y !== k.y)) j++;
+      while (j < px.length && (px[j]!.x !== k.x || px[j]!.y !== k.y)) j++; // j < length, and pts pairs px
       if (j >= px.length) return pts;   // cannot happen; keep everything rather than lose a sample
-      out.push(pts[j]);
+      out.push(pts[j]!);
       j++;
     }
     return out;

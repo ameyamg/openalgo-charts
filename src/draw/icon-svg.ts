@@ -163,7 +163,7 @@ export function iconUse(id: string, opts: IconSvgOptions = {}): string {
 function contrastOf(color: string): string {
   const m = /^#([0-9a-f]{3,8})$/i.exec(color.trim());
   if (!m) return '#000';
-  const hex = m[1];
+  const hex = m[1]!; // the one group is in every match
   // Short forms double each digit; alpha, when present, does not affect luminance.
   const wide = hex.length < 6 ? hex.split('').map((c) => c + c).join('') : hex;
   const r = parseInt(wide.slice(0, 2), 16);

@@ -71,7 +71,7 @@ export const CYCLE_PALETTE: readonly string[] = [
 export function cycleColor(i: number): string {
   const n = CYCLE_PALETTE.length;
   const k = Number.isFinite(i) ? Math.trunc(i) : 0;
-  return CYCLE_PALETTE[((k % n) + n) % n];
+  return CYCLE_PALETTE[((k % n) + n) % n]!; // in 0..n-1
 }
 
 /** `0.618` as `61.8%`: the text a level prints when it carries no label. */

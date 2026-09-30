@@ -26,7 +26,7 @@
  * drawings in place and hands the list over again.
  */
 import type { PrimitiveRenderContext } from 'openalgo-charts';
-import type { Drawing, DrawingTool, FibLevel, ScreenPoint } from './types';
+import type { AtLeast, Drawing, DrawingTool, FibLevel, ScreenPoint } from './types';
 import { extendSegment } from './geometry';
 import { DEFAULT_FIB, DEFAULT_FIB_FAN, DEFAULT_FIB_TIME_ZONE, DEFAULT_GANN_FAN } from './levels';
 import {
@@ -71,7 +71,15 @@ const join = (a: HitBox, b: HitBox): HitBox => ({
   x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1),
 });
 
-type BoxOf = (pts: readonly ScreenPoint[], d: Drawing, rc: PrimitiveRenderContext, grab: number) => HitBox;
+/**
+ * A tool's box from its anchors in media px. `toolHitBox` is called only after
+ * the layer's count check, so an entry reads the `N` anchors its tool declares
+ * without a check of its own (`ToolAnchors` in types.ts states the same for
+ * the tools). A method's type, so one table holds entries that read different
+ * counts.
+ */
+type BoxOf<N extends number = 1> = { of(pts: Pts<N>, d: Drawing, rc: PrimitiveRenderContext, grab: number): HitBox }['of'];
+type Pts<N extends number> = AtLeast<ScreenPoint, N>;
 
 /** The levels a ladder tool hit-tests: the same filter its `distance` runs. */
 const levelsOf = (own: readonly FibLevel[] | undefined, fallback: readonly FibLevel[]): FibLevel[] =>
@@ -81,7 +89,7 @@ const levelsOf = (own: readonly FibLevel[] | undefined, fallback: readonly FibLe
 const around: BoxOf = (pts, _d, _rc, grab) => spanOf(pts, grab);
 
 /** Trend line, ray and extended line: the segment as extended to the plot's edges. */
-const line = (left: boolean, right: boolean): BoxOf => (pts, d, rc, grab) => {
+const line = (left: boolean, right: boolean): BoxOf<2> => (pts, d, rc, grab) => {
   const el = d.style.extendLeft ?? left;
   const er = d.style.extendRight ?? right;
   const [a, b] = pts;
@@ -97,11 +105,12 @@ const line = (left: boolean, right: boolean): BoxOf => (pts, d, rc, grab) => {
 };
 
 /** Retracement and extension: the ladder's rungs, over the anchors' span or out to an extended edge. */
-const fib = (anchors: 2 | 3): BoxOf => (pts, d, rc, grab) => {
+const fib = (anchors: 2 | 3): BoxOf<2> => (pts, d, rc, grab) => {
+  // A fib is drawn in data space only, so its points are its anchors, `anchors` of them.
   const p = d.points;
-  const from = anchors === 2 ? p[0].price : p[2].price;
-  const span = p[1].price - p[0].price;
-  const xa = pts[0].x, xb = pts[anchors - 1].x;
+  const from = anchors === 2 ? p[0]!.price : p[2]!.price;
+  const span = p[1]!.price - p[0]!.price;
+  const xa = pts[0].x, xb = pts[anchors - 1]!.x;
   const x0 = d.style.extendLeft === true ? 0 : Math.min(xa, xb);
   const x1 = d.style.extendRight === true ? rc.plotWidth : Math.max(xa, xb);
   let y0 = Infinity, y1 = -Infinity;
@@ -174,24 +183,24 @@ const BOXES = new Map<DrawingTool, BoxOf>([
     const cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2;
     return { x0: cx - rx * k, y0: cy - ry * k, x1: cx + rx * k, y1: cy + ry * k };
   }],
-  [CIRCLE, (pts, _d, _rc, g) => {
+  [CIRCLE, (pts: Pts<2>, _d, _rc, g) => {
     const [a, b] = pts;
     return spanOf([a], Math.hypot(b.x - a.x, b.y - a.y) + g);
   }],
-  [PARALLEL_CHANNEL, (pts, _d, _rc, g) => {
+  [PARALLEL_CHANNEL, (pts: Pts<3>, _d, _rc, g) => {
     const [a, b, t] = pts;
     const dy = t.y - (a.y + (b.y - a.y) * 0.5);
     return spanOf([a, b, { x: a.x, y: a.y + dy }, { x: b.x, y: b.y + dy }], g);
   }],
   // The corners lie within the far anchor's reach of the first edge.
-  [ROTATED_RECTANGLE, (pts, _d, _rc, g) => pts.length < 3 ? NOWHERE
+  [ROTATED_RECTANGLE, (pts: Pts<3>, _d, _rc, g) => pts.length < 3 ? NOWHERE
     : spanOf(pts.slice(0, 2), Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y) + g)],
   // Both curves bend toward a control that is not an anchor.
-  [ARC, (pts, _d, _rc, g) => {
+  [ARC, (pts: Pts<3>, _d, _rc, g) => {
     const [a, m, b] = pts;
     return spanOf([a, b, { x: 2 * m.x - (a.x + b.x) / 2, y: 2 * m.y - (a.y + b.y) / 2 }], g);
   }],
-  [DOUBLE_CURVE, (pts, _d, _rc, g) => {
+  [DOUBLE_CURVE, (pts: Pts<3>, _d, _rc, g) => {
     if (pts.length < 3) return NOWHERE;
     const [a, m, b] = pts;
     return spanOf([a, m, b, { x: a.x + b.x - m.x, y: a.y + b.y - m.y }], g);
@@ -202,35 +211,35 @@ const BOXES = new Map<DrawingTool, BoxOf>([
   [LONG_POSITION, position], [SHORT_POSITION, position],
   [TEXT, bounded(TEXT, 3)], [TABLE, bounded(TABLE, 0)],
   // Cycles repeat twelve times from the first anchor, and span the plot's height.
-  [CYCLIC_LINES, (pts, _d, _rc, g) => {
+  [CYCLIC_LINES, (pts: Pts<2>, _d, _rc, g) => {
     const [a, b] = pts, far = a.x + (b.x - a.x) * 12;
     return { x0: Math.min(a.x, far) - g, y0: -Infinity, x1: Math.max(a.x, far) + g, y1: Infinity };
   }],
-  [TIME_CYCLES, (pts, _d, _rc, g) => {
+  [TIME_CYCLES, (pts: Pts<2>, _d, _rc, g) => {
     const [a, b] = pts, far = a.x + (b.x - a.x) * 12;
     return { x0: Math.min(a.x, far) - g, y0: a.y - Math.abs(b.x - a.x) / 2 - g, x1: Math.max(a.x, far) + g, y1: a.y + 2 };
   }],
-  [SINE_LINE, (pts, _d, _rc, g) => {
+  [SINE_LINE, (pts: Pts<2>, _d, _rc, g) => {
     const [a, b] = pts, amp = Math.abs(b.y - a.y);
     return spanOf([{ x: a.x, y: a.y - amp }, { x: b.x, y: a.y + amp }], g);
   }],
-  [FIB_TIME_ZONE, (pts, d, _rc, g) => {
+  [FIB_TIME_ZONE, (pts: Pts<2>, d, _rc, g) => {
     const [a, b] = pts;
     const xs = levelsOf(d.style.levels, DEFAULT_FIB_TIME_ZONE).map((lv) => ({ x: a.x + (b.x - a.x) * lv.ratio, y: 0 }));
     const r = spanOf(xs, g);
     return { x0: r.x0, y0: xs.length === 0 ? Infinity : -Infinity, x1: r.x1, y1: xs.length === 0 ? -Infinity : Infinity };
   }],
-  [FIB_FAN, (pts, d, rc, g) => {
+  [FIB_FAN, (pts: Pts<2>, d, rc, g) => {
     const [a, b] = pts;
     return spanOf([a, ...levelsOf(d.style.levels, DEFAULT_FIB_FAN).map((lv) =>
       extendSegment(a, { x: b.x, y: a.y + (b.y - a.y) * lv.ratio }, rc.plotWidth, false, true)[1])], g);
   }],
-  [GANN_FAN, (pts, d, rc, g) => {
+  [GANN_FAN, (pts: Pts<2>, d, rc, g) => {
     const [a, b] = pts;
     return spanOf([a, ...levelsOf(d.style.levels, DEFAULT_GANN_FAN).map((lv) =>
       extendSegment(a, { x: b.x, y: a.y + (b.y - a.y) * lv.ratio }, rc.plotWidth, false, true)[1])], g);
   }],
-  [FIB_CHANNEL, (pts, d, rc, g) => {
+  [FIB_CHANNEL, (pts: Pts<3>, d, rc, g) => {
     const [a, b, w] = pts, ox = w.x - b.x, oy = w.y - b.y;
     let box = NOWHERE;
     for (const lv of levelsOf(d.style.levels, DEFAULT_FIB)) {
@@ -241,7 +250,7 @@ const BOXES = new Map<DrawingTool, BoxOf>([
     }
     return box;
   }],
-  [CALLOUT, (pts, _d, _rc, g) => pts.length < 2 ? NOWHERE
+  [CALLOUT, (pts: Pts<2>, _d, _rc, g) => pts.length < 2 ? NOWHERE
     : join(spanOf(pts.slice(0, 2), g), { x0: pts[1].x - 60, y0: pts[1].y - 16, x1: pts[1].x + 60, y1: pts[1].y + 16 })],
   [PRICE_LABEL, mark(-10, -41, 82, 10)],
   [FLAG_MARK, mark(-8, -24, 16, 8)],
@@ -257,7 +266,8 @@ for (const tool of PATTERN_DRAWING_TOOLS) BOXES.set(tool, around);
  * for a drawing whose anchors project to `pts`, or undefined when this table
  * does not know the tool. A drawing whose box cannot be worked out, a hand
  * edited one with a field of the wrong type say, is asked on every move, so
- * the tool answers it exactly as it did before there was a box.
+ * the tool answers it exactly as it did before there was a box. Ask only of a
+ * drawing that holds the anchors its tool declares, as the layer paints.
  */
 export function toolHitBox(
   tool: DrawingTool, pts: readonly ScreenPoint[], d: Drawing, rc: PrimitiveRenderContext, grab: number,
@@ -267,7 +277,7 @@ export function toolHitBox(
   try {
     // A hundredth of a pixel of slack: a tool rounds its own arithmetic,
     // and a distance a few ulps under the radius must not fall outside.
-    const b = of(pts, d, rc, grab);
+    const b = of(pts as Pts<1>, d, rc, grab); // every caller checks the count first
     return { x0: b.x0 - SLACK, y0: b.y0 - SLACK, x1: b.x1 + SLACK, y1: b.y1 + SLACK };
   } catch {
     return EVERYWHERE;

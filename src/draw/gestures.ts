@@ -255,7 +255,7 @@ export class DrawingGestures {
       return true;
     }
     if (p.viaDrag !== true && p.id !== null && p.id.startsWith('draw:')) {
-      const id = p.id.slice('draw:'.length).split('#')[0];
+      const id = p.id.slice('draw:'.length).split('#')[0]!; // a split has a first part
       const d = this._host.drawings().find((x) => x.id === id);
       if (d !== undefined && erasable(d)) this._host.erase([id]);
     }

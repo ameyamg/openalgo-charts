@@ -71,7 +71,7 @@ function indexOfTime(bars: readonly Bar[], time: number): number {
   let hi = bars.length - 1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    const t = bars[mid].time;
+    const t = bars[mid]!.time; // lo <= mid <= hi, all in range
     if (t === time) return mid;
     if (t < time) lo = mid + 1;
     else hi = mid - 1;
@@ -90,8 +90,8 @@ export function barAt(host: MagnetHost, time: number): SnapBar | null {
   const at = host.dataLayer.indexToTime(Math.round(host.dataLayer.timeToIndexFloat(time)));
   const i = at === undefined ? -1 : indexOfTime(bars, at);
   if (i < 0) return null;
-  const { open, high, low, close } = bars[i];
-  return { time: bars[i].time, open, high, low, close };
+  const { open, high, low, close } = bars[i]!; // a found index
+  return { time: bars[i]!.time, open, high, low, close };
 }
 
 /** Whether a colour paints nothing: the helper plot a band or a mark is measured from. */
@@ -100,8 +100,8 @@ function invisible(color: string | undefined): boolean {
   if (c === 'transparent') return true;
   if (/^#[0-9a-f]{4}$/.test(c)) return c[4] === '0';
   if (/^#[0-9a-f]{8}$/.test(c)) return c.endsWith('00');
-  const args = /^(?:rgb|hsl)a?\((.*)\)$/.exec(c)?.[1].split(/[\s,/]+/).filter(Boolean);
-  return args?.length === 4 && parseFloat(args[3]) === 0;
+  const args = /^(?:rgb|hsl)a?\((.*)\)$/.exec(c)?.[1]!.split(/[\s,/]+/).filter(Boolean);
+  return args?.length === 4 && parseFloat(args[3]!) === 0; // the group is in every match; four args
 }
 
 /**
@@ -158,7 +158,7 @@ export function magnetPoint(
   if (paneIndex === pricePane) {
     const values = [bar.open, bar.high, bar.low, bar.close];
     if (mode === 'strong') {
-      let best = values[0];
+      let best = values[0]!; // four values
       let bestD = Infinity;
       for (const v of values) {
         const d = Math.abs(v - point.price);

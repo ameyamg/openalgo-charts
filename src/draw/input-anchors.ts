@@ -94,7 +94,7 @@ export function studyInputTarget(chart: { panes?(): readonly unknown[] }, study:
       || (explicit.priceScaleId !== undefined && explicit.priceScaleId !== priceScaleId)) continue;
     targets.set(`${paneIndex}:${priceScaleId}`, { paneIndex, priceScaleId });
   }
-  return targets.size === 1 ? [...targets.values()][0] : null;
+  return targets.size === 1 ? [...targets.values()][0]! : null;
 }
 
 /** The handle itself: a ring at the point, with guides while it is in hand. */
