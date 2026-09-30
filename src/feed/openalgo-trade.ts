@@ -18,7 +18,8 @@
  * - **The analyzer/live mode is checked, not claimed.** See `getServerMode`.
  */
 import type { OrderFeed, PlaceRequest, PreflightFailure, TradeMode } from '../trade/order-engine';
-import type { Order, OrderSide, OrderStatus, OrderType, Position } from '../trade/types';
+import type { Order, OrderStatus, Position } from '../trade/types';
+import type { OrderSide, OrderType } from './types';
 import { validateQuantity, type OrderConstraints } from '../trade/validation';
 import { assertTradingCapability, type TradingCapabilityRequest, type TradingCapabilitySource } from './trading-capabilities';
 import type { LooseOptional } from '../helpers/types';
@@ -296,6 +297,20 @@ export class OpenAlgoTradeFeed implements OrderFeed {
 
   public get capabilities(): TradingCapabilitySource | undefined { return this._config.capabilities; }
 
+  /**
+   * Place an order through OpenAlgo's placeorder route.
+   *
+   * An order without `exchange` goes to `NSE`, and one without `product` takes
+   * the feed's `defaultProduct`. Both defaults are documented and hosts place
+   * through them, so they stay through 2.x. `modify()` is stricter on purpose:
+   * it never guesses an exchange or product for an order the book does not
+   * describe, since a guess there moves a live order somewhere its owner did
+   * not put it. A host that trades on any other exchange passes `exchange`
+   * with every order.
+   *
+   * Every refusal before the request is sent is a pre-flight error, so the
+   * caller can correct and retry knowing nothing reached the broker.
+   */
   public async place(request: PlaceRequest & { mode: TradeMode }): Promise<{ orderId: string }> {
     const req = { ...request };
     // placeorder has no account, duration, expiry or leverage field; one key is

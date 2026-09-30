@@ -1,5 +1,5 @@
 /**
- * OpenAlgo WebSocket adapter (ARCHITECTURE.md §10, C2). Speaks the documented
+ * OpenAlgo WebSocket adapter (ARCHITECTURE.md §10). Speaks the documented
  * OpenAlgo WS proxy protocol (default port 8765, or wss://host/ws in production):
  *
  *   1. authenticate: { action:'authenticate', api_key }
@@ -24,6 +24,8 @@
 import type { MarketDepth } from './types';
 import { epochMsToUtcSeconds } from './time';
 import type { LooseOptional } from '../helpers/types';
+import { later } from '../helpers/timers';
+import { dispatch } from '../helpers/dispatch';
 
 export type WsMode = 'LTP' | 'Quote' | 'Depth';
 
@@ -59,7 +61,7 @@ export interface WsClientWarning extends WsControlMessage {
   message: string;
 }
 
-/** OpenAlgo numeric data modes (websockets-format.md §Data Modes). */
+/** The number the OpenAlgo proxy expects in a subscribe frame's `mode` field for each data mode. */
 const MODE_NUMBER: Record<WsMode, number> = { LTP: 1, Quote: 2, Depth: 3 };
 
 /** Minimal socket surface (the browser WebSocket satisfies this). */
@@ -464,7 +466,7 @@ export class OpenAlgoWsFeed {
   /**
    * Open the socket. Also the deliberate way back from a refused key or an
    * earlier `close()`: both are user-intent states, and only user intent clears
-   * them (design §5.2, FATAL -> CONNECTING on an explicit connect).
+   * them, so this is the one way out of the fatal state back to connecting.
    */
   public connect(): void {
     if (this._sock !== null) return;
@@ -507,24 +509,19 @@ export class OpenAlgoWsFeed {
     return () => this._controlCbs.delete(cb);
   }
 
+  // Every host callback goes through `dispatch`, as on the chart bus: a throw
+  // reaches neither the other listeners nor the state change that emitted.
   private _emitState(s: WsState): void {
-    for (const cb of this._stateCbs) cb(s);
+    dispatch(this._stateCbs, s);
   }
 
   private _emitControl(msg: WsControlMessage): void {
-    for (const cb of this._controlCbs) cb(msg);
+    dispatch(this._controlCbs, msg);
   }
 
   private _warn(code: string, message: string): void {
     const w: WsClientWarning = { type: 'client_warning', code, message };
     this._emitControl(w);
-  }
-
-  /** A timer that never holds a Node event loop open. `unref` is absent in browsers. */
-  private _later(fn: () => void, ms: number): ReturnType<typeof setTimeout> {
-    const t = setTimeout(fn, ms);
-    (t as unknown as { unref?: () => void }).unref?.();
-    return t;
   }
 
   /**
@@ -544,7 +541,7 @@ export class OpenAlgoWsFeed {
       this._onAuthenticated();
       return;
     }
-    this._authTimer = this._later(
+    this._authTimer = later(
       () => this._failConnection('AUTH_TIMEOUT', `no auth acknowledgement within ${this._auth.ackTimeoutMs}ms`),
       this._auth.ackTimeoutMs,
     );
@@ -632,7 +629,7 @@ export class OpenAlgoWsFeed {
     const delay = backoffDelayMs(n, this._rc, this._rc.random);
     this._phase = 'backoff';
     this._emitState('reconnecting');
-    this._reconnectTimer = this._later(() => {
+    this._reconnectTimer = later(() => {
       this._reconnectTimer = null;
       this._sock = null;
       this._openSocket();
@@ -658,7 +655,7 @@ export class OpenAlgoWsFeed {
   private _armLiveness(): void {
     if (this._hbTimeoutMs <= 0 || this._phase !== 'ready') return;
     this._clearTimer('live');
-    this._liveTimer = this._later(() => this._probeLiveness(), this._hbTimeoutMs);
+    this._liveTimer = later(() => this._probeLiveness(), this._hbTimeoutMs);
   }
 
   /**
@@ -677,7 +674,7 @@ export class OpenAlgoWsFeed {
   private _probeLiveness(): void {
     if (this._phase !== 'ready' || this._sock === null) return;
     this._sock.send(JSON.stringify({ action: 'ping' }));
-    this._liveTimer = this._later(
+    this._liveTimer = later(
       () => this._failConnection('HEARTBEAT_DEAD', `no answer to a liveness ping within ${this._hbProbeMs}ms`),
       this._hbProbeMs,
     );
@@ -797,7 +794,7 @@ export class OpenAlgoWsFeed {
     const orderUpdate = parseOrderUpdate(raw);
     if (orderUpdate !== null) {
       if (!this._sequenceOk('orders', raw)) return;
-      for (const cb of this._orderCbs) cb(orderUpdate);
+      dispatch(this._orderCbs, orderUpdate);
       return;
     }
     const parsed = parseMessage(raw);
@@ -809,10 +806,11 @@ export class OpenAlgoWsFeed {
     const rawTopic = (raw as RawMsg).topic;
     if (parsed.kind === 'ltp') {
       if (!this._sequenceOk(rawTopic ?? `ltp:${parsed.event.symbol}.${parsed.event.exchange}`, raw)) return;
-      for (const cb of this._ltpCbs) cb(parsed.event);
+      dispatch(this._ltpCbs, parsed.event);
     } else {
       if (!this._sequenceOk(rawTopic ?? `depth:${parsed.symbol}.${parsed.exchange}`, raw)) return;
-      for (const cb of this._depthCbs) cb(parsed.symbol, parsed.exchange, parsed.depth);
+      const { symbol, exchange, depth } = parsed;
+      dispatch([...this._depthCbs].map(cb => () => cb(symbol, exchange, depth)), undefined);
     }
   }
 }

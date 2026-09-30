@@ -147,7 +147,7 @@ It sits on the `'top'` z-order, which is the layer `Pane.paintTop` repaints for 
 
 ## Feedback loops and dead charts
 
-**One group-wide re-entrancy guard**, not one per channel. Any member event arriving while the group is broadcasting is an echo of that broadcast by definition, since a human cannot pan two charts in one call stack. It is group-wide because a symbol change that reloads data can move a viewport, and that second-order echo is the same bug wearing a different hat.
+**One group-wide re-entrancy guard**, not one per channel. Any member event arriving while the group is broadcasting is an echo of that broadcast by definition, since a human cannot pan two charts in one call stack. It is group-wide because a symbol change that reloads data can move a viewport, and that second-order echo is the same bug wearing a different hat. The symbol, interval and chart type channels also ignore a selection a follower reports while the group is applying one: a follower's `onSymbol` that announces the name it normalised to (a suffix, a case change) leaves the group on the leader's instrument (since 2.6.0; before, the follower's spelling became `group.symbol()`).
 
 Members are dropped the moment their chart dies. `chart.destroy()` sets `isDestroyed`, emits `'destroy'` and the group prunes on the spot; a `LinkChart` that is not a `Chart` and reports neither is probed by pane count instead (the price pane can never be removed by any other route). This matters beyond tidiness: `addPrimitive` on a destroyed chart would resurrect a pane.
 
@@ -245,9 +245,11 @@ Other host setters can call `group.syncAppearance(chart)` explicitly. The adapte
 reads supported chart-settings fields, so calling it after `setTheme` transfers
 those visual fields, not an entire theme object. `filterLinkAppearance(values)`
 returns a fresh allowlisted record: known series styling, readout visibility,
-scale presentation, grid, crosshair, watermark styling and axis chrome. It omits
-watermark text, instrument identity, interval, timezone, navigation, studies,
-event feeds, alerts and trading. No chart data or series type crosses. Each peer
+scale presentation (mode, auto-fit, the primary-prices-only fit since 2.6.0, and
+inversion), grid, crosshair, watermark styling and axis chrome. It omits
+watermark text, instrument identity, interval, timezone, navigation, the study
+legend fold (`statusLine.indicatorsCollapsed`), studies, event feeds, alerts and
+trading. No chart data or series type crosses. Each peer
 receives a separate record; callbacks cannot echo back through the group guard.
 Enabling appearance waits for the next edit or explicit notification.
 

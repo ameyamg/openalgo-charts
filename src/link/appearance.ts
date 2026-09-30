@@ -7,6 +7,11 @@ export interface LinkAppearanceAdapter {
   apply(values: Readonly<LinkAppearanceValues>): void;
 }
 
+/**
+ * The chart settings keys a linked chart follows. Every other key is left out
+ * on purpose, and tests/link-appearance.test.ts lists each with its reason, so
+ * a setting added later fails there until it is decided.
+ */
 const VISUAL_KEYS = new Set([
   ...('precision priceLineVisible lastValueVisible colorByPreviousClose upColor downColor bodyVisible '
     + 'borderUpColor borderDownColor borderVisible wickUpColor wickDownColor wickVisible '
@@ -15,7 +20,7 @@ const VISUAL_KEYS = new Set([
   ...('titleMode title logo marketStatus chartValues barChange volume openInterest lastDayChange lastValueLabel '
     + 'background backgroundColor backgroundOpacity').split(' ').map(key => `statusLine.${key}`),
   ...('visible color opacity fontSize').split(' ').map(key => `watermark.${key}`),
-  ...('mode autoScale inverted').split(' ').map(key => `scales.${key}`),
+  ...('mode autoScale priceOnly inverted').split(' ').map(key => `scales.${key}`),
   'axisChrome.sessionClock', 'axisChrome.barCountdown',
   ...('grid.vertLines grid.vertColor grid.vertStyle grid.horzLines grid.horzColor grid.horzStyle '
     + 'grid.lineWidth grid.spacing crosshairMode crosshairSnapToBar crosshair.color crosshair.style '

@@ -15,7 +15,10 @@ export interface BarsRequest {
   noCache?: boolean;
   /** Cancel this consumer's request. Existing feeds may ignore cancellation. */
   signal?: AbortSignal | undefined;
-  /** Deadline in milliseconds, including response-body reading. */
+  /**
+   * Deadline in milliseconds, including response-body reading. The shared
+   * request pool holds it to 2^31 - 1 ms, the longest a timer waits.
+   */
   timeoutMs?: number;
   /** Preferred number of bars; a date-range feed may return a different count. */
   countBack?: number;
@@ -227,9 +230,17 @@ export interface NewsFeed {
   getNews(request: NewsRequest): Promise<NewsPage>;
 }
 
+/** The side of an order, one declaration for the base and the trade tier. */
 export type OrderSide = 'BUY' | 'SELL';
+/** How an order is priced, one declaration for the base and the trade tier. */
 export type OrderType = 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
 
+/**
+ * The order `TradeFeed.placeOrder` takes.
+ *
+ * @deprecated Removed in 3.0.0. Only `TradeFeed` takes it. Use `PlaceRequest` from
+ * `openalgo-charts/trade` (since 1.0.0), the order `OrderEngine` and `OrderFeed.place` take.
+ */
 export interface PlaceOrder {
   symbol: string;
   exchange: string;
@@ -243,11 +254,13 @@ export interface PlaceOrder {
 }
 
 /**
- * High-level broker trading source: place / modify / cancel plus subscriptions
- * to orders and positions. NOTE: the trade tier's `OrderEngine` uses the smaller
- * `OrderFeed` (`place` / `modify` / `cancel`, from `openalgo-charts/trade`), which
- * is what `OpenAlgoTradeFeed` implements. Implement `OrderFeed` for the engine's
- * write path; use `TradeFeed` for a higher-level broker abstraction.
+ * A broker surface of place, modify and cancel plus order and position
+ * subscriptions. Nothing in the library takes or implements it: the trading
+ * layer never calls one.
+ *
+ * @deprecated Removed in 3.0.0. Implement `OrderFeed` from `openalgo-charts/trade`
+ * (since 1.0.0), which `OrderEngine` writes through and `OpenAlgoTradeFeed`
+ * implements, and hand the book to the chart with `chart.trading.syncState`.
  */
 export interface TradeFeed {
   placeOrder(o: PlaceOrder): Promise<{ orderId: string }>;

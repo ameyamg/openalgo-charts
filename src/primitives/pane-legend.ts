@@ -146,16 +146,20 @@ export interface PaneLegendOptions {
   /**
    * Which inline action buttons to draw, left to right. Each hit-tests as
    * `${id}::<action>`:
-   *  - `up` / `down` — move this pane one slot (`::up` / `::down`)
-   *  - `hide`        — toggle visibility (`::hide`)
+   *  - `up` / `down`: move this pane one slot (`::up` / `::down`)
+   *  - `hide`: toggle visibility (`::hide`)
+   *  - `settings`: open this source's settings (`::settings`)
    *  - `source`: show the code this source was written from (`::source`)
    *  - `collapse`: fold this pane to a header strip, or open it again (`::collapse`)
-   *  - `maximize`    — expand this pane to fill the chart (`::maximize`)
-   *  - `close`       — remove the source, and its pane if it empties (`::close`)
+   *  - `maximize`: expand this pane to fill the chart (`::maximize`)
+   *  - `close`: remove the source, and its pane if it empties (`::close`)
    *
    * When only some actions fit, the end of this list stays visible.
-   * Defaults to `['up', 'down', 'hide', 'maximize', 'close']` for pane sources
-   * and `['hide', 'close']` for overlays (pass explicitly to override).
+   * Defaults to `['hide', 'settings', 'close']`. A chart drawing a study's row
+   * adds the pane's own controls to it: on the first row of a pane other than
+   * the price pane it puts `up`, `down`, `collapse` and `maximize` before
+   * `close` (last when the row has none), and it leaves out `close` or
+   * `settings` where the study's policy refuses them.
    */
   actions?: readonly PaneLegendAction[];
   /** Rendered as hidden (dimmed, eye hollow). */

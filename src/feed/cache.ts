@@ -129,7 +129,6 @@ const DEFAULT_MAX_BARS = 250_000;
 export const BAR_CACHE_VERSION = 1;
 
 /**
- * Interval token to seconds. Case matters where it disambiguates: lowercase
  * The instant a bar starting at `barStartSec` closes, or null when that cannot
  * be known from the interval alone.
  *
@@ -140,8 +139,8 @@ export const BAR_CACHE_VERSION = 1;
  * that way is served stale for up to a minute at a time, and a registered
  * calendar code was approximated at 30 days.
  *
- * Null means "no fixed close", and it is returned for three genuinely different
- * situations that all demand the same conservative answer:
+ * Null means "no fixed close", and it is returned for two genuinely different
+ * situations that both demand the same conservative answer:
  *
  *  - **tick and volume bars**, which close on trade flow. A 500-tick bar may run
  *    for a second or an hour, so nothing about elapsed time says whether the

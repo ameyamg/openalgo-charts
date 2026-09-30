@@ -51,7 +51,7 @@ Install the newly seeded subscription before releasing the previous one, so a sh
 
 Supporting types: `MarketDepth { bids: DepthLevel[]; asks: DepthLevel[]; ltp: number; ltq?: number; timeSec?: UTCSeconds }`, `DepthLevel { price, qty, orders? }`, variable depth, whatever the broker streams. `UnsubscribeFn = () => void`.
 
-`TradeFeed` is the separate, higher-level broker abstraction (`placeOrder` / `modifyOrder` / `cancelOrder` / `subscribeOrders` / `subscribePositions`, taking `PlaceOrder`). The trade tier's `OrderEngine` does **not** use it, it uses the smaller `OrderFeed` (`place` / `modify` / `cancel`) from `openalgo-charts/trade`, which is what `OpenAlgoTradeFeed` implements. See [trading](trading.md).
+`TradeFeed` (`placeOrder` / `modifyOrder` / `cancelOrder` / `subscribeOrders` / `subscribePositions`, taking `PlaceOrder`) is deprecated, removed in 3.0.0 (both types): nothing in the library takes or implements it. The trade tier's `OrderEngine` uses the smaller `OrderFeed` (`place` / `modify` / `cancel`, taking `PlaceRequest`) from `openalgo-charts/trade`, which is what `OpenAlgoTradeFeed` implements, and the chart draws the book a host hands it with `chart.trading.syncState`. `OrderSide` and `OrderType` are one type each: the trade tier's are the base's, re-exported. See [trading](trading.md).
 
 **Verify every OpenAlgo wire field against your running OpenAlgo build.** The adapters below encode the documented REST paths and WS message shapes, and the parsers are deliberately tolerant, but field names have moved between OpenAlgo releases. Pin them for your deployment before production.
 
@@ -143,7 +143,7 @@ Market time uses the first valid positive value in `last_trade_time`, `ltt`, `ex
 
 Symbol and exchange resolve independently from non-empty `data` fields, then top-level envelope fields, then the legacy `topic`. Empty nested identity fields do not hide usable top-level identity. This applies to LTP, Quote and Depth frames.
 
-Callbacks, each returning its own unsubscribe: `onLtp`, `onDepth((symbol, exchange, depth) => {})`, `onState((s: WsState) => {})` with `'connecting' | 'open' | 'closed' | 'error' | 'reconnecting'`, `onControl` for auth/subscribe acks and server errors, `onOrderUpdate` for the account-level order stream.
+Callbacks, each returning its own unsubscribe: `onLtp`, `onDepth((symbol, exchange, depth) => {})`, `onState((s: WsState) => {})` with `'connecting' | 'open' | 'closed' | 'error' | 'reconnecting'`, `onControl` for auth/subscribe acks and server errors, `onOrderUpdate` for the account-level order stream. A callback that throws stops neither the other callbacks nor the feed's own state change (since 2.6.0): its error goes to `reportError` where the platform has one, as on the chart bus. Before, a throw during an auth refusal left the socket open, and a throwing tick listener starved the ones after it.
 
 Reconnect and resubscribe:
 

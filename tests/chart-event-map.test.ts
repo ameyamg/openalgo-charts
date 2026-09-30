@@ -176,8 +176,8 @@ const EMITTERS = new Set([
 const NAME_ONLY = new Set(['Chart._emitViewport', 'ReplayGroup._emit']);
 /** The declarations whose `on`, `once` or `off` subscribe to the chart bus. */
 const SUBSCRIBERS = new Set([
-  'Chart.on', 'AlertChartHost.on', 'DrawingChartHost.on', 'PickHost.on', 'LinkChart.on', 'ReplayGroupChartHost.on',
-  'InstrumentDrawingsChart.on', 'ComparisonChartHost.on',
+  'Chart.on', 'AlertChartHost.on', 'DrawingChartHost.on', 'PickHost.on', 'LinkChart.on', 'ReplayChartHost.on',
+  'ReplayGroupChartHost.on', 'InstrumentDrawingsChart.on', 'ComparisonChartHost.on',
 ]);
 /** Names a host emits and the engine only listens for; nothing in src emits them. */
 const HOST_ONLY = ['chartType', 'interval'];

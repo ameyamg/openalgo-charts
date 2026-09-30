@@ -183,6 +183,24 @@ describe('comparison mode', () => {
     expect(pane.priceScale.options.mode).toBe('linear');
   });
 
+  it('applies the options of a later request to the controller the chart already has', () => {
+    // addComparison creates the chart's controller with the defaults. A host
+    // that asks for the controller afterwards with a baseline or a mode gets
+    // them applied, as a second attachSessionShading call applies its options,
+    // rather than silently keeping the defaults.
+    const { chart, pane } = loaded(ramp(100, 11, 110));
+    addComparison(chart, { symbol: 'BANKNIFTY', bars: ramp(45000, 11, 46000) });
+    const controller = comparisonController(chart, { mode: 'indexed-to-100', baseline: 'common' });
+    expect(controller).toBe(comparisonController(chart));
+    expect(controller.mode).toBe('indexed-to-100');
+    expect(controller.baseline).toBe('common');
+    expect(pane.priceScale.options.mode).toBe('indexed-to-100');
+    // Asking with no options, or with only one of them, changes nothing else.
+    comparisonController(chart, { baseline: 'first-visible' });
+    expect(controller.mode).toBe('indexed-to-100');
+    expect(controller.baseline).toBe('first-visible');
+  });
+
   it('keeps a mode the user changed underneath it', () => {
     const { chart, pane } = loaded(ramp(100, 11, 110));
     const handle = addComparison(chart, { symbol: 'BANKNIFTY', bars: ramp(45000, 11, 46000) });

@@ -20,12 +20,6 @@
     "src/primitives/indicator-draws.ts": {
       "IndicatorDrawings.draw": 164
     },
-    "src/primitives/markers.ts": {
-      "SeriesMarkers.draw": 219
-    },
-    "src/primitives/table.ts": {
-      "ChartTable.draw": 151
-    },
     "src/profile/market-profile-primitive.ts": {
       "MarketProfile._drawSession": 229
     },

@@ -13,6 +13,7 @@
 import type { Bar } from '../model/bar';
 import type { SeriesId } from '../model/data-layer';
 import type { PriceScale } from '../scale/price-scale';
+import type { LogicalRange } from '../scale/time-scale';
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from './primitive';
 import { roundRectPath, contrastText } from '../render/pill';
 import { hasTextStyle, textFont, validateTextStyle } from '../render/text-style';
@@ -333,13 +334,204 @@ function placeInLane(lane: LaneBox[], dir: -1 | 1, box: LaneBox, gap: number, ke
   return dy;
 }
 
+/** Where a painted mark landed, in media px, for hit-testing; a styled mark is clipped to the plot. */
+interface MarkPosition { id: string; x: number; y: number; clip?: { width: number; height: number } | undefined }
+
+/** Where a mark sits before lanes move it, in device px; NaN when it has nothing to sit on. */
+function anchorY(m: SeriesMarker, bar: Bar | undefined, px: number, gap: number, priceScale: PriceScale,
+  rc: PrimitiveRenderContext): number {
+  if (m.position === 'paneTop') {
+    // Pinned to the plot edge, stacking inward, so the row never moves
+    // with the scale and needs no bar under it.
+    return px / 2 + 4 * rc.dpr + gap;
+  } else if (m.position === 'paneBottom') {
+    return rc.plotHeight * rc.dpr - px / 2 - 4 * rc.dpr - gap;
+  } else if (m.position === 'atPrice' && m.price !== undefined) {
+    return priceScale.priceToY(m.price) * rc.dpr;
+  } else if (bar !== undefined && m.position === 'aboveBar') {
+    return priceScale.priceToY(bar.high) * rc.dpr - px - gap;
+  } else if (bar !== undefined && m.position === 'belowBar') {
+    return priceScale.priceToY(bar.low) * rc.dpr + px + gap;
+  } else if (bar !== undefined) {
+    return priceScale.priceToY((bar.open + bar.close) / 2) * rc.dpr;
+  }
+  return NaN;
+}
+
+/** How a paint finds the bar a mark sits on: on its own series, else among the fallback bars. */
+function barLookup(own: readonly Bar[], fallbackBars: (() => readonly Bar[]) | undefined): (time: number) => Bar | undefined {
+  // Bars are looked up per drawn marker, never collected up front: a paint
+  // runs on every live tick, and indexing the whole history here made the
+  // frame cost grow with the history length instead of with what is shown.
+  let fallback: readonly Bar[] | undefined;
+  let fallbackByTime: Map<number, Bar> | undefined;
+  return (time: number): Bar | undefined => {
+    // A real point on the marker's own series wins; indicator null columns
+    // retain their timestamp as NaN points. Where that series has a gap the
+    // instrument's bar stands in, which is the whole point: the mark is drawn
+    // rather than lost.
+    const bar = barAtTime(own, time);
+    if (bar !== undefined && Number.isFinite(bar.close)) return bar;
+    if (fallbackBars === undefined) return undefined;
+    fallback ??= fallbackBars();
+    // The fallback comes from the host and is not promised to be sorted. An
+    // exact hit is right when it is sorted (a repeated time's copies sit
+    // together and the last wins) and when it repeats no time; only a miss
+    // has to be confirmed by indexing it, at most once per paint.
+    const hit = barAtTime(fallback, time);
+    if (hit !== undefined) return hit;
+    if (fallbackByTime === undefined) {
+      fallbackByTime = new Map();
+      for (const b of fallback) fallbackByTime.set(b.time, b);
+    }
+    return fallbackByTime.get(time);
+  };
+}
+
+/**
+ * Where a paint starts laying out: the lane window before the first mark
+ * that may be painted, so text marks left of the view still make room, and
+ * the widest half of any text mark laid out. Null when no mark can be painted.
+ */
+function laneWindow(
+  markers: readonly SeriesMarker[],
+  anyStyled: boolean,
+  rc: PrimitiveRenderContext,
+  range: LogicalRange,
+  laneFont: (m: SeriesMarker) => number,
+  halfOf: (m: SeriesMarker, fontPx: number) => number,
+): { start: number; widest: number } | null {
+  const dpr = rc.dpr;
+  // Every walk over the marks stays inside the list: the loop bounds hold `i`,
+  // `first` is short of the length once the early return below has passed, and
+  // a mark's predecessor is read only after the first one.
+  // The first mark that may be painted; none before it is.
+  let first = markers.length;
+  for (let i = 0; i < markers.length; i++) {
+    const m = markers[i]!;
+    const index = rc.dataLayer.timeToIndex(m.time);
+    if (index === undefined) continue;
+    if (isStyled(m)) {
+      const fontPx = markerFontPx(m) * dpr;
+      const half = m.text !== undefined && Number.isFinite(fontPx) && fontPx > 0 ? halfOf(m, fontPx) : 0;
+      if (rc.timeScale.indexToX(index) * dpr + Math.max(half, 16 * dpr) < 0) continue;
+    } else if (index < range.from - 1) {
+      continue;
+    }
+    first = i;
+    break;
+  }
+  if (first === markers.length) return null;
+  // Marks at one time stack in order, so the first bar's earlier marks count too.
+  while (first > 0 && markers[first - 1]!.time === markers[first]!.time) first--;
+  const from = Math.max(0, Math.floor((first - LANE_WINDOW) / LANE_WINDOW) * LANE_WINDOW);
+
+  // The widest half of any text mark laid out, which bounds how far left of
+  // its own x a later box can start.
+  let widest = 0;
+  for (let i = from; i < markers.length; i++) {
+    const m = markers[i]!;
+    const index = rc.dataLayer.timeToIndex(m.time);
+    if (index === undefined) continue;
+    if (!isStyled(m) && index > range.to + 1) {
+      if (anyStyled) continue;
+      break;
+    }
+    const fontPx = laneFont(m);
+    if (fontPx > 0) widest = Math.max(widest, halfOf(m, fontPx));
+  }
+  // The latest mark in the window that nothing laid out before it reaches.
+  let start = from;
+  let reach = -Infinity;
+  for (let i = from; i < first; i++) {
+    const m = markers[i]!;
+    const index = rc.dataLayer.timeToIndex(m.time);
+    if (index === undefined) continue;
+    const x = rc.timeScale.indexToX(index) * dpr;
+    if (x - widest >= reach && (i === from || markers[i - 1]!.time !== m.time)) start = i;
+    const fontPx = laneFont(m);
+    if (fontPx > 0) reach = Math.max(reach, x + halfOf(m, fontPx));
+  }
+  if (first > start) {
+    const index = rc.dataLayer.timeToIndex(markers[first]!.time);
+    if (index !== undefined && rc.timeScale.indexToX(index) * dpr - widest >= reach) start = first;
+  }
+  return { start, widest };
+}
+
+/** Paint one placed mark, clipped to the plot when it is styled, and record where it landed. */
+function paintMark(ctx: CanvasRenderingContext2D, rc: PrimitiveRenderContext, m: SeriesMarker, x: number, y: number,
+  px: number, fontPx: number, drawText: boolean, below: boolean, styled: boolean, label: boolean, positions: MarkPosition[]): void {
+  const ty = below ? y + px : y - px;
+  let textW = 0, layout: ReturnType<typeof labelLayout> | undefined;
+  if (styled) {
+    if (drawText) ctx.font = textFont(m, fontPx, FAMILY, label);
+    let left = x - px / 2, right = x + px / 2, top = y - px / 2, bottom = y + px / 2;
+    if (drawText && m.text !== undefined) {
+      if (label) {
+        layout = labelLayout(ctx, m.shape === 'labelUp', y, m.text, fontPx);
+        left = x - layout.w / 2; right = x + layout.w / 2;
+        top = Math.min(y, layout.top); bottom = Math.max(y, layout.top + layout.h);
+      } else {
+        const lines = m.text.split('\n');
+        for (const line of lines) textW = Math.max(textW, ctx.measureText(line).width);
+        const textH = fontPx + (lines.length - 1) * fontPx * LINE_H;
+        left = Math.min(left, x - textW / 2); right = Math.max(right, x + textW / 2);
+        top = Math.min(top, below ? ty : ty - textH); bottom = Math.max(bottom, below ? ty + textH : ty);
+      }
+    }
+    if (!label && ![left, right, top, bottom].every(Number.isFinite)) {
+      // Unrenderable text cannot erase an independently sized signal glyph.
+      drawText = false;
+      left = x - px / 2; right = x + px / 2; top = y - px / 2; bottom = y + px / 2;
+    }
+    if (![left, right, top, bottom].every(Number.isFinite) || right < 0 || left > rc.plotWidth * rc.dpr
+      || bottom < 0 || top > rc.plotHeight * rc.dpr) return;
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, rc.plotWidth * rc.dpr, rc.plotHeight * rc.dpr); ctx.clip();
+  }
+  const clip = styled ? { width: rc.plotWidth, height: rc.plotHeight } : undefined;
+  if (m.shape === 'labelUp' || m.shape === 'labelDown') {
+    if (m.text !== undefined) {
+      if (layout) paintLabel(ctx, m.shape === 'labelUp', x, y, m.text, m.color, fontPx, layout, m);
+      else drawLabel(ctx, m.shape === 'labelUp', x, y, m.text, m.color, fontPx);
+    }
+    if (m.id !== undefined) positions.push({ id: m.id, x: x / rc.dpr, y: y / rc.dpr, clip });
+    if (styled) ctx.restore();
+    return;
+  }
+  drawShape(ctx, m.shape, x, y, px, m.color);
+  if (drawText && m.text !== undefined) {
+    ctx.fillStyle = m.textColor ?? m.color;
+    ctx.font = textFont(m, fontPx, FAMILY);
+    ctx.textAlign = m.textAlign ?? 'center';
+    // Text grows away from the edge a pinned marker sits on, the way it
+    // grows away from the bar for the bar-anchored positions.
+    ctx.textBaseline = below ? 'top' : 'bottom';
+    const tx = m.textAlign === 'left' ? x - textW / 2 : m.textAlign === 'right' ? x + textW / 2 : x;
+    if (m.text.indexOf('\n') < 0) {
+      ctx.fillText(m.text, tx, ty);
+    } else {
+      // Rows grow away from the bar (down below it, up above it) and the
+      // block is written from the anchor outward, so whichever edge the
+      // baseline pins stays put and the text never runs back over the candle.
+      const lines = m.text.split('\n');
+      const lh = fontPx * LINE_H;
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[below ? i : lines.length - 1 - i]!, tx, below ? ty + lh * i : ty - lh * i);
+      }
+    }
+  }
+  if (m.id !== undefined) positions.push({ id: m.id, x: x / rc.dpr, y: y / rc.dpr, clip });
+  if (styled) ctx.restore();
+}
+
 export class SeriesMarkers implements IPrimitive {
   private readonly _seriesId: SeriesId;
   private readonly _fallbackBars: (() => readonly Bar[]) | undefined;
   private readonly _priceScale: (() => PriceScale) | undefined;
   private _markers: SeriesMarker[] = [];
   private _host: PrimitiveHost | null = null;
-  private _lastPositions: { id: string; x: number; y: number; clip?: { width: number; height: number } | undefined }[] = [];
+  private _lastPositions: MarkPosition[] = [];
   /** The widest row of each text mark measured so far, for this marker set and `_widthDpr`. */
   private _widths = new Map<SeriesMarker, number>();
   private _widthDpr = 0;
@@ -411,33 +603,7 @@ export class SeriesMarkers implements IPrimitive {
   public draw(ctx: CanvasRenderingContext2D, rc: PrimitiveRenderContext): void {
     this._lastPositions = [];
     if (this._markers.length === 0) return;
-    // Bars are looked up per drawn marker, never collected up front: a paint
-    // runs on every live tick, and indexing the whole history here made the
-    // frame cost grow with the history length instead of with what is shown.
-    const own = rc.dataLayer.seriesBars(this._seriesId);
-    let fallback: readonly Bar[] | undefined;
-    let fallbackByTime: Map<number, Bar> | undefined;
-    const barAt = (time: number): Bar | undefined => {
-      // A real point on the marker's own series wins; indicator null columns
-      // retain their timestamp as NaN points. Where that series has a gap the
-      // instrument's bar stands in, which is the whole point: the mark is drawn
-      // rather than lost.
-      const bar = barAtTime(own, time);
-      if (bar !== undefined && Number.isFinite(bar.close)) return bar;
-      if (this._fallbackBars === undefined) return undefined;
-      fallback ??= this._fallbackBars();
-      // The fallback comes from the host and is not promised to be sorted. An
-      // exact hit is right when it is sorted (a repeated time's copies sit
-      // together and the last wins) and when it repeats no time; only a miss
-      // has to be confirmed by indexing it, at most once per paint.
-      const hit = barAtTime(fallback, time);
-      if (hit !== undefined) return hit;
-      if (fallbackByTime === undefined) {
-        fallbackByTime = new Map();
-        for (const b of fallback) fallbackByTime.set(b.time, b);
-      }
-      return fallbackByTime.get(time);
-    };
+    const barAt = barLookup(rc.dataLayer.seriesBars(this._seriesId), this._fallbackBars);
     const priceScale = this._priceScale?.() ?? rc.priceScale;
     const range = rc.timeScale.visibleRange();
     const stackByTime = new Map<number, number>();
@@ -453,60 +619,9 @@ export class SeriesMarkers implements IPrimitive {
       fontPx, effectiveMarkerPx(m.size, rc.timeScale.barSpacing) * dpr);
 
     ctx.save();
-    // Every walk over the marks stays inside the list: the loop bounds hold `i`,
-    // `first` is short of the length once the early return below has passed, and
-    // a mark's predecessor is read only after the first one.
-    // The first mark that may be painted; none before it is.
-    let first = markers.length;
-    for (let i = 0; i < markers.length; i++) {
-      const m = markers[i]!;
-      const index = rc.dataLayer.timeToIndex(m.time);
-      if (index === undefined) continue;
-      if (isStyled(m)) {
-        const fontPx = markerFontPx(m) * dpr;
-        const half = m.text !== undefined && Number.isFinite(fontPx) && fontPx > 0 ? halfOf(m, fontPx) : 0;
-        if (rc.timeScale.indexToX(index) * dpr + Math.max(half, 16 * dpr) < 0) continue;
-      } else if (index < range.from - 1) {
-        continue;
-      }
-      first = i;
-      break;
-    }
-    if (first === markers.length) { ctx.restore(); return; }
-    // Marks at one time stack in order, so the first bar's earlier marks count too.
-    while (first > 0 && markers[first - 1]!.time === markers[first]!.time) first--;
-    const from = Math.max(0, Math.floor((first - LANE_WINDOW) / LANE_WINDOW) * LANE_WINDOW);
-
-    // The widest half of any text mark laid out, which bounds how far left of
-    // its own x a later box can start.
-    let widest = 0;
-    for (let i = from; i < markers.length; i++) {
-      const m = markers[i]!;
-      const index = rc.dataLayer.timeToIndex(m.time);
-      if (index === undefined) continue;
-      if (!isStyled(m) && index > range.to + 1) {
-        if (this._anyStyled) continue;
-        break;
-      }
-      const fontPx = laneFont(m);
-      if (fontPx > 0) widest = Math.max(widest, halfOf(m, fontPx));
-    }
-    // The latest mark in the window that nothing laid out before it reaches.
-    let start = from;
-    let reach = -Infinity;
-    for (let i = from; i < first; i++) {
-      const m = markers[i]!;
-      const index = rc.dataLayer.timeToIndex(m.time);
-      if (index === undefined) continue;
-      const x = rc.timeScale.indexToX(index) * dpr;
-      if (x - widest >= reach && (i === from || markers[i - 1]!.time !== m.time)) start = i;
-      const fontPx = laneFont(m);
-      if (fontPx > 0) reach = Math.max(reach, x + halfOf(m, fontPx));
-    }
-    if (first > start) {
-      const index = rc.dataLayer.timeToIndex(markers[first]!.time);
-      if (index !== undefined && rc.timeScale.indexToX(index) * dpr - widest >= reach) start = first;
-    }
+    const window = laneWindow(markers, this._anyStyled, rc, range, laneFont, halfOf);
+    if (window === null) { ctx.restore(); return; }
+    const { start, widest } = window;
     const laneGap = 2 * dpr;
     const lanes: Record<-1 | 1, LaneBox[]> = { [-1]: [], [1]: [] };
 
@@ -529,31 +644,14 @@ export class SeriesMarkers implements IPrimitive {
       const x = rc.timeScale.indexToX(index) * rc.dpr;
       const stack = stackByTime.get(m.time) ?? 0;
       const gap = (px + 4 * rc.dpr) * stack;
-      let y: number;
-      if (m.position === 'paneTop') {
-        // Pinned to the plot edge, stacking inward, so the row never moves
-        // with the scale and needs no bar under it.
-        y = px / 2 + 4 * rc.dpr + gap;
-      } else if (m.position === 'paneBottom') {
-        y = rc.plotHeight * rc.dpr - px / 2 - 4 * rc.dpr - gap;
-      } else if (m.position === 'atPrice' && m.price !== undefined) {
-        y = priceScale.priceToY(m.price) * rc.dpr;
-      } else if (bar !== undefined && m.position === 'aboveBar') {
-        y = priceScale.priceToY(bar.high) * rc.dpr - px - gap;
-      } else if (bar !== undefined && m.position === 'belowBar') {
-        y = priceScale.priceToY(bar.low) * rc.dpr + px + gap;
-      } else if (bar !== undefined) {
-        y = priceScale.priceToY((bar.open + bar.close) / 2) * rc.dpr;
-      } else {
-        continue;
-      }
+      let y = anchorY(m, bar, px, gap, priceScale, rc);
       if (!Number.isFinite(y) || !Number.isFinite(x)) continue;
       stackByTime.set(m.time, stack + 1);
       const fontPx = markerFontPx(m) * rc.dpr;
       const label = m.shape === 'labelUp' || m.shape === 'labelDown';
       const validFont = Number.isFinite(fontPx) && fontPx > 0;
       if (label && !validFont) continue;
-      let drawText = validFont && m.text !== undefined;
+      const drawText = validFont && m.text !== undefined;
       const below = m.position === 'belowBar' || m.position === 'paneTop';
       if (laneFontPx > 0) {
         const side = LANE[m.position] as -1 | 1;
@@ -563,67 +661,7 @@ export class SeriesMarkers implements IPrimitive {
         }
       }
       if (hidden) continue;
-      const ty = below ? y + px : y - px;
-      let textW = 0, layout: ReturnType<typeof labelLayout> | undefined;
-      if (styled) {
-        if (drawText) ctx.font = textFont(m, fontPx, FAMILY, label);
-        let left = x - px / 2, right = x + px / 2, top = y - px / 2, bottom = y + px / 2;
-        if (drawText && m.text !== undefined) {
-          if (label) {
-            layout = labelLayout(ctx, m.shape === 'labelUp', y, m.text, fontPx);
-            left = x - layout.w / 2; right = x + layout.w / 2;
-            top = Math.min(y, layout.top); bottom = Math.max(y, layout.top + layout.h);
-          } else {
-            const lines = m.text.split('\n');
-            for (const line of lines) textW = Math.max(textW, ctx.measureText(line).width);
-            const textH = fontPx + (lines.length - 1) * fontPx * LINE_H;
-            left = Math.min(left, x - textW / 2); right = Math.max(right, x + textW / 2);
-            top = Math.min(top, below ? ty : ty - textH); bottom = Math.max(bottom, below ? ty + textH : ty);
-          }
-        }
-        if (!label && ![left, right, top, bottom].every(Number.isFinite)) {
-          // Unrenderable text cannot erase an independently sized signal glyph.
-          drawText = false;
-          left = x - px / 2; right = x + px / 2; top = y - px / 2; bottom = y + px / 2;
-        }
-        if (![left, right, top, bottom].every(Number.isFinite) || right < 0 || left > rc.plotWidth * rc.dpr
-          || bottom < 0 || top > rc.plotHeight * rc.dpr) continue;
-        ctx.save(); ctx.beginPath(); ctx.rect(0, 0, rc.plotWidth * rc.dpr, rc.plotHeight * rc.dpr); ctx.clip();
-      }
-      const clip = styled ? { width: rc.plotWidth, height: rc.plotHeight } : undefined;
-      if (m.shape === 'labelUp' || m.shape === 'labelDown') {
-        if (m.text !== undefined) {
-          if (layout) paintLabel(ctx, m.shape === 'labelUp', x, y, m.text, m.color, fontPx, layout, m);
-          else drawLabel(ctx, m.shape === 'labelUp', x, y, m.text, m.color, fontPx);
-        }
-        if (m.id !== undefined) this._lastPositions.push({ id: m.id, x: x / rc.dpr, y: y / rc.dpr, clip });
-        if (styled) ctx.restore();
-        continue;
-      }
-      drawShape(ctx, m.shape, x, y, px, m.color);
-      if (drawText && m.text !== undefined) {
-        ctx.fillStyle = m.textColor ?? m.color;
-        ctx.font = textFont(m, fontPx, FAMILY);
-        ctx.textAlign = m.textAlign ?? 'center';
-        // Text grows away from the edge a pinned marker sits on, the way it
-        // grows away from the bar for the bar-anchored positions.
-        ctx.textBaseline = below ? 'top' : 'bottom';
-        const tx = m.textAlign === 'left' ? x - textW / 2 : m.textAlign === 'right' ? x + textW / 2 : x;
-        if (m.text.indexOf('\n') < 0) {
-          ctx.fillText(m.text, tx, ty);
-        } else {
-          // Rows grow away from the bar (down below it, up above it) and the
-          // block is written from the anchor outward, so whichever edge the
-          // baseline pins stays put and the text never runs back over the candle.
-          const lines = m.text.split('\n');
-          const lh = fontPx * LINE_H;
-          for (let i = 0; i < lines.length; i++) {
-            ctx.fillText(lines[below ? i : lines.length - 1 - i]!, tx, below ? ty + lh * i : ty - lh * i);
-          }
-        }
-      }
-      if (m.id !== undefined) this._lastPositions.push({ id: m.id, x: x / rc.dpr, y: y / rc.dpr, clip });
-      if (styled) ctx.restore();
+      paintMark(ctx, rc, m, x, y, px, fontPx, drawText, below, styled, label, this._lastPositions);
     }
     ctx.restore();
   }

@@ -1,6 +1,6 @@
 ---
 title: Custom Data Feeds
-description: The DataFeed and TradeFeed interfaces, and writing an adapter for any broker.
+description: The DataFeed and OrderFeed interfaces, and writing an adapter for any broker.
 ---
 
 # Custom data feeds
@@ -174,14 +174,10 @@ adapter that stays open for hours, keep a bounded source window and release
 every subscription during teardown. See
 [Performance & Operations](/docs/performance-and-operations).
 
-## TradeFeed
-
-There are **two** interfaces here and they are not interchangeable. `OrderEngine` takes the
-smaller `OrderFeed`; `TradeFeed` is the higher-level broker abstraction with its own
-subscriptions.
+## OrderFeed and TradeFeed
 
 `OrderFeed` (from `openalgo-charts/trade`) is what the engine's write path needs, and the
-only one you must implement to place orders. Note that `place` receives the engine's
+only one you implement to place orders. Note that `place` receives the engine's
 `mode`, so an adapter can route analyzer traffic differently from live:
 
 ```ts
@@ -192,8 +188,8 @@ interface OrderFeed {
 }
 ```
 
-`TradeFeed` (from the base package) is the broader broker surface, with push subscriptions
-rather than snapshot getters:
+`TradeFeed` (from the base package) is deprecated and goes in 3.0.0. Nothing in the library
+takes or implements it, and the trading layer never calls one:
 
 ```ts
 interface TradeFeed {
@@ -205,9 +201,10 @@ interface TradeFeed {
 }
 ```
 
-Implement against your broker and the entire on-chart trading layer works unchanged. The
-bundled `OpenAlgoTradeFeed` implements `OrderFeed` and is the reference implementation;
-`FakeBroker` is an in-memory `OrderFeed` for tests and demos.
+Implement `OrderFeed` against your broker for the engine's writes, and hand the orders and
+positions you read back to the chart with `chart.trading.syncState`: that is what the on-chart
+trading layer draws from. The bundled `OpenAlgoTradeFeed` implements `OrderFeed` and is the
+reference implementation; `FakeBroker` is an in-memory `OrderFeed` for tests and demos.
 
 ## Time conversion helpers
 

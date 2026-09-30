@@ -9,9 +9,9 @@
  *
  * The mechanic is deliberately boring. Replay feeds the chart a **prefix** of
  * the full bar array through the ordinary `series.setData` path, and that is
- * what makes indicators free: `Chart._setData` calls `_recomputeIndicators` for
- * the primary series, and `IndicatorInstance.recompute` re-reads the whole
- * history from `sourceBars()`. Shorten that history and every indicator, level,
+ * what makes indicators free: for the primary series that path invalidates and
+ * recomputes every study at once (`ChartSeries._setData`), and
+ * `IndicatorInstance.recompute` re-reads the whole history from `sourceBars()`. Shorten that history and every indicator, level,
  * fill, marker and legend reconstructs itself as it was at that bar, with no
  * replay-aware code anywhere in the indicator tier.
  */
@@ -22,21 +22,17 @@ import { seriesConfirmation } from '../model/series-provenance';
 import { clamp } from '../helpers/math';
 import { setReplayWindow } from '../model/replay-window';
 import { ReplayTimeline, type ReplayTiming } from './timeline';
+import { monotonicNow, repeat } from '../helpers/timers';
 
 /** Schedules a repeating callback and returns its canceller. Inject in tests. */
 export type ReplayScheduler = (cb: () => void, intervalMs: number) => () => void;
-
-const defaultScheduler: ReplayScheduler = (cb, ms) => {
-  const id = setInterval(cb, ms);
-  return () => clearInterval(id);
-};
 
 /**
  * Most bars a single timer tick may consume. A backgrounded tab throttles its
  * timers to about one call a second, so without a ceiling the first tick after
  * the user comes back would fast-forward minutes of the session in one frame.
  */
-const CATCH_UP_LIMIT = 10;
+export const CATCH_UP_LIMIT = 10;
 
 /**
  * The slice of the time scale replay saves and restores. Declared structurally
@@ -63,6 +59,12 @@ export interface ReplayChartHost {
    * may be omitted and replay drives that one.
    */
   primarySeries?(): SeriesApi | null;
+  /**
+   * Optional. When the chart reports its own end, replay listens for it while
+   * it owns the chart's data: a chart destroyed mid-session stops the playback
+   * timer and is written to no more, and nothing is restored to it.
+   */
+  on?(event: 'destroy', callback: () => void): () => void;
 }
 
 /** Everything a transport bar and a clock need, in one object. */
@@ -173,7 +175,10 @@ export interface ReplayOptions {
   onFrame?: ((state: ReplayState) => void) | undefined;
   /** Playback clock. Default `performance.now`. */
   now?: () => number;
-  /** Playback timer. Default `setInterval`. */
+  /**
+   * Playback timer. Default `setInterval`, with the interval held from 1 ms to
+   * 2^31 - 1 ms, the longest a platform timer waits (a longer one fires at once).
+   */
   scheduler?: ReplayScheduler;
 }
 
@@ -258,6 +263,8 @@ export class ReplayController {
   private _interval = 0;
   /** Clock reading the last advance was charged to; keeps playback drift-free. */
   private _lastAdvance = 0;
+  /** Stops listening for the chart's end; held only while replay owns its data. */
+  private _release: (() => void) | undefined;
 
   /**
    * Constructing the controller **enters replay**: it snapshots the chart's data
@@ -303,8 +310,8 @@ export class ReplayController {
     const speed = options.speed ?? 1;
     this._speed = speed > 0 ? speed : 1;
     this._onFrame = options.onFrame ?? null;
-    this._now = options.now ?? (() => (typeof performance !== 'undefined' ? performance.now() : 0));
-    this._schedule = options.scheduler ?? defaultScheduler;
+    this._now = options.now ?? monotonicNow;
+    this._schedule = options.scheduler ?? repeat;
     // Opening on a half-formed candle is not a position anyone asked for, so
     // entering replay lands on the last step of `startIndex`, the same place a
     // `seek` there would.
@@ -516,6 +523,8 @@ export class ReplayController {
     this._playing = false;
     this._stopTimer();
     if (!this._active) return;
+    this._release?.();
+    this._release = undefined;
     const transition = ++this._transition;
     this._active = false;
     this._index = this._startIndex;
@@ -598,6 +607,7 @@ export class ReplayController {
 
   private _write(shown: Bar[], forming: boolean, first: boolean): void {
     const transition = ++this._transition;
+    if (first) this._release = this._chart.on?.('destroy', this._gone);
     // Other data owners must know the boundary before the primary write can
     // paint or notify a host. A comparison added later reads the same boundary.
     const lastTime = shown[shown.length - 1]?.time ?? Number.NEGATIVE_INFINITY;
@@ -647,6 +657,19 @@ export class ReplayController {
     }
     this._advance(due);
     if (this._atEnd()) this._end();
+  };
+
+  /**
+   * The chart is gone: there is nothing to restore to and nothing to draw on,
+   * so the clock stops and the controller leaves replay without writing. A
+   * write in progress sees the transition move and goes no further.
+   */
+  private readonly _gone = (): void => {
+    this._transition++;
+    this._playing = false;
+    this._stopTimer();
+    this._active = false;
+    this._release = undefined;
   };
 
   /** True on the last step of the last bar, which is where playback stops. */

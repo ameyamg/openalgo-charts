@@ -34,6 +34,7 @@ import type { ChartTheme } from '../theme';
 import type { SeriesStyle } from '../render/series-style';
 import { contrastText } from '../render/pill';
 import { dashPattern, type CanvasLineStyle } from '../render/grid';
+import { drawAxisTag } from './axis-tag';
 import { sessionStartFlags, DEFAULT_TIMEZONE } from '../feed/time';
 
 export type PriceLevelKind =
@@ -470,38 +471,7 @@ export class PriceLevels implements IPrimitive {
       }
 
       if (style.label && rc.priceAxisSide !== 'hidden' && rc.priceAxisWidth > 0) {
-        const text = style.text ?? rc.priceScale.format(price);
-        const padX = 6 * dpr;
-        const boxH = TAG_H * dpr;
-        const left = rc.priceAxisSide === 'left';
-        if (left || rc.priceAxisOffset !== undefined) {
-          const offset = rc.priceAxisOffset ?? 0;
-          const edge = Math.round(offset * dpr);
-          const outer = Math.round((offset + (left ? -rc.priceAxisWidth : rc.priceAxisWidth)) * dpr);
-          const available = Math.abs(outer - edge) - 1;
-          if (Number.isFinite(edge) && Number.isFinite(outer) && available > 0 && maxY >= boxH) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(Math.min(edge, outer), 0, available + 1, maxY);
-            ctx.clip();
-            const padding = Math.min(padX, available / 4), textWidth = ctx.measureText(text).width;
-            const width = Math.min(available, textWidth + padding * 2);
-            const x = left ? edge - 1 - width : edge + 1;
-            const tagY = Math.max(boxH / 2, Math.min(maxY - boxH / 2, y));
-            ctx.fillStyle = color;
-            ctx.fillRect(x, tagY - boxH / 2, width, boxH);
-            ctx.fillStyle = contrastText(color);
-            ctx.font = `500 ${11 * dpr * (textWidth > 0 ? Math.min(1, (width - padding * 2) / textWidth) : 1)}px system-ui, sans-serif`;
-            ctx.fillText(text, x + padding, tagY);
-            ctx.restore();
-            ctx.font = `500 ${11 * dpr}px system-ui, sans-serif`;
-          }
-        } else {
-          ctx.fillStyle = color;
-          ctx.fillRect(xEnd + 1, y - boxH / 2, ctx.measureText(text).width + padX * 2, boxH);
-          ctx.fillStyle = contrastText(color);
-          ctx.fillText(text, xEnd + 1 + padX, y);
-        }
+        drawAxisTag(ctx, rc, y, style.text ?? rc.priceScale.format(price), color, contrastText(color), TAG_H * dpr, true);
       }
     }
     ctx.restore();

@@ -109,7 +109,7 @@ function disposeLiveFeed() {
 }
 ```
 
-The chart depends only on the `DataFeed` / `TradeFeed` interfaces, so any broker
+The chart depends only on the `DataFeed` / `OrderFeed` interfaces, so any broker
 can be wired with a small adapter. Verify the exact REST paths against your
 running OpenAlgo build before production use.
 

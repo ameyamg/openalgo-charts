@@ -12,7 +12,7 @@
  * future is the entire point: a translucent wash still shows the shape faintly,
  * which is what tells a user there is more session there to walk into.
  */
-import type { IPrimitive, PrimitiveRenderContext, ZOrder } from './primitive';
+import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, ZOrder } from './primitive';
 
 export interface ReplayShadeOptions {
   /**
@@ -34,6 +34,7 @@ export interface ReplayShadeOptions {
 
 export class ReplayShade implements IPrimitive {
   private _opts: Required<Omit<ReplayShadeOptions, 'index'>> & { index: number | null };
+  private _host: PrimitiveHost | null = null;
 
   public constructor(opts: ReplayShadeOptions) {
     this._opts = {
@@ -47,14 +48,19 @@ export class ReplayShade implements IPrimitive {
     };
   }
 
+  public attached(host: PrimitiveHost): void { this._host = host; }
+  public detached(): void { this._host = null; }
+
   public zOrder(): ZOrder { return this._opts.zOrder; }
   /** Takes no part in autoscale: it covers bars, it is not one. */
   public autoscaleInfo(): null { return null; }
   /** Never hit, so the click that picks a bar reaches the chart. */
   public hitTest(): null { return null; }
 
+  /** Moving or clearing the cut repaints at once: a host sets it on a click, not only on a pointer move. */
   public setOptions(patch: Partial<ReplayShadeOptions>): void {
     this._opts = { ...this._opts, ...patch };
+    this._host?.requestUpdate();
   }
 
   public draw(ctx: CanvasRenderingContext2D, rc: PrimitiveRenderContext): void {

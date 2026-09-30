@@ -11,6 +11,25 @@ import type { LooseOptional } from '../helpers/types';
 export type VolumeMode = 'ltq-sum' | 'day-delta';
 export type LateTickPolicy = 'foldIntoBar' | 'dropOlderThanPrevBar';
 
+/**
+ * Two observations of one bucket as one bar: the extremes are the union,
+ * since each side saw real prices, and the volume the larger, since volume
+ * inside a bar only grows (a bar neither side gave a volume keeps none).
+ * Every other field is `base`'s. Which side owns the open, the close and the
+ * open interest depends on which one the caller trusts for them, so each
+ * caller sets those itself.
+ */
+export function widenBar(base: Bar, observed: Bar): Bar {
+  return {
+    ...base,
+    high: Math.max(base.high, observed.high),
+    low: Math.min(base.low, observed.low),
+    // Bar stays exact for hosts; an undefined volume here is a bar without one.
+    volume: base.volume === undefined && observed.volume === undefined
+      ? undefined : Math.max(base.volume ?? 0, observed.volume ?? 0),
+  } satisfies LooseOptional<Bar> as Bar;
+}
+
 export interface CandleBuilderOptions {
   intervalSec: number;
   /** 'ltq-sum' accumulates last-traded-qty; 'day-delta' diffs cumulative day volume. */
@@ -116,16 +135,9 @@ export class CandleBuilder {
   public reconcile(authoritative: Bar): Bar | null {
     const current = this._current;
     if (current === null || authoritative.time !== current.time) return null;
-    const volume = current.volume === undefined && authoritative.volume === undefined
-      ? undefined : Math.max(current.volume ?? 0, authoritative.volume ?? 0);
-    // Bar stays exact for hosts; an undefined volume here is a bar without one.
-    const merged = {
-      ...current,
-      open: this._provisional ? authoritative.open : current.open,
-      high: Math.max(current.high, authoritative.high),
-      low: Math.min(current.low, authoritative.low),
-      volume,
-    } satisfies LooseOptional<Bar> as Bar;
+    const merged = widenBar(current, authoritative);
+    if (this._provisional) merged.open = authoritative.open;
+    const volume = merged.volume;
     // In day-delta mode the volume is recomputed from the cumulative on every
     // tick, so the baseline moves with it or the next tick would shrink it back.
     if (this._opts.volumeMode === 'day-delta' && this._hasCum && volume !== undefined) {

@@ -6,7 +6,12 @@ import type { IndicatorApi } from '../model/indicator-instance';
 import type { IPrimitive } from '../primitives/primitive';
 import type { TickSchedule } from '../feed/tick-schedule';
 
-/** A primary-source mutation, emitted after indicator invalidation. */
+/**
+ * The payload of the chart's `data:update` event (see `ChartEventMap`): a
+ * primary-source mutation, emitted after indicator invalidation. Every chart
+ * emits it, alerts or not; the type is declared here because the alert
+ * controller was its first reader.
+ */
 export interface ChartDataUpdate {
   kind: 'update' | 'reset' | 'prepend';
   time?: number;

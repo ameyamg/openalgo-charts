@@ -1,4 +1,5 @@
 import { roundToTick } from '../helpers/math';
+import { later } from '../helpers/timers';
 import type { Bar } from '../model/bar';
 import { getIndicator, hasIndicator } from '../model/indicator-registry';
 import { numericMatch, touchMatch } from './conditions';
@@ -744,11 +745,10 @@ export class AlertController {
     this._clearTimer();
     if (next === undefined) return;
     this._timerAt = next;
-    this._timer = setTimeout(() => {
+    this._timer = later(() => {
       this._timer = undefined;
       this._timerAt = undefined;
       if (!this._destroyed) this._expireDue();
-    }, Math.max(1, Math.min(2_147_483_647, (next - this._now()) * 1000)));
-    (this._timer as unknown as { unref?: () => void }).unref?.();
+    }, Math.max(1, (next - this._now()) * 1000));
   }
 }

@@ -22,6 +22,8 @@ that names no removal release, so none can stay open-ended.
 | Deprecated | Removed in | Use instead |
 | --- | --- | --- |
 | `mapOrder` | 3.0.0 | `decodeOrder`, which returns why a row could not be read, or `OpenAlgoTradeFeed.getOrderBook()` |
+| `TradeFeed` | 3.0.0 | `OrderFeed` from `openalgo-charts/trade`, which the order engine writes through; nothing in the library ever called a `TradeFeed` |
+| `PlaceOrder` | 3.0.0 | `PlaceRequest` from `openalgo-charts/trade`, the order `OrderFeed.place` takes |
 | `level.dashed` received by a custom `IndicatorHost.addIndicatorLevel` | 3.0.0 | `level.lineStyle`, which is always resolved |
 | `depth_level` key in a depth subscribe frame | 3.0.0 | `depth`, which is sent beside it |
 | Widget message key "Enter a valid expiry date and time in UTC" | 3.0.0 | Nothing: the widget no longer shows it |

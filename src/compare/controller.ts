@@ -645,6 +645,11 @@ export function existingComparisonHandles(chart: ComparisonChartHost): readonly 
 /**
  * The controller for a chart, created on first use. Use it to change the mode
  * for the whole chart, to list what is on it, or to clear it.
+ *
+ * A chart has one, so a later call returns the same controller, with the `mode`
+ * and `baseline` it passes applied through `setMode` and `setBaseline`. An
+ * attach helper merges a repeated request this way; a controller that owns
+ * state a second owner would fight over (alerts, a replay group) refuses one.
  */
 export function comparisonController(
   chart: ComparisonChartHost,
@@ -654,6 +659,9 @@ export function comparisonController(
   if (controller === undefined) {
     controller = new ComparisonController(chart, options);
     controllers.set(chart, controller);
+  } else {
+    if (options?.mode !== undefined) controller.setMode(options.mode);
+    if (options?.baseline !== undefined) controller.setBaseline(options.baseline);
   }
   return controller;
 }

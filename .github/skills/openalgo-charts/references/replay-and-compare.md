@@ -35,7 +35,7 @@ replay.play({ speed: 2 });
 | `speed` | `number` | `1` | Multiplier over `barMs`. |
 | `onFrame` | `(state: ReplayState) => void` | none | Called after the chart is updated, alongside the event. |
 | `now` | `() => number` | `performance.now` | Injectable clock. |
-| `scheduler` | `(cb, ms) => () => void` | `setInterval` | Injectable timer; returns its canceller. |
+| `scheduler` | `(cb, ms) => () => void` | `setInterval` | Injectable timer; returns its canceller. The default holds the interval from 1 ms to 2^31 - 1 ms, the longest a platform timer waits, so a very slow replay no longer ticks every millisecond (since 2.6.0). |
 | `timing` | `ReplayTiming` | none | Explicit candle availability for time-aligned replay. `barEndTime: ReplayBarEndTime` returns UTC seconds; `subBarEndTime` is required with finer bars. |
 | `startTime` | `number` | selected candle's end | Requires `timing`. Before the first observation the chart is empty, `index` is -1 and `bar` is null. |
 | `autoStart` | `boolean` | `true` | False validates and captures data/viewport without changing the chart; seek or play enters later. |
@@ -49,7 +49,7 @@ replay.play({ speed: 2 });
 | `stepBack` | `(n = 1) => void` | Stops dead at the first bar. |
 | `play` | `({ speed? }) => void` | Re-speeds a running replay. On the last bar it emits `replay:end` and arms no timer. |
 | `pause` | `() => void` | Leaves the playhead where it is. |
-| `stop` | `() => void` | Restores data **and** viewport. Safe twice; a later `seek`/`step`/`play` re-enters from `startIndex`. |
+| `stop` | `() => void` | Restores data **and** viewport. Safe twice; a later `seek`/`step`/`play` re-enters from `startIndex`. After the chart is destroyed it does nothing: the controller already left replay, see below. |
 | `state` | `() => ReplayState` | `{ index, total, playing, speed, bar, subIndex, subSteps }`: everything a transport bar and a clock need. |
 | `seekTime` | `(utcSeconds: number) => void` | Requires `timing`; projects only observations available by that time. |
 | `time` | `() => number \| null` | Availability clock with `timing`; displayed bar timestamp otherwise. |
@@ -201,7 +201,7 @@ Events on the chart bus, all carrying a `ReplayState`: `replay:start` (first fra
 
 ### Why indicators come free
 
-Every transition funnels through one private `_apply(index)` that hands the driven series a **prefix** of `bars` through the public `series.setData`. That is already the path that calls `_recomputeIndicators`, and `IndicatorInstance.recompute` re-reads the whole history from `sourceBars()`, so each plot, level, fill, marker and legend row rebuilds itself as it stood at that bar. There is no replay-aware code in the indicator tier, and none is needed.
+Every transition funnels through one private `_apply(index)` that hands the driven series a **prefix** of `bars` through the public `series.setData`. For the primary series that path already invalidates and recomputes every study at once, and `IndicatorInstance.recompute` re-reads the whole history from `sourceBars()`, so each plot, level, fill, marker and legend row rebuilds itself as it stood at that bar. There is no replay-aware code in the indicator tier, and none is needed.
 
 `dataLayer.length` shrinks with the prefix, so an indicator's own plot series cannot hold the shared time axis open at future bars.
 
@@ -210,6 +210,7 @@ Every transition funnels through one private `_apply(index)` that hands the driv
 - **Pass every series that shares the timeline** (volume histogram, a comparison line) in `options.series`. The DataLayer merges all series onto one axis, so one left at full length drags future timestamps back onto it. The extras are cut by **time**, not by count.
 - **Replay drives series, not the feed.** Live ticks, periodic reconciliation, reconnect refreshes and older-history responses must all stop writing displayed series while replay is active, even while paused. Detach those writers or retain live data in a separate host buffer. On exit, `stop()` restores its captured snapshot; the host must then reconcile current live data and reseed. See [host-integration](host-integration.md).
 - **Speed is derived from the clock, not the tick count**, so a throttled timer still plays at the requested rate. One tick consumes at most 10 bars, so a backgrounded tab does not fast-forward the session when it wakes.
+- **A destroyed chart ends the session.** While replay owns the chart's data the controller listens for `'destroy'` (`ReplayChartHost.on`, optional; `Chart` has it). On it the timer stops, nothing more is written and nothing is restored. Since 2.6.0; before, a playing controller kept calling `setData` on the dead chart until the host called `stop()`. A custom host without `on` still has to stop replay itself.
 - `stop()` restores `barSpacing` and `rightOffset` together with the data. Those two plus the restored `baseIndex` *are* the visible logical range, which is why the view returns to the pixel.
 
 ## Symbol comparison
@@ -223,7 +224,7 @@ comparisonController(chart).setMode('indexed-to-100');
 bn.remove();
 ```
 
-`addComparison(chart, options)` is the free-function front door; `comparisonController(chart, options?)` returns the one controller per chart (held in a `WeakMap`) for chart-wide operations. **A primary series must exist first** or `add` throws.
+`addComparison(chart, options)` is the free-function front door; `comparisonController(chart, options?)` returns the one controller per chart (held in a `WeakMap`) for chart-wide operations; a call after it exists applies the `mode` and `baseline` it passes through `setMode` and `setBaseline` (since 2.6.0; before, they were ignored). **A primary series must exist first** or `add` throws.
 
 ### ComparisonOptions and the handle
 

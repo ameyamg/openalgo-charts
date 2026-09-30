@@ -484,6 +484,38 @@ describe('feedback loops', () => {
     expect(group.symbol()).toBe('BANKNIFTY');
   });
 
+  it('does not let a follower that renames the symbol bounce it back to the leader', () => {
+    // A host loader that normalises the name (a suffix, a case change) and
+    // announces what it loaded. That echo arrives inside the broadcast, and
+    // taking it as a new selection would make the follower's spelling the
+    // group's: the next convergence then sends it back to the leader.
+    const a = new StubChart(days(0, 9));
+    const b = new StubChart(days(0, 9));
+    const group = createLinkGroup({ symbol: true, crosshair: false, viewport: false });
+    const load = (chart: StubChart, rename: (s: string) => string) => (symbol: string): void => {
+      chart.symbols.push(symbol);
+      chart.emit('symbol', { symbol: rename(symbol) });
+    };
+    group.add(a, { symbol: 'NIFTY', onSymbol: load(a, (s) => s) });
+    group.add(b, { symbol: 'NIFTY', onSymbol: load(b, (s) => `${s}-EQ`) });
+
+    a.emit('symbol', { symbol: 'BANKNIFTY' });
+    expect(b.symbols).toEqual(['BANKNIFTY']);
+    expect(group.symbol()).toBe('BANKNIFTY');
+
+    // Switching the channel off and on converges on the agreed instrument,
+    // which both charts already hold: nothing is loaded again on either side.
+    group.setOptions({ symbol: false });
+    group.setOptions({ symbol: true });
+    expect(a.symbols).toEqual([]);
+    expect(b.symbols).toEqual(['BANKNIFTY']);
+
+    // A chart joining later is loaded with the leader's choice.
+    const late = new StubChart(days(0, 9));
+    group.add(late, { symbol: 'NIFTY', onSymbol: load(late, (s) => s) });
+    expect(late.symbols).toEqual(['BANKNIFTY']);
+  });
+
   it('survives an echo that crosses channels: a symbol load that moves a viewport', () => {
     // The second-order loop decision 3 is group-wide for. Loading a new
     // instrument replaces the data and restores the zoom, which emits 'pan',
