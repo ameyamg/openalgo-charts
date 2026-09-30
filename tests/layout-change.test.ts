@@ -50,12 +50,30 @@ describe('layout:change', () => {
       ['setAxisChromeOptions', () => chart.setAxisChromeOptions({ barCountdown: true })],
       ['setEventOptions', () => chart.setEventOptions({ dividend: false })],
       ['applyOptions', () => chart.applyOptions({ crosshairSnapToBar: true })],
+      ['setNavigationOptions', () => chart.setNavigationOptions({ mousePan: 'horizontal' })],
     ];
     for (const [setter, call] of calls) {
       heard.length = 0;
       call();
       expect(heard, setter).toEqual([setter]);
     }
+  });
+
+  it('follows the magnet shortcut, which changes the crosshair mode getState saves', () => {
+    const { chart, heard } = makeChart();
+    const run = (chart as unknown as { _runShortcut(command: string): boolean })._runShortcut.bind(chart);
+    expect(run('toggleCrosshairMagnet')).toBe(true);
+    expect(chart.getState().crosshairMode).toBe('magnet');
+    expect(heard).toEqual(['applyOptions']);
+  });
+
+  it('keeps objects:change for the pan and zoom switches beside layout:change', () => {
+    const { chart, heard } = makeChart();
+    let objects = 0;
+    chart.on('objects:change', () => { objects++; });
+    chart.setNavigationOptions({ panEnabled: false });
+    expect(objects).toBe(1);
+    expect(heard).toEqual(['setNavigationOptions']);
   });
 
   it('is one event for a setter that sets others on its way', () => {

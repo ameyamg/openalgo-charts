@@ -6,7 +6,7 @@ import { Chart } from '../src/core/chart';
 import { makeCtx, RecordingContext } from './helpers/fake-ctx';
 import type { Bar } from '../src/model/bar';
 import { PriceScale } from '../src/scale/price-scale';
-import { drawLastPriceLabel } from '../src/render/axis';
+import { drawLastPriceLine, drawLastPriceTag } from '../src/render/axis';
 import { drawCrosshair } from '../src/render/crosshair';
 
 const di = (x: number, close: number): { x: number; bar: Bar } => ({ x, bar: { time: x, open: close, high: close, low: close, close } });
@@ -245,18 +245,14 @@ describe('Gap 1: title / priceLineVisible / lastValueVisible', () => {
   const layout = { plotWidth: 200, plotHeight: 100, priceAxisWidth: 60, timeAxisHeight: 20, plotLeft: 0 };
   const ps = () => { const s = new PriceScale(); s.setHeight(100); s.autoscale(10, 20); return s; };
 
-  it('drawLastPriceLabel honors showLine / showTag', () => {
-    const none = makeCtx();
-    drawLastPriceLabel(none.ctx, ps(), 15, true, layout, 1, undefined, undefined, false, false);
-    expect(none.rec.ops.length).toBe(0);
-
+  it('draws the last-price line and its tag separately', () => {
     const lineOnly = makeCtx();
-    drawLastPriceLabel(lineOnly.ctx, ps(), 15, true, layout, 1, undefined, undefined, true, false);
+    drawLastPriceLine(lineOnly.ctx, ps(), 15, true, layout, 1);
     expect(lineOnly.rec.ops.some((o) => o.type === 'stroke')).toBe(true);
     expect(lineOnly.rec.ops.some((o) => o.type === 'fillRect')).toBe(false); // no tag box
 
     const tagOnly = makeCtx();
-    drawLastPriceLabel(tagOnly.ctx, ps(), 15, true, layout, 1, undefined, undefined, false, true);
+    drawLastPriceTag(tagOnly.ctx, ps(), 15, true, layout, 1);
     expect(tagOnly.rec.ops.some((o) => o.type === 'fillRect')).toBe(true);
     expect(tagOnly.rec.ops.some((o) => o.type === 'stroke')).toBe(false); // no line
   });

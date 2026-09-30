@@ -1,4 +1,5 @@
 import type { IndicatorDescriptor, IndicatorSettings, IndicatorStudySource } from './indicator-registry';
+import { isPlainObject } from '../helpers/validate';
 
 /** A proposed chart state. Input order is display order, not calculation order. */
 export interface IndicatorDependencyNode {
@@ -19,12 +20,6 @@ export interface IndicatorDependencyPlan {
   dependencies: ReadonlyMap<string, readonly IndicatorDependencyEdge[]>;
 }
 
-function plainRecord(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== 'object' || value === null) return false;
-  const prototype: unknown = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
 function nonemptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
@@ -37,7 +32,7 @@ function hasStudyKind(value: unknown): boolean {
 }
 
 function copyReference(value: unknown): IndicatorStudySource {
-  if (!plainRecord(value)) throw new TypeError('Study source reference must be a plain object.');
+  if (!isPlainObject(value)) throw new TypeError('Study source reference must be a plain object.');
   const keys = Reflect.ownKeys(value);
   if (keys.length !== 3 || !keys.every(key => key === 'kind' || key === 'instanceId' || key === 'plotKey')) {
     throw new TypeError('Study source reference requires only kind, instanceId and plotKey.');
@@ -60,7 +55,7 @@ function copyReference(value: unknown): IndicatorStudySource {
  * are rejected without executing them. Returned references remain mutable.
  */
 export function cloneIndicatorSettings(settings: Readonly<IndicatorSettings>): IndicatorSettings {
-  if (!plainRecord(settings)) throw new TypeError('Indicator settings must be a plain object.');
+  if (!isPlainObject(settings)) throw new TypeError('Indicator settings must be a plain object.');
   const result: IndicatorSettings = {};
   for (const key of Object.keys(settings)) {
     const property = Object.getOwnPropertyDescriptor(settings, key)!;

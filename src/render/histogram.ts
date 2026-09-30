@@ -1,13 +1,14 @@
 /**
- * Histogram / column renderer (ARCHITECTURE.md §6). Used for the volume pane.
- * Bars are drawn from a base value (0) up to each bar's close.
+ * Histogram renderer (ARCHITECTURE.md §6), used for volume and for a study's
+ * histogram plots. Bars are drawn from a base value (0) up to each bar's
+ * close. Columns are drawn by `drawColumns` in bars.ts.
  */
 import type { Bar } from '../model/bar';
 import { optimalBarWidth } from './candles';
 
 export interface HistogramStyle {
   color: string;
-  /** Optional separate colors keyed by an up/down flag set on the bar's volume sign. */
+  /** Value the bars grow from (default 0). */
   base: number;
 }
 

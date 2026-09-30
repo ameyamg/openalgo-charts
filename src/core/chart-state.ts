@@ -19,6 +19,7 @@ import type { Chart } from './chart';
 import type { Pane } from './pane';
 import type { PriceScaleOptions } from '../scale/price-scale';
 import type { PriceScaleId } from '../model/series';
+import { isPriceScaleId } from '../model/price-axis-layout';
 import { cloneIndicatorSettings, planIndicatorDependencies } from '../model/indicator-dependencies';
 import { getIndicator, hasIndicator, type IndicatorDescriptor } from '../model/indicator-registry';
 import { IndicatorInstance, parseIndicatorPlotPriceScales, validateIndicatorScaleAssignment } from '../model/indicator-instance';
@@ -41,6 +42,7 @@ import { validateIndicatorInputs } from '../model/indicator-inputs';
 import type { ChartSettingsState } from '../model/chart-settings';
 import { isValidTimezone } from '../feed/time';
 import type { LooseOptional } from '../helpers/types';
+import { hasOnlyDataProperties, isPlainObject } from '../helpers/validate';
 
 interface PreparedIndicatorRestore {
   specs: IndicatorState[];
@@ -71,8 +73,6 @@ export interface PersistenceHost {
   readonly _indicatorReservedIds: Chart['_indicatorReservedIds'];
   readonly _indicatorRefreshes: Chart['_indicatorRefreshes'];
   readonly _primaryPane: Chart['_primaryPane'];
-  readonly _timeNav: Chart['_timeNav'];
-  readonly _anchored: Chart['_anchored'];
   _crosshairMode: Chart['_crosshairMode'];
   _crosshairSnapToBar: Chart['_crosshairSnapToBar'];
   _priceOnlyAutoScale: Chart['_priceOnlyAutoScale'];
@@ -105,7 +105,6 @@ export interface PersistenceHost {
   eventOptions: Chart['eventOptions'];
   setEventOptions: Chart['setEventOptions'];
   setTimezone: Chart['setTimezone'];
-  _validPriceScaleId: Chart['_validPriceScaleId'];
   _reserveAlertStudyIds: Chart['_reserveAlertStudyIds'];
   _emit: Chart['_emit'];
   _withinLayoutChange: Chart['_withinLayoutChange'];
@@ -238,9 +237,7 @@ export class ChartPersistence {
       if (collapsed && (!('value' in collapsed) || (collapsed.value !== undefined && typeof collapsed.value !== 'boolean'))) {
         throw new Error('Invalid indicator legend preference');
       }
-      const plain = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object'
-        && [Object.prototype, null].includes(Object.getPrototypeOf(value))
-        && Object.values(Object.getOwnPropertyDescriptors(value)).every(property => 'value' in property);
+      const plain = (value: unknown): value is Record<string, unknown> => isPlainObject(value) && hasOnlyDataProperties(value);
       if (!plain(options)) throw new Error('Invalid chart restore options');
       if (options.preserveScaleFormats !== undefined) {
         const selectors = options.preserveScaleFormats;
@@ -252,7 +249,7 @@ export class ChartPersistence {
         for (let index = 0; index < selectors.length; index++) {
           const selector = properties[index]?.value as unknown;
           if (!plain(selector) || typeof selector.paneIndex !== 'number' || !Number.isInteger(selector.paneIndex) || selector.paneIndex < 0
-            || !this._host._validPriceScaleId(selector.scaleId)) throw new Error('Invalid preserved scale selector');
+            || !isPriceScaleId(selector.scaleId)) throw new Error('Invalid preserved scale selector');
           const pane = this._host._panes[selector.paneIndex];
           if (!pane || !Object.prototype.hasOwnProperty.call(pane.scaleStates(), selector.scaleId)) {
             throw new Error('Preserved scale must already exist');
@@ -289,7 +286,7 @@ export class ChartPersistence {
             const property = Object.getOwnPropertyDescriptor(spec, 'plotPriceScaleIds');
             if (!property?.enumerable || !('value' in property)) throw new Error('Invalid indicator plot price scale map field');
           }
-          if (spec.priceScaleId !== undefined && !this._host._validPriceScaleId(spec.priceScaleId)) throw new Error('Invalid indicator price scale');
+          if (spec.priceScaleId !== undefined && !isPriceScaleId(spec.priceScaleId)) throw new Error('Invalid indicator price scale');
           if (spec.barSource !== undefined) parseIndicatorBarSource(spec.barSource);
           if (spec.instanceId === undefined) continue;
           if (typeof spec.instanceId !== 'string' || !spec.instanceId.trim() || reservedIds.has(spec.instanceId)) {
@@ -513,8 +510,7 @@ export class ChartPersistence {
     // A study pane above the price pane is as prunable as one below it.
     for (let i = this._host._panes.length - 1; i >= 0; i--) {
       const pane = this._host._panes[i]!;
-      if (pane !== this._host._primaryPane && pane.series().length === 0 && !this._host._indicators.some(study => study.paneIndex === i)
-        && pane.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive))) this._host.removePane(i);
+      if (!this._host._indicators.some(study => study.paneIndex === i) && this._host._layout._holdsOnlyFurniture(pane)) this._host.removePane(i);
     }
 
     this._host._alertState = alerts;

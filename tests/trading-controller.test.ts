@@ -108,6 +108,30 @@ describe('TradingController', () => {
     expect(h.lines()).toHaveLength(1); // same line, not recreated
   });
 
+  it('updatePositionPnl takes the pill text without the number it never read', () => {
+    const h = fakeHost();
+    const tc = new TradingController(h.host);
+    tc.setPositions([{ id: 'p1', side: 'long', entryPrice: 100, size: 2, pnlText: '+$0.00' }]);
+    const line = h.lines()[0];
+    tc.updatePositionPnl('p1', '-$40.00', '-0.40%');
+    expect(line.options().leftLabel).toBe('-$40.00 (-0.40%)');
+    tc.updatePositionPnl('p1', '+$12.00');
+    expect(line.options().leftLabel).toBe('+$12.00 (-0.40%)');
+  });
+
+  it('reads the deprecated form the same way when a script host passes no number', () => {
+    const h = fakeHost();
+    const tc = new TradingController(h.host);
+    tc.setPositions([{ id: 'p1', side: 'long', entryPrice: 100, size: 2 }]);
+    const line = h.lines()[0];
+    // Before the first tick a script host may have no P&L number yet.
+    const call = tc.updatePositionPnl.bind(tc) as (...args: unknown[]) => void;
+    call('p1', undefined, '+$5.00', '+0.05%');
+    expect(line.options().leftLabel).toBe('+$5.00 (+0.05%)');
+    call('p1', null, '+$6.00');
+    expect(line.options().leftLabel).toBe('+$6.00 (+0.05%)');
+  });
+
   it('syncState and readOnly (no close button)', () => {
     const h = fakeHost();
     const tc = new TradingController(h.host);

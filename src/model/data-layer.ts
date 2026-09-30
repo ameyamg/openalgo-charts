@@ -190,6 +190,60 @@ export interface IndexedBar {
 
 const EMPTY_BARS: readonly Bar[] = [];
 
+/** Where the visible bars of one series start, and the last time they may carry. */
+export interface VisibleSpan {
+  start: number;
+  lastTime: number;
+}
+
+/**
+ * Find the bars of `bars` whose logical index lies within [from, to], the way
+ * `DataLayer.visibleBars` does (it is built on this), without building its list: `out.start` is the
+ * first candidate and `out.lastTime` the time past which none is in view.
+ * Returns false when nothing can be.
+ *
+ * A caller walks `bars` from `start` while `time <= lastTime` and keeps the
+ * bars `timeToIndex` answers for, which is the list `visibleBars` returns,
+ * in the same order.
+ */
+export function visibleSpan(layer: DataLayer, bars: readonly Bar[], from: number, to: number, out: VisibleSpan): boolean {
+  const lo = Math.max(0, Math.floor(from));
+  const hi = Math.min(layer.baseIndex, Math.ceil(to));
+  if (hi < lo || bars.length === 0) return false;
+  const loTime = layer.indexToTime(lo);
+  const hiTime = layer.indexToTime(hi);
+  if (loTime === undefined || hiTime === undefined) return false;
+  let start = 0;
+  let end = bars.length;
+  while (start < end) {
+    const mid = (start + end) >> 1;
+    if (bars[mid]!.time < loTime) start = mid + 1; // start <= mid < end <= bars.length
+    else end = mid;
+  }
+  out.start = start;
+  out.lastTime = hiTime;
+  return true;
+}
+
+/** Scratch for the walks below, which run start to end without yielding. */
+const SPAN: VisibleSpan = { start: 0, lastTime: 0 };
+
+/**
+ * The bar of series `id` at a logical index, as `visibleBars(id, index, index)[0]`
+ * answers it, without building a list: the crosshair, the readout and the
+ * snap ask for one bar on every pointer move.
+ */
+export function barAtIndex(layer: DataLayer, id: SeriesId, index: number): Bar | undefined {
+  const bars = layer.seriesBars(id);
+  if (!visibleSpan(layer, bars, index, index, SPAN)) return undefined;
+  for (let i = SPAN.start; i < bars.length; i++) {
+    const bar = bars[i]!; // below the length the loop checks
+    if (bar.time > SPAN.lastTime) return undefined;
+    if (layer.timeToIndex(bar.time) !== undefined) return bar;
+  }
+  return undefined;
+}
+
 /**
  * Where the bar at `time` sits in a series, or -1. A study writes a revised
  * older point of its plot through `update`, so this runs per point per tick and
@@ -508,24 +562,11 @@ export class DataLayer {
     const entry = this._series.get(id);
     if (entry === undefined) return [];
     const bars = entry.bars;
-    const lo = Math.max(0, Math.floor(fromIndex));
-    const hi = Math.min(this.baseIndex, Math.ceil(toIndex));
-    if (hi < lo || bars.length === 0) return [];
-    const loTime = this._sortedTimes[lo];
-    const hiTime = this._sortedTimes[hi];
-    if (loTime === undefined || hiTime === undefined) return [];
-    // First bar with time >= loTime (bars are sorted by time).
-    let start = 0;
-    let end = bars.length;
-    while (start < end) {
-      const mid = (start + end) >> 1;
-      if (bars[mid]!.time < loTime) start = mid + 1;
-      else end = mid;
-    }
+    if (!visibleSpan(this, bars, fromIndex, toIndex, SPAN)) return [];
     const out: IndexedBar[] = [];
-    for (let i = start; i < bars.length; i++) {
+    for (let i = SPAN.start; i < bars.length; i++) {
       const t = bars[i]!.time;
-      if (t > hiTime) break;
+      if (t > SPAN.lastTime) break;
       const index = this._indexByTime.get(t);
       if (index !== undefined) out.push({ index, bar: bars[i]! });
     }

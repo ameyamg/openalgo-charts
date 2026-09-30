@@ -23,7 +23,8 @@
  */
 import type { Bar, SeriesDataItem } from './bar';
 import type { SeriesApi } from './series';
-import type { IndicatorPlot, IndicatorSettings, IndicatorValues } from './indicator-registry';
+import { plotStyleKeys, type IndicatorPlot, type IndicatorSettings, type IndicatorValues } from './indicator-registry';
+import { parseColor } from '../render/pill';
 
 /**
  * Most points one plot writes in place in a pass. Each is a data-layer update
@@ -52,6 +53,28 @@ type Settings = Readonly<IndicatorSettings>;
  */
 function same(a: unknown, b: unknown): boolean {
   return a === b ? a !== 0 || 1 / (a as number) === 1 / (b as number) : a !== a && b !== b;
+}
+
+/**
+ * The plot's generated Opacity setting, 100 when unset. The series colour folds
+ * it in (IndicatorInstance._plotStyle); a plot that colours bar by bar paints
+ * over the series colour, so its per-bar colours are faded here too.
+ */
+function opacityOf(plot: IndicatorPlot, settings: Settings): number {
+  const v = settings[plotStyleKeys(plot).opacity];
+  return typeof v === 'number' && Number.isFinite(v) ? v : 100;
+}
+
+/**
+ * A per-bar colour at `opacity` percent of its own alpha. Multiplied rather than
+ * replaced: a study that says something with the alpha of a bar (a weakening
+ * histogram drawn lighter) keeps saying it when the whole plot is faded. What
+ * does not parse as a colour passes through.
+ */
+function faded(color: unknown, opacity: number): unknown {
+  if (typeof color !== 'string' || opacity >= 100) return color;
+  const c = parseColor(color);
+  return c === null ? color : `rgba(${c.r},${c.g},${c.b},${c.a * Math.max(0, opacity) / 100})`;
 }
 
 export class PlotWrites {
@@ -103,6 +126,7 @@ export class PlotWrites {
     const n = bars.length;
     const { colorBy, colorParts } = plot;
     const coloured = colorBy !== undefined || colorParts !== undefined;
+    const opacity = coloured ? opacityOf(plot, settings) : 100;
     const [rec, m] = this._claim(series, 1, 1);
     const value = rec.cols[0]!, body = rec.colors[0]!; // the one list each that _claim made
     const changed: number[] = [];
@@ -114,7 +138,7 @@ export class PlotWrites {
       // border are for the candle plot, see `writeCandles`.
       let paint: unknown;
       if (coloured && Number.isFinite(next)) {
-        paint = colorParts?.({ value: next, index: i, values, settings })?.body ?? colorBy?.({ value: next, index: i, values, settings });
+        paint = faded(colorParts?.({ value: next, index: i, values, settings })?.body ?? colorBy?.({ value: next, index: i, values, settings }), opacity);
       }
       if (!whole && (i >= m || !same(value[i], next) || (coloured && body[i] !== paint)) && changed.push(i) > IN_PLACE) whole = true;
       value[i] = next;
@@ -146,6 +170,7 @@ export class PlotWrites {
       return col;
     });
     const { colorBy, colorParts } = plot;
+    const opacity = colorBy !== undefined || colorParts !== undefined ? opacityOf(plot, settings) : 100;
     const [rec, m] = this._claim(series, 4, 3);
     const [open, high, low, close] = rec.cols as [List, List, List, List], [color, wick, border] = rec.colors as [List, List, List];
     const changed: number[] = [];
@@ -160,9 +185,10 @@ export class PlotWrites {
         const parts = colorParts?.({ value, index: i, values, settings });
         if (parts !== undefined) {
           if (parts.body !== undefined) body = parts.body;
-          wickColor = parts.wick;
-          borderColor = parts.border;
+          wickColor = faded(parts.wick, opacity);
+          borderColor = faded(parts.border, opacity);
         }
+        body = faded(body, opacity);
       }
       if (!whole && (i >= m || !same(open[i], o) || !same(high[i], h) || !same(low[i], l)
         || !same(close[i], value) || color[i] !== body || wick[i] !== wickColor || border[i] !== borderColor)

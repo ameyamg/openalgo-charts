@@ -2,7 +2,7 @@ import type { Chart } from '../core/chart';
 import { existingComparisonHandles } from '../compare/controller';
 import { getIndicator } from './indicator-registry';
 import { replayWindow } from './replay-window';
-import type { ChartDataColumn, ChartDataCsvOptions, ChartDataCsvRange, ChartDataProjectionContext } from './chart-data-export';
+import type { ChartDataColumn, ChartDataCsvOptions, ChartDataCsvRange, ChartDataProjectionContext } from './chart-data-export-types';
 
 export const priceFields = ['open', 'high', 'low', 'close', 'volume', 'oi'] as const;
 const allFields = ['time', ...priceFields] as const;

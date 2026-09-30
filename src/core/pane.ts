@@ -33,24 +33,24 @@
 import { CanvasLayer, hairlineHeight, separatorIsBorder } from './canvas';
 import { PriceScale } from '../scale/price-scale';
 import { type TimeScale } from '../scale/time-scale';
-import { type DataLayer } from '../model/data-layer';
+import { barAtIndex, visibleSpan, type DataLayer, type VisibleSpan } from '../model/data-layer';
 import type { SeriesRecord, PriceScaleId } from '../model/series';
 import type { PriceScaleState } from '../model/chart-state';
-import { PriceAxisLayout, type PriceAxisPlacement, type PriceAxisSide, type PriceAxisSlot } from '../model/price-axis-layout';
+import { PriceAxisLayout, isPriceScaleId, type PriceAxisPlacement, type PriceAxisSide, type PriceAxisSlot } from '../model/price-axis-layout';
 import { computeGridLines, drawGrid, resolveGridStyle, resolveScaleStyle, type CanvasOptions } from '../render/grid';
 import { getChartType, registeredChartTypes, type SeriesRenderContext } from '../model/chart-type-registry';
 import type { SeriesStyle } from '../render/series-style';
 import { lodActive, lodColumnWidth, lodKind } from '../model/conflation';
-import { createSeriesDrawItems, visibleSpan, type LodRequest, type SeriesDrawItems, type VisibleSpan } from '../render/draw-items';
+import { createSeriesDrawItems, type LodRequest, type SeriesDrawItems } from '../render/draw-items';
 import { announcingHost, createHitBoxes, inHitBox } from '../render/hit-boxes';
 import {
-  drawPriceAxis, drawLeftPriceAxis, drawTimeAxis, drawLastPriceLabel, drawSessionClock,
+  drawPriceAxis, drawTimeAxis, drawLastPriceLine, drawLastPriceTag, drawSessionClock,
   drawTimeAxisPill, lastPriceTagHeight, AXIS_LABEL_PRIORITY, resolveAxisLabels, drawSeriesValueTag,
   axisTagY,
   type PlotLayout, type TickMarkType, type AxisLabelBand,
-  type SessionClockOptions, type BarCountdownOptions,
+  type SessionClockOptions, type BarCountdownOptions, type AxisStyle,
 } from '../render/axis';
-import { drawCrosshair, drawCrosshairTag, resolveCrosshairStyle } from '../render/crosshair';
+import { crosshairTagWidth, drawCrosshair, drawCrosshairTag, resolveCrosshairStyle } from '../render/crosshair';
 import { isInvisible } from '../render/pill';
 import type { IPrimitive, PrimitiveHit, PrimitiveHost, PrimitiveRenderContext, ZOrder } from '../primitives/primitive';
 import { PaneLegend } from '../primitives/pane-legend';
@@ -103,7 +103,7 @@ export interface PaneRenderContext {
    * canvas element. Every field is an override: unset falls back to the theme.
    */
   canvasOptions?: CanvasOptions;
-  /** Optional custom time label formatter (UTC seconds -> string). Defaults to IST. */
+  /** Optional custom time label formatter (UTC seconds -> string). Omitted, labels follow `timezone`. */
   timeFormatter?: ((utcSeconds: number, tickMark?: TickMarkType) => string) | undefined;
   /**
    * IANA zone the time axis and crosshair label in. Absent means the shipped
@@ -166,6 +166,12 @@ const HIT_RANK: Record<ZOrder, number> = { bottom: 0, normal: 2, top: 3 };
  */
 const SPAN: VisibleSpan = { start: 0, lastTime: 0 };
 const LOD: LodRequest = { kind: 'ohlc', dpr: 1, factor: 1 };
+
+/** The instrument's last bar, for the last-price line and its axis tag. */
+interface LastPriceEntry { close: number; up: boolean; showLine: boolean; showTag: boolean }
+
+/** Another series' last value, tagged on the strip its scale is drawn in. */
+interface ValueTag { price: number; color: string; scaleId: PriceScaleId }
 
 /**
  * The renderers the level of detail may hand merged bars to: the built-in ones,
@@ -660,8 +666,7 @@ export class Pane {
    */
   public bindPrimitiveScale(primitive: IPrimitive, scaleId: PriceScaleId | null): boolean {
     if (this._destroyed || !this.hasPrimitive(primitive)) return false;
-    if (scaleId !== null && (typeof scaleId !== 'string'
-      || (scaleId !== 'left' && scaleId !== 'right' && scaleId !== '' && !scaleId.startsWith('overlay:')))) return false;
+    if (scaleId !== null && !isPriceScaleId(scaleId)) return false;
     if (this.primitiveScaleId(primitive) === scaleId) return false;
     this._hitEpoch++;
     if (scaleId === null) this._primitiveScales.delete(primitive);
@@ -1127,6 +1132,69 @@ export class Pane {
     const slotted = this._slotted(live, ctx);
     for (const p of live) if (p.zOrder() === 'bottom' && !slotted?.has(p)) p.draw(g, this._boundPrimitiveContext(p, prc, ctx));
 
+    const { readout, lastEntry, valueTags } = this._paintSeriesPass(g, ctx, layout, open, prc, slotted, target);
+    // Still inside the clip and before the normal-layer primitives: a backend
+    // that batched the series has to land them under the price lines and
+    // markers, not over them.
+    if (target === undefined) this._backend.endFrame();
+
+    // End of the plot clip. Everything below draws into the axis strip on
+    // purpose: the ladder, the last-price tag, the trading pills. Restoring here
+    // and not at the end of the frame is the whole point.
+    g.restore();
+
+    const slots = this.axisSlots(ctx);
+    const colors = { up: ctx.theme.lastPriceUp, down: ctx.theme.lastPriceDown, text: ctx.theme.lastPriceText };
+    const last = lastEntry;
+    if (last !== null && last.showLine) drawLastPriceLine(g, readout, last.close, last.up, layout, dpr, colors);
+    // The countdown counts to the close of the chart's own bar, so it rides
+    // on the tag of the pane that shows the price source. A study pane's tag
+    // is the study's value: a clock under it named a bar the pane does not
+    // draw, and doubled the tag's height into the study's level tags.
+    const countdown = this._source !== null && this._series.includes(this._source) ? ctx.barCountdown : undefined;
+    const lastTagOn = (scale: PriceScale): boolean => last !== null && last.showTag && readout === scale;
+    this._paintAxisLadders(g, layout, dpr, slots, valueTags, last, lastTagOn, countdown, axisStyle);
+
+    // normal-layer primitives (price lines, markers, events) draw over series
+    for (const p of live) if (p.zOrder() === 'normal' && !slotted?.has(p)) p.draw(g, this._boundPrimitiveContext(p, prc, ctx));
+
+    // The readout tag goes on after them: where the market is now outranks a
+    // level's tag (AXIS_LABEL_PRIORITY), so a price line crossing it, a
+    // study's 70 or an order at the touch, does not cover the one number that
+    // moves.
+    // Only the strip that carries the tag is clipped again: a pane with a
+    // strip on each side, or with its tag turned off, pays for no second pass.
+    for (const slot of slots) {
+      if (last === null || !lastTagOn(this._scaleFor(slot.scaleId))) continue;
+      this._inAxisSlot(g, slot, layout, dpr, (scale, columnLayout) => drawLastPriceTag(g, scale, last.close, last.up, columnLayout, dpr,
+        axisStyle, { colors, countdown, side: slot.side }));
+    }
+
+    if (ctx.showTimeAxis) {
+      // The zone goes to the axis rather than being pre-baked into a formatter
+      // here: the axis is what decides date-versus-clock and what computes the
+      // `tickMark` hint, so a host formatter and the default one only agree on
+      // where the day turns over if both are decided on the same calendar.
+      drawTimeAxis(g, ctx.timeScale, ctx.dataLayer, layout, dpr, axisStyle, ctx.timeFormatter, ctx.timezone);
+      // The corner the two strips meet in, which no tick, tag or series ever
+      // occupies. Drawn last so it sits over the time axis's own row.
+      if (ctx.sessionClock !== undefined) drawSessionClock(g,
+        { ...layout, priceAxisWidth: Math.min(layout.priceAxisWidth, ctx.axisColumnWidth ?? layout.priceAxisWidth) },
+        dpr, ctx.sessionClock, axisStyle);
+    }
+    g.restore(); // end plot shift
+    if (target === undefined) this._paintedHitBoxes(ctx);
+  }
+
+  /**
+   * The series pass of `paintBase`, inside the plot clip: every series at the
+   * frame's level of detail, each followed by the primitives slotted above it.
+   * It hands back what the axis strips draw afterwards.
+   */
+  private _paintSeriesPass(g: CanvasRenderingContext2D, ctx: PaneRenderContext, layout: PlotLayout, open: boolean,
+    prc: PrimitiveRenderContext, slotted: Map<IPrimitive, SeriesRecord> | null, target: CanvasRenderingContext2D | undefined,
+  ): { readout: PriceScale; lastEntry: LastPriceEntry | null; valueTags: ValueTag[] } {
+    const dpr = ctx.dpr;
     // series (registry-driven — the core never switches on type)
     const range = ctx.timeScale.visibleRange();
     // Last-price line/tag follows the pane's readout series (the main one),
@@ -1137,10 +1205,10 @@ export class Pane {
     const source = this._shownSource();
     const instrument = source !== undefined && this._scaleFor(source.scaleId) === readout ? source
       : this._series.find(s => s.style.visible !== false && getChartType(s.type).isPriceSeries && this._scaleFor(s.scaleId) === readout);
-    let lastEntry: { close: number; up: boolean; showLine: boolean; showTag: boolean } | null = null;
+    let lastEntry: LastPriceEntry | null = null;
     // Every visible axis describes its own sources, even when the pane's main
     // readout belongs to the other side or a hidden scale.
-    const valueTags: { price: number; color: string; scaleId: PriceScaleId }[] = [];
+    const valueTags: ValueTag[] = [];
     // The level of detail is decided once for the frame: every series shares
     // the time scale, so they all cross the threshold together.
     const spacing = ctx.timeScale.barSpacing;
@@ -1173,8 +1241,8 @@ export class Pane {
       // for the lookup, and only a series with no bar there falls back.
       if (s.style.colorByPreviousClose === true && items.length > 0) {
         const at = buffer.firstIndex() - 1;
-        const before = ctx.dataLayer.visibleBars(s.dataId, at, at);
-        if (before.length > 0) items[0]!.prevClose = before[0]!.bar.close; // both lengths checked
+        const before = barAtIndex(ctx.dataLayer, s.dataId, at);
+        if (before !== undefined) items[0]!.prevClose = before.close; // items is not empty, checked above
       }
       let maxVolume = 0;
       for (let i = 0; i < items.length; i++) {
@@ -1208,42 +1276,16 @@ export class Pane {
       }
       this._paintSlot(slotted, s, g, prc, ctx, target);
     }
-    // Still inside the clip and before the normal-layer primitives: a backend
-    // that batched the series has to land them under the price lines and
-    // markers, not over them.
-    if (target === undefined) this._backend.endFrame();
+    return { readout, lastEntry, valueTags };
+  }
 
-    // End of the plot clip. Everything below draws into the axis strip on
-    // purpose: the ladder, the last-price tag, the trading pills. Restoring here
-    // and not at the end of the frame is the whole point.
-    g.restore();
-
-    const slots = this.axisSlots(ctx);
-    const colors = { up: ctx.theme.lastPriceUp, down: ctx.theme.lastPriceDown, text: ctx.theme.lastPriceText };
-    const last = lastEntry;
-    if (last !== null) {
-      drawLastPriceLabel(g, readout, last.close, last.up, layout, dpr, axisStyle, colors, last.showLine, false);
-    }
-    // The countdown counts to the close of the chart's own bar, so it rides
-    // on the tag of the pane that shows the price source. A study pane's tag
-    // is the study's value: a clock under it named a bar the pane does not
-    // draw, and doubled the tag's height into the study's level tags.
-    const countdown = this._source !== null && this._series.includes(this._source) ? ctx.barCountdown : undefined;
-    const lastTagOn = (scale: PriceScale): boolean => last !== null && last.showTag && readout === scale;
-    /** Paint into one axis strip, clipped to it, in the coordinates its tags use. */
-    const inSlot = (slot: PriceAxisSlot, paint: (scale: PriceScale, columnLayout: PlotLayout) => void): void => {
-      const { side, width } = slot, scale = this._scaleFor(slot.scaleId);
-      if (!scale.scaled) return;
-      g.save();
-      const outer = Math.round(slot.x * dpr), end = Math.round((slot.x + width) * dpr);
-      g.beginPath(); g.rect(outer, 0, end - outer, Math.round(layout.plotHeight * dpr)); g.clip();
-      g.translate(side === 'left' ? end : outer - Math.round(layout.plotWidth * dpr), 0);
-      paint(scale, { ...layout, priceAxisWidth: width, plotLeft: width });
-      g.restore();
-    };
+  /** The tick ladder of each axis strip, with the value tags that fit beside the readout tag. */
+  private _paintAxisLadders(g: CanvasRenderingContext2D, layout: PlotLayout, dpr: number, slots: readonly PriceAxisSlot[],
+    valueTags: readonly ValueTag[], last: LastPriceEntry | null, lastTagOn: (scale: PriceScale) => boolean,
+    countdown: BarCountdownOptions | undefined, axisStyle: AxisStyle): void {
     // Resolve each strip independently: equal prices on opposite scales do not
     // overlap. The readout tag outranks series tags, which outrank axis ticks.
-    for (const slot of slots) inSlot(slot, (scale, columnLayout) => {
+    for (const slot of slots) this._inAxisSlot(g, slot, layout, dpr, (scale, columnLayout) => {
       const { side, width, scaleId } = slot;
       const tags = valueTags.filter(tag => tag.scaleId === scaleId);
       const bands: AxisLabelBand[] = [];
@@ -1265,43 +1307,26 @@ export class Pane {
         // same plot-relative coordinates as their source series.
         g.save();
         g.translate(-Math.round(width * dpr), 0);
-        drawLeftPriceAxis(g, scale, width, layout.plotHeight, dpr, axisStyle, reserved);
+        drawPriceAxis(g, scale, columnLayout, dpr, axisStyle, reserved, 'left');
         g.restore();
       } else drawPriceAxis(g, scale, columnLayout, dpr, axisStyle, reserved);
       for (let i = 0; i < tags.length; i++) {
         if (allowed[tagBase + i]) drawSeriesValueTag(g, scale, tags[i]!.price, tags[i]!.color, columnLayout, dpr, axisStyle, side);
       }
     });
+  }
 
-    // normal-layer primitives (price lines, markers, events) draw over series
-    for (const p of live) if (p.zOrder() === 'normal' && !slotted?.has(p)) p.draw(g, this._boundPrimitiveContext(p, prc, ctx));
-
-    // The readout tag goes on after them: where the market is now outranks a
-    // level's tag (AXIS_LABEL_PRIORITY), so a price line crossing it, a
-    // study's 70 or an order at the touch, does not cover the one number that
-    // moves.
-    // Only the strip that carries the tag is clipped again: a pane with a
-    // strip on each side, or with its tag turned off, pays for no second pass.
-    for (const slot of slots) {
-      if (last === null || !lastTagOn(this._scaleFor(slot.scaleId))) continue;
-      inSlot(slot, (scale, columnLayout) => drawLastPriceLabel(g, scale, last.close, last.up, columnLayout, dpr,
-        axisStyle, colors, false, true, countdown, slot.side));
-    }
-
-    if (ctx.showTimeAxis) {
-      // The zone goes to the axis rather than being pre-baked into a formatter
-      // here: the axis is what decides date-versus-clock and what computes the
-      // `tickMark` hint, so a host formatter and the default one only agree on
-      // where the day turns over if both are decided on the same calendar.
-      drawTimeAxis(g, ctx.timeScale, ctx.dataLayer, layout, dpr, axisStyle, ctx.timeFormatter, ctx.timezone);
-      // The corner the two strips meet in, which no tick, tag or series ever
-      // occupies. Drawn last so it sits over the time axis's own row.
-      if (ctx.sessionClock !== undefined) drawSessionClock(g,
-        { ...layout, priceAxisWidth: Math.min(layout.priceAxisWidth, ctx.axisColumnWidth ?? layout.priceAxisWidth) },
-        dpr, ctx.sessionClock, axisStyle);
-    }
-    g.restore(); // end plot shift
-    if (target === undefined) this._paintedHitBoxes(ctx);
+  /** Paint into one axis strip, clipped to it, in the coordinates its tags use. */
+  private _inAxisSlot(g: CanvasRenderingContext2D, slot: PriceAxisSlot, layout: PlotLayout, dpr: number,
+    paint: (scale: PriceScale, columnLayout: PlotLayout) => void): void {
+    const { side, width } = slot, scale = this._scaleFor(slot.scaleId);
+    if (!scale.scaled) return;
+    g.save();
+    const outer = Math.round(slot.x * dpr), end = Math.round((slot.x + width) * dpr);
+    g.beginPath(); g.rect(outer, 0, end - outer, Math.round(layout.plotHeight * dpr)); g.clip();
+    g.translate(side === 'left' ? end : outer - Math.round(layout.plotWidth * dpr), 0);
+    paint(scale, { ...layout, priceAxisWidth: width, plotLeft: width });
+    g.restore();
   }
 
   /**
@@ -1356,6 +1381,7 @@ export class Pane {
       // reference dialog does; an explicit label background still wins.
       const tagBg = ctx.theme.crosshairLabelBackground ?? style.color;
       const showTags = ctx.theme.crosshairLabelVisible !== false;
+      const axisStyle = resolveScaleStyle(ctx.theme, ctx.canvasOptions?.scales);
       // price tag on the strip this pane's prices are actually labelled in
       // (hovered pane only)
       if (showTags && cross.yLocal !== null) {
@@ -1364,9 +1390,9 @@ export class Pane {
         if (slot) {
           const text = scale.format(scale.yToPrice(cross.yLocal));
           const start = Math.round(slot.x * dpr), end = Math.round((slot.x + slot.width) * dpr);
-          const x = slot.side === 'left' ? end - this._tagWidth(g, text, dpr) : start;
+          const x = slot.side === 'left' ? end - crosshairTagWidth(g, text, dpr, axisStyle) : start;
           g.save(); g.beginPath(); g.rect(start, 0, end - start, Math.round(layout.plotHeight * dpr)); g.clip();
-          drawCrosshairTag(g, text, x, cross.yLocal * dpr, dpr, tagBg, ctx.theme.lastPriceText, 'right');
+          drawCrosshairTag(g, text, x, cross.yLocal * dpr, dpr, tagBg, ctx.theme.lastPriceText, 'right', axisStyle);
           g.restore();
         }
       }
@@ -1386,7 +1412,7 @@ export class Pane {
           drawTimeAxisPill(
             g, label, cross.x * dpr, layout.plotHeight * dpr, dpr,
             { background: tagBg, textColor: ctx.theme.lastPriceText, backplate: ctx.theme.background },
-            resolveScaleStyle(ctx.theme, ctx.canvasOptions?.scales),
+            axisStyle,
           );
         }
       }
@@ -1424,19 +1450,6 @@ export class Pane {
   /** Media-px y of a price on this pane's readout scale. The inverse of `yToPrice`. */
   public priceToY(price: number): number {
     return this._readoutScale().priceToY(price);
-  }
-
-  /**
-   * Width of the box `drawCrosshairTag` draws for this text, in bitmap px. The
-   * font and padding are restated from it because it measures privately and a
-   * left-hand tag has to know its own width before it can be positioned.
-   */
-  private _tagWidth(g: CanvasRenderingContext2D, text: string, dpr: number): number {
-    g.save();
-    g.font = `${11 * dpr}px system-ui, sans-serif`;
-    const w = g.measureText(text).width + 12 * dpr + 1;
-    g.restore();
-    return w;
   }
 
   /** Price at a media-px y on this pane (crosshair magnet, click/drag readout). */

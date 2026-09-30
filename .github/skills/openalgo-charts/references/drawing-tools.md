@@ -497,7 +497,7 @@ Events on the chart bus: `draw:tool`, `draw:add`, `draw:update`, `draw:remove`, 
 The modifier gestures (since 2.5.9) add `draw:measure` (`{ active }`), as a temporary measure starts and goes, and `draw:eraser` (`{ active }`), as eraser mode turns on and off; see Modifier gestures.
 Since 2.6.0 importing the tier adds every one of these names to `ChartEventMap`, so `chart.on('draw:add', (e) => e.drawing)` is typed; the payload types `DrawingEvent`, `DrawingListEvent`, `DrawingIdsEvent`, `DrawingIdEvent`, `DrawingToolEvent` and `DrawingModeEvent` are exported beside `DrawingChangeEvent`. The two families are two granularities and both stay: `draw:*` per drawing (carrying it) and per tool, `drawing:*` per mutation and per selection change. See [events-and-state](events-and-state.md).
 
-**The controller listens on `chart.on(...)`, not `subscribeClick` / `subscribeDrag`.** Those two are single-slot callbacks the host needs for its own order lines; routing drawings through the bus means the two never contend.
+**The controller listens on `chart.on(...)`, not `subscribeClick` / `subscribeDrag`.** A drag subscription is what makes an `ns-resize` order line draggable, and drawings do not need one; the host keeps either surface for its own order lines.
 
 ### Placement lifecycle
 

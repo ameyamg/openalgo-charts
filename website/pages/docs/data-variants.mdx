@@ -141,22 +141,19 @@ publishDataContext(chart, { symbol: 'AAPL', exchange: 'US', interval: '5m',
   variant: { session: 'extended' } });
 ```
 
-`chart.setDataContext` compares the symbol, exchange, interval and open interest
-capability, so a change of variant alone would be ignored there. The helper
-makes it a change of source: requested bars in flight are aborted, source
-revisions restart and studies read the context again. The instrument never
+`chart.setDataContext` compares the symbol, exchange, interval, open interest
+capability and, since 2.6.0, the variant, so a change of variant alone is a
+change of source: requested bars in flight are aborted, source revisions
+restart and studies read the context again. The helper normalizes the variant
+first. The instrument never
 changes on the way, so event markers, linked drawings and news stay with it.
 `Instrument.applyTo` keeps the variant the context already has.
 
 <Callout type="info">
-To make the chart see a variant-only change, the helper passes through a context
-with the interval cleared before setting the real one, so the chart emits
-`data:context` twice for it: first that passing context, then the real one. The
-library's requested studies, Tier 2 studies and alert controller wait for the
-real one, so nothing is fetched, reported or saved for the passing context. A
-listener of your own sees both; act on the context that is current once
-`publishDataContext` returns. A change of symbol, exchange or interval makes one
-call and emits once, as before.
+A variant-only change emits `data:context` once, like any other change of source.
+Before 2.6.0 the chart did not compare variants, so the helper passed through a
+context with the interval cleared before setting the real one, and a listener saw
+two events; the helper still does that for a target that keeps the old variant.
 </Callout>
 
 ## Alerts

@@ -1,6 +1,5 @@
 /** Per-bar position levels from the instrument itself, with no external alignment. */
 import type { IndicatorDescriptor } from 'openalgo-charts';
-import { withAlpha } from 'openalgo-charts';
 import { str } from './settings';
 
 const reading = (value: number | undefined): number | null =>
@@ -27,12 +26,8 @@ export const OPEN_INTEREST_CHANGE: IndicatorDescriptor = {
   plots: [{
     key: 'change', type: 'histogram', title: 'OI change', colorKey: 'upColor', style: { base: 0 },
     priceFormat: { type: 'volume' },
-    colorBy: ({ value, settings }) => {
-      const tint = value < 0 ? str(settings, 'downColor', '#ef5350') : str(settings, 'upColor', '#26a69a');
-      const opacity = settings['change:opacity'];
-      return typeof opacity === 'number' && Number.isFinite(opacity) && opacity < 100
-        ? withAlpha(tint, Math.max(0, opacity) / 100) : tint;
-    },
+    // The plot's Opacity setting fades this colour in the plot writer.
+    colorBy: ({ value, settings }) => (value < 0 ? str(settings, 'downColor', '#ef5350') : str(settings, 'upColor', '#26a69a')),
   }],
   calc: bars => ({
     change: bars.map((bar, i) => {

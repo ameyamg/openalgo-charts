@@ -66,6 +66,8 @@ export interface PanesHost {
   readonly _movablePrimaryPane: Chart['_movablePrimaryPane'];
   readonly _eventMarkers: Chart['_eventMarkers'];
   readonly _destroyed: Chart['_destroyed'];
+  readonly _timeNav: Chart['_timeNav'];
+  readonly _anchored: Chart['_anchored'];
   _primaryPane: Chart['_primaryPane'];
   _eventPane: Chart['_eventPane'];
   _drawingState: Chart['_drawingState'];
@@ -480,7 +482,8 @@ export class ChartPanes {
 
   /** The work of `Chart.maximizePane`, which carries the documented contract. */
   public maximizePane(index: number): boolean {
-    if (index < 0 || index >= this._host._panes.length) return false;
+    // A fractional index matches no pane in the layout, which would then hide them all.
+    if (!Number.isInteger(index) || index < 0 || index >= this._host._panes.length) return false;
     this._maximizedPane = this._maximizedPane === index ? null : index;
     this._relayout();
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
@@ -489,6 +492,18 @@ export class ChartPanes {
     this._host._primitives._rehomeAnchored();
     this._host._emit('paneMaximized', { paneIndex: this._maximizedPane });
     return true;
+  }
+
+  /**
+   * Whether a pane other than the price pane is left with nothing a user put
+   * there: no series, and no primitive but the chart's own furniture (the time
+   * navigator, an anchored primitive, which moves to wherever it is anchored).
+   * Moving a study away, a failed add and a restore prune such a pane. Removing
+   * a study prunes its pane on the series alone, see `ChartStudies._forgetIndicator`.
+   */
+  public _holdsOnlyFurniture(pane: Pane): boolean {
+    return pane !== this._host._primaryPane && pane.series().length === 0
+      && pane.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive));
   }
 
   /** The work of `Chart.setPaneCollapsed`, which carries the documented contract. */

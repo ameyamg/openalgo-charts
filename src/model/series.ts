@@ -23,6 +23,9 @@ export type { SeriesType };
  * display an overlay or change any scale's side without changing its identity.
  */
 export type PriceScaleId = 'right' | 'left' | '' | `overlay:${string}`;
+// `isPriceScaleId` (price-axis-layout.ts) checks a value against this. It lives
+// there because that module imports nothing at run time, so a lazy tier can
+// take it by path without this module's chart-type registry.
 
 /**
  * Value formatting for a price scale (its axis labels and crosshair tag):

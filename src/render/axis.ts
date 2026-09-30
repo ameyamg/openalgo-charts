@@ -229,7 +229,11 @@ function tickFits(y: number, bottom: number, dpr: number): boolean {
 }
 
 /**
- * Draw price tick labels in the right axis strip (bitmap scope).
+ * Draw price tick labels in an axis strip (bitmap scope). On the right the
+ * strip starts at `layout.plotWidth` and the labels are left-aligned into it;
+ * on the left it ends at `layout.plotLeft` (absolute pane coordinates, not the
+ * shifted plot frame) and they are right-aligned. The separator sits at the
+ * strip's inner edge either way.
  *
  * `reserved` lists the bands other labels have already claimed (last price,
  * price lines, session levels). A tick colliding with one of them is dropped
@@ -242,26 +246,29 @@ export function drawPriceAxis(
   dpr: number,
   style: AxisStyle = DEFAULT_AXIS_STYLE,
   reserved?: readonly AxisLabelBand[],
+  side: 'left' | 'right' = 'right',
 ): void {
   // The scale owns the ladder: in the rebasing modes a nice price is an ugly
   // percentage, so the values have to be chosen in label space (see
   // `PriceScale.ticks`). Linear and log get the same ladder as before.
   const ticks = priceScale.ticks(priceTickCount(layout.plotHeight));
   const keep = survivingTicks(ticks, priceScale, dpr, reserved);
-  const xStart = Math.round(layout.plotWidth * dpr);
+  const left = side === 'left';
+  const edge = Math.round((left ? layout.plotLeft : layout.plotWidth) * dpr);
+  const rule = left ? edge - 0.5 : edge + 0.5, textX = left ? edge - 6 * dpr : edge + 6 * dpr;
 
   ctx.save();
   ctx.strokeStyle = style.lineColor;
   ctx.fillStyle = style.textColor;
   ctx.font = scaleFont(style.font, dpr);
-  ctx.textAlign = 'left';
+  ctx.textAlign = left ? 'right' : 'left';
   ctx.textBaseline = 'middle';
   ctx.lineWidth = 1;
 
   // axis separator
   ctx.beginPath();
-  ctx.moveTo(xStart + 0.5, 0);
-  ctx.lineTo(xStart + 0.5, Math.round(layout.plotHeight * dpr));
+  ctx.moveTo(rule, 0);
+  ctx.lineTo(rule, Math.round(layout.plotHeight * dpr));
   ctx.stroke();
 
   for (let i = 0; i < ticks.length; i++) {
@@ -269,51 +276,7 @@ export function drawPriceAxis(
     const price = ticks[i]!;
     const y = Math.round(priceScale.priceToY(price) * dpr);
     if (!tickFits(y, layout.plotHeight * dpr, dpr)) continue;
-    ctx.fillText(priceScale.format(price), xStart + 6 * dpr, y);
-  }
-  ctx.restore();
-}
-
-/**
- * Draw price tick labels in the LEFT axis strip. `plotLeft` is the strip width in
- * media px; the separator sits at its inner edge and labels are right-aligned into
- * the strip. Drawn in absolute pane coordinates (not the shifted plot frame).
- *
- * `reserved` behaves as it does on the right axis: bands already claimed by
- * higher-priority labels, which a colliding tick yields to.
- */
-export function drawLeftPriceAxis(
-  ctx: CanvasRenderingContext2D,
-  priceScale: PriceScale,
-  plotLeft: number,
-  plotHeight: number,
-  dpr: number,
-  style: AxisStyle = DEFAULT_AXIS_STYLE,
-  reserved?: readonly AxisLabelBand[],
-): void {
-  const ticks = priceScale.ticks(priceTickCount(plotHeight));
-  const keep = survivingTicks(ticks, priceScale, dpr, reserved);
-  const xEdge = Math.round(plotLeft * dpr);
-
-  ctx.save();
-  ctx.strokeStyle = style.lineColor;
-  ctx.fillStyle = style.textColor;
-  ctx.font = scaleFont(style.font, dpr);
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'middle';
-  ctx.lineWidth = 1;
-
-  ctx.beginPath();
-  ctx.moveTo(xEdge - 0.5, 0);
-  ctx.lineTo(xEdge - 0.5, Math.round(plotHeight * dpr));
-  ctx.stroke();
-
-  for (let i = 0; i < ticks.length; i++) {
-    if (keep !== null && !keep[i]) continue;
-    const price = ticks[i]!;
-    const y = Math.round(priceScale.priceToY(price) * dpr);
-    if (!tickFits(y, plotHeight * dpr, dpr)) continue;
-    ctx.fillText(priceScale.format(price), xEdge - 6 * dpr, y);
+    ctx.fillText(priceScale.format(price), textX, y);
   }
   ctx.restore();
 }
@@ -539,15 +502,14 @@ function gridIndices(from: number, to: number, stride: number): number[] {
   return out;
 }
 
-/**
- * Draw the last-price line (dashed, across the plot) plus a filled price tag on
- * the right axis, colored up/down. Updates cheaply with every live tick.
- */
+/** The last price's up and down fills, and the text written on them. */
 export interface LastPriceColors {
   up: string;
   down: string;
   text: string;
 }
+
+const DEFAULT_LAST_PRICE_COLORS: LastPriceColors = { up: '#26a69a', down: '#ef5350', text: '#0d0e12' };
 
 /** Anything that can answer "what time is bar `index`", i.e. a `DataLayer`. */
 export interface BarTimeSource {
@@ -738,7 +700,51 @@ export function drawSeriesValueTag(
   ctx.restore();
 }
 
-export function drawLastPriceLabel(
+/**
+ * The last price's dashed line across the plot, coloured up or down. Updates
+ * cheaply with every live tick. Draws nothing for a price off the plot.
+ */
+export function drawLastPriceLine(
+  ctx: CanvasRenderingContext2D,
+  priceScale: PriceScale,
+  price: number,
+  up: boolean,
+  layout: PlotLayout,
+  dpr: number,
+  colors: LastPriceColors = DEFAULT_LAST_PRICE_COLORS,
+): void {
+  const y = Math.round(priceScale.priceToY(price) * dpr);
+  if (!Number.isFinite(y) || y < 0 || y > layout.plotHeight * dpr) return;
+  const color = up ? colors.up : colors.down;
+  const xStart = Math.round(layout.plotWidth * dpr);
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, Math.round(dpr));
+  ctx.setLineDash([3 * dpr, 3 * dpr]);
+  ctx.beginPath();
+  ctx.moveTo(0, y + 0.5);
+  ctx.lineTo(xStart, y + 0.5);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+/** How `drawLastPriceTag` fills its tag and what it adds under the price. */
+export interface LastPriceTagOptions {
+  colors?: LastPriceColors;
+  /** The bar-close countdown, as a second row, when it is visible. */
+  countdown?: BarCountdownOptions | undefined;
+  /** The strip the tag sits in. Default 'right'. */
+  side?: 'left' | 'right';
+}
+
+/**
+ * The last price's filled tag on an axis strip, coloured up or down, with the
+ * bar-close countdown under the price when one is given. At the plot edges
+ * the tag moves to stay inside; the line keeps the quoted value. Draws nothing
+ * for a price off the plot.
+ */
+export function drawLastPriceTag(
   ctx: CanvasRenderingContext2D,
   priceScale: PriceScale,
   price: number,
@@ -746,74 +752,55 @@ export function drawLastPriceLabel(
   layout: PlotLayout,
   dpr: number,
   style: AxisStyle = DEFAULT_AXIS_STYLE,
-  colors: LastPriceColors = { up: '#26a69a', down: '#ef5350', text: '#0d0e12' },
-  showLine = true,
-  showTag = true,
-  countdown?: BarCountdownOptions,
-  side: 'left' | 'right' = 'right',
+  { colors = DEFAULT_LAST_PRICE_COLORS, countdown, side = 'right' }: LastPriceTagOptions = {},
 ): void {
-  if (!showLine && !showTag) return;
   const y = Math.round(priceScale.priceToY(price) * dpr);
   if (!Number.isFinite(y) || y < 0 || y > layout.plotHeight * dpr) return;
   const color = up ? colors.up : colors.down;
   const xStart = Math.round(layout.plotWidth * dpr);
 
   ctx.save();
-  if (showLine) {
-    // dashed line across the plot
-    ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(1, Math.round(dpr));
-    ctx.setLineDash([3 * dpr, 3 * dpr]);
-    ctx.beginPath();
-    ctx.moveTo(0, y + 0.5);
-    ctx.lineTo(xStart, y + 0.5);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  if (showTag) {
-    // The price line stays at the quoted value when an edge tag is shifted to fit.
-    const label = priceScale.format(price);
-    const withCountdown = countdown !== undefined && countdown.visible === true;
-    const priceFont = scaleFont(style.font, dpr);
-    ctx.font = priceFont;
-    const padX = 6 * dpr;
-    const boxH = lastPriceTagHeight(dpr, withCountdown);
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    if (side === 'left') {
-      const tagY = axisTagY(y, layout.plotHeight * dpr, boxH, side);
-      if (tagY !== null) {
-        const rows = [{ text: label, font: priceFont, offset: withCountdown ? -boxH / 4 : 0 }];
-        if (withCountdown) rows.push({
-          text: formatCountdown(barCountdownSeconds(countdown.lastBarTime, countdown.intervalSec, countdown.now())),
-          font: scaleFont(style.font, dpr * 0.9), offset: boxH / 4,
-        });
-        fillLeftTag(ctx, tagY, boxH, rows, layout, dpr, color, colors.text);
-      }
-    } else if (!withCountdown) {
-      fillTag(ctx, xStart, y, boxH, padX, label, color, colors.text);
-    } else {
-      const clock = formatCountdown(
-        barCountdownSeconds(countdown.lastBarTime, countdown.intervalSec, countdown.now()),
-      );
-      // A size down, so the price stays the headline and the countdown reads as
-      // the subtitle it is. `HH:MM:SS` is fixed width, so the tag does not
-      // breathe in and out once a second.
-      const clockFont = scaleFont(style.font, dpr * 0.9);
-      const priceW = ctx.measureText(label).width;
-      ctx.font = clockFont;
-      const clockW = ctx.measureText(clock).width;
-      ctx.fillStyle = color;
-      ctx.fillRect(xStart + 1, y - boxH / 2, Math.max(priceW, clockW) + padX * 2, boxH);
-      ctx.fillStyle = colors.text;
-      // Rows at the quarter points: the price keeps the line the price line
-      // points at, and the countdown sits under it inside the same tag.
-      ctx.font = priceFont;
-      ctx.fillText(label, xStart + 1 + padX, y - boxH / 4);
-      ctx.font = clockFont;
-      ctx.fillText(clock, xStart + 1 + padX, y + boxH / 4);
+  // The price line stays at the quoted value when an edge tag is shifted to fit.
+  const label = priceScale.format(price);
+  const withCountdown = countdown !== undefined && countdown.visible === true;
+  const priceFont = scaleFont(style.font, dpr);
+  ctx.font = priceFont;
+  const padX = 6 * dpr;
+  const boxH = lastPriceTagHeight(dpr, withCountdown);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  if (side === 'left') {
+    const tagY = axisTagY(y, layout.plotHeight * dpr, boxH, side);
+    if (tagY !== null) {
+      const rows = [{ text: label, font: priceFont, offset: withCountdown ? -boxH / 4 : 0 }];
+      if (withCountdown) rows.push({
+        text: formatCountdown(barCountdownSeconds(countdown.lastBarTime, countdown.intervalSec, countdown.now())),
+        font: scaleFont(style.font, dpr * 0.9), offset: boxH / 4,
+      });
+      fillLeftTag(ctx, tagY, boxH, rows, layout, dpr, color, colors.text);
     }
+  } else if (!withCountdown) {
+    fillTag(ctx, xStart, y, boxH, padX, label, color, colors.text);
+  } else {
+    const clock = formatCountdown(
+      barCountdownSeconds(countdown.lastBarTime, countdown.intervalSec, countdown.now()),
+    );
+    // A size down, so the price stays the headline and the countdown reads as
+    // the subtitle it is. `HH:MM:SS` is fixed width, so the tag does not
+    // breathe in and out once a second.
+    const clockFont = scaleFont(style.font, dpr * 0.9);
+    const priceW = ctx.measureText(label).width;
+    ctx.font = clockFont;
+    const clockW = ctx.measureText(clock).width;
+    ctx.fillStyle = color;
+    ctx.fillRect(xStart + 1, y - boxH / 2, Math.max(priceW, clockW) + padX * 2, boxH);
+    ctx.fillStyle = colors.text;
+    // Rows at the quarter points: the price keeps the line the price line
+    // points at, and the countdown sits under it inside the same tag.
+    ctx.font = priceFont;
+    ctx.fillText(label, xStart + 1 + padX, y - boxH / 4);
+    ctx.font = clockFont;
+    ctx.fillText(clock, xStart + 1 + padX, y + boxH / 4);
   }
   ctx.restore();
 }

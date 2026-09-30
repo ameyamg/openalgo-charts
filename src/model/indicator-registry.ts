@@ -23,6 +23,7 @@ import type { IPrimitive } from '../primitives/primitive';
 import type { DataVariant } from '../feed/data-variant';
 import { validateIndicatorInputs } from './indicator-inputs';
 import { IndicatorInputError } from './indicator-input-error';
+import { isPlainObject } from '../helpers/validate';
 export { IndicatorInputError } from './indicator-input-error';
 
 /** Which price a calculation reads from each bar. */
@@ -1156,8 +1157,7 @@ export function sourceValues(bars: readonly Bar[], source: IndicatorSource | Ind
 export function sourceValues(bars: readonly Bar[], source: IndicatorSource | IndicatorStudySource,
   context?: Pick<IndicatorCalcContext, 'resolveSource'>): (number | null)[] {
   if (typeof source !== 'string') {
-    if (source === null || typeof source !== 'object' ||
-      (Object.getPrototypeOf(source) !== Object.prototype && Object.getPrototypeOf(source) !== null)) {
+    if (!isPlainObject(source)) {
       throw new IndicatorInputError('Invalid study source reference');
     }
     const fields = Object.getOwnPropertyDescriptors(source);

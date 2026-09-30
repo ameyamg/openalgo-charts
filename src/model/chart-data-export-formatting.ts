@@ -1,4 +1,4 @@
-import type { ChartDataColumn, ChartDataCsvFormatters } from './chart-data-export';
+import type { ChartDataColumn, ChartDataCsvFormatters } from './chart-data-export-types';
 import type { CsvSnapshotColumn } from './chart-data-export-snapshot';
 import type { CsvRow } from './chart-data-export-alignment';
 

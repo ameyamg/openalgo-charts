@@ -1,5 +1,14 @@
 import type { PriceScaleId } from './series';
 
+/**
+ * Whether a value is a {@link PriceScaleId}. The one copy of the rule: a scale
+ * id arrives untyped from saved state and script hosts, and a pane answers its
+ * right scale for any id it does not know, so every reader checks here first.
+ */
+export function isPriceScaleId(value: unknown): value is PriceScaleId {
+  return typeof value === 'string' && (value === 'right' || value === 'left' || value === '' || value.startsWith('overlay:'));
+}
+
 export type PriceAxisSide = 'left' | 'right' | 'hidden';
 
 /** Placement is independent of scale identity, formatting and numeric range. */
@@ -20,10 +29,6 @@ export interface PriceAxisSlot {
 
 const sides: readonly PriceAxisSide[] = ['left', 'right', 'hidden'];
 
-function validId(id: PriceScaleId): boolean {
-  return typeof id === 'string' && (id === 'right' || id === 'left' || id === '' || id.startsWith('overlay:'));
-}
-
 function defaultSide(id: PriceScaleId): PriceAxisSide {
   return id === 'left' || id === 'right' ? id : 'hidden';
 }
@@ -36,7 +41,7 @@ export class PriceAxisLayout {
   ]);
 
   register(id: PriceScaleId): void {
-    if (validId(id) && !this._placements.has(id)) this._placements.set(id, this.get(id));
+    if (isPriceScaleId(id) && !this._placements.has(id)) this._placements.set(id, this.get(id));
   }
 
   /** A prospective default does not create a scale merely because a caller inspects it. */
@@ -51,7 +56,7 @@ export class PriceAxisLayout {
 
   /** Insert at a clamped rank. An omitted rank retains the current side's order or appends. */
   set(id: PriceScaleId, side: PriceAxisSide, order?: number): boolean {
-    if (!validId(id) || !sides.includes(side)
+    if (!isPriceScaleId(id) || !sides.includes(side)
       || (order !== undefined && (!Number.isSafeInteger(order) || order < 0))) return false;
     const previous = this.get(id);
     const destination = this._sideIds(side).filter(value => value !== id);

@@ -237,7 +237,7 @@ place when the server disagrees with the caller's expectation.
 
 **`chart.emit` swallows exceptions thrown by listeners, silently, with no console output.** One bad listener must not break the render loop, so a bug inside your handler leaves no trace. Wrap handler bodies in your own try/catch while debugging.
 
-**`subscribeClick`/`subscribeCrosshairMove`/`subscribeDrag` are single slots (a second call replaces the first) and they are hit-only.** Use `chart.on('click', ...)`, which also fires on empty plot with `id: null` plus `price`, `time` and `point`. Event names are plain strings, so a typo silently never fires; the crosshair-leave payload is all-null and must be handled.
+**`subscribeClick`/`subscribeCrosshairMove`/`subscribeDrag` add a subscriber each call (since 2.6.0; before, a second call replaced the first) and `subscribeClick` is hit-only.** Keep the unsubscribe each returns: a host that subscribes again on the same chart without it hears every click twice. Use `chart.on('click', ...)` for clicks on empty plot, which carry `id: null` plus `price`, `time` and `point`. Event names are plain strings, so a typo silently never fires; the crosshair-leave payload is all-null and must be handled.
 
 **`chart.off('click')` with no callback removes *every* listener for that event, including the drawing tier's and the trade layer's.** Always pass the callback, or keep the unsubscribe function `on()` returns.
 

@@ -4,6 +4,8 @@
  * chart-type registry. Keeping one optional-field interface avoids a sprawling
  * discriminated union at the rendering boundary.
  */
+import type { ChartTheme } from '../theme';
+
 export interface SeriesStyle {
   // candle / bar family
   upColor?: string;
@@ -16,6 +18,13 @@ export interface SeriesStyle {
   wickVisible?: boolean;
   /** Paint candle bodies. Off leaves outline and wick. Default true. */
   bodyVisible?: boolean;
+  /**
+   * Has no effect: no renderer reads it, and a `candlestick` series with it set
+   * draws filled candles.
+   *
+   * @deprecated Removed in 3.0.0. Add the series as `'hollow-candle'` (or switch it with
+   * `chart.setSeriesType`), which draws up candles as outlines and down candles filled.
+   */
   hollow?: boolean;
   /**
    * Color bars by close-versus-previous-close instead of close-versus-own-open,
@@ -100,4 +109,44 @@ export interface SeriesStyle {
   thickColor?: string;
   /** Kagi thin (yin) line color. */
   thinColor?: string;
+}
+
+// Theme fallbacks per family: where the style sets no colour, the theme's.
+// The 2D registry and the GPU backend both resolve through these, so a
+// family's defaults are written once. Candles have `resolveCandleStyle`.
+
+/** Bars, high-low and columns: up and down colours. */
+export function withUpDown(s: SeriesStyle, t: ChartTheme): SeriesStyle {
+  return { ...s, upColor: s.upColor ?? t.upColor, downColor: s.downColor ?? t.downColor };
+}
+
+/** Lines: the line colour, plus the type's own switch (`markers`, `step`). */
+export function withLineColor(s: SeriesStyle, t: ChartTheme, extra?: SeriesStyle): SeriesStyle {
+  return { ...s, color: s.color ?? t.lineColor, ...extra };
+}
+
+/** Area: the line colour and both fill stops. */
+export function withAreaColors(s: SeriesStyle, t: ChartTheme): SeriesStyle {
+  return {
+    ...s,
+    color: s.color ?? t.lineColor,
+    areaTopColor: s.areaTopColor ?? t.areaTopColor,
+    areaBottomColor: s.areaBottomColor ?? t.areaBottomColor,
+  };
+}
+
+/** Baseline: the line and fill on each side of the base. */
+export function withBaselineColors(s: SeriesStyle, t: ChartTheme): SeriesStyle {
+  return {
+    ...s,
+    topColor: s.topColor ?? t.baselineTopLine,
+    bottomColor: s.bottomColor ?? t.baselineBottomLine,
+    areaTopColor: s.areaTopColor ?? t.baselineTopFill,
+    areaBottomColor: s.areaBottomColor ?? t.baselineBottomFill,
+  };
+}
+
+/** HLC area: the close line. The band has its own default, see `HLC_AREA_BAND_COLOR`. */
+export function withHlcAreaColors(s: SeriesStyle, t: ChartTheme): SeriesStyle {
+  return { ...s, closeColor: s.closeColor ?? t.lineColor };
 }

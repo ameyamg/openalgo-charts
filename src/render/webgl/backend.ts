@@ -42,15 +42,18 @@ import type { DrawItem, RendererEntry, SeriesRenderContext, SeriesType } from '.
 // as src/transform/index.ts.
 import { getChartType, registeredChartTypes, registerRenderBackend } from 'openalgo-charts';
 import type { Bar } from '../../model/bar';
-import type { ChartTheme } from '../../theme';
-import type { SeriesStyle } from '../series-style';
+import {
+  withAreaColors, withBaselineColors, withHlcAreaColors, withLineColor, withUpDown, type SeriesStyle,
+} from '../series-style';
+import { DEFAULT_HISTOGRAM_STYLE } from '../histogram';
 import type { IRenderBackend } from '../backend';
 import {
-  candleGeometry, candleTier, optimalBarWidth, DEFAULT_CANDLE_STYLE, type CandleStyle,
+  candleGeometry, candleTier, optimalBarWidth, resolveCandleStyle, type CandleStyle,
 } from '../candles';
 import { barGeometry } from '../bars';
 import {
-  project, projectSteps, trimToView, dashPeriod, polyline, CLOSE, HIGH, LOW, EDGE_PAD, type Polyline,
+  project, projectSteps, trimToView, dashPeriod, polyline, lineDash, pointColors, CLOSE, HIGH, LOW, EDGE_PAD, HLC_AREA_BAND_COLOR,
+  type Polyline,
 } from '../line';
 import { VertexBatch } from './batch';
 import { ColorCache, TRANSPARENT, lerpPremultiplied, normaliseWith2d, type PremultipliedRgba } from './color';
@@ -271,27 +274,6 @@ export function isWebGL2Supported(): boolean {
   return sharedGlDevice().available;
 }
 
-// ── colour resolution, mirroring the registry's private helpers ─────────────
-
-/** The registry's `candleStyle`: style over theme, plus the type's own switches. */
-function resolveCandleStyle(s: SeriesStyle, theme: ChartTheme, extra: Partial<CandleStyle> = {}): CandleStyle {
-  return {
-    ...DEFAULT_CANDLE_STYLE,
-    upColor: s.upColor ?? theme.upColor,
-    downColor: s.downColor ?? theme.downColor,
-    borderUpColor: s.borderUpColor ?? theme.upColor,
-    borderDownColor: s.borderDownColor ?? theme.downColor,
-    wickUpColor: s.wickUpColor ?? theme.wickUpColor,
-    wickDownColor: s.wickDownColor ?? theme.wickDownColor,
-    borderVisible: s.borderVisible ?? DEFAULT_CANDLE_STYLE.borderVisible,
-    bodyVisible: s.bodyVisible ?? true,
-    wickVisible: s.wickVisible ?? DEFAULT_CANDLE_STYLE.wickVisible,
-    // Passed on unset when the series leaves it unset: only `=== true` reads it.
-    colorByPreviousClose: s.colorByPreviousClose,
-    ...extra,
-  } satisfies LooseOptional<CandleStyle> as CandleStyle;
-}
-
 type ColorOf = (css: string) => PremultipliedRgba;
 
 // ── emitters, one per 2D renderer ───────────────────────────────────────────
@@ -419,26 +401,6 @@ function emitHistogram(
     const top = Math.min(baseY, y);
     batch.rect(cx - half, top, w, Math.max(1, Math.abs(baseY - y)), color(bar.color ?? fill));
   }
-}
-
-/** The line renderer's own dash table (it does not share the grid's). */
-function lineDash(style: SeriesStyle, dpr: number): number[] {
-  if (style.lineStyle === 'dashed') return [6 * dpr, 4 * dpr];
-  if (style.lineStyle === 'dotted') return [1 * dpr, 3 * dpr];
-  return [];
-}
-
-/** The line renderer's per-point colours: one per polyline point, or nothing. */
-function pointColors(items: readonly DrawItem[], step: boolean): (string | undefined)[] | undefined {
-  let any = false;
-  for (const it of items) if (it.bar.color !== undefined) { any = true; break; }
-  if (!any) return undefined;
-  const out: (string | undefined)[] = [];
-  for (const it of items) {
-    if (step && out.length > 0) out.push(it.bar.color);
-    out.push(it.bar.color);
-  }
-  return out;
 }
 
 /** Where a dash walk stands: which pattern entry, and how much of it is left. */
@@ -674,7 +636,7 @@ function emitHlcArea(
   // from the same items, so each holds a point at every index under highs.n.
   trimToView(highs, items, false, 0, pad);
   trimToView(lows, items, false, 0, pad);
-  const band = color(style.areaTopColor ?? 'rgba(79,140,255,0.15)');
+  const band = color(style.areaTopColor ?? HLC_AREA_BAND_COLOR);
   const hx = highs.xs, hy = highs.ys, lx = lows.xs, ly = lows.ys;
   let prev = -1;
   for (let i = highs.s; i < highs.n; i++) {
@@ -819,46 +781,31 @@ export class WebGL2Backend implements IRenderBackend {
       }
       case 'bar':
       case 'high-low':
-        emitBars(b, items, priceToY, barSpacing, dpr, {
-          ...style, upColor: style.upColor ?? theme.upColor, downColor: style.downColor ?? theme.downColor,
-        }, kind === 'high-low', c);
+        emitBars(b, items, priceToY, barSpacing, dpr, withUpDown(style, theme), kind === 'high-low', c);
         break;
       case 'line':
-        emitLine(b, items, priceToY, dpr, { ...style, color: style.color ?? theme.lineColor }, c);
+        emitLine(b, items, priceToY, dpr, withLineColor(style, theme), c);
         break;
       case 'line-markers':
-        emitLine(b, items, priceToY, dpr, { ...style, color: style.color ?? theme.lineColor, markers: true }, c);
+        emitLine(b, items, priceToY, dpr, withLineColor(style, theme, { markers: true }), c);
         break;
       case 'step':
-        emitLine(b, items, priceToY, dpr, { ...style, color: style.color ?? theme.lineColor, step: true }, c);
+        emitLine(b, items, priceToY, dpr, withLineColor(style, theme, { step: true }), c);
         break;
       case 'area':
-        emitArea(b, items, priceToY, dpr, rc.plotHeight, {
-          ...style,
-          color: style.color ?? theme.lineColor,
-          areaTopColor: style.areaTopColor ?? theme.areaTopColor,
-          areaBottomColor: style.areaBottomColor ?? theme.areaBottomColor,
-        }, c);
+        emitArea(b, items, priceToY, dpr, rc.plotHeight, withAreaColors(style, theme), c);
         break;
       case 'hlc-area':
-        emitHlcArea(b, items, priceToY, dpr, { ...style, closeColor: style.closeColor ?? theme.lineColor }, c);
+        emitHlcArea(b, items, priceToY, dpr, withHlcAreaColors(style, theme), c);
         break;
       case 'baseline':
-        emitBaseline(b, items, priceToY, dpr, {
-          ...style,
-          topColor: style.topColor ?? theme.baselineTopLine,
-          bottomColor: style.bottomColor ?? theme.baselineBottomLine,
-          areaTopColor: style.areaTopColor ?? theme.baselineTopFill,
-          areaBottomColor: style.areaBottomColor ?? theme.baselineBottomFill,
-        }, c);
+        emitBaseline(b, items, priceToY, dpr, withBaselineColors(style, theme), c);
         break;
       case 'column':
-        emitColumns(b, items, priceToY, barSpacing, dpr, {
-          ...style, upColor: style.upColor ?? theme.upColor, downColor: style.downColor ?? theme.downColor,
-        }, c);
+        emitColumns(b, items, priceToY, barSpacing, dpr, withUpDown(style, theme), c);
         break;
       case 'histogram':
-        emitHistogram(b, items, priceToY, barSpacing, dpr, style.color ?? '#3a4666', style.base ?? 0, c);
+        emitHistogram(b, items, priceToY, barSpacing, dpr, style.color ?? DEFAULT_HISTOGRAM_STYLE.color, style.base ?? 0, c);
         break;
     }
   }

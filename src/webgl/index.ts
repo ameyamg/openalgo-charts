@@ -2,13 +2,12 @@
 // Registers the GPU series backend under 'webgl2' so `renderer: 'auto'` picks it
 // up wherever WebGL2 is available and `renderer: 'webgl2'` stops throwing.
 
-// The registry MUST come from the base entry, not a deep path: each tier is its
-// own rollup bundle, so importing '../render/backend' here would inline a second
-// registry Map that `createChart` never reads. `openalgo-charts` is external for
-// tier builds. The helpers this file inlines from ../render (candles, bars, line)
-// are pure and stateless, so that duplication is only bytes.
-import { registerRenderBackend } from 'openalgo-charts';
-import { createWebGL2Backend } from '../render/webgl';
+// The registry is the base entry's: `registerWebGL2Backend` reaches it through
+// the `openalgo-charts` specifier, which is external for tier builds, so no
+// second registry Map is inlined here. The helpers this tier inlines from
+// ../render (candles, bars, line) are pure and stateless, so that duplication
+// is only bytes.
+import { registerWebGL2Backend } from '../render/webgl';
 
 export { WebGL2Backend, GlDevice, sharedGlDevice, isWebGL2Supported, createWebGL2Backend } from '../render/webgl';
 // Type-only: the batch and colour cache a backend and its device expose as
@@ -27,7 +26,7 @@ let _registered = false;
 export function registerWebGL2Renderer(): void {
   if (_registered) return;
   _registered = true;
-  registerRenderBackend('webgl2', () => createWebGL2Backend());
+  registerWebGL2Backend();
 }
 
 registerWebGL2Renderer();

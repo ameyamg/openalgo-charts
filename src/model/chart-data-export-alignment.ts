@@ -1,4 +1,4 @@
-import type { ChartDataCsvOptions, ChartDataCsvRange } from './chart-data-export';
+import type { ChartDataCsvOptions, ChartDataCsvRange } from './chart-data-export-types';
 import { withinCsvRange, type CsvSnapshot } from './chart-data-export-snapshot';
 
 export interface CsvRow {

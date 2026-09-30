@@ -232,9 +232,11 @@ Notes that bite:
 addIndicator(
   indicatorId: string,
   settings?: Readonly<IndicatorSettings>,
-  options?: { paneIndex?: number },
+  options?: AddIndicatorOptions,
 ): IndicatorApi
 ```
+
+`AddIndicatorOptions` (named in 2.6.0; the same fields the method always took) is `{ paneIndex?, priceScaleId?, plotPriceScaleIds?, policy?, instanceId?, barSource? }`: the pane, the scale for the study's plots, a scale per plot key, the `IndicatorPolicy`, the id to bring a removed study back under, and `'underlying'` bars on a transformed chart.
 
 `options.paneIndex` overrides placement entirely: a `pane` indicator can be dropped onto the price pane, or a second indicator onto an existing pane. An instance that did **not** create its own pane never applies `range()`; a shared pane belongs to whoever created it.
 
@@ -483,7 +485,7 @@ Two families of keys live in one flat `IndicatorSettings` bag:
 
 **A descriptor that declares `colorKey` owns the colour key.** `plotStyleKeys` returns `plot.colorKey` in the `color` slot rather than `<plotKey>:color`, so a generated key would shadow the declared one and setting the declared key would silently stop working. Always read the key from `plotStyleKeys(plot).color`, never hand-build `` `${plot.key}:color` ``.
 
-Opacity folds into the colour as alpha (a canvas stroke has no opacity channel). Changing `:type` **rebuilds the series**: a chart type belongs to the series, not the style bag.
+Opacity folds into the colour as alpha (a canvas stroke has no opacity channel). Since 2.6.0 it also fades the per-bar colours of a `colorBy` or `colorParts` plot (body, wick and border), multiplying each colour's own alpha, so a descriptor must not apply `<plotKey>:opacity` itself or the plot fades twice. Changing `:type` **rebuilds the series**: a chart type belongs to the series, not the style bag.
 
 Generating a dialog from a descriptor:
 

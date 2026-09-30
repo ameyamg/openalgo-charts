@@ -269,10 +269,10 @@ candles that is six colours and three switches:
 | `upColor` / `downColor` | Body fill. |
 | `borderVisible` | `false` drops the body outline. |
 | `borderUpColor` / `borderDownColor` | Body outline, independent of the fill. In hollow mode the up candle *is* its outline, so it stays drawn with `borderVisible: false` and falls back to the body colour rather than erasing the candle. |
-| `bodyVisible` | `false` drops the body fill, leaving the outline and the wick. Distinct from `hollow`, which empties only the up candles. With `borderVisible: false` as well a candle is reduced to its wick, which is two deliberate switches rather than an accident, so it is honoured. |
+| `bodyVisible` | `false` drops the body fill, leaving the outline and the wick. Distinct from the `hollow-candle` type, which empties only the up candles. With `borderVisible: false` as well a candle is reduced to its wick, which is two deliberate switches rather than an accident, so it is honoured. |
 | `wickVisible` | `false` drops the wicks. |
 | `wickUpColor` / `wickDownColor` | Wick colour. |
-| `hollow` | Up candles drawn as outlines, down candles filled. |
+| `hollow` | No effect: deprecated, removed in 3.0.0. For up candles drawn as outlines and down candles filled, add the series as `'hollow-candle'`. |
 | `colorByPreviousClose` | See below. |
 | `precision` | Decimal places for this series' price labels. |
 
