@@ -236,3 +236,21 @@ export function machineTail<S>(
   machine.keys.forEach((k, j) => { out[k] = cols[j]; });
   return out;
 }
+
+/**
+ * The full result of a study written only as a machine: every bar stepped from
+ * bar 0. Its `calc` and its tail then walk one piece of arithmetic, so the two
+ * cannot drift apart the way a batch kernel and its stepper copy can.
+ */
+export function stepAll<S>(machine: Machine<S>, n: number): IndicatorValues {
+  const state = machine.start();
+  const row: Cell[] = machine.keys.map(() => null);
+  const cols = machine.keys.map(() => new Array<Cell>(n));
+  for (let i = 0; i < n; i++) {
+    machine.step(state, i, row);
+    for (let k = 0; k < cols.length; k++) cols[k][i] = row[k];
+  }
+  const out: Record<string, Cell[]> = {};
+  machine.keys.forEach((k, j) => { out[k] = cols[j]; });
+  return out;
+}

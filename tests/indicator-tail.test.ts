@@ -286,6 +286,10 @@ const CASES: Record<string, IndicatorSettings[]> = {
   ],
   donchian: [{}, { length: 5, offset: 3 }, { length: 1 }],
   'parabolic-sar': [{}, { start: 0.1, increment: 0.05, maximum: 0.5 }, { start: 0.2, increment: 0.2, maximum: 0.2 }],
+  zlema: [{}, { length: 1 }, { length: 4, source: 'hl2' }, { length: 9, source: 'volume' }],
+  vidya: [{}, { length: 1, cmoLength: 1 }, { length: 20, cmoLength: 5, source: 'ohlc4' }],
+  'elder-ray': [{}, { length: 1 }, { length: 4 }],
+  'schaff-trend-cycle': [{}, { fastLength: 3, slowLength: 7, cycleLength: 3, factor: 0.3 }, { fastLength: 1, slowLength: 2, cycleLength: 1, factor: 1 }],
   'volatility-squeeze': [{}, { length: 2, bbMult: 1, kcMult: 1 }, { length: 7, kcMult: 3 }],
 };
 
