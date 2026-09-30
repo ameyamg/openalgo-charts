@@ -108,6 +108,31 @@ async function steps(page: Page): Promise<number[]> {
   });
 }
 
+test('the website example draws the folded EMA it describes', async ({ page }, info) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  const markdown = await (await page.request.get('/website/pages/examples.mdx')).text();
+  let code = markdown.split('### A built-in study on a higher timeframe')[1].split('code={`')[1].split('`} />')[0];
+  const market = await (await page.request.get('/website/components/synthetic-market.ts')).text();
+  code = code.replace('${STOCK_BARS_SOURCE}', market.split('STOCK_BARS_SOURCE = `')[1].split('`;')[0]);
+  await page.setViewportSize({ width: 960, height: 380 });
+  await page.route('**/higher-timeframe-example.html', route => route.fulfill({ contentType: 'text/html', body:
+    '<!doctype html><html><head><style>html,body{margin:0;background:#101010}#example{width:960px;height:360px}</style></head><body><div id="example"></div></body></html>' }));
+  await page.goto('/higher-timeframe-example.html');
+  await page.evaluate(async sourceCode => {
+    const lib = await import('/dist/openalgo-charts.all.mjs');
+    const chart = new Function('el', 'lib', sourceCode)(document.getElementById('example'), lib) as Chart;
+    const [plain, folded] = chart.indicators();
+    window.__htf = { chart, plain, folded, open: () => {} };
+  }, code);
+  await paint(page);
+  const at = await steps(page);
+  expect(at.length).toBeGreaterThan(20);
+  for (const s of at) expect(s % 900, `a step ${s}s after the open`).toBe(0);
+  expect(await page.evaluate(() => window.__htf.folded.legend()?.options().params)).toBe('9 close 15m');
+  await page.screenshot({ path: info.outputPath('website-example.png') });
+  expect(errors).toEqual([]);
+});
+
 for (const surface of ['widget', 'demo'] as const) {
   test(`${surface}: a 15 minute EMA beside the chart's own, and its timeframe select`, async ({ page }, info) => {
     const errors = await mount(page, surface);
