@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { MEASURE } from '../src/draw/tools';
+import { MEASURE } from '../src/draw/measure-tools';
 import { makeCtx } from './helpers/fake-ctx';
 import type { DrawContext } from '../src/draw/types';
 

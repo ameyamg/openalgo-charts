@@ -9,10 +9,9 @@
  * it": a field that leaves the op stream untouched fails here.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import {
-  BUILTIN_DRAWING_TOOLS, RECTANGLE, TEXT,
-  registerBuiltinDrawingTools, registeredDrawingTools, drawingSettingsSchema,
-} from '../src/draw/tools';
+import { BUILTIN_DRAWING_TOOLS, RECTANGLE, registerBuiltinDrawingTools } from '../src/draw/tools';
+import { TEXT } from '../src/draw/annotation-tools';
+import { registeredDrawingTools, drawingSettingsSchema } from '../src/draw/registry';
 import {
   LINE_FIELDS, FILL_FIELDS, TEXT_FIELDS, LEVEL_FIELDS, EXTEND_FIELDS, FONT_FIELDS,
   SHAPE_TEXT_FIELDS, PLATE_TEXT_FIELDS, COLOR_FIELD,

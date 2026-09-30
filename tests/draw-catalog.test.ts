@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { registerBuiltinDrawingTools, registeredDrawingTools } from '../src/draw/tools';
+import { registerBuiltinDrawingTools } from '../src/draw/tools';
+import { registeredDrawingTools } from '../src/draw/registry';
 
 const addedIds = [
   'disjoint-channel', 'flat-top-bottom', 'regression-channel',

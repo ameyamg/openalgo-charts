@@ -28,7 +28,7 @@ import type {
   DrawingChangeKind, DrawingChangeEvent, DrawingEditOptions, DrawingEvent, DrawingToolEvent,
 } from './controller-types';
 import { DrawingLayer, placeViewportAnchors, sortByZIndex, type DrawingPointerKind } from './layer';
-import { getDrawingTool, hasDrawingTool, viewportDrawingTool } from './tools';
+import { getDrawingTool, hasDrawingTool, viewportDrawingTool } from './registry';
 import { readViewportPoints } from './viewport';
 import { DrawingClipboard, cloneDrawing } from './clipboard';
 import { migrateDrawings, migrateGroups } from './migrate';

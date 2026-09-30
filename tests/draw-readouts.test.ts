@@ -6,8 +6,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
   TREND_LINE, RAY, EXTENDED_LINE, ARROW, RECTANGLE,
-  registerBuiltinDrawingTools, drawingSettingsSchema,
+  registerBuiltinDrawingTools,
 } from '../src/draw/tools';
+import { drawingSettingsSchema } from '../src/draw/registry';
 import { RecordingContext } from './helpers/fake-ctx';
 import type { Drawing, DrawingPoint, DrawingStyle, DrawingText, DrawingTool, DrawContext } from '../src/draw/types';
 

@@ -58,27 +58,33 @@ export {
   registeredDrawingTools,
   matchDrawingShortcut,
   drawingShortcuts,
+  // A registry lookup, so it lives with the registry rather than in schema.ts.
+  drawingSettingsSchema,
+} from './registry';
+export {
   registerBuiltinDrawingTools,
   BUILTIN_DRAWING_TOOLS,
   TREND_LINE, RAY, EXTENDED_LINE, ARROW,
   HORIZONTAL_LINE, HORIZONTAL_RAY, VERTICAL_LINE, CROSS_LINE,
   RECTANGLE, ELLIPSE, PARALLEL_CHANNEL,
+  PATH,
+  // The 2.0 additions: shape, freehand and cycle families.
+  CIRCLE, TRIANGLE, POLYLINE, ARC, CURVE, ROTATED_RECTANGLE, DOUBLE_CURVE,
+  HIGHLIGHTER, BRUSH,
+  CYCLIC_LINES, TIME_CYCLES, SINE_LINE,
+} from './tools';
+export {
   FIB_RETRACEMENT, FIB_EXTENSION,
-  LONG_POSITION, SHORT_POSITION, MEASURE,
-  TEXT, PATH,
+  FIB_CHANNEL, FIB_TIME_ZONE, FIB_FAN, GANN_FAN, GANN_BOX,
+} from './fib-tools';
+export { LONG_POSITION, SHORT_POSITION, MEASURE, FORECAST, PRICE_RANGE, DATE_RANGE } from './measure-tools';
+export {
+  TEXT,
   // Annotations: the marks whose job is a human sentence on the chart.
   NOTE, BALLOON, COMMENT, SIGNPOST, PRICE_NOTE, TABLE,
   ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT,
   PRICE_LABEL, CALLOUT, FLAG_MARK,
-  // The 2.0 additions: measurement, shape, freehand, fib and cycle families.
-  FORECAST, PRICE_RANGE, DATE_RANGE,
-  CIRCLE, TRIANGLE, POLYLINE, ARC, CURVE, ROTATED_RECTANGLE, DOUBLE_CURVE,
-  HIGHLIGHTER, BRUSH,
-  FIB_CHANNEL, FIB_TIME_ZONE, FIB_FAN, GANN_FAN, GANN_BOX,
-  CYCLIC_LINES, TIME_CYCLES, SINE_LINE,
-  // A registry lookup, so it lives with the registry rather than in schema.ts.
-  drawingSettingsSchema,
-} from './tools';
+} from './annotation-tools';
 
 // Per-tool settings schema. Pure and DOM-free: a host renders its own dialog
 // from the field list and writes the result back through
@@ -215,7 +221,7 @@ import './events';
 export { studyInputTarget } from './input-anchors';
 export type { StudyInputTarget, InputAnchorStep } from './input-anchors';
 
-export type { ShortcutEvent } from './tools';
+export type { ShortcutEvent } from './registry';
 
 export {
   distToSegment, distToLine, distToPolyline,

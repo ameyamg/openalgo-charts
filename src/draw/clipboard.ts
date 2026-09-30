@@ -31,7 +31,7 @@
  */
 import type { Drawing, DrawingIntervalRange, DrawingPoint, DrawingStyle, DrawingText, FibLevel } from './types';
 import { DRAWING_STATE_VERSION } from './types';
-import { hasDrawingTool, viewportDrawingTool } from './tools';
+import { hasDrawingTool, viewportDrawingTool } from './registry';
 import { migrateDrawings } from './migrate';
 import { readViewportPoints } from './viewport';
 import { drawingsDocumentVersion, readIntervalRange } from './intervals';

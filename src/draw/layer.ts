@@ -37,7 +37,7 @@
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from 'openalgo-charts';
 import type { Drawing, DrawingPoint, ScreenPoint, ViewportPoint } from './types';
-import { getDrawingTool, hasDrawingTool } from './tools';
+import { getDrawingTool, hasDrawingTool } from './registry';
 import { withDrawingTextMetrics } from './text-metrics';
 import { anchorCount, containInPlot, viewportToPlot, type PlotBox } from './viewport';
 import { boundsOf } from './geometry';
