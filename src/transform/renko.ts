@@ -5,7 +5,7 @@
  * incremental for live updates.
  */
 import type { Bar } from '../model/bar';
-import type { ISeriesTransform } from './transform';
+import { copyState, type ISeriesTransform } from './transform';
 
 export interface RenkoOptions {
   boxSize: number;
@@ -22,6 +22,10 @@ export class RenkoTransform implements ISeriesTransform {
 
   public reset(): void {
     this._edge = NaN;
+  }
+
+  public clone(): RenkoTransform {
+    return copyState(this);
   }
 
   public push(bar: Bar): Bar[] {

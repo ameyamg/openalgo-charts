@@ -249,7 +249,11 @@ export { conflationGroupSize, conflateBars, conflateItems, mergeBars } from './m
 
 // Family-B transforms live in the lazy 'openalgo-charts/transform' entry point
 // (importing it also registers the 'point-figure' and 'kagi' renderers), so they
-// are intentionally NOT re-exported from the base bundle.
+// are intentionally NOT re-exported from the base bundle. The registry they
+// fill for in-chart transforms (`chart.setSeriesTransform`) is here, so a chart
+// that never draws one never loads one.
+export { registerSeriesTransform, getSeriesTransform, registeredSeriesTransforms, parseSeriesTransformSpec } from './model/series-transform';
+export type { SeriesTransformSpec, SeriesTransformRun, SeriesTransformDefinition } from './model/series-transform';
 export type { Bar, LinePoint, Whitespace, SeriesDataItem, UTCSeconds, OriginalTime } from './model/bar';
 export { isWhitespace, toBar } from './model/bar';
 

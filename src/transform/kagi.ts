@@ -7,7 +7,7 @@
  * The kagi renderer connects vertices with a stepped line of varying width.
  */
 import type { Bar } from '../model/bar';
-import type { ISeriesTransform } from './transform';
+import { copyState, type ISeriesTransform } from './transform';
 
 export interface KagiOptions {
   reversal: number;
@@ -24,6 +24,8 @@ export class KagiTransform implements ISeriesTransform {
   private _prevShoulder = -Infinity; // last up-turn price
   private _prevWaist = Infinity; // last down-turn price
   private _thick = false;
+  /** Time of the newest bar pushed, which the vertex still forming is dated at. */
+  private _time = 0;
 
   public constructor(options: KagiOptions) {
     if (options.reversal <= 0) throw new Error('openalgo-charts: Kagi reversal must be > 0');
@@ -36,10 +38,16 @@ export class KagiTransform implements ISeriesTransform {
     this._prevShoulder = -Infinity;
     this._prevWaist = Infinity;
     this._thick = false;
+    this._time = 0;
+  }
+
+  public clone(): KagiTransform {
+    return copyState(this);
   }
 
   public push(bar: Bar): Bar[] {
     const p = bar.close;
+    this._time = bar.time;
     if (Number.isNaN(this._ext)) {
       this._ext = p;
       return [];
@@ -71,6 +79,6 @@ export class KagiTransform implements ISeriesTransform {
 
   public flush(): Bar[] {
     if (Number.isNaN(this._ext)) return [];
-    return [vertex(0, this._ext, this._thick)];
+    return [vertex(this._time, this._ext, this._thick)];
   }
 }

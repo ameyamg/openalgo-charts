@@ -20,6 +20,22 @@ export interface ISeriesTransform {
   push(bar: Bar): Bar[];
   /** Optional: emit any in-progress element at end of data. */
   flush?(): Bar[];
+  /**
+   * Optional: an independent copy of the state, for a live chart to push the
+   * forming bar through. `push` changes state on every call, so the bar that
+   * is still forming is pushed into a copy on each tick and into the transform
+   * itself only once it has closed. The built-in transforms all have one.
+   */
+  clone?(): ISeriesTransform;
+}
+
+/**
+ * A shallow copy of a transform: its prototype and every field. A field that
+ * holds an object is shared, so a transform whose state has one copies it
+ * after this.
+ */
+export function copyState<T extends object>(transform: T): T {
+  return Object.assign(Object.create(Object.getPrototypeOf(transform) as object) as T, transform);
 }
 
 /**

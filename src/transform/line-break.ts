@@ -4,7 +4,7 @@
  * candlestick renderer (each line = a body). Incremental.
  */
 import type { Bar } from '../model/bar';
-import type { ISeriesTransform } from './transform';
+import { copyState, type ISeriesTransform } from './transform';
 
 export interface LineBreakOptions {
   lines: number;
@@ -25,6 +25,12 @@ export class LineBreakTransform implements ISeriesTransform {
 
   public reset(): void {
     this._lines = [];
+  }
+
+  public clone(): LineBreakTransform {
+    const copy = copyState(this);
+    copy._lines = this._lines.slice(); // appended to, never edited
+    return copy;
   }
 
   public push(bar: Bar): Bar[] {

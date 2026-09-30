@@ -21,7 +21,7 @@
  * is the only way variable-box modes can render correctly).
  */
 import type { Bar } from '../model/bar';
-import type { ISeriesTransform } from './transform';
+import { copyState, type ISeriesTransform } from './transform';
 
 export type PointFigureMethod = 'hl' | 'close';
 export type PointFigureBoxMode = 'fixed' | 'percent' | 'atr';
@@ -138,6 +138,14 @@ export class PointFigureTransform implements ISeriesTransform {
     this._bot = NaN;
     this._time = 0;
     this._atr.reset();
+  }
+
+  public clone(): PointFigureTransform {
+    const copy = copyState(this);
+    // The running ATR is state too, and its own object. The field is
+    // readonly to everything but a copy being made.
+    Object.assign(copy, { _atr: copyState(this._atr) });
+    return copy;
   }
 
   /**

@@ -6,7 +6,7 @@
  *   haHigh  = max(h, haOpen, haClose) ; haLow = min(l, haOpen, haClose)
  */
 import type { Bar } from '../model/bar';
-import type { ISeriesTransform } from './transform';
+import { copyState, type ISeriesTransform } from './transform';
 
 export class HeikinAshiTransform implements ISeriesTransform {
   private _prevOpen = NaN;
@@ -15,6 +15,10 @@ export class HeikinAshiTransform implements ISeriesTransform {
   public reset(): void {
     this._prevOpen = NaN;
     this._prevClose = NaN;
+  }
+
+  public clone(): HeikinAshiTransform {
+    return copyState(this);
   }
 
   public push(bar: Bar): Bar[] {
