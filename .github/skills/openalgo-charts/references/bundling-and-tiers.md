@@ -2,11 +2,19 @@
 
 *When to read this: picking an import specifier, loading the package from a plain HTML page, debugging a "type is not registered" error, or checking a size budget.*
 
-Source of truth: `package.json` (`exports`, `sideEffects`, `files`), `rollup.config.js`, `.size-limit.json`, `src/all.ts`.
+Source of truth: `package.json` (`exports`, `sideEffects`, `files`), `rollup.config.js`, `.size-limit.json`, `src/all.ts`, `scripts/check-exports.mjs`.
 
 ## The nine entry points
 
-`exports` declares exactly nine specifiers, each with only `types` and `import` conditions. There is no `main`, no `require` condition and no CJS build: the package is ESM-only (`"type": "module"`, `module: dist/openalgo-charts.mjs`).
+`exports` declares exactly nine specifiers, each with `types`, `import` and (unreleased) `default` conditions, where `default` names the same `.mjs` file as `import`. There is no `main` and no CommonJS build: the package is ESM (`"type": "module"`, `module: dist/openalgo-charts.mjs`).
+
+**No CommonJS build, and `require()` gets the ESM files (unreleased).** A CommonJS copy of the code would carry a second set of registries, so a descriptor registered through one copy would be unknown to a chart created by the other (the same failure as a deep import, below). The `default` condition points `require()` at the ESM files themselves instead:
+
+- Node 20.19 or later, 22.12 or later, and every later release line load them synchronously: `require('openalgo-charts')` and `require('openalgo-charts/indicators')` return the very modules `import` returns, one registry between them.
+- An older Node throws `ERR_REQUIRE_ESM`, whose message says to use `import()`. A CommonJS module can always do that: `const { createChart } = await import('openalgo-charts');`.
+- TypeScript compiling to CommonJS accepts the `require` from 5.8, with `module: "nodenext"`. A test runner working in CommonJS mode has to load this package as ESM (its ESM mode, or a transform for it).
+
+`npm run check:exports` (in `verify`, after the build) requires every specifier under the running Node and fails if `require()` and `import` disagree.
 
 | Specifier | Emitted file | Contents | Brotli measured / limit | Import has side effects |
 |---|---|---|---|---|
@@ -49,8 +57,8 @@ Node and any bundler honouring `exports` will refuse a deep specifier outright, 
 
 Verified against the built output:
 
-- `dist/openalgo-charts.indicators.mjs`, `.transform.mjs`, `.trade.mjs` and `.workspace.mjs` import from `"./openalgo-charts.mjs"`, a **relative** specifier, not the bare package name. Rollup rewrites it via `output.paths: { 'openalgo-charts': './openalgo-charts.mjs' }`.
-- `dist/openalgo-charts.draw.mjs` and `.profile.mjs` emit no base import at all: they take only *types* from `openalgo-charts`, which erase at compile time. Their registries and primitives are self-contained.
+- `dist/openalgo-charts.indicators.mjs`, `.transform.mjs`, `.trade.mjs`, `.draw.mjs`, `.webgl.mjs` and `.workspace.mjs` import from `"./openalgo-charts.mjs"`, a **relative** specifier, not the bare package name. Rollup rewrites it via `output.paths: { 'openalgo-charts': './openalgo-charts.mjs' }`. The widget imports `./openalgo-charts.mjs` and `./openalgo-charts.draw.mjs`.
+- `dist/openalgo-charts.profile.mjs` emits no base import at all: it takes only *types* from `openalgo-charts`, which erase at compile time.
 
 **Serving `dist/` directly over HTTP works with no import map.** A `<script type="module">` that loads `/dist/openalgo-charts.indicators.mjs` resolves `./openalgo-charts.mjs` as a sibling URL. Every example in `examples/` relies on this; none declares an import map. The `.d.ts` builds keep the bare specifier, which TypeScript resolves through `exports`.
 
@@ -101,17 +109,31 @@ Lazy-load a tier the user may never touch:
 const { DrawingController } = await import('openalgo-charts/draw');
 ```
 
-**Plain `<script>`, the standalone IIFE.** `dist/openalgo-charts.standalone.js` is built with `format: 'iife', name: 'OpenAlgoCharts'`, from the base entry with nothing external. It defines a `window.OpenAlgoCharts` global and needs no module support.
+**Plain `<script>`, the script-tag build.** Every tier also ships as a classic script (`format: 'iife'`) that needs no module support. `dist/openalgo-charts.standalone.js` is the base, built with `name: 'OpenAlgoCharts'` and nothing external; it defines the `window.OpenAlgoCharts` global. (unreleased) Each tier's `dist/openalgo-charts.<tier>.standalone.js` adds itself to that global under the tier's name, so `import { X } from 'openalgo-charts/draw'` becomes `OpenAlgoCharts.draw.X`:
 
 ```html
 <script src="/dist/openalgo-charts.standalone.js"></script>
+<script src="/dist/openalgo-charts.indicators.standalone.js"></script>
+<script src="/dist/openalgo-charts.draw.standalone.js"></script>
+<script src="/dist/openalgo-charts.widget.standalone.js"></script>
 <script>
   const chart = OpenAlgoCharts.createChart(document.getElementById('chart'));
   chart.addSeries('candlestick').setData(bars);
+  chart.addIndicator('rsi');                                     // registered by the indicators file
+  const draw = new OpenAlgoCharts.draw.DrawingController(chart);
+  const widget = OpenAlgoCharts.widget.createWidget(document.getElementById('terminal'), { feed, symbol: 'INFY', exchange: 'NSE', interval: '5m' });
 </script>
 ```
 
-**The standalone bundle is base-only.** No tier is included and no tier can attach to it, a tier `.mjs` loaded beside it would import its own second copy of the base. Use native ESM when you need tiers on a bundler-free page.
+(unreleased) The rules of the script-tag build:
+
+- **One base, shared.** A tier file leaves the base (and, for the widget, the draw tier) external exactly as its `.mjs` does, and reads them from the global, so it registers into the base the page loaded. Never load a tier's `.mjs` beside the classic base: that module imports its own base, with its own registries.
+- **Order.** The base first, then any tier, with the draw tier before the widget. A tier file loaded too early throws before it runs, naming the files to load first: `openalgo-charts.widget.standalone.js needs openalgo-charts.standalone.js and openalgo-charts.draw.standalone.js loaded before it`. Load each file once.
+- **A key per tier, not one flat object.** The base and the widget both export a `withAlpha`, with different code; `OpenAlgoCharts.withAlpha` and `OpenAlgoCharts.widget.withAlpha` keep both. Each key holds exactly the runtime exports of that tier's `.d.ts`, which `npm run check:exports` enforces after every build.
+- **The widget's file carries its first-use parts.** A classic script cannot share a split chunk, and a part fetched as a module would bring the ESM base with it, so the script-tag widget bundles the shortcuts editor, the Layouts menu and the rest into its one file and fetches nothing more. It is correspondingly larger than `openalgo-charts.widget.mjs`.
+- The `unpkg` and `jsdelivr` fields still name the base file, so the bare CDN URL serves what it always did.
+
+Prefer native ESM where the page allows it: modules fetch the widget's parts only when used, and a bundler drops what the page never imports.
 
 **Native ESM, concrete `.mjs` URLs.**
 
@@ -165,7 +187,7 @@ The chart-only tree-shaking ceiling is 46 KiB; widget controls remain excluded.
 
 **Nothing is excluded from these numbers.** The package has zero runtime dependencies (`dependencies` is absent; everything in `devDependencies` is build tooling), so the measured file *is* the shipped payload. There is no CSS to import, no peer dependency, no web-component registration.
 
-`npm run verify` runs lint, typecheck, unit tests, endurance-harness tests, build, demo tests, declaration checks, size budgets and tree shaking, and is the `prepublishOnly` hook.
+`npm run verify` runs lint, typecheck, unit tests, endurance-harness tests, build, demo tests, declaration checks, the export checks (script-tag keys and `require()`), size budgets and tree shaking, and is the `prepublishOnly` hook.
 
 ## `src/all.ts` is not an entry point
 

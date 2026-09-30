@@ -44,6 +44,15 @@ methods on it. Destroy it on the way out. Never build a new chart to show new da
   its tiers touches no DOM, so a top-level import works in a module that a server also
   evaluates. CI holds this: `npm run skills:coverage` imports every built tier in Node.
   Only `createChart` and `createWidget` need the browser and a real element.
+- **It is ESM, and `require()` gets the same modules.** There is no CommonJS build: a
+  second copy of the code would carry a second set of registries, and an indicator
+  registered through one copy would be unknown to a chart made by the other. Each export
+  points `require()` at the ESM file itself, so on Node 20.19 or later, 22.12 or later, and
+  every later release line, `require('openalgo-charts')` returns the module `import`
+  returns. An older Node throws `ERR_REQUIRE_ESM`; use `await import('openalgo-charts')`
+  there. TypeScript compiling to CommonJS accepts the `require` from 5.8 with
+  `module: "nodenext"`, and a test runner working in CommonJS mode has to load the package
+  as ESM.
 - **`createChart(container, options)` takes over the element.** It reads the element's
   size, sets `position: relative` (only when it is statically positioned), `display: flex`,
   `background` and `touch-action: none`, adds ARIA attributes, and appends its canvases.
@@ -113,10 +122,12 @@ the same folder and imports the base module by a relative path, so both share on
 </script>
 ```
 
-A page that cannot load modules can use the classic script
-`dist/openalgo-charts.standalone.js`, which defines an `OpenAlgoCharts` global with the
-base tier only: no indicators, drawing tools or widget. [Use from a CDN](/docs/cdn) has
-both forms and why to pin the version.
+A page that cannot load modules can use the script-tag build: one classic script per tier.
+`dist/openalgo-charts.standalone.js` defines an `OpenAlgoCharts` global, and each tier's
+file (`openalgo-charts.widget.standalone.js`, say) adds itself to it under the tier's name
+and shares its engine, so the widget is `OpenAlgoCharts.widget.createWidget`.
+[Use from a CDN](/docs/cdn#the-no-modules-build) has both forms, the load order and why to
+pin the version.
 
 ### Mount and clean up [#plain-lifecycle]
 

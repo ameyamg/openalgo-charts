@@ -58,7 +58,9 @@ You need the version and the exact set of tier imports before you can reason abo
 | A cut deleted nothing, or copied "into the void" | the async result was not awaited | `await draw.cut()` and check the boolean; read `draw.clipboard().lastError()` |
 | Orders do not reach the broker | wrong layer | `chart.trading` is visualization only |
 | Blank page in Next.js or SSR | chart created during server render | client-only component, create in an effect |
-| Bare specifier fails in the browser | no bundler resolution | standalone build or an import map |
+| Bare specifier fails in the browser | no bundler resolution | a path into `dist/`, an import map, or the script-tag files |
+| `openalgo-charts.<tier>.standalone.js needs ... loaded before it` | a script-tag tier loaded before the base, or the widget before the draw tier | load the files in the order the message names, each once |
+| `ERR_REQUIRE_ESM` from `require('openalgo-charts')` | a Node older than 20.19 or 22.12 cannot require ESM | `await import('openalgo-charts')`, or a newer Node |
 
 [pitfalls](../openalgo-charts/references/pitfalls.md) has the full verified list with the reason behind each. [Host integration](../openalgo-charts/references/host-integration.md) covers request ownership, replay and lifecycle checks.
 

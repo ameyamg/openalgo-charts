@@ -410,8 +410,23 @@ needed:
 </script>
 ```
 
-The standalone script (`openalgo-charts.standalone.js`) is base-only and cannot host the
-widget: a tier loaded beside it would import its own second engine.
+A page that cannot load modules uses the script-tag build instead: classic scripts for the
+base, the indicator and draw tiers and the widget, in that order, and
+`OpenAlgoCharts.widget.createWidget`. The widget's file reads the engine and the draw tier
+from the `OpenAlgoCharts` global, so there is one engine, and it carries the parts below in
+itself rather than fetching them.
+Never load `openalgo-charts.widget.mjs` beside the classic base: a module imports its own
+second engine.
+
+```html
+<script src="/dist/openalgo-charts.standalone.js"></script>
+<script src="/dist/openalgo-charts.indicators.standalone.js"></script>
+<script src="/dist/openalgo-charts.draw.standalone.js"></script>
+<script src="/dist/openalgo-charts.widget.standalone.js"></script>
+<script>
+  OpenAlgoCharts.widget.createWidget(document.getElementById('terminal'), { symbol: 'RELIANCE', interval: '5m' });
+</script>
+```
 
 Some of the widget loads on first use. The shortcuts panel, the Layouts menu, the
 indicator templates list, the chart data dialog, a chart grid's bar and menus, and the

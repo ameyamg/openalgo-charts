@@ -288,7 +288,7 @@ computePriceLevels({ bars, anchorTime });   // the same numbers, pure, no canvas
 - **Verify option names against local typings before writing them.** Many similarly named options exist at chart, series, pane and scale level. Confirm which level owns the option.
 - **Minimal snippets.** One feature per code block. Combining an indicator, a drawing tool and a trading line in one snippet hides which API does what.
 - **Import from the package entry or a published tier specifier.** Never a deep path.
-- **Match the user's host.** A React user wants the effect lifecycle; a Vue user wants the composable with a `shallowRef`; a vanilla user wants neither; a no-bundler user needs the standalone build.
+- **Match the user's host.** A React user wants the effect lifecycle; a Vue user wants the composable with a `shallowRef`; a vanilla user wants neither; a no-bundler user gets `<script type="module">` from `dist/` or a CDN, or the script-tag files when the page cannot load modules.
 - **State which tier a feature needs** whenever the answer uses one.
 - **Do not invent.** If a name does not appear in the installed typings or upstream source, it does not exist.
 
