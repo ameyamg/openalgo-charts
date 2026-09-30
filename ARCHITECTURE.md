@@ -96,7 +96,9 @@ compatibility inventory now names the file three moved comments live in), and th
 render-parity spec painted the same pixels as 2.5.6 at every zoom. Private members stay private, so the published declarations show
 only `private` names for the collaborators. `scripts/line-caps.json` holds every source file
 to 1,500 lines through ESLint, with the few older files over the limit capped at their
-size so that they can only shrink.
+size so that they can only shrink. `scripts/function-caps.json` does the same for
+functions at 150 lines (`tests/function-caps.test.ts`), since a file cap does not bound
+a module that is one long mount closure.
 
 ## 0. Why from scratch (and the principles we follow)
 
