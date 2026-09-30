@@ -37,7 +37,7 @@ describe('OpenAlgoWsFeed listeners that throw', () => {
     ws.connect();
     expect(() => frame(s, { type: 'auth', status: 'error', message: 'Invalid API key' })).not.toThrow();
     expect(s.closed).toBe(1);
-    expect(states.at(-1)).toBe('closed');
+    expect(states[states.length - 1]).toBe('closed');
     expect(heard).toContain('AUTH_FAILED');
     expect(reported.length).toBeGreaterThan(0);
     ws.close();
