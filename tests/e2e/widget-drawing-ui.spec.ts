@@ -141,6 +141,51 @@ test('a mixed selection says mixed, locks and deletes as one step, and a read-on
   expect(errors).toEqual([]);
 });
 
+test('the rail and the right-click menu act on a selection in one step each, by the toolbar\'s rules', async ({ page }, info) => {
+  const errors = await mount(page);
+  const order = () => page.evaluate(() => window.__drawUi.widget.draw.drawings().map(d => `${d.id}:${d.zIndex}`));
+  const undo = () => page.evaluate(() => window.__drawUi.widget.history.undo());
+  await select(page, 'trend', 'level');
+  // The rail's lock: one press, one step back.
+  const railLock = page.locator('.oac-rail__ctl .oac-rail__btn').nth(2);
+  await railLock.click();
+  expect((await style(page, 'trend')).locked && (await style(page, 'level')).locked).toBe(true);
+  await undo();
+  expect((await style(page, 'trend')).locked || (await style(page, 'level')).locked).toBe(false);
+  // A partly locked selection reads unlocked in the menu, deletes, and locks whole in one step.
+  await page.evaluate(() => { const { widget, ids } = window.__drawUi; widget.draw.update(ids.level, { locked: true }); });
+  await select(page, 'trend', 'level');
+  const ends = await page.evaluate(() => { const { widget, ids } = window.__drawUi; return widget.draw.get(ids.trend)!.points; });
+  const [a, b] = [await at(page, ends[0]!.time, ends[0]!.price), await at(page, ends[1]!.time, ends[1]!.price)];
+  const onTrend = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const menu = page.locator('.oac-ctx');
+  await page.mouse.click(onTrend.x, onTrend.y, { button: 'right' });
+  await expect(menu.locator('[data-act="draw-lock"]')).toHaveAttribute('aria-checked', 'false');
+  await expect(menu.locator('[data-act="draw-delete"]')).not.toHaveAttribute('aria-disabled', 'true');
+  await page.screenshot({ path: info.outputPath('menu-partly-locked.png') });
+  await menu.locator('[data-act="draw-lock"]').click();
+  expect((await style(page, 'trend')).locked && (await style(page, 'level')).locked).toBe(true);
+  await undo();
+  expect([(await style(page, 'trend')).locked, (await style(page, 'level')).locked]).toEqual([false, true]);
+  // The order moves of a selection are one step too.
+  const before = await order();
+  await page.mouse.click(onTrend.x, onTrend.y, { button: 'right' });
+  await menu.locator('[data-act="draw-front"]').click();
+  expect(await order()).not.toEqual(before);
+  await undo();
+  expect(await order()).toEqual(before);
+  // The rail's right-click menus walk with the arrows, as every other menu does.
+  const trash = page.locator('.oac-rail__ctl .oac-rail__btn').nth(4);
+  await trash.click({ button: 'right' });
+  const rows = page.locator('.oac-menu .oac-menu__row');
+  await expect(rows.first()).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(rows.nth(1)).toBeFocused();
+  await page.screenshot({ path: info.outputPath('rail-menu.png') });
+  await page.keyboard.press('Escape');
+  expect(errors).toEqual([]);
+});
+
 test('the keyboard reaches the toolbar from the chart and walks it without moving the drawing', async ({ page }) => {
   const errors = await mount(page);
   await select(page, 'trend');
