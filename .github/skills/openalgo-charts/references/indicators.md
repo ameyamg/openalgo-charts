@@ -1328,7 +1328,7 @@ withAlpha('#26a69a', 0.12);                        // 'rgba(38,166,154,0.12)'
 fromGradient(v, 30, 70, '#ef5350', '#26a69a');     // sRGB blend, alpha included, clamped
 ```
 
-Use these in a `colorBy`, `background` or `barColors` rather than hand-rolling a hex parser. They read `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()` and `rgba()`; **CSS colour names are not parsed**. Neither throws: an unparseable input comes back untouched from `withAlpha`, and `fromGradient` falls back to `low`. A not-available value, and a zero-width range, both resolve to `low` rather than to `rgba(NaN,...)`, which matters because canvas ignores an unparseable `fillStyle` and silently repaints the previous colour. `min > max` is a legitimate way to flip the scale.
+Use these in a `colorBy`, `background` or `barColors` rather than hand-rolling a hex parser. (The widget tier's own `withAlpha` writes CSS token values, `#rrggbb` when opaque and a clamped alpha otherwise; use this one for anything the chart paints.) They read `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()` and `rgba()`; **CSS colour names are not parsed**. Neither throws: an unparseable input comes back untouched from `withAlpha`, and `fromGradient` falls back to `low`. A not-available value, and a zero-width range, both resolve to `low` rather than to `rgba(NaN,...)`, which matters because canvas ignores an unparseable `fillStyle` and silently repaints the previous colour. `min > max` is a legitimate way to flip the scale.
 
 ## Tier 2: indicators with their own data
 

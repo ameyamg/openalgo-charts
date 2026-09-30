@@ -206,7 +206,7 @@ the status line and download resources are released after handoff or failure.
 | `applyTokens(el, tokens)` | function | Write a token set inline on an element. |
 | `themeMode(theme)` | function | `'dark'` or `'light'`, judged from the theme background. |
 | `token(name)` | function | `var(--oac-name)`. |
-| `parseColor(input)`, `formatColor(c)`, `luminance(color)`, `mix(a, b, t)`, `withAlpha(color, alpha)` | functions | The colour maths the tokens are built from; exported for a host deriving its own. |
+| `parseColor(input)`, `formatColor(c)`, `luminance(color)`, `mix(a, b, t)`, `withAlpha(color, alpha)` | functions | The colour maths the tokens are built from; exported for a host deriving its own. This `withAlpha` is not the base package's: it writes a CSS token value, `#rrggbb` when the result is opaque and `rgba()` otherwise, with the alpha clamped to 0..1, where the base one always writes `rgba(r,g,b,a)` with the alpha as given, for canvas. Use this one for chrome styles and the base one for anything the chart paints; alias one when a module imports both. |
 | `contrastRatio(a, b)`, `readableOn(color, surfaces, pole, min?)`, `TEXT_CONTRAST` | functions, const `4.5` | (since 2.5.9) The WCAG ratio of two colours, and a colour stepped toward `pole` by the least amount that reads at `min` on every one of `surfaces`. The text tokens (`mut`, `faint`, `up`, `down`, `amber`, `danger`) are built with it, so they read at 4.5 to 1 in both built-in themes and in a host theme. |
 | `TOKEN_PREFIX` | const `'--oac-'` | |
 | `WIDGET_FONT`, `WIDGET_MONO` | consts | The UI and monospace font stacks. |
