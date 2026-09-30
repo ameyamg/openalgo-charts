@@ -40,7 +40,7 @@ const KEY = 'timeframe';
 
 const INPUT: IndicatorInput = {
   key: KEY, type: 'interval', label: 'Timeframe', default: '',
-  tooltip: 'Compute on a higher timeframe folded from the chart bars. A value appears once its period has closed and never changes after.',
+  tooltip: 'Compute on a higher timeframe folded from the chart bars. Each value appears once its period closes.',
 };
 
 const DAY = 86400;
@@ -78,20 +78,20 @@ function plan(d: IndicatorDescriptor, s: Readonly<IndicatorSettings>, ctx: Indic
   const found = tryResolveInterval(tf);
   if (found === null) throw new IndicatorInputError(`${d.name}: "${tf}" is not a known timeframe`);
   if (!isTimeBucketed(found.bucketing)) {
-    throw new IndicatorInputError(`${d.name}: "${tf}" bars close on trade flow rather than the clock, so they cannot be folded from the chart bars`);
+    throw new IndicatorInputError(`${d.name}: "${tf}" bars close on trade flow, not the clock, so they cannot be folded`);
   }
   const code = ctx?.interval;
   const chart = code === undefined || code === '' ? null : tryResolveInterval(code)?.bucketing ?? null;
   if (chart !== null) {
     if (!isTimeBucketed(chart)) {
-      throw new IndicatorInputError(`${d.name}: the chart's "${code ?? ''}" bars close on trade flow rather than the clock, so no timeframe can be folded from them`);
+      throw new IndicatorInputError(`${d.name}: the chart's "${code ?? ''}" bars close on trade flow, not the clock, so they cannot be folded`);
     }
     if (span(found.bucketing) <= span(chart)) return null;
   }
   for (const input of d.inputs) {
     const value = s[input.key];
     if (input.type === 'source' && typeof value === 'object' && value !== null) {
-      throw new IndicatorInputError(`${d.name}: a timeframe folds the chart bars, and another study's output is not a bar; pick a price source or clear the timeframe`);
+      throw new IndicatorInputError(`${d.name}: another study's output cannot be folded to a timeframe; pick a price source`);
     }
   }
   const zone = ctx?.timezone ?? (typeof s.timezone === 'string' && s.timezone !== '' ? s.timezone : DEFAULT_TIMEZONE);
