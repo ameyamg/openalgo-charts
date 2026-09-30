@@ -563,6 +563,9 @@ export function collectInputRows(host) {
   ) };
 }
 
+/** The study's bar source, shown as a row of its inputs; not a descriptor setting. */
+const BAR_SOURCE = '@bars';
+
 // Inputs = the descriptor's own `inputs`. Style = `indicatorStyleInputs()`,
 // generated per plot (colour, opacity, thickness, line style) so every
 // indicator gets the same controls without declaring them.
@@ -570,7 +573,14 @@ export function renderSettingsTab(draft) {
   const inst = settingsFor;
   if (!inst) return;
   const descriptor = getIndicator(inst.indicatorId);
-  const inputs = settingsTab === 'style' ? indicatorStyleInputs(descriptor) : descriptor.inputs.map(input => {
+  // The bars the study computes on lead its inputs while the chart transforms:
+  // on any other chart they are the same bars, and the row would do nothing.
+  const primary = settingsTarget.chart.primarySeries?.();
+  const bars = settingsTab !== 'style' && primary && settingsTarget.chart.seriesTransform?.(primary) ? [{
+    key: BAR_SOURCE, type: 'select', label: 'Compute on', default: 'chart',
+    options: [{ label: 'Chart bars', value: 'chart' }, { label: 'Underlying bars', value: 'underlying' }],
+  }] : [];
+  const inputs = settingsTab === 'style' ? indicatorStyleInputs(descriptor) : [...bars, ...descriptor.inputs.map(input => {
     if (input.type !== 'source' || !input.allowStudyOutputs) return input;
     // Repeated studies are told apart as the widget numbers them, not by an internal id.
     const names = studyNames(settingsTarget.chart);
@@ -580,8 +590,8 @@ export function renderSettingsTab(draft) {
         label: `${names.get(producer.id)} / ${plot.title ?? plot.key}`,
       })));
     return { ...input, studyOutputs };
-  });
-  renderInputRows(el('set-body'), inputs, draft ?? inst.settings());
+  })];
+  renderInputRows(el('set-body'), inputs, draft ?? { ...inst.settings(), ...(bars.length ? { [BAR_SOURCE]: inst.barSource() } : {}) });
   const target = settingsTarget, host = el('set-body');
   const current = () => settingsFor === inst && settingsTarget === target && target.current()
     && target.chart.indicators().includes(inst);
@@ -614,7 +624,9 @@ export function collectSettings() {
   if (!currentSettings()) return false;
   if (!validateTypedRows(el('set-body'))) return false;
   try {
-    if (settingsFor.setSettings(collectInputRows(el('set-body'))) === false) return refused(settingsFor);
+    const { [BAR_SOURCE]: bars, ...settings } = collectInputRows(el('set-body'));
+    if (bars !== undefined && bars !== settingsFor.barSource() && !settingsFor.setBarSource(bars)) return refused(settingsFor);
+    if (settingsFor.setSettings(settings) === false) return refused(settingsFor);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'The study settings could not be applied';
     el('status').textContent = message;
