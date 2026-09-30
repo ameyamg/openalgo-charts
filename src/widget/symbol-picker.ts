@@ -130,9 +130,11 @@ export function mountSymbolPicker(ctx: WidgetContext, input: HTMLInputElement, o
       || (options.context === undefined ? undefined : JSON.stringify(options.context())) !== contextAtQuery) return;
     const symbol = hit.symbol.trim();
     if (symbol === '') return;
+    // Leave the field while the results still show: a field that commits on
+    // change holds its typed text back until then, so only the pick lands.
+    input.blur();
     close();
     options.onSelect(symbol, hit.exchange);
-    input.blur();
   };
   const paint = (): void => {
     if (panel === null || list === null) return;
@@ -199,7 +201,8 @@ export function mountSymbolPicker(ctx: WidgetContext, input: HTMLInputElement, o
       if (list === null) return;
       const row = h(doc, 'div', 'oac-symbol-picker__status', { role: 'status' });
       row.textContent = widgetText(ctx, key, {}, fallback);
-      list.replaceChildren(row);
+      list.textContent = '';
+      list.appendChild(row);
     };
     status('schema.ui.searchingSymbols', 'Searching');
     // Typed text stays committable: a lookup that fails leaves raw entry to the field.

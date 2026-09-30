@@ -302,7 +302,7 @@ describe('mobile mode', () => {
     input.value = 'inf';
     fire(input, 'input');
     await vi.advanceTimersByTimeAsync(150);
-    expect(search).toHaveBeenCalledWith('inf');
+    expect(search).toHaveBeenCalledWith('inf', { signal: expect.any(AbortSignal) });
     (withSearch.root.querySelector('[data-mobile-action="pick-symbol"]') as FakeElement).click();
     expect(withSearch.w.symbol()).toBe('INFY');
 
