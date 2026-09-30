@@ -40,8 +40,8 @@ export { ZoomGlide, DEFAULT_ZOOM_GLIDE_OPTIONS } from './input/zoom-glide';
 export type { ZoomGlideOptions } from './input/zoom-glide';
 export { InvalidationLevel } from './core/invalidate-mask';
 export type { PaneInvalidation, TimeScaleOp } from './core/invalidate-mask';
-export { bitmapSize, snapToDevicePixel } from './core/canvas';
-export type { Size } from './core/canvas';
+export { bitmapSize, snapToDevicePixel } from './helpers/math';
+export type { Size } from './helpers/math';
 
 export { PriceScale, autoscaleRange, isRebasing, DEFAULT_PRICE_SCALE_OPTIONS } from './scale/price-scale';
 export type { PriceRange, PriceScaleOptions, PriceScaleMode } from './scale/price-scale';

@@ -16,8 +16,7 @@
  * plausible shape) would freeze the palette and make a later `setTheme` a
  * silent no-op for anything the dialog had touched.
  */
-import { snapToDevicePixel } from '../core/canvas';
-import { clamp } from '../helpers/math';
+import { clamp, snapToDevicePixel } from '../helpers/math';
 import type { ChartTheme } from '../theme';
 import type { AxisStyle } from './axis';
 import type { CrosshairOptions } from './crosshair';
