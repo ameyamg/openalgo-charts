@@ -1,3 +1,3 @@
 {
-  "clean": ["profile", "trade", "webgl", "workspace"]
+  "clean": ["draw", "profile", "trade", "webgl", "workspace"]
 }
