@@ -289,3 +289,35 @@ describe('chart time navigator', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('TimeNavigator colours', () => {
+  /** The fill and stroke of the first button's plate, for one theme. */
+  function plate(theme: { axisText: string; axisLine: string; background: string }): { fill: string; stroke: string } {
+    const nav = new TimeNavigator({ fadeSeconds: 0 });
+    nav.setPointer({ x: 10, y: 380 });   // in the band, over no button
+    const styles: { fill: string[]; stroke: string[] } = { fill: [], stroke: [] };
+    const ctx: Record<string, unknown> = {
+      canvas: {}, globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1,
+      save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, roundRect() {}, arc() {},
+      measureText: () => ({ width: 40 }), fillText() {},
+      fill() { styles.fill.push(String(ctx.fillStyle)); },
+      stroke() { styles.stroke.push(String(ctx.strokeStyle)); },
+    };
+    nav.draw(ctx as unknown as CanvasRenderingContext2D, { ...rc(), theme } as PrimitiveRenderContext);
+    return { fill: styles.fill[0]!, stroke: styles.stroke[0]! };
+  }
+
+  it('mixes the plate from six-digit and rgb() theme colours as it always has', () => {
+    expect(plate({ axisText: '#8b91a7', axisLine: '#2a3046', background: '#0d0e12' }))
+      .toEqual({ fill: 'rgb(28,30,36)', stroke: 'rgba(42,48,70,0.8)' });
+    expect(plate({ axisText: 'rgba(139, 145, 167, 1)', axisLine: 'rgb(42,48,70)', background: 'rgb(13,14,18)' }))
+      .toEqual({ fill: 'rgb(28,30,36)', stroke: 'rgba(42,48,70,0.8)' });
+  });
+
+  it('reads a four-digit #rgba theme colour as its channels', () => {
+    // #fff8 is white at about half alpha. Read as the six-digit form it is
+    // not, it was the number 0xfff8, a blue green.
+    expect(plate({ axisText: '#fff8', axisLine: '#0008', background: '#000f' }))
+      .toEqual({ fill: 'rgb(31,31,31)', stroke: 'rgba(0,0,0,0.8)' });
+  });
+});
