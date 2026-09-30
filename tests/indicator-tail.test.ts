@@ -286,6 +286,7 @@ const CASES: Record<string, IndicatorSettings[]> = {
   ],
   donchian: [{}, { length: 5, offset: 3 }, { length: 1 }],
   'parabolic-sar': [{}, { start: 0.1, increment: 0.05, maximum: 0.5 }, { start: 0.2, increment: 0.2, maximum: 0.2 }],
+  'volatility-squeeze': [{}, { length: 2, bbMult: 1, kcMult: 1 }, { length: 7, kcMult: 3 }],
 };
 
 /** Settings a tail deliberately declines: the full calc must still be what the runtime shows. */

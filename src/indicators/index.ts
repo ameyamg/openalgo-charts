@@ -1,7 +1,7 @@
 /**
  * Indicator tier (opt-in: "openalgo-charts/indicators").
  *
- * 105 Tier-1 built-ins, computed from the chart's own bars, no extra data,
+ * 106 Tier-1 built-ins, computed from the chart's own bars, no extra data,
  * plus the Tier-2 contract for indicators that own an external fetch/subscribe
  * lifecycle. Importing this module registers every built-in as a side effect.
  *
