@@ -13,8 +13,9 @@
  * anchor takes is read back through the pane's own scale.
  */
 import { getIndicator } from 'openalgo-charts';
-import type { Bar, DataLayer, IndicatorApi, SeriesApi } from 'openalgo-charts';
+import type { Bar } from 'openalgo-charts';
 import type { DrawingPoint, MagnetMode } from './types';
+import type { DrawingChartHost } from './controller-types';
 
 /** How close, in media px, a value must be for the weak magnet to pull. */
 export const WEAK_MAGNET_PX = 8;
@@ -42,14 +43,7 @@ export interface SnapBar {
  * study pane cannot be compared at all, and without the price series or the
  * studies there is nothing to snap to.
  */
-export interface MagnetHost {
-  readonly dataLayer: DataLayer;
-  priceToCoordinate?(price: number, paneIndex?: number): number | null;
-  primaryBars?(): readonly Bar[];
-  indicators?(): readonly IndicatorApi[];
-  panes?(): readonly unknown[];
-  seriesStyle?(series: SeriesApi): { readonly visible?: boolean; readonly color?: string } | null;
-}
+export type MagnetHost = Pick<DrawingChartHost, 'dataLayer' | 'priceToCoordinate' | 'primaryBars' | 'indicators' | 'panes' | 'seriesStyle'>;
 
 /** What a study pane is read through: its scales and its own price projection, pane-local. `Pane` has them. */
 interface StudyPane {

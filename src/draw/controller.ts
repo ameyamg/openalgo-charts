@@ -32,7 +32,7 @@ import { getDrawingTool, hasDrawingTool, viewportDrawingTool } from './registry'
 import { readViewportPoints } from './viewport';
 import { DrawingClipboard, cloneDrawing } from './clipboard';
 import { migrateDrawings, migrateGroups } from './migrate';
-import { InputAnchors, type InputAnchorHost, type InputAnchorStep } from './input-anchors';
+import { InputAnchors, type InputAnchorStep } from './input-anchors';
 import { DrawingScreen, type PaneProjection, type PointerSample } from './screen';
 import { magnetModeOf, magnetPoint, type SnapBar } from './snap';
 import { DrawingGestures, type GestureKeys } from './gestures';
@@ -257,8 +257,8 @@ export class DrawingController {
     }
     this._interval = contextInterval(chart.getDataContext?.());
     this._sync();
-    if (options.inputAnchors !== false && typeof (chart as InputAnchorHost).indicators === 'function') {
-      this._anchors = new InputAnchors(chart as InputAnchorHost, {
+    if (options.inputAnchors !== false && typeof chart.indicators === 'function') {
+      this._anchors = new InputAnchors(chart, {
         record: (step, outside) => this._history._recordStep(step, outside),
         placing: () => this._tool !== null,
       });
@@ -308,8 +308,7 @@ export class DrawingController {
    */
   private _setPlacementMode(active: boolean): void {
     this._placing = active;
-    const chart = this._chart as unknown as { setPlacementMode?: (a: boolean) => void };
-    chart.setPlacementMode?.(active);
+    this._chart.setPlacementMode?.(active);
   }
 
   /**
