@@ -47,8 +47,6 @@ import {
   ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT,
 } from './annotation-tools';
 import { ANCHORED_VWAP, FIXED_RANGE_VOLUME_PROFILE } from './analysis-tools';
-export { ANCHORED_VWAP, FIXED_RANGE_VOLUME_PROFILE } from './analysis-tools';
-export { anchoredVwapAnalysis, fixedRangeVolumeProfileAnalysis } from './analysis';
 
 /** `showLabels` on a horizontal line toggles exactly one thing: the price tag. */
 const PRICE_TAG_FIELD: SettingsField = { ...SHOW_LABELS_FIELD, label: 'Show price' };
@@ -789,5 +787,3 @@ export function registerBuiltinDrawingTools(): void {
   _registered = true;
   for (const t of BUILTIN_DRAWING_TOOLS) registerDrawingTool(t);
 }
-
-export type { ScreenPoint };
