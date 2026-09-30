@@ -2,6 +2,7 @@ import type { Bar } from '../model/bar';
 import type { BarSubscriptionOptions, BarsRequest, DataFeed, LiveBarMeta, UnsubscribeFn } from './types';
 import { type HistoryRequestPool, sharedHistoryRequests, withHistoryDeadline } from './request-pool';
 import { tryResolveInterval } from './intervals';
+import { widenBar } from './candle-builder';
 import { dataVariantError, normalizeDataVariant, unsupportedDataVariant, type DataVariantDimension } from './data-variant';
 import type { LooseOptional } from '../helpers/types';
 
@@ -320,12 +321,7 @@ export class DataLoadingController {
       // bucket mid-way only saw its first tick, the close because a live push
       // during the request (below) is the only proof the stream is fresher.
       const forming = held && held.time === newest ? byTime.get(held.time) : undefined;
-      if (held && forming) {
-        byTime.set(held.time, { ...forming,
-          high: Math.max(forming.high, held.high), low: Math.min(forming.low, held.low),
-          volume: forming.volume === undefined && held.volume === undefined ? undefined : Math.max(forming.volume ?? 0, held.volume ?? 0),
-        } satisfies LooseOptional<Bar> as Bar);
-      }
+      if (held && forming) byTime.set(held.time, widenBar(forming, held));
       if (this._provisionalTime !== null && byTime.has(this._provisionalTime) && this._provisionalTime <= authoritativeTo) {
         this._provisionalTime = null;
       }
@@ -333,12 +329,8 @@ export class DataLoadingController {
         const historical = byTime.get(live.time);
         // Whole-bar observations cannot reveal their overlap with a REST snapshot.
         // Preserve observed live extrema/close without adding the volumes twice.
-        byTime.set(live.time, historical ? { ...historical,
-          high: Math.max(historical.high, live.high), low: Math.min(historical.low, live.low), close: live.close,
-          volume: historical.volume === undefined && live.volume === undefined ? undefined : Math.max(historical.volume ?? 0, live.volume ?? 0),
-          // Absence on the newer observation must not inherit an older level.
-          oi: live.oi,
-        } satisfies LooseOptional<Bar> as Bar : live);
+        // Absence on the newer observation must not inherit an older open interest.
+        byTime.set(live.time, historical ? { ...widenBar(historical, live), close: live.close, oi: live.oi } satisfies LooseOptional<Bar> as Bar : live);
       }
       this._bars = normalize([...byTime.values()]);
       this._buffer = null;
@@ -392,8 +384,7 @@ export class DataLoadingController {
     if (rollover) {
       if (provisional) this._provisionalTime = bar.time;
     } else if (provisional && this._provisionalTime !== bar.time) {
-      bar = { ...bar, open: tail.open, high: Math.max(tail.high, bar.high), low: Math.min(tail.low, bar.low),
-        volume: tail.volume === undefined && bar.volume === undefined ? undefined : Math.max(tail.volume ?? 0, bar.volume ?? 0) } satisfies LooseOptional<Bar> as Bar;
+      bar = { ...widenBar(bar, tail), open: tail.open };
     }
     if (this._buffer) {
       this._buffer.set(bar.time, bar);
