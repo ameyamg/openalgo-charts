@@ -83,9 +83,10 @@ export const OPEN_INTEREST_BUILDUP: IndicatorDescriptor = {
       return oiChange >= 0 ? priceChange >= 0 ? 1 : 2 : priceChange >= 0 ? 3 : 4;
     }),
   }),
-  barColors: ({ values, settings }) => values.state.map(state => {
+  // `calc` above always writes `state`, and each reading in it is 1 to 4.
+  barColors: ({ values, settings }) => values.state!.map(state => {
     if (state === null) return null;
-    const [key, fallback] = BUILDUP_COLORS[state - 1];
+    const [key, fallback] = BUILDUP_COLORS[state - 1]!;
     return color(settings, key, fallback);
   }),
 };

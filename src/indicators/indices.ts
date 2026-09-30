@@ -67,7 +67,7 @@ function smoothRuns(values: readonly number[], period: number, smooth: Smoother)
     let end = i;
     while (end < values.length && Number.isFinite(values[end])) end += 1;
     const run = smooth(values.slice(i, end), period);
-    for (let k = 0; k < run.length; k++) out[i + k] = run[k];
+    for (let k = 0; k < run.length; k++) out[i + k] = run[k]!;
     i = end;
   }
   return out;
@@ -93,9 +93,11 @@ function volumeIndex(bars: readonly Bar[], on: 'falling' | 'rising'): number[] {
   let index = 1;
   for (let i = 0; i < bars.length; i++) {
     if (i > 0) {
-      const prevClose = bars[i - 1].close;
-      const close = bars[i].close;
-      const moved = on === 'falling' ? vol(bars[i]) < vol(bars[i - 1]) : vol(bars[i]) > vol(bars[i - 1]);
+      const bar = bars[i]!;
+      const prev = bars[i - 1]!;
+      const prevClose = prev.close;
+      const close = bar.close;
+      const moved = on === 'falling' ? vol(bar) < vol(prev) : vol(bar) > vol(prev);
       // A zero or missing previous close, or a missing close, makes the
       // percentage change undefined. Compounding a NaN in would destroy every
       // later bar of a running product, so the index holds instead, exactly as
@@ -185,9 +187,9 @@ export const PVT: IndicatorDescriptor = {
   calc: (bars) => {
     const term = new Array<number>(bars.length).fill(NaN);
     for (let i = 1; i < bars.length; i++) {
-      const prevClose = bars[i - 1].close;
+      const prevClose = bars[i - 1]!.close;
       if (prevClose === 0 || !Number.isFinite(prevClose)) continue;
-      term[i] = ((bars[i].close - prevClose) / prevClose) * vol(bars[i]);
+      term[i] = ((bars[i]!.close - prevClose) / prevClose) * vol(bars[i]!);
     }
     // `cumulative` reads a non-finite term as 0, which is what bar 0 needs: it
     // has no previous close, so it contributes nothing and the total opens at 0
@@ -259,11 +261,12 @@ export const PVO: IndicatorDescriptor = {
     const slow = osc(volumes, len(s, 'slowLength', 26));
 
     const pvo = new Array<number>(n).fill(NaN);
+    // Every series here holds one value per bar.
     for (let i = 0; i < n; i++) {
       // A window that traded nothing has no baseline to express the spread as a
       // percentage of. the reference division by zero is na, so this stays a gap --
       // which is the whole of a feed the vendor sends no volume for.
-      if (slow[i] !== 0) pvo[i] = (100 * (fast[i] - slow[i])) / slow[i];
+      if (slow[i] !== 0) pvo[i] = (100 * (fast[i]! - slow[i]!)) / slow[i]!;
     }
 
     // After its warmup PVO has no reading only where the slow average is
@@ -272,7 +275,7 @@ export const PVO: IndicatorDescriptor = {
     // move readings on complete series, so the restart stays (K13).
     const signal = smoothRuns(pvo, len(s, 'signalLength', 9), smootherFor(str(s, 'sigType', 'EMA')));
     const hist = new Array<number>(n);
-    for (let i = 0; i < n; i++) hist[i] = pvo[i] - signal[i];
+    for (let i = 0; i < n; i++) hist[i] = pvo[i]! - signal[i]!;
     return { hist: nulls(hist), pvo: nulls(pvo), signal: nulls(signal) };
   },
   levels: () => [{ price: 0, color: '#787b8680', title: 'Zero' }],
@@ -311,10 +314,11 @@ export const MASS_INDEX: IndicatorDescriptor = {
     const double = smaSeededEma(single, 9);
 
     const ratio = new Array<number>(n).fill(NaN);
+    // Both averages hold one value per bar.
     for (let i = 0; i < n; i++) {
       // A flat market long enough for the smoothed range to reach zero has no
       // expansion to measure; the reference divides by zero and gets na.
-      if (double[i] !== 0) ratio[i] = single[i] / double[i];
+      if (double[i] !== 0) ratio[i] = single[i]! / double[i]!;
     }
     // `rollingSum` accumulates every term it is handed, non-finite ones
     // included, so it has to run inside `smoothRuns` rather than over the
@@ -356,10 +360,11 @@ export const ULCER_INDEX: IndicatorDescriptor = {
     const peak = highest(values, length);
 
     const squared = new Array<number>(n).fill(NaN);
+    // Every series here holds one value per bar.
     for (let i = 0; i < n; i++) {
-      const hi = peak[i];
+      const hi = peak[i]!;
       if (!Number.isFinite(hi) || hi === 0) continue;
-      const drawdown = (100 * (values[i] - hi)) / hi;
+      const drawdown = (100 * (values[i]! - hi)) / hi;
       squared[i] = drawdown * drawdown;
     }
     // `sma` refuses to average a window holding a non-finite value, so the
@@ -367,7 +372,7 @@ export const ULCER_INDEX: IndicatorDescriptor = {
     // instead of leaking into it.
     const mean = sma(squared, length);
     const ui = new Array<number>(n);
-    for (let i = 0; i < n; i++) ui[i] = Math.sqrt(mean[i]);
+    for (let i = 0; i < n; i++) ui[i] = Math.sqrt(mean[i]!);
     return {
       ui: nulls(ui),
       zero: ui.map((v) => (Number.isFinite(v) ? 0 : null)),

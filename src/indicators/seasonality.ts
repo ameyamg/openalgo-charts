@@ -119,7 +119,9 @@ const SKIP_BG = withOpacity(NEUTRAL, 0.5);
  * outlier month would flatten every other cell into near-invisibility.
  *
  * A missing value gets no fill at all, so an empty cell reads as absent data
- * rather than as a neutral reading.
+ * rather than as a neutral reading. The cells below carry that as
+ * `bgColor: undefined`, which the table paints like an omitted fill; the
+ * public `TableCell` keeps the member exact, hence their assertions.
  */
 function rampColor(value: number | null, cutoff: number, pos: string, neg: string): string | undefined {
   if (value === null || !Number.isFinite(value)) return undefined;
@@ -211,7 +213,7 @@ function buildMatrix(
   // The last month in the data is still being written, so its change is not yet
   // a month's change. The reference reaches the same place from the other side,
   // by reading only closed monthly bars.
-  const forming = spans.length > 0 ? spans[spans.length - 1] : null;
+  const forming = spans.length > 0 ? spans[spans.length - 1]! : null;
   if (forming !== null) skipped.add(monthKey(forming.year, forming.month));
 
   const years: number[] = [];
@@ -221,10 +223,10 @@ function buildMatrix(
   // most of the move. Index 0 is therefore unmeasurable and stays blank: the
   // first month in the data has no predecessor to measure against.
   for (let i = 1; i < spans.length; i++) {
-    const span = spans[i];
+    const span = spans[i]!;
     // The predecessor is the previous month *present in the data*, so a hole in
     // the series bridges rather than swallowing the month after it.
-    const prev = spans[i - 1];
+    const prev = spans[i - 1]!;
     if (span.year < startYear || skipped.has(monthKey(span.year, span.month))) continue;
     // A zero or non-finite previous close has no percentage change to report,
     // and the absolute denominator keeps the sign meaningful on a series that
@@ -359,7 +361,7 @@ export const SEASONALITY: IndicatorDescriptor = {
           continue;
         }
         const v = row[m] ?? null;
-        cells.push(v === null ? { text: '' } : { text: pct(v), bgColor: rampColor(v, cutoff, pos, neg) });
+        cells.push(v === null ? { text: '' } : { text: pct(v), bgColor: rampColor(v, cutoff, pos, neg) } as TableCell);
       }
       rows.push(cells);
       rowWeights.push(1);
@@ -379,7 +381,7 @@ export const SEASONALITY: IndicatorDescriptor = {
         const cells: TableCell[] = [labelCell('Avgs:')];
         for (let m = 0; m < 12; m++) {
           const v = mean(column(matrix, m));
-          cells.push(v === null ? { text: '' } : { text: pct(v), bgColor: rampColor(v, cutoff, pos, neg) });
+          cells.push(v === null ? { text: '' } : { text: pct(v), bgColor: rampColor(v, cutoff, pos, neg) } as TableCell);
         }
         rows.push(cells);
         rowWeights.push(1);
@@ -404,7 +406,7 @@ export const SEASONALITY: IndicatorDescriptor = {
           const v = percentPositive(column(matrix, m));
           cells.push(v === null
             ? { text: '' }
-            : { text: `${Math.round(v)}%`, bgColor: rampColor(v - 50, 50, pos, neg) });
+            : { text: `${Math.round(v)}%`, bgColor: rampColor(v - 50, 50, pos, neg) } as TableCell);
         }
         rows.push(cells);
         rowWeights.push(1);

@@ -36,6 +36,9 @@ const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string
  * deviations either side. Three of the studies below are different readings of
  * the same three numbers, so they share one construction rather than each
  * re-deriving the basis.
+ *
+ * The calc helpers return one value per input, so in this file every series
+ * derived from the bars is read at a bar index alongside the bars themselves.
  */
 function bands(values: readonly number[], length: number, mult: number): {
   middle: number[]; upper: number[]; lower: number[];
@@ -46,9 +49,9 @@ function bands(values: readonly number[], length: number, mult: number): {
   const upper = new Array<number>(n);
   const lower = new Array<number>(n);
   for (let i = 0; i < n; i++) {
-    const d = mult * dev[i];
-    upper[i] = middle[i] + d;
-    lower[i] = middle[i] - d;
+    const d = mult * dev[i]!;
+    upper[i] = middle[i]! + d;
+    lower[i] = middle[i]! - d;
   }
   return { middle, upper, lower };
 }
@@ -60,7 +63,7 @@ function shift(values: readonly number[], by: number): number[] {
   const out = new Array<number>(n).fill(NaN);
   for (let i = 0; i < n; i++) {
     const j = i + by;
-    if (j >= 0 && j < n) out[j] = values[i];
+    if (j >= 0 && j < n) out[j] = values[i]!;
   }
   return out;
 }
@@ -93,10 +96,10 @@ export const BOLLINGER_PERCENT_B: IndicatorDescriptor = {
     const { upper, lower } = bands(values, num(s, 'length', 20), num(s, 'mult', 2));
     const out = new Array<number>(values.length);
     for (let i = 0; i < values.length; i++) {
-      const span = upper[i] - lower[i];
+      const span = upper[i]! - lower[i]!;
       // A flat window collapses the bands onto the basis; the reference 0/0 is `na`,
       // and any finite answer we invented here would be a fabricated signal.
-      out[i] = span > 0 ? (values[i] - lower[i]) / span : NaN;
+      out[i] = span > 0 ? (values[i]! - lower[i]!) / span : NaN;
     }
     // Never null, warmup included: the band is drawn across the whole pane, so
     // its edges have to exist on bars where the study prints nothing.
@@ -156,7 +159,7 @@ export const BOLLINGER_BANDWIDTH: IndicatorDescriptor = {
     const { middle, upper, lower } = bands(values, num(s, 'length', 20), num(s, 'mult', 2));
     const bbw = new Array<number>(values.length);
     for (let i = 0; i < values.length; i++) {
-      bbw[i] = middle[i] === 0 ? NaN : ((upper[i] - lower[i]) / middle[i]) * 100;
+      bbw[i] = middle[i] === 0 ? NaN : ((upper[i]! - lower[i]!) / middle[i]!) * 100;
     }
     // `highest`/`lowest` compare, and a NaN loses every comparison, so the
     // bandwidth's own warmup is skipped rather than poisoning the window: the
@@ -223,8 +226,8 @@ export const BB_TREND: IndicatorDescriptor = {
     const long = bands(closes, num(s, 'longLength', 50), mult);
     const out = new Array<number>(closes.length);
     for (let i = 0; i < closes.length; i++) {
-      const spread = Math.abs(short.lower[i] - long.lower[i]) - Math.abs(short.upper[i] - long.upper[i]);
-      out[i] = short.middle[i] === 0 ? NaN : (spread / short.middle[i]) * 100;
+      const spread = Math.abs(short.lower[i]! - long.lower[i]!) - Math.abs(short.upper[i]! - long.upper[i]!);
+      out[i] = short.middle[i] === 0 ? NaN : (spread / short.middle[i]!) * 100;
     }
     return { bbtrend: nulls(out) };
   },
@@ -270,9 +273,9 @@ export const CHOPPINESS_INDEX: IndicatorDescriptor = {
     const out = new Array<number>(bars.length).fill(NaN);
     if (scale !== 0) {
       for (let i = 0; i < bars.length; i++) {
-        const span = hi[i] - lo[i];
+        const span = hi[i]! - lo[i]!;
         if (!(span > 0)) continue;
-        const ratio = travel[i] / span;
+        const ratio = travel[i]! / span;
         if (!(ratio > 0)) continue;
         out[i] = (100 * Math.log10(ratio)) / scale;
       }
@@ -329,8 +332,8 @@ export const HISTORICAL_VOLATILITY: IndicatorDescriptor = {
     const annual = 365; // the reference hard-codes calendar days, not trading days.
     const returns = new Array<number>(n).fill(NaN);
     for (let i = 1; i < n; i++) {
-      const prev = bars[i - 1].close;
-      const curr = bars[i].close;
+      const prev = bars[i - 1]!.close;
+      const curr = bars[i]!.close;
       returns[i] = prev > 0 && curr > 0 ? Math.log(curr / prev) : NaN;
     }
     // The first return is `na` (no prior close), and `stdev` refuses a window
@@ -433,14 +436,14 @@ export const CHOP_ZONE: IndicatorDescriptor = {
     const ema34 = smaSeededEma(bars.map((b) => b.close), CHOP_ZONE_EMA_LENGTH);
     const angle = new Array<number>(n).fill(NaN);
     for (let i = 1; i < n; i++) {
-      const range = hi[i] - lo[i];
-      const avg = (bars[i].high + bars[i].low + bars[i].close) / 3;
+      const range = hi[i]! - lo[i]!;
+      const avg = (bars[i]!.high + bars[i]!.low + bars[i]!.close) / 3;
       if (!(range > 0) || avg === 0) continue;
-      const span = (25 / range) * lo[i];
+      const span = (25 / range) * lo[i]!;
       // One bar wide, so the rise is the whole triangle: dy against dx of 1.
       // the reference measures the drop (previous EMA minus current), which makes an
       // advancing EMA negative here and positive after the sign flip below.
-      const dy = ((ema34[i - 1] - ema34[i]) / avg) * span;
+      const dy = ((ema34[i - 1]! - ema34[i]!) / avg) * span;
       if (!Number.isFinite(dy)) continue;
       const hyp = Math.sqrt(1 + dy * dy);
       const degrees = Math.round((180 * Math.acos(1 / hyp)) / CHOP_ZONE_PI);
@@ -529,14 +532,15 @@ export const STANDARD_ERROR: IndicatorDescriptor = {
     let sxx = 0;
     for (let k = 0; k < len; k++) sxx += (xBar - k - 1) ** 2;
     const out = new Array<number>(closes.length).fill(NaN);
+    // `len` is a whole number of at least 3, so each window lies in [0, i].
     for (let i = len - 1; i < closes.length; i++) {
       let sum = 0;
-      for (let k = 0; k < len; k++) sum += closes[i - k];
+      for (let k = 0; k < len; k++) sum += closes[i - k]!;
       const mean = sum / len;
       let syy = 0;
       let sxy = 0;
       for (let k = 0; k < len; k++) {
-        const dy = mean - closes[i - k];
+        const dy = mean - closes[i - k]!;
         syy += dy * dy;
         sxy += (xBar - k - 1) * dy;
       }
@@ -612,15 +616,15 @@ export const VOLATILITY_SQUEEZE: IndicatorDescriptor = withTail({
     const kcMult = num(s, 'kcMult', 1.5);
     const hh = highest(high, length);
     const ll = lowest(low, length);
-    const delta = close.map((c, i) => c - ((hh[i] + ll[i]) / 2 + middle[i]) / 2);
+    const delta = close.map((c, i) => c - ((hh[i]! + ll[i]!) / 2 + middle[i]!) / 2);
     const state = new Array<number | null>(n).fill(null);
     const squeeze = new Array<number | null>(n).fill(null);
     for (let i = 0; i < n; i++) {
-      const rail = kcMult * range[i];
-      const upperKc = middle[i] + rail;
-      const lowerKc = middle[i] - rail;
+      const rail = kcMult * range[i]!;
+      const upperKc = middle[i]! + rail;
+      const lowerKc = middle[i]! - rail;
       if (![upper[i], lower[i], upperKc, lowerKc].every(Number.isFinite)) continue;
-      state[i] = lower[i] > lowerKc && upper[i] < upperKc ? 1 : 0;
+      state[i] = lower[i]! > lowerKc && upper[i]! < upperKc ? 1 : 0;
       squeeze[i] = 0;
     }
     return { momentum: nulls(linreg(delta, length)), squeeze, state };
