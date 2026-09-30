@@ -53,8 +53,13 @@ export function bucketPrice(price: number, step: number): number {
   return Math.round((Math.round(price / step) * step) * 1e8) / 1e8;
 }
 
-/** Inclusive list of bucket prices spanning [low, high]. */
+/**
+ * Inclusive list of bucket prices spanning [low, high]. A step that is not a
+ * positive finite number gives no buckets.
+ */
 export function priceBuckets(low: number, high: number, step: number): number[] {
+  // A negative step would walk away from `high` and never stop.
+  if (!(step > 0) || step === Infinity) return [];
   const lo = bucketPrice(low, step);
   const hi = bucketPrice(high, step);
   const out: number[] = [];
