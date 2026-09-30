@@ -17,7 +17,8 @@ import {
   applyIndicatorTemplate, createWidget, mountIndicatorPicker, saveIndicatorTemplate, type Widget, type WidgetOptions,
 } from '../src/widget/index';
 import { hostKept } from '../src/widget/layouts-templates';
-import { hostOwnedStudy } from '../src/workspace/documents';
+import { hostOwnedStudy } from '../src/model/indicator-policy';
+import { hostOwnedStudy as workspaceRule } from '../src/workspace/documents';
 import { ensureWindowGlobal, fakeContainer, fakeWidgetDocument, type FakeElement } from './helpers/fake-dom-widget';
 
 beforeAll(ensureWindowGlobal);
@@ -381,9 +382,14 @@ describe('the workspace store as the widget reaches it', () => {
 });
 
 describe('the host-kept study rule', () => {
-  // The widget cannot load the workspace tier at run time, so it keeps its own
-  // copy of the rule the template parser uses; the two must never disagree.
-  it('is the same in the widget and in the workspace tier, for every policy', () => {
+  // One rule, declared in the base: the widget and the workspace tier each take
+  // that function by path, so they cannot disagree.
+  it('is one function, declared in the base policy module, in the widget and the workspace tier', () => {
+    expect(hostKept).toBe(hostOwnedStudy);
+    expect(workspaceRule).toBe(hostOwnedStudy);
+  });
+
+  it('keeps a study the user may not remove or cannot see, and no other', () => {
     const flag = [true, false, undefined] as const;
     const policies: Array<IndicatorPolicy | undefined> = [undefined];
     for (const removable of flag) for (const configurable of flag) for (const movable of flag) for (const listed of flag) {
@@ -391,7 +397,9 @@ describe('the host-kept study rule', () => {
         ...(movable === undefined ? {} : { movable }), ...(listed === undefined ? {} : { listed }) });
     }
     expect(policies).toHaveLength(82);
-    for (const policy of policies) expect(hostKept(policy), JSON.stringify(policy)).toBe(hostOwnedStudy(policy));
-    expect(policies.filter(policy => hostKept(policy))).toHaveLength(45);
+    for (const policy of policies) {
+      expect(hostOwnedStudy(policy), JSON.stringify(policy)).toBe(policy?.removable === false || policy?.listed === false);
+    }
+    expect(policies.filter(policy => hostOwnedStudy(policy))).toHaveLength(45);
   });
 });
