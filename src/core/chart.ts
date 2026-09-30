@@ -369,7 +369,6 @@ export class Chart {
   private _axisColumnWidth = 0;
   private _emptyPriceAxis = true;
   private _timeNav: TimeNavigator | null = null;
-  private _timeNavButtons: TimeNavigatorOptions['buttons'] = [];
   private _schedulingTimeNav = false;
   /** Pane the navigator is currently attached to, so it can follow the bottom. */
   private _timeNavPane = -1;
@@ -449,13 +448,13 @@ export class Chart {
     if (margins.marginTop !== undefined || margins.marginBottom !== undefined) {
       this._priceScaleOptions = { ...this._priceScaleOptions, ...margins };
     }
-    this._patchNavigation(options.navigation ?? {});
+    this._input._patchNavigation(options.navigation ?? {});
     const nav = options.timeNavigator ?? true;
     if (nav !== false) {
       const own = nav === true ? undefined : nav;
       this._timeNav = new TimeNavigator({ ...own, hints: this._navHints(own) }, this._now);
-      this._timeNavButtons = [...this._timeNav.options().buttons];
-      this._syncNavigatorPolicy();
+      this._input._timeNavButtons = [...this._timeNav.options().buttons];
+      this._input._syncNavigatorPolicy();
       // Hints read from the keymap follow a rebind; hints the host passed stay. A shared manager is let go on destroy.
       if (own?.hints === undefined && this._shortcuts !== null) this.on('destroy', this._shortcuts.onChange(() => this._timeNav?.setOptions({ hints: this._navHints() })));
     }
@@ -587,77 +586,9 @@ export class Chart {
     const before = this._navigation.defaultVisibleBars;
     const spacing = this._navigation.defaultBarSpacing;
     const pan = this._navigation.panEnabled, zoom = this._navigation.zoomEnabled;
-    this._patchNavigation(patch);
+    this._input._patchNavigation(patch);
     if (before !== this._navigation.defaultVisibleBars || spacing !== this._navigation.defaultBarSpacing) this.resetScale();
     if (pan !== this._navigation.panEnabled || zoom !== this._navigation.zoomEnabled) this.emit('objects:change', undefined);
-  }
-
-  private _patchNavigation(patch: Partial<ChartNavigationOptions>): void {
-    const wasPan = this._navigation.panEnabled, wasZoom = this._navigation.zoomEnabled;
-    for (const key of ['panEnabled', 'zoomEnabled'] as const) {
-      const field = Object.getOwnPropertyDescriptor(patch, key);
-      if (field && 'value' in field && typeof field.value === 'boolean') this._navigation[key] = field.value;
-    }
-    const stopPan = wasPan !== false && this._navigation.panEnabled === false;
-    const stopZoom = wasZoom !== false && this._navigation.zoomEnabled === false;
-    if (stopPan || stopZoom) {
-      this._motion._stopDisabled(stopPan, stopZoom);
-      if (this._input._pinch !== null || (stopPan && this._input._dragging)
-        || (stopZoom && (this._input._axisDrag === 'price' || this._input._axisDrag === 'time'))) {
-        this._input._navigationCancelled = true;
-        this._input._dragging = false;
-        this._input._axisDrag = null;
-        this._input._axisDragScale = null;
-        this._input._pinch = null;
-        this._input._pointerMoved = true;
-        this._dragVelocity = 0;
-        this._input._setHover(null);
-      }
-    }
-    if (wasPan !== this._navigation.panEnabled || wasZoom !== this._navigation.zoomEnabled) this._syncNavigatorPolicy();
-    if (patch.mousePan === 'horizontal' || patch.mousePan === 'both') this._navigation.mousePan = patch.mousePan;
-    const count = patch.defaultVisibleBars;
-    // Saved layouts are untrusted input. Invalid values must not poison spacing.
-    if (typeof count === 'number' && Number.isFinite(count) && count >= 0) {
-      this._navigation.defaultVisibleBars = Math.min(100000, Math.floor(count));
-      // An explicit count edit selects count mode. A complete saved preference
-      // can carry both fields, in which case its spacing still takes precedence.
-      if (patch.defaultBarSpacing === undefined) delete this._navigation.defaultBarSpacing;
-    }
-    const spacing = patch.defaultBarSpacing;
-    if (typeof spacing === 'number' && Number.isFinite(spacing) && spacing >= 0) {
-      if (spacing === 0) delete this._navigation.defaultBarSpacing;
-      else this._navigation.defaultBarSpacing = spacing;
-    }
-  }
-
-  private _navigationAllowed(command: string): boolean {
-    switch (command) {
-      case 'panLeftBar': case 'panRightBar': case 'panLeft': case 'panRight':
-      case 'panLeftFast': case 'panRightFast': case 'panUp': case 'panDown':
-        return this._navigation.panEnabled !== false;
-      case 'zoomIn': case 'zoomOut': case 'resetScale': case 'fitContent':
-        return this._navigation.zoomEnabled !== false;
-      default: return true;
-    }
-  }
-
-  private _syncNavigatorPolicy(): void {
-    if (this._timeNav === null) return;
-    if (this._timeNavButtons.every(action => action === null || this._navigationAllowed(action))) {
-      this._timeNav.setOptions({ buttons: [...this._timeNavButtons] });
-      return;
-    }
-    const buttons: (TimeNavigatorOptions['buttons'][number])[] = [];
-    let gap = false;
-    for (const action of this._timeNavButtons) {
-      if (action === null) { gap = true; continue; }
-      if (!this._navigationAllowed(action)) continue;
-      if (gap && buttons.length > 0) buttons.push(null);
-      buttons.push(action);
-      gap = false;
-    }
-    this._timeNav.setOptions({ buttons });
   }
 
   private _fitDefaultView(): boolean {

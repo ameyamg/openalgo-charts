@@ -88,7 +88,7 @@ export interface PersistenceHost {
   getVisibleLogicalRange: Chart['getVisibleLogicalRange'];
   setVisibleLogicalRange: Chart['setVisibleLogicalRange'];
   navigationOptions: Chart['navigationOptions'];
-  _patchNavigation: Chart['_patchNavigation'];
+  readonly _input: Chart['_input'];
   gridOptions: Chart['gridOptions'];
   setGridOptions: Chart['setGridOptions'];
   canvasOptions: Chart['canvasOptions'];
@@ -379,7 +379,7 @@ export class ChartPersistence {
     if (s.watermark) this._host.setWatermarkOptions(s.watermark);
     if (s.trading) this._host.setTradingSettings(s.trading);
     if (s.axisChrome) this._host.setAxisChromeOptions(s.axisChrome);
-    if (s.navigation && typeof s.navigation === 'object') this._host._patchNavigation(s.navigation);
+    if (s.navigation && typeof s.navigation === 'object') this._host._input._patchNavigation(s.navigation);
     if (s.events) this._host.setEventOptions(s.events);
     if (s.crosshairMode) this._host._crosshairMode = s.crosshairMode;
     if (typeof s.crosshairSnapToBar === 'boolean') this._host._crosshairSnapToBar = s.crosshairSnapToBar;
