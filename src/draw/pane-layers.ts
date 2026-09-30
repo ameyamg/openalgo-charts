@@ -19,7 +19,7 @@ import { GestureLayer } from './gesture-layer';
  * The layers of one pane: under the series, over it, and one inside the
  * series band for each entry a drawing is placed above.
  */
-export interface PaneLayers {
+interface PaneLayers {
   bottom: DrawingLayer;
   top: GestureLayer;
   series: Map<string, DrawingLayer>;
