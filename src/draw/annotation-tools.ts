@@ -4,6 +4,7 @@
  * arrow marks. Every one of them puts a human sentence, or a mark pointing at
  * a bar, on the chart.
  */
+import type { PrimitiveRenderContext } from 'openalgo-charts';
 import type { AnchoredTool, DrawContext, Drawing, DrawingText, DrawingTool, ScreenPoint } from './types';
 import { distToSegment } from './geometry';
 import { roundRectPath, contrastText } from '../render/pill';
@@ -118,18 +119,19 @@ export const PRICE_LABEL: DrawingTool = {
     calloutTail(c, box, p, c.style.color);
     calloutText(c, box, [text], c.style.color, 12);
   },
-  distance: (x, y, h) => {
-    // The anchor plus a generous box to its upper right: measuring the real
-    // text needs a context the hit path does not have.
-    const p = h.pts[0];
-    const w = 64;
-    const hgt = 22;
-    const x0 = p.x + 18;
-    const y0 = p.y - 30 - hgt / 2;
-    if (x >= x0 && x <= x0 + w && y >= y0 && y <= y0 + hgt) return 0;
-    return Math.hypot(x - p.x, y - p.y) <= 10 ? 0 : null;
-  },
+  distance: (x, y, h) => reached(x, y, priceLabelReach(h.pts[0], h.drawing, h.rc)),
 } satisfies AnchoredTool<1>;
+
+/**
+ * Where the price label is grabbed, in media px: its pill, centred up and to
+ * the right of the anchor as `calloutBox` paints it (see `hitBubble`), and
+ * the anchor itself.
+ */
+function priceLabelReach(p: ScreenPoint, d: Drawing, rc: PrimitiveRenderContext): Reach {
+  // A price label is drawn only once it holds its anchor.
+  const text = contentOf(d, rc.priceScale.format(d.points[0]!.price));
+  return { plate: hitBubble(d, [text], p.x + 18, p.y - 30, 50), dot: { at: p, r: 10 } };
+}
 
 /**
  * Callout: a text bubble on its own anchor with a tail back to the point it
@@ -151,10 +153,16 @@ export const CALLOUT: DrawingTool = {
     if (h.pts.length < 2) return null;
     const [target, seat] = h.pts;
     // Bubble body, else the tail back to the annotated point.
-    if (Math.abs(x - seat.x) <= 60 && Math.abs(y - seat.y) <= 16) return 0;
+    const b = calloutReach(seat, h.drawing);
+    if (insidePlate(x, y, b.x, b.y, b.w, b.h) !== null) return 0;
     return distToSegment(x, y, target, seat);
   },
 } satisfies AnchoredTool<2>;
+
+/** The callout's bubble as a hit test grabs it, in media px; see `hitBubble`. */
+function calloutReach(seat: ScreenPoint, d: Drawing): Plate {
+  return hitBubble(d, contentOf(d, 'Note').split('\n'), seat.x, seat.y, 106);
+}
 
 /** Rounded bubble at (x, y) sized to `lines`; returns its device-px box. */
 function calloutBox(
@@ -163,13 +171,22 @@ function calloutBox(
   const d = c.rc.dpr;
   const t = textOf(c.drawing);
   const size = (t.fontSize ?? defaultSize) * d;
-  c.ctx.save();
-  c.ctx.font = fontOf(t, size);
-  let textW = 0;
-  for (const s of lines) textW = Math.max(textW, c.ctx.measureText(s).width);
-  c.ctx.restore();
-  const w = textW + 14 * d;
+  const w = widest(c.ctx, t, lines, size) + 14 * d;
   const h = size * 1.4 * lines.length + 8 * d;
+  return { x: x - w / 2, y: y - h / 2, w, h };
+}
+
+/**
+ * A bubble centred at (x, y) as a hit test grabs it, in media px: measured as
+ * `calloutBox` paints it when a canvas can be made (`measureContext`), else on
+ * `guess`, a text width generous enough that a short bubble is grabbable.
+ */
+function hitBubble(d: Drawing, lines: readonly string[], x: number, y: number, guess: number): Plate {
+  const t = textOf(d);
+  const size = t.fontSize ?? 12;
+  const probe = measureContext();
+  const w = (probe === null ? guess : widest(probe, t, lines, size)) + 14;
+  const h = size * 1.4 * lines.length + 8;
   return { x: x - w / 2, y: y - h / 2, w, h };
 }
 
@@ -280,33 +297,94 @@ export const FLAG_MARK: DrawingTool = {
  * plate is shaped, not in anything structural.
  */
 
-/** How an annotation's plate is drawn when its text block sets nothing. */
+/** A box by its top-left and size. */
+type Plate = { x: number; y: number; w: number; h: number };
+
+/**
+ * An annotation's plate: its face when the text block sets nothing, and where
+ * it sits. One statement for painting and for hit testing, so the plate that
+ * is grabbed is the plate that is painted.
+ */
 interface PlateDefaults {
   /** Font size in media px. */
   size: number;
   /** Plate opacity, 0..1. */
   opacity: number;
+  /** What the plate says when the text block is empty. */
+  fallback: string;
+  /** The anchored price, formatted, is the plate's first line. */
+  price?: true;
+  /**
+   * The plate's top-left for a plate `w` by `h` at the anchor `p`, in the px
+   * of ratio `d`: device px to paint, media px (`d` 1) to hit-test.
+   */
+  at(p: ScreenPoint, w: number, h: number, d: number): ScreenPoint;
+  /** The post a hit also takes, in media px; without one, a dot of 8 px about the anchor. */
+  post?(p: ScreenPoint): Plate;
+}
+
+/** Where an annotation is grabbed, in media px: its plate, and a dot or a post at its anchor. */
+interface Reach { plate: Plate; dot?: { at: ScreenPoint; r: number }; post?: Plate }
+
+/**
+ * The widest of `lines` in `t`'s face at `sizePx`, measured on `ctx`: the
+ * context being painted, or the offscreen probe, which answers in media px.
+ */
+function widest(ctx: CanvasRenderingContext2D, t: DrawingText, lines: readonly string[], sizePx: number): number {
+  ctx.save();
+  ctx.font = fontOf(t, sizePx);
+  let w = 0;
+  for (const s of lines) w = Math.max(w, ctx.measureText(s).width);
+  ctx.restore();
+  return w;
+}
+
+/** The plate's lines: the price first where it shows one, then the text or its fallback. */
+function plateLines(def: PlateDefaults, d: Drawing, format: (price: number) => string): string[] {
+  const text = contentOf(d, def.fallback).split('\n');
+  // A price plate is drawn only once the drawing holds its anchor.
+  return def.price === true ? [format(d.points[0]!.price), ...text] : text;
 }
 
 /**
- * A plate of text with its top-left at (x, y), returned in device px.
+ * The plate as painted, in device px: sized to `lines` in the text block's
+ * face and placed by `def`.
  *
- * Distinct from `calloutBox`, which centres on a point: an annotation that
- * grows downward from where it was dropped stays where the user put it as the
- * text is typed, while a centred one creeps upward a half-line at a time.
+ * Placed by a corner, not centred on a point as `calloutBox` is: an annotation
+ * that grows downward from where it was dropped stays where the user put it
+ * as the text is typed, while a centred one creeps upward a half-line at a time.
  */
-function notePlate(
-  c: DrawContext, lines: readonly string[], x: number, y: number, def: PlateDefaults,
-): { x: number; y: number; w: number; h: number } {
+function notePlate(c: DrawContext, p: ScreenPoint, lines: readonly string[], def: PlateDefaults): Plate {
   const d = c.rc.dpr;
-  const t = textOf(c.drawing);
-  const size = (t.fontSize ?? def.size) * d;
-  c.ctx.save();
-  c.ctx.font = fontOf(t, size);
-  let textW = 0;
-  for (const s of lines) textW = Math.max(textW, c.ctx.measureText(s).width);
-  c.ctx.restore();
-  return { x, y, w: textW + 16 * d, h: size * 1.45 * lines.length + 10 * d };
+  const size = (textOf(c.drawing).fontSize ?? def.size) * d;
+  const w = widest(c.ctx, textOf(c.drawing), lines, size) + 16 * d;
+  const h = size * 1.45 * lines.length + 10 * d;
+  return { ...def.at(p, w, h, d), w, h };
+}
+
+/**
+ * Where a plate annotation is grabbed, in media px. The plate is measured as
+ * `notePlate` paints it when a canvas can be made (`measureContext`); where
+ * none can, it is taken as 120 px wide, generous enough that a short plate is
+ * always grabbable, and the dot or post at the anchor catches the rest.
+ */
+function plateReach(def: PlateDefaults, p: ScreenPoint, d: Drawing, rc: PrimitiveRenderContext): Reach {
+  const t = textOf(d);
+  const size = t.fontSize ?? def.size;
+  const lines = plateLines(def, d, (price) => rc.priceScale.format(price));
+  const probe = measureContext();
+  const w = probe === null ? 120 : widest(probe, t, lines, size) + 16;
+  const h = size * 1.45 * lines.length + 10;
+  const plate = { ...def.at(p, w, h, 1), w, h };
+  return def.post === undefined ? { plate, dot: { at: p, r: 8 } } : { plate, post: def.post(p) };
+}
+
+/** Whether (x, y) is on what `r` reaches: 0 when it is, as for anywhere on a plate, else null. */
+function reached(x: number, y: number, r: Reach): 0 | null {
+  const { plate, dot, post } = r;
+  if (insidePlate(x, y, plate.x, plate.y, plate.w, plate.h) !== null) return 0;
+  if (dot !== undefined) return Math.hypot(x - dot.at.x, y - dot.at.y) <= dot.r ? 0 : null;
+  return post !== undefined && insidePlate(x, y, post.x, post.y, post.w, post.h) !== null ? 0 : null;
 }
 
 /** The plate's colour: the text block's own, else the drawing's. */
@@ -358,20 +436,6 @@ function insidePlate(
   return x >= bx && x <= bx + w && y >= by && y <= by + h ? 0 : null;
 }
 
-/**
- * The plate a hit test assumes, in media px.
- *
- * Hit testing runs without a canvas, so the real text cannot be measured. A
- * fixed box is the honest approximation: it is generous enough that a plate is
- * always grabbable, and the anchor dot below catches the rest.
- */
-function notePlateGuess(d: Drawing, lines: number, def: PlateDefaults): { w: number; h: number } {
-  const size = d.text?.fontSize ?? def.size;
-  return { w: 120, h: size * 1.45 * Math.max(1, lines) + 10 };
-}
-
-const linesOf = (d: Drawing, fallback: string): number => contentOf(d, fallback).split('\n').length;
-
 /** A plate on a stem: the stem's colour and width apply, and the plate's text surface. */
 const STEMMED_NOTE_SETTINGS: SettingsSchema = composeSettings(
   [COLOR_FIELD, LINE_WIDTH_FIELD, PLATE_TEXT_FIELDS], { textIsContent: true },
@@ -379,7 +443,10 @@ const STEMMED_NOTE_SETTINGS: SettingsSchema = composeSettings(
 /** A plate with a tail: only the colour applies outside the text surface. */
 const TAILED_NOTE_SETTINGS: SettingsSchema = composeSettings([COLOR_FIELD, PLATE_TEXT_FIELDS], { textIsContent: true });
 
-const NOTE_PLATE: PlateDefaults = { size: 12, opacity: 0.95 };
+/** Up and to the right of the pin, where the stem meets its bottom-left corner. */
+const NOTE_PLATE: PlateDefaults = {
+  size: 12, opacity: 0.95, fallback: 'Note', at: (p, _w, _h, d) => ({ x: p.x + 16 * d, y: p.y - 34 * d }),
+};
 
 /**
  * Note: a pin at the bar with its text to the upper right.
@@ -396,8 +463,8 @@ export const NOTE: DrawingTool = {
   draw: (c) => {
     const d = c.rc.dpr;
     const p = c.pts[0];
-    const lines = contentOf(c.drawing, 'Note').split('\n');
-    const box = notePlate(c, lines, p.x + 16 * d, p.y - 34 * d, NOTE_PLATE);
+    const lines = plateLines(NOTE_PLATE, c.drawing, c.formatPrice);
+    const box = notePlate(c, p, lines, NOTE_PLATE);
     c.ctx.save();
     c.ctx.setLineDash([]);
     c.ctx.strokeStyle = c.style.color;
@@ -414,16 +481,13 @@ export const NOTE: DrawingTool = {
     c.ctx.restore();
     paintPlate(c, box, lines, NOTE_PLATE);
   },
-  distance: (x, y, h) => {
-    const p = h.pts[0];
-    const g = notePlateGuess(h.drawing, linesOf(h.drawing, 'Note'), NOTE_PLATE);
-    const hit = insidePlate(x, y, p.x + 16, p.y - 34, g.w, g.h);
-    if (hit !== null) return hit;
-    return Math.hypot(x - p.x, y - p.y) <= 8 ? 0 : null;
-  },
+  distance: (x, y, h) => reached(x, y, plateReach(NOTE_PLATE, h.pts[0], h.drawing, h.rc)),
 } satisfies AnchoredTool<1>;
 
-const BALLOON_PLATE: PlateDefaults = { size: 12, opacity: 0.95 };
+/** Centred over the anchor, clear of the tail. */
+const BALLOON_PLATE: PlateDefaults = {
+  size: 12, opacity: 0.95, fallback: 'Balloon', at: (p, w, h, d) => ({ x: p.x - w / 2, y: p.y - h - 12 * d }),
+};
 
 /**
  * Balloon: a speech bubble sitting above its anchor, tail pointing down.
@@ -439,9 +503,8 @@ export const BALLOON: DrawingTool = {
   draw: (c) => {
     const d = c.rc.dpr;
     const p = c.pts[0];
-    const lines = contentOf(c.drawing, 'Balloon').split('\n');
-    const size = notePlate(c, lines, 0, 0, BALLOON_PLATE);
-    const box = { x: p.x - size.w / 2, y: p.y - size.h - 12 * d, w: size.w, h: size.h };
+    const lines = plateLines(BALLOON_PLATE, c.drawing, c.formatPrice);
+    const box = notePlate(c, p, lines, BALLOON_PLATE);
     c.ctx.save();
     c.ctx.setLineDash([]);
     c.ctx.globalAlpha = c.drawing.text?.backgroundOpacity ?? BALLOON_PLATE.opacity;
@@ -455,16 +518,13 @@ export const BALLOON: DrawingTool = {
     c.ctx.restore();
     paintPlate(c, box, lines, BALLOON_PLATE, 8);
   },
-  distance: (x, y, h) => {
-    const p = h.pts[0];
-    const g = notePlateGuess(h.drawing, linesOf(h.drawing, 'Balloon'), BALLOON_PLATE);
-    const hit = insidePlate(x, y, p.x - g.w / 2, p.y - g.h - 12, g.w, g.h);
-    if (hit !== null) return hit;
-    return Math.hypot(x - p.x, y - p.y) <= 8 ? 0 : null;
-  },
+  distance: (x, y, h) => reached(x, y, plateReach(BALLOON_PLATE, h.pts[0], h.drawing, h.rc)),
 } satisfies AnchoredTool<1>;
 
-const COMMENT_PLATE: PlateDefaults = { size: 11, opacity: 0.92 };
+/** Up and to the right of the anchor, the tail off its bottom-left corner. */
+const COMMENT_PLATE: PlateDefaults = {
+  size: 11, opacity: 0.92, fallback: 'Comment', at: (p, _w, h, d) => ({ x: p.x + 8 * d, y: p.y - h - 10 * d }),
+};
 
 /**
  * Comment: a small square-cornered box with a tail off its bottom left.
@@ -480,9 +540,8 @@ export const COMMENT: DrawingTool = {
   draw: (c) => {
     const d = c.rc.dpr;
     const p = c.pts[0];
-    const lines = contentOf(c.drawing, 'Comment').split('\n');
-    const size = notePlate(c, lines, 0, 0, COMMENT_PLATE);
-    const box = { x: p.x + 8 * d, y: p.y - size.h - 10 * d, w: size.w, h: size.h };
+    const lines = plateLines(COMMENT_PLATE, c.drawing, c.formatPrice);
+    const box = notePlate(c, p, lines, COMMENT_PLATE);
     c.ctx.save();
     c.ctx.setLineDash([]);
     c.ctx.globalAlpha = c.drawing.text?.backgroundOpacity ?? COMMENT_PLATE.opacity;
@@ -496,16 +555,20 @@ export const COMMENT: DrawingTool = {
     c.ctx.restore();
     paintPlate(c, box, lines, COMMENT_PLATE, 3);
   },
-  distance: (x, y, h) => {
-    const p = h.pts[0];
-    const g = notePlateGuess(h.drawing, linesOf(h.drawing, 'Comment'), COMMENT_PLATE);
-    const hit = insidePlate(x, y, p.x + 8, p.y - g.h - 10, g.w, g.h);
-    if (hit !== null) return hit;
-    return Math.hypot(x - p.x, y - p.y) <= 8 ? 0 : null;
-  },
+  distance: (x, y, h) => reached(x, y, plateReach(COMMENT_PLATE, h.pts[0], h.drawing, h.rc)),
 } satisfies AnchoredTool<1>;
 
-const SIGNPOST_PLATE: PlateDefaults = { size: 11, opacity: 0.95 };
+/** How tall the signpost's post stands, in media px. */
+const POST = 34;
+
+/**
+ * Centred on top of the post. The post itself is grabbed too, so a signpost
+ * whose plate is off the pane stays grabbable.
+ */
+const SIGNPOST_PLATE: PlateDefaults = {
+  size: 11, opacity: 0.95, fallback: 'Event', at: (p, w, h, d) => ({ x: p.x - w / 2, y: p.y - POST * d - h }),
+  post: (p) => ({ x: p.x - 5, y: p.y - POST, w: 10, h: POST + 4 }),
+};
 
 /**
  * Signpost: a post standing on the bar with its plate at the top.
@@ -522,35 +585,30 @@ export const SIGNPOST: DrawingTool = {
   draw: (c) => {
     const d = c.rc.dpr;
     const p = c.pts[0];
-    const post = 34 * d;
-    const lines = contentOf(c.drawing, 'Event').split('\n');
-    const size = notePlate(c, lines, 0, 0, SIGNPOST_PLATE);
+    const lines = plateLines(SIGNPOST_PLATE, c.drawing, c.formatPrice);
+    const box = notePlate(c, p, lines, SIGNPOST_PLATE);
     c.ctx.save();
     c.ctx.setLineDash([]);
     c.ctx.strokeStyle = c.style.color;
     c.ctx.lineWidth = Math.max(1, c.style.lineWidth * d);
     c.ctx.beginPath();
     c.ctx.moveTo(p.x, p.y);
-    c.ctx.lineTo(p.x, p.y - post);
+    c.ctx.lineTo(p.x, p.y - POST * d);
     c.ctx.stroke();
     c.ctx.fillStyle = c.style.color;
     c.ctx.beginPath();
     c.ctx.arc(p.x, p.y, 3 * d, 0, Math.PI * 2);
     c.ctx.fill();
     c.ctx.restore();
-    paintPlate(c, { x: p.x - size.w / 2, y: p.y - post - size.h, w: size.w, h: size.h }, lines, SIGNPOST_PLATE, 4);
+    paintPlate(c, box, lines, SIGNPOST_PLATE, 4);
   },
-  distance: (x, y, h) => {
-    const p = h.pts[0];
-    const g = notePlateGuess(h.drawing, linesOf(h.drawing, 'Event'), SIGNPOST_PLATE);
-    const hit = insidePlate(x, y, p.x - g.w / 2, p.y - 34 - g.h, g.w, g.h);
-    if (hit !== null) return hit;
-    // The post itself, so a signpost whose plate is off-pane stays grabbable.
-    return Math.abs(x - p.x) <= 5 && y >= p.y - 34 && y <= p.y + 4 ? 0 : null;
-  },
+  distance: (x, y, h) => reached(x, y, plateReach(SIGNPOST_PLATE, h.pts[0], h.drawing, h.rc)),
 } satisfies AnchoredTool<1>;
 
-const PRICE_NOTE_PLATE: PlateDefaults = { size: 11, opacity: 0.95 };
+/** To the right of the anchor, level with it, the price on its first line. */
+const PRICE_NOTE_PLATE: PlateDefaults = {
+  size: 11, opacity: 0.95, fallback: 'Note', price: true, at: (p, _w, _h, d) => ({ x: p.x + 14 * d, y: p.y - 12 * d }),
+};
 
 /**
  * Price note: the anchored price, with the user's text under it.
@@ -566,8 +624,8 @@ export const PRICE_NOTE: DrawingTool = {
   draw: (c) => {
     const d = c.rc.dpr;
     const p = c.pts[0];
-    const lines = [c.formatPrice(c.drawing.points[0].price), ...contentOf(c.drawing, 'Note').split('\n')];
-    const box = notePlate(c, lines, p.x + 14 * d, p.y - 12 * d, PRICE_NOTE_PLATE);
+    const lines = plateLines(PRICE_NOTE_PLATE, c.drawing, c.formatPrice);
+    const box = notePlate(c, p, lines, PRICE_NOTE_PLATE);
     c.ctx.save();
     c.ctx.setLineDash([]);
     c.ctx.strokeStyle = c.style.color;
@@ -579,14 +637,36 @@ export const PRICE_NOTE: DrawingTool = {
     c.ctx.restore();
     paintPlate(c, box, lines, PRICE_NOTE_PLATE, 4);
   },
-  distance: (x, y, h) => {
-    const p = h.pts[0];
-    const g = notePlateGuess(h.drawing, linesOf(h.drawing, 'Note') + 1, PRICE_NOTE_PLATE);
-    const hit = insidePlate(x, y, p.x + 14, p.y - 12, g.w, g.h);
-    if (hit !== null) return hit;
-    return Math.hypot(x - p.x, y - p.y) <= 8 ? 0 : null;
-  },
+  distance: (x, y, h) => reached(x, y, plateReach(PRICE_NOTE_PLATE, h.pts[0], h.drawing, h.rc)),
 } satisfies AnchoredTool<1>;
+
+const PLATES = new Map<DrawingTool, PlateDefaults>([
+  [NOTE, NOTE_PLATE], [BALLOON, BALLOON_PLATE], [COMMENT, COMMENT_PLATE], [SIGNPOST, SIGNPOST_PLATE], [PRICE_NOTE, PRICE_NOTE_PLATE],
+]);
+
+/**
+ * The box outside which a plate annotation, the price label or the callout's
+ * bubble reports no hit, in media px, for the layer's hit index: read off the
+ * same measured plate the hit test reads, so the two cannot disagree. The
+ * callout's tail is a segment the index adds itself. Undefined for any other
+ * tool, and for a drawing short of its anchors.
+ */
+export function annotationBox(
+  tool: DrawingTool, pts: readonly ScreenPoint[], d: Drawing, rc: PrimitiveRenderContext,
+): { x0: number; y0: number; x1: number; y1: number } | undefined {
+  const def = PLATES.get(tool), p = pts[0], seat = pts[1];
+  let r: Reach;
+  if (tool === CALLOUT && seat !== undefined) r = { plate: calloutReach(seat, d) };
+  else if (tool === PRICE_LABEL && p !== undefined) r = priceLabelReach(p, d, rc);
+  else if (def !== undefined && p !== undefined) r = plateReach(def, p, d, rc);
+  else return undefined;
+  const { plate, dot, post } = r;
+  const mark = dot !== undefined ? { x: dot.at.x - dot.r, y: dot.at.y - dot.r, w: 2 * dot.r, h: 2 * dot.r } : post ?? plate;
+  return {
+    x0: Math.min(plate.x, mark.x), y0: Math.min(plate.y, mark.y),
+    x1: Math.max(plate.x + plate.w, mark.x + mark.w), y1: Math.max(plate.y + plate.h, mark.y + mark.h),
+  };
+}
 
 const TABLE_SIZE = 11;
 const TABLE_OPACITY = 0.92;

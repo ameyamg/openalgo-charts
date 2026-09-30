@@ -39,7 +39,7 @@ import {
 import { FIB_RETRACEMENT, FIB_EXTENSION, GANN_BOX, FIB_TIME_ZONE, FIB_FAN, GANN_FAN, FIB_CHANNEL } from './fib-tools';
 import { MEASURE, LONG_POSITION, SHORT_POSITION, PRICE_RANGE, DATE_RANGE, FORECAST } from './measure-tools';
 import {
-  TEXT, TABLE, PRICE_LABEL, CALLOUT, FLAG_MARK,
+  annotationBox, TEXT, TABLE, PRICE_LABEL, CALLOUT, FLAG_MARK,
   ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, NOTE, BALLOON, COMMENT, SIGNPOST, PRICE_NOTE,
 } from './annotation-tools';
 import { PATTERN_DRAWING_TOOLS } from './pattern-tools';
@@ -156,20 +156,11 @@ const mark = (dx0: number, dy0: number, dx1: number, dy1: number): BoxOf => (pts
 };
 
 /**
- * The plate annotations (note, balloon, comment, signpost, price note): a
- * plate at most 120 px wide, placed left, right, above or below the anchor,
- * plus the anchor dot and the signpost's post. The plate's height follows the
- * font size and the lines; one box that holds every placement costs a few
- * spare pixels and restates no tool's layout.
+ * The annotations grabbed on a plate or a bubble measured from their text
+ * (the plate notes, the price label, the callout's bubble): the box comes from
+ * annotation-tools.ts, off the plate their own hit test measures.
  */
-const plate: BoxOf = (pts, d) => {
-  const value = d.text?.value;
-  if (value !== undefined && typeof value !== 'string') return EVERYWHERE;
-  const lines = (value === undefined || value === '' ? 1 : value.split('\n').length) + 1;
-  const h = Math.abs(d.text?.fontSize ?? 12) * 1.45 * lines + 10;
-  const p = pts[0];
-  return { x0: p.x - 60, y0: p.y - 34 - h, x1: p.x + 136, y1: p.y + 8 + h };
-};
+const annotated = (tool: DrawingTool): BoxOf => (pts, d, rc) => annotationBox(tool, pts, d, rc) ?? EVERYWHERE;
 
 const BOXES = new Map<DrawingTool, BoxOf>([
   [TREND_LINE, line(false, false)], [RAY, line(false, true)], [EXTENDED_LINE, line(true, true)],
@@ -254,13 +245,14 @@ const BOXES = new Map<DrawingTool, BoxOf>([
     }
     return box;
   }],
-  [CALLOUT, (pts: Pts<2>, _d, _rc, g) => pts.length < 2 ? NOWHERE
-    : join(spanOf(pts.slice(0, 2), g), { x0: pts[1].x - 60, y0: pts[1].y - 16, x1: pts[1].x + 60, y1: pts[1].y + 16 })],
-  [PRICE_LABEL, mark(-10, -41, 82, 10)],
+  // The tail is a segment, grabbed within the radius, and the bubble anywhere on it.
+  [CALLOUT, (pts: Pts<2>, d, rc, g) => pts.length < 2 ? NOWHERE : join(spanOf(pts.slice(0, 2), g), annotated(CALLOUT)(pts, d, rc, g))],
+  [PRICE_LABEL, annotated(PRICE_LABEL)],
   [FLAG_MARK, mark(-8, -24, 16, 8)],
   [ARROW_UP, mark(-8, -20, 8, 20)], [ARROW_DOWN, mark(-8, -20, 8, 20)],
   [ARROW_LEFT, mark(-8, -20, 8, 20)], [ARROW_RIGHT, mark(-8, -20, 8, 20)],
-  [NOTE, plate], [BALLOON, plate], [COMMENT, plate], [SIGNPOST, plate], [PRICE_NOTE, plate],
+  [NOTE, annotated(NOTE)], [BALLOON, annotated(BALLOON)], [COMMENT, annotated(COMMENT)],
+  [SIGNPOST, annotated(SIGNPOST)], [PRICE_NOTE, annotated(PRICE_NOTE)],
 ]);
 // Legs, necklines and filled triangles, all between the pattern's own anchors.
 for (const tool of PATTERN_DRAWING_TOOLS) BOXES.set(tool, around);
