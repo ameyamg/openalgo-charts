@@ -70,6 +70,19 @@ describe('built-in settings', () => {
     expect(differ).toEqual([]);
   });
 
+  it('reads a fractional plot offset as whole bars', () => {
+    const differ: string[] = [];
+    const offsets = cases((input) => wholeStepped(input) && /offset|displacement/i.test(input.key));
+    for (const { d, key } of offsets) {
+      const defaults = indicatorDefaults(d);
+      const x = defaults[key] as number;
+      const at = (v: number): string => JSON.stringify(output(d, { ...defaults, [key]: v }));
+      if (at(x + 1.5) !== at(x + 2) || at(x + 1.4) !== at(x + 1)) differ.push(`${d.id}:${key}`);
+    }
+    expect(offsets.length).toBeGreaterThan(10);
+    expect(differ).toEqual([]);
+  });
+
   it('reads an empty colour or choice as its declared default', () => {
     const differ: string[] = [];
     for (const { d, key } of cases((input) => input.type === 'color' || input.type === 'select')) {

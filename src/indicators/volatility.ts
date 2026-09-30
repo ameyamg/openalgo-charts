@@ -13,7 +13,7 @@ import { trueRange, sourceValues } from 'openalgo-charts';
 import type { IndicatorDescriptor } from 'openalgo-charts';
 import { sma, stdev, highest, lowest, nulls, smaSeededEma, rollingSum, roc, linreg } from './calc';
 import { withTail, windowTail } from './tail';
-import { num, int, str, src } from './settings';
+import { num, int, offsetOf, str, src } from './settings';
 
 /**
  * the reference `color.new(c, t)` transparency, where 0 is opaque and 100 invisible.
@@ -276,7 +276,7 @@ export const CHOPPINESS_INDEX: IndicatorDescriptor = {
     // The band edges are never null and never shifted: reference lines stay put
     // when the plot is offset, and the shading covers the pane during warmup.
     return {
-      chop: nulls(shift(out, num(s, 'offset', 0))),
+      chop: nulls(shift(out, offsetOf(s, 'offset', 0))),
       bandHigh: new Array<number>(bars.length).fill(61.8),
       bandLow: new Array<number>(bars.length).fill(38.2),
     };
