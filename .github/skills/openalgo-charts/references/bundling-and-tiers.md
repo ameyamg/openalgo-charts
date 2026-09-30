@@ -187,7 +187,7 @@ The chart-only tree-shaking ceiling is 46 KiB; widget controls remain excluded.
 
 **Nothing is excluded from these numbers.** The package has zero runtime dependencies (`dependencies` is absent; everything in `devDependencies` is build tooling), so the measured file *is* the shipped payload. There is no CSS to import, no peer dependency, no web-component registration.
 
-`npm run verify` runs lint, typecheck, unit tests, endurance-harness tests, build, demo tests, declaration checks, the export checks (script-tag keys and `require()`), size budgets and tree shaking, and is the `prepublishOnly` hook.
+`npm run verify` runs lint, typecheck, the import-cycle and unused-export gates, unit tests, endurance-harness tests, build, demo tests, declaration checks, the export checks (script-tag keys and `require()`), size budgets and tree shaking, and is the `prepublishOnly` hook.
 
 ## `src/all.ts` is not an entry point
 
