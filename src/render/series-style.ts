@@ -16,6 +16,13 @@ export interface SeriesStyle {
   wickVisible?: boolean;
   /** Paint candle bodies. Off leaves outline and wick. Default true. */
   bodyVisible?: boolean;
+  /**
+   * Has no effect: no renderer reads it, and a `candlestick` series with it set
+   * draws filled candles.
+   *
+   * @deprecated Removed in 3.0.0. Add the series as `'hollow-candle'` (or switch it with
+   * `chart.setSeriesType`), which draws up candles as outlines and down candles filled.
+   */
   hollow?: boolean;
   /**
    * Color bars by close-versus-previous-close instead of close-versus-own-open,
