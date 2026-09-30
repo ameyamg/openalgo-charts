@@ -484,6 +484,81 @@ class WidgetContextImpl implements WidgetContext {
 }
 
 /**
+ * The chart's options from the widget's. Everything the widget does not
+ * consume itself goes to the chart as is, so a host keeps every engine option
+ * it had; the widget adds its default bar spacing, reduced motion when the
+ * user asks for it, and for a routed widget the engine's shortcuts gated by
+ * the same decision as its own chords (`inChart` answers while the route
+ * leaves the choice open).
+ */
+function engineOptions(options: WidgetOptions, doc: Document, inChart: () => boolean): ChartOptions {
+  const chartOpts = { ...options } as Record<string, unknown>;
+  for (const k of WIDGET_ONLY_KEYS) delete chartOpts[k];
+  if (options.navigation?.defaultVisibleBars === undefined && options.navigation?.defaultBarSpacing === undefined) {
+    chartOpts.navigation = { ...options.navigation, defaultBarSpacing: options.timeScale?.barSpacing ?? 8 };
+  }
+  // `movablePrimaryPane` reaches the engine as the host gave it, off unless
+  // set. The widget's own chrome follows the price pane wherever it sits,
+  // but a host's code on `widget.chart` may still pass 0 for the price, and
+  // only the host knows whether it does.
+  const reducedMotion = doc.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+  if (reducedMotion && chartOpts.animZoom === undefined) chartOpts.animZoom = false;
+  if (reducedMotion && chartOpts.animAutoscale === undefined) chartOpts.animAutoscale = false;
+  // A routed widget hands the engine's shortcuts the same decision as its own
+  // chords, so a hovered chart that is not the routed one stays still. A
+  // host's own manager, which a grid shares between its charts, is wrapped
+  // per chart rather than rebuilt, and its scope still decides whenever the
+  // route leaves the choice open.
+  const route = options.keyboardRoute;
+  const given = options.shortcuts;
+  if (route !== undefined && given !== false) {
+    const target = given instanceof ShortcutManager ? given : new ShortcutManager(given);
+    chartOpts.shortcuts = new Proxy(target, {
+      get: (t, key) => {
+        if (key === 'scope') return 'global';
+        if (key === 'resolve') return (e: KeyboardEvent) => ((route() ?? (t.scope === 'global' || inChart())) ? t.resolve(e) : null);
+        const value = Reflect.get(t, key) as unknown;
+        return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(t) : value;
+      },
+    });
+  }
+  return chartOpts as ChartOptions;
+}
+
+/**
+ * The popup chart-owned event markers open, in the widget's language and on
+ * the chart's clock, closed by a context change or new events. Returns the
+ * teardown.
+ */
+function eventDetailsPopup(ctx: WidgetContext, chartEl: HTMLElement, options: WidgetOptions): () => void {
+  const chart = ctx.chart;
+  const own = options.eventDetails === false ? undefined : options.eventDetails;
+  const eventDetails = new EventDetailsPopup(chartEl, {
+    styleNonce: options.styleNonce, overlays: ctx.overlays,
+    formatTime: time => {
+      const date = new Date(time * 1000);
+      return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat(options.locale, {
+        timeZone: chart.timezone(), dateStyle: 'medium', timeStyle: 'short',
+      }).format(date) : String(time);
+    },
+    ...own,
+    // In the widget's language; a host's own labels still win, one by one.
+    labels: { ...eventDetailsLabels(ctx), ...own?.labels },
+    // Reuse the host's shared stylesheet and its preserved CSP nonce.
+    injectStyles: false,
+  });
+  const offs = [
+    chart.on('event:click', payload => {
+      const details = payload as ChartEventClick;
+      eventDetails.open(details, details.point);
+    }),
+    chart.on('data:context', () => eventDetails.close()),
+    chart.on('events:change', () => eventDetails.close()),
+  ];
+  return () => { for (const off of offs) off(); eventDetails.destroy(); };
+}
+
+/**
  * A study legend's eye, gear and cross and the cross on an order or position
  * line are painted on the canvas, with no element to carry a name, so the
  * chart's hover id raises the widget's tip at the pointer saying what a press
@@ -666,39 +741,7 @@ class WidgetImpl implements Widget {
     container.appendChild(root);
 
     // ── the engine ─────────────────────────────────────────────────────
-    // Everything the widget does not consume itself goes to the chart as is,
-    // so a host keeps every engine option it had.
-    const chartOpts = { ...options } as Record<string, unknown>;
-    for (const k of WIDGET_ONLY_KEYS) delete chartOpts[k];
-    if (options.navigation?.defaultVisibleBars === undefined && options.navigation?.defaultBarSpacing === undefined) {
-      chartOpts.navigation = { ...options.navigation, defaultBarSpacing: options.timeScale?.barSpacing ?? 8 };
-    }
-    // `movablePrimaryPane` reaches the engine as the host gave it, off unless
-    // set. The widget's own chrome follows the price pane wherever it sits,
-    // but a host's code on `widget.chart` may still pass 0 for the price, and
-    // only the host knows whether it does.
-    const reducedMotion = doc.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
-    if (reducedMotion && chartOpts.animZoom === undefined) chartOpts.animZoom = false;
-    if (reducedMotion && chartOpts.animAutoscale === undefined) chartOpts.animAutoscale = false;
-    // A routed widget hands the engine's shortcuts the same decision as its own
-    // chords, so a hovered chart that is not the routed one stays still. A
-    // host's own manager, which a grid shares between its charts, is wrapped
-    // per chart rather than rebuilt, and its scope still decides whenever the
-    // route leaves the choice open.
-    const route = options.keyboardRoute;
-    const given = options.shortcuts;
-    if (route !== undefined && given !== false) {
-      const target = given instanceof ShortcutManager ? given : new ShortcutManager(given);
-      chartOpts.shortcuts = new Proxy(target, {
-        get: (t, key) => {
-          if (key === 'scope') return 'global';
-          if (key === 'resolve') return (e: KeyboardEvent) => ((route() ?? (t.scope === 'global' || this._inChart())) ? t.resolve(e) : null);
-          const value = Reflect.get(t, key) as unknown;
-          return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(t) : value;
-        },
-      });
-    }
-    this.chart = createChart(chartEl, { ...(chartOpts as ChartOptions), theme: this._chartTheme, document: doc });
+    this.chart = createChart(chartEl, { ...engineOptions(options, doc, () => this._inChart()), theme: this._chartTheme, document: doc });
     chartEl.setAttribute('aria-label', options.ariaLabel ?? widgetText(options, 'Price chart'));
     const transform = this._transformFor(this._chartType, options.chartType === undefined ? saved?.chart : undefined);
     this._series = this.chart.addSeries((transform === null ? this._chartType : getSeriesTransform(transform.type).renderer) as SeriesType,
@@ -772,29 +815,7 @@ class WidgetImpl implements Widget {
     });
     this._cleanups.push(() => { tips.destroy(); overlays.destroy(); });
     this._cleanups.push(canvasButtonTips(this.context, chartEl));
-    if (options.eventDetails !== false) {
-      const eventDetails = new EventDetailsPopup(chartEl, {
-        styleNonce: options.styleNonce, overlays: this.context.overlays,
-        formatTime: time => {
-          const date = new Date(time * 1000);
-          return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat(options.locale, {
-            timeZone: this.chart.timezone(), dateStyle: 'medium', timeStyle: 'short',
-          }).format(date) : String(time);
-        },
-        ...options.eventDetails,
-        // In the widget's language; a host's own labels still win, one by one.
-        labels: { ...eventDetailsLabels(this.context), ...options.eventDetails?.labels },
-        // Reuse the host's shared stylesheet and its preserved CSP nonce.
-        injectStyles: false,
-      });
-      this._cleanups.push(this.chart.on('event:click', payload => {
-        const details = payload as ChartEventClick;
-        eventDetails.open(details, details.point);
-      }));
-      this._cleanups.push(this.chart.on('data:context', () => eventDetails.close()));
-      this._cleanups.push(this.chart.on('events:change', () => eventDetails.close()));
-      this._cleanups.push(() => eventDetails.destroy());
-    }
+    if (options.eventDetails !== false) this._cleanups.push(eventDetailsPopup(this.context, chartEl, options));
     this._dataStatus = mountDataStatus(this.context, stage, this.dataController, () => { void this.reload(); });
     if (options.panels !== false) {
       this._dock = mountPanelDock(this.context, stage, {
