@@ -1487,7 +1487,7 @@ export class IndicatorInstance implements IndicatorApi {
       requestState: this._host.requestState ? () => this._host.requestState!() : undefined,
       subscribeRequestChanges: this._host.subscribeRequestChanges ? listener => this._host.subscribeRequestChanges!(listener) : undefined,
       settings: () => this._descriptorSettings(),
-      bars: () => this._host.sourceBars(),
+      bars: () => (this._barSource === 'underlying' ? this._host.underlyingBars?.()?.bars : undefined) ?? this._host.sourceBars(),
       requestRecompute: () => {
         if (this._removed) return;
         this._barCount = 0; // external data invalidates any calcTail state

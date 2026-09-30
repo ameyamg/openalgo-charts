@@ -166,3 +166,22 @@ describe('study bar source', () => {
     expect(() => chart.addIndicator('bar-source-sma', {}, { barSource: 'raw' as never })).toThrow(/bar source/);
   });
 });
+
+describe('a study lifecycle on a transformed chart', () => {
+  it('hands attach the bars the study computes on', () => {
+    let read: (() => readonly Bar[]) | null = null;
+    registerIndicator({
+      id: 'bar-source-attach', name: 'Bar source attach', placement: 'pane', inputs: [],
+      plots: [{ key: 'value', type: 'line', title: 'Close' }],
+      calc: (bars): IndicatorValues => ({ value: bars.map(bar => bar.close) }),
+      attach: (ctx) => { read = ctx.bars; return () => {}; },
+    });
+    const chart = makeChart();
+    const bars = walk(200);
+    chart.addSeries('candlestick', { transform: { type: 'renko', options: { boxSize: BOX } } }).setData(bars);
+    const study = chart.addIndicator('bar-source-attach');
+    expect(read!()).toEqual(chart.primaryBars());
+    study.setBarSource('underlying');
+    expect(read!()).toEqual(bars);
+  });
+});
