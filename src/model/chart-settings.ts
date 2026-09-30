@@ -461,9 +461,9 @@ function priceControls(chart: Chart): Control[] {
         (c) => sty(c).lineWidth ?? 1.5, (c, v) => setSty(c, { lineWidth: v }),
       ));
     }
-    // Only the plain line renderers honour a dash; area/baseline redraw their
-    // outline through a fixed-style call, so the control would be inert there.
-    if (type === 'line' || type === 'line-markers' || type === 'step') {
+    // The line renderers and the area outline honour a dash; baseline and HLC
+    // area stroke with a fixed style, so the control would be inert there.
+    if (type === 'line' || type === 'line-markers' || type === 'step' || type === 'area') {
       out.push(selectCtl(
         'symbol.lineStyle', 'Line style', 'Line', 'solid', LINE_STYLES,
         (c) => sty(c).lineStyle ?? 'solid',
