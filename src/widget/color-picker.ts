@@ -1,4 +1,4 @@
-import type { OverlayOptions } from './context';
+import type { WidgetContext } from './context';
 import { widgetText, type WidgetTranslationOptions } from './localization';
 
 const PALETTE = ['#4f8cff', '#26a69a', '#ef5350', '#f4b740', '#ab79df', '#22a8bd', '#e88555', '#9aa6b2', '#ffffff', '#000000'];
@@ -13,7 +13,7 @@ function parse(value: unknown): { hex: string; alpha: number; format: ColorForma
   const literal = value.trim();
   const hex = /^#([\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.exec(literal);
   if (hex !== null) {
-    let digits = hex[1].toLowerCase();
+    let digits = hex[1]!.toLowerCase(); // the group is not optional, so any match fills it
     if (digits.length <= 4) digits = digits.split('').map(c => c + c).join('');
     const alpha = digits.length === 8 ? parseInt(digits.slice(6), 16) / 255 : 1;
     return { hex: `#${digits.slice(0, 6)}`, alpha, format: digits.length === 8 ? 'hexAlpha' : 'hex' };
@@ -32,7 +32,7 @@ function parse(value: unknown): { hex: string; alpha: number; format: ColorForma
   } else {
     const parts = body.split('/');
     if (parts.length > 2) return null;
-    components = parts[0].trim().split(/\s+/);
+    components = parts[0]!.trim().split(/\s+/); // a split always returns at least one part
     alphaToken = parts[1]?.trim();
   }
   if (components.length !== 3 || components.some(part => !/^\d{1,3}$/.test(part))) return null;
@@ -69,9 +69,9 @@ export interface ColorPickerOptions extends WidgetTranslationOptions {
   label: string;
   value: unknown;
   disabledReason?: string | null;
-  live?: boolean;
+  live?: boolean | undefined;
   /** Use the host's overlay stack to escape scrolling ancestors and share focus/Escape ownership. */
-  openOverlay?(element: HTMLElement, options?: OverlayOptions): () => void;
+  openOverlay?: WidgetContext['openOverlay'] | undefined;
   onChange(value: string): void;
 }
 

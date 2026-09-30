@@ -128,24 +128,24 @@ export interface WidgetOptions extends Omit<ChartOptions, 'theme'>, WidgetBottom
   /** Event marker clicks open details. Set false to provide a host-owned view. */
   eventDetails?: false | EventDetailsPopupOptions;
   /** Where bars come from. Without one the chart shows what the host sets on `widget.series` itself. */
-  feed?: DataFeed;
+  feed?: DataFeed | undefined;
   /** Shared history, paging and recovery options. `now` here uses UTC seconds. */
   loading?: DataLoadingOptions;
-  symbol?: string;
+  symbol?: string | undefined;
   /** Exchange passed to the feed with the symbol. Default `''`. */
-  exchange?: string;
+  exchange?: string | undefined;
   /** Interval code the registry knows (a built-in token or one passed to `registerInterval`). Default `1d`. */
-  interval?: string;
+  interval?: string | undefined;
   /**
    * Which of the feed's series to show: a session, an adjustment, a currency
    * or a unit. Default: the feed's own default series. The feed must declare
    * it through `dataVariants`, or the chart reports it unsupported.
    */
-  variant?: DataVariant;
+  variant?: DataVariant | undefined;
   /** The interval pills, each a known code. Default: `DEFAULT_INTERVALS` plus every registered code. */
   intervals?: readonly string[];
   /** Primary series type. Default `candlestick`. Must be a registered chart type. */
-  chartType?: string;
+  chartType?: string | undefined;
   /** `dark` (default), `light`, or a full `ChartTheme`; the chrome derives its palette from it. */
   theme?: WidgetThemeName | ChartTheme;
   /** The drawing rail. `false` hides it; an object restricts its tools or seeds its pins. Default on. */
@@ -255,12 +255,12 @@ export interface WidgetState {
   chart: WidgetChartState;
   rail: RailPrefs | null;
   /** Optional in older records. Width is bounded when restored. */
-  panels?: PanelDockState;
+  panels?: PanelDockState | undefined;
 }
 
 export interface WidgetRestoreReport {
   applied: boolean;
-  reason?: string;
+  reason?: string | undefined;
   /** The engine's own report for the chart half, when it was reached. */
   chart?: RestoreReport;
 }
@@ -426,8 +426,8 @@ class WidgetContextImpl implements WidgetContext {
   public readonly bus: WidgetBus<WidgetBusEvents>;
   public readonly storage: WidgetStorage;
   public readonly locale: string | undefined;
-  public readonly translate?: WidgetTranslator;
-  public readonly symbolSearch?: SymbolSearch;
+  public readonly translate?: WidgetTranslator | undefined;
+  public readonly symbolSearch?: SymbolSearch | undefined;
   public readonly toast: WidgetContext['toast'];
   public readonly openOverlay: WidgetContext['openOverlay'];
   public readonly status: WidgetContext['status'];

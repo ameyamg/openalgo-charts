@@ -62,7 +62,7 @@ export interface PartAsk {
   readonly slot: PartSlot;
   readonly doc: Document;
   /** The control that asked: pressing it again is asking again, not moving on. */
-  readonly from?: Element | null;
+  readonly from?: Element | null | undefined;
 }
 
 /**
