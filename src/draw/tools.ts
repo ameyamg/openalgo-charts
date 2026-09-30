@@ -17,7 +17,7 @@
  * file reads it, because a control with nothing behind it is a defect.
  */
 import type {
-  DrawContext, Drawing, DrawingPoint, DrawingText, DrawingTool, ExpandContext, FibLevel, ScreenPoint,
+  AnchoredTool, AtLeast, DrawContext, Drawing, DrawingPoint, DrawingText, DrawingTool, ExpandContext, FibLevel, ScreenPoint, ToolAnchors,
 } from './types';
 import { lineAlertValue, horizontalAlertValue, channelAlertValue, channelAlertLevels, fibAlertValue, fibAlertLevels } from './alert-values';
 import {
@@ -103,7 +103,7 @@ export function matchDrawingShortcut(e: ShortcutEvent): string | null {
   // Option+T types a dagger on macOS, where the physical key still says T; a
   // letter typed wins, so a non-QWERTY layout keeps its own letters.
   const typed = e.key ?? '', letter = e.altKey === true && !/^[a-z]$/i.test(typed) ? /^Key([A-Z])$/.exec(e.code ?? '') : null;
-  const key = (letter !== null ? letter[1] : typed).toLowerCase();
+  const key = (letter !== null ? letter[1]! : typed).toLowerCase(); // the one group is in every match
   if (key === '') return null;
   const alt = e.altKey === true;
   const ctrl = e.ctrlKey === true || e.metaKey === true;
@@ -312,16 +312,16 @@ function chip(
   ctx.fillStyle = bg;
   ctx.fill();
   ctx.fillStyle = t.color ?? contrastText(bg);
-  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], bx + padX, by + padY + lh * (i + 0.5));
+  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i]!, bx + padX, by + padY + lh * (i + 0.5)); // i is in range
   ctx.restore();
   return h;
 }
 
 /** Thousands-separated fixed-point, locale-independent so output is stable. */
 function grouped(n: number, dp = 0): string {
-  const [i, f] = Math.abs(n).toFixed(dp).split('.');
+  const [i, f] = Math.abs(n).toFixed(dp).split('.'); // a split has a first part
   const sign = n < 0 ? '-' : '';
-  return sign + i.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (f === undefined ? '' : '.' + f);
+  return sign + i!.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (f === undefined ? '' : '.' + f);
 }
 
 /** `YYYY-MM-DD` in UTC: enough to anchor a label to its bar. */
@@ -376,7 +376,7 @@ const DOWN_TINT = '#ef5350';
  * that the readout describes. Off by default, so a line paints exactly as it
  * did before the readout existed.
  */
-function lineStats(c: DrawContext): void {
+function lineStats(c: DrawContext & ToolAnchors<2>): void {
   if (c.style.showStats !== true) return;
   const [a, b] = c.pts;
   const [p0, p1] = c.drawing.points;
@@ -423,16 +423,16 @@ function ink(c: DrawContext, width: number, alpha: number): void {
   const right: ScreenPoint[] = [];
   for (let i = 0; i < n; i++) {
     // The tangent at a sample runs from its previous neighbour to its next
-    // one; the ends use the one segment they have.
-    const prev = pts[i === 0 ? 0 : i - 1];
-    const next = pts[i === n - 1 ? n - 1 : i + 1];
+    // one; the ends use the one segment they have. Every index is in 0..n-1.
+    const prev = pts[i === 0 ? 0 : i - 1]!;
+    const next = pts[i === n - 1 ? n - 1 : i + 1]!;
     const len = Math.hypot(next.x - prev.x, next.y - prev.y) || 1;
     const nx = -(next.y - prev.y) / len;
     const ny = (next.x - prev.x) / len;
     const pressure = c.drawing.points[i]?.pressure;
     const half = pressureWidth(width, pressure ?? 0.5) / 2;
-    left.push({ x: pts[i].x + nx * half, y: pts[i].y + ny * half });
-    right.push({ x: pts[i].x - nx * half, y: pts[i].y - ny * half });
+    left.push({ x: pts[i]!.x + nx * half, y: pts[i]!.y + ny * half });
+    right.push({ x: pts[i]!.x - nx * half, y: pts[i]!.y - ny * half });
   }
   // One loop: out along the left edge, back along the right, so the spline
   // rounds the ends on its own and the fill is a single closed region.
@@ -495,7 +495,7 @@ function lineTool(id: string, name: string, left: boolean, right: boolean): Draw
       const [a, b] = extendSegment(h.pts[0], h.pts[1], h.rc.plotWidth, el, er);
       return distToSegment(x, y, a, b);
     },
-  };
+  } satisfies AnchoredTool<2>;
 }
 
 export const TREND_LINE: DrawingTool = { ...lineTool('trend-line', 'Trend Line', false, false), shortcut: 'Alt+T' };
@@ -518,7 +518,7 @@ export const ARROW: DrawingTool = {
     lineStats(c);
   },
   distance: (x, y, h) => distToSegment(x, y, h.pts[0], h.pts[1]),
-};
+} satisfies AnchoredTool<2>;
 
 export const HORIZONTAL_LINE: DrawingTool = {
   id: 'horizontal-line', name: 'Horizontal Line', points: 1, shortcut: 'Alt+H',
@@ -538,7 +538,7 @@ export const HORIZONTAL_LINE: DrawingTool = {
     }
   },
   distance: (_x, y, h) => distToHorizontal(y, h.pts[0].y),
-};
+} satisfies AnchoredTool<1>;
 
 export const HORIZONTAL_RAY: DrawingTool = {
   id: 'horizontal-ray', name: 'Horizontal Ray', points: 1, shortcut: 'Alt+J',
@@ -558,7 +558,7 @@ export const HORIZONTAL_RAY: DrawingTool = {
     }
   },
   distance: (x, y, h) => (x < h.pts[0].x ? null : distToHorizontal(y, h.pts[0].y)),
-};
+} satisfies AnchoredTool<1>;
 
 export const VERTICAL_LINE: DrawingTool = {
   id: 'vertical-line', name: 'Vertical Line', points: 1, shortcut: 'Alt+V',
@@ -573,7 +573,7 @@ export const VERTICAL_LINE: DrawingTool = {
     c.ctx.setLineDash([]);
   },
   distance: (x, _y, h) => distToVertical(x, h.pts[0].x),
-};
+} satisfies AnchoredTool<1>;
 
 export const CROSS_LINE: DrawingTool = {
   id: 'cross-line', name: 'Cross Line', points: 1, shortcut: 'Alt+C',
@@ -589,7 +589,7 @@ export const CROSS_LINE: DrawingTool = {
     c.ctx.setLineDash([]);
   },
   distance: (x, y, h) => Math.min(distToVertical(x, h.pts[0].x), distToHorizontal(y, h.pts[0].y)),
-};
+} satisfies AnchoredTool<1>;
 
 // ── shapes ────────────────────────────────────────────────────────────────
 
@@ -618,7 +618,7 @@ export const RECTANGLE: DrawingTool = {
   },
   distance: (x, y, h) => distToRect(x, y, h.pts[0], h.pts[1], h.drawing.style.fill === true),
   bounds: shapeBounds('left', 'top'),
-};
+} satisfies AnchoredTool<2, true>;
 
 export const ELLIPSE: DrawingTool = {
   id: 'ellipse', name: 'Ellipse', points: 2, viewport: true,
@@ -645,7 +645,7 @@ export const ELLIPSE: DrawingTool = {
   },
   distance: (x, y, h) => distToEllipse(x, y, h.pts[0], h.pts[1], h.drawing.style.fill === true),
   bounds: shapeBounds('center', 'middle'),
-};
+} satisfies AnchoredTool<2, true>;
 
 export const PARALLEL_CHANNEL: DrawingTool = {
   id: 'parallel-channel', name: 'Parallel Channel', points: 3,
@@ -680,7 +680,7 @@ export const PARALLEL_CHANNEL: DrawingTool = {
     const d2 = distToSegment(x, y, { x: a.x, y: a.y + dy }, { x: b.x, y: b.y + dy });
     return Math.min(d1, d2);
   },
-};
+} satisfies AnchoredTool<3>;
 
 // ── fibonacci ─────────────────────────────────────────────────────────────
 
@@ -698,10 +698,10 @@ function fibTool(id: string, name: string, anchors: 2 | 3): DrawingTool {
       const p = c.drawing.points;
       const d = c.rc.dpr;
       // Retracement measures p0 to p1; extension projects that leg from p2.
-      const from = anchors === 2 ? p[0].price : p[2].price;
+      const from = anchors === 2 ? p[0].price : p[2]!.price; // an extension declares three anchors
       const span = p[1].price - p[0].price;
-      const xa = Math.min(c.pts[0].x, c.pts[anchors - 1].x);
-      const xb = Math.max(c.pts[0].x, c.pts[anchors - 1].x);
+      const xa = Math.min(c.pts[0].x, c.pts[anchors - 1]!.x); // the last anchor it declares
+      const xb = Math.max(c.pts[0].x, c.pts[anchors - 1]!.x);
       const x0 = c.style.extendLeft === true ? 0 : xa;
       const x1 = c.style.extendRight === true ? c.rc.plotWidth * d : xb;
       // The leg the ratios are ratios of, in the drawing's own colour. The
@@ -710,7 +710,7 @@ function fibTool(id: string, name: string, anchors: 2 | 3): DrawingTool {
       c.ctx.beginPath();
       c.ctx.moveTo(c.pts[0].x, c.pts[0].y);
       c.ctx.lineTo(c.pts[1].x, c.pts[1].y);
-      if (anchors === 3) c.ctx.lineTo(c.pts[2].x, c.pts[2].y);
+      if (anchors === 3) c.ctx.lineTo(c.pts[2]!.x, c.pts[2]!.y);
       c.ctx.stroke();
       let prevY: number | null = null;
       for (const lv of levels) {
@@ -741,11 +741,11 @@ function fibTool(id: string, name: string, anchors: 2 | 3): DrawingTool {
     distance: (x, y, h) => {
       const levels = activeLevels(h.drawing.style.levels, DEFAULT_FIB);
       const p = h.drawing.points;
-      const from = anchors === 2 ? p[0].price : p[2].price;
+      const from = anchors === 2 ? p[0].price : p[2]!.price; // p2 and anchors - 1: anchors the tool declares
       const span = p[1].price - p[0].price;
-      const x0 = h.drawing.style.extendLeft === true ? 0 : Math.min(h.pts[0].x, h.pts[anchors - 1].x);
+      const x0 = h.drawing.style.extendLeft === true ? 0 : Math.min(h.pts[0].x, h.pts[anchors - 1]!.x);
       const x1 = h.drawing.style.extendRight === true
-        ? h.rc.plotWidth : Math.max(h.pts[0].x, h.pts[anchors - 1].x);
+        ? h.rc.plotWidth : Math.max(h.pts[0].x, h.pts[anchors - 1]!.x);
       if (x < x0 - 4 || x > x1 + 4) return null;
       let best = Infinity;
       for (const lv of levels) {
@@ -754,7 +754,7 @@ function fibTool(id: string, name: string, anchors: 2 | 3): DrawingTool {
       }
       return best;
     },
-  };
+  } satisfies AnchoredTool<2 | 3>;
 }
 
 export const FIB_RETRACEMENT = fibTool('fib-retracement', 'Fib Retracement', 2);
@@ -829,11 +829,11 @@ export const MEASURE: DrawingTool = {
       let first = 0, end = src.length;
       while (first < end) {
         const mid = (first + end) >>> 1;
-        if (src[mid].time < lo) first = mid + 1;
+        if (src[mid]!.time < lo) first = mid + 1; // mid < end <= length
         else end = mid;
       }
       for (let i = first; i < src.length; i++) {
-        const b = src[i];
+        const b = src[i]!; // i is in range
         if (b.time > hi) break;
         if (b.volume !== undefined) { vol += b.volume; seen = true; }
       }
@@ -842,7 +842,7 @@ export const MEASURE: DrawingTool = {
     chip(c, lines, midX, Math.max(y0, y1) + 6 * d, tint, { align: 'center', place: 'below' });
   },
   distance: (x, y, h) => distToRect(x, y, h.pts[0], h.pts[1], true),
-};
+} satisfies AnchoredTool<2>;
 
 /** Reward per unit of risk for a default box and a derived stop. */
 const POSITION_RR = 2;
@@ -859,7 +859,7 @@ const POSITION_MIN_DRAG_PX = 6;
  * The full anchor set from the two placed: entry and target as clicked (or a
  * default target for a bare click), the stop derived opposite at the ratio.
  */
-function positionAnchors(clicked: readonly DrawingPoint[], ctx: ExpandContext, long: boolean): DrawingPoint[] {
+function positionAnchors(clicked: AtLeast<DrawingPoint, 1>, ctx: ExpandContext, long: boolean): DrawingPoint[] {
   const entry = clicked[0];
   const second = clicked[1] ?? entry;
   const face = long ? 1 : -1;
@@ -900,7 +900,7 @@ function positionAnchors(clicked: readonly DrawingPoint[], ctx: ExpandContext, l
 function opposeLevels(points: readonly DrawingPoint[], handle: number | null): DrawingPoint[] {
   const out = points.map((p) => ({ ...p }));
   if (out.length < 3) return out;
-  const [entry, target, stop] = out;
+  const [entry, target, stop] = out as AtLeast<DrawingPoint, 3>; // by the length check above
   const targetSide = Math.sign(target.price - entry.price);
   const stopSide = Math.sign(stop.price - entry.price);
   if (targetSide === 0 || stopSide === 0 || targetSide !== stopSide) return out;
@@ -949,8 +949,8 @@ function positionTool(id: string, name: string, long: boolean): DrawingTool {
       const [entry, target] = pts;
       // Between the first click and the second the drawing has two anchors
       // and previews against the cursor: the stop is derived for the frame,
-      // exactly where `expand` will put it.
-      const stop = pts.length >= 3 ? pts[2] : { time: target.time, price: entry.price - (target.price - entry.price) / POSITION_RR };
+      // exactly where `expand` will put it. The third anchor is read only once it is there.
+      const stop = pts.length >= 3 ? pts[2]! : { time: target.time, price: entry.price - (target.price - entry.price) / POSITION_RR };
       const d = c.rc.dpr;
       const xs = c.pts.map((p) => p.x);
       const x0 = Math.min(...xs);
@@ -1024,13 +1024,13 @@ function positionTool(id: string, name: string, long: boolean): DrawingTool {
       const x1 = Math.max(...xs);
       if (x < x0 - 4 || x > x1 + 4) return null;
       const [entry, target] = pts;
-      const stopPrice = pts.length >= 3 ? pts[2].price : entry.price - (target.price - entry.price) / POSITION_RR;
+      const stopPrice = pts.length >= 3 ? pts[2]!.price : entry.price - (target.price - entry.price) / POSITION_RR; // by the length
       const ys = [entry.price, target.price, stopPrice].map((p) => h.rc.priceScale.priceToY(p));
       const lo = Math.min(...ys);
       const hi = Math.max(...ys);
       return y >= lo && y <= hi ? 0 : Math.min(Math.abs(y - lo), Math.abs(y - hi));
     },
-  };
+  } satisfies AnchoredTool<2>;
 }
 
 export const LONG_POSITION = positionTool('long-position', 'Long Position', true);
@@ -1055,10 +1055,10 @@ function textLines(ctx: CanvasRenderingContext2D, t: DrawingText, value: string,
   for (const para of paragraphs) {
     const words = para.split(/\s+/).filter((w) => w !== '');
     if (words.length === 0) { out.push(''); continue; }
-    let line = words[0];
+    let line = words[0]!; // not empty, and every i below is in range
     for (let i = 1; i < words.length; i++) {
-      const next = `${line} ${words[i]}`;
-      if (ctx.measureText(next).width > maxWidth) { out.push(line); line = words[i]; }
+      const next = `${line} ${words[i]!}`;
+      if (ctx.measureText(next).width > maxWidth) { out.push(line); line = words[i]!; }
       else line = next;
     }
     out.push(line);
@@ -1155,7 +1155,7 @@ function labelLayout(
  * screen with only its outline kept on the plot could lose its label off the
  * top edge.
  */
-function shapeBounds(align: LabelAlign, valign: LabelValign): NonNullable<DrawingTool['bounds']> {
+function shapeBounds(align: LabelAlign, valign: LabelValign): NonNullable<AnchoredTool<2, true>['bounds']> {
   return (pts, drawing) => {
     const r = rectOf(pts[0], pts[1]);
     const t = textOf(drawing);
@@ -1228,7 +1228,7 @@ export const TEXT: DrawingTool = {
   },
   // The box it is grabbed by is the box a pinned note keeps on screen.
   bounds: (pts, drawing) => textRect(pts[0], drawing),
-};
+} satisfies AnchoredTool<1, true>;
 
 /**
  * The text tool's box in media px from its anchor. Measured with a throwaway
@@ -1272,13 +1272,13 @@ export const PATH: DrawingTool = {
     applyStroke(c);
     c.ctx.beginPath();
     c.ctx.moveTo(c.pts[0].x, c.pts[0].y);
-    for (let i = 1; i < c.pts.length; i++) c.ctx.lineTo(c.pts[i].x, c.pts[i].y);
+    for (let i = 1; i < c.pts.length; i++) c.ctx.lineTo(c.pts[i]!.x, c.pts[i]!.y); // i is in range
     c.ctx.stroke();
     c.ctx.setLineDash([]);
-    arrowHead(c, c.pts[c.pts.length - 2], c.pts[c.pts.length - 1]);
+    arrowHead(c, c.pts[c.pts.length - 2]!, c.pts[c.pts.length - 1]!); // two or more, by the check above
   },
   distance: (x, y, h) => (h.pts.length < 2 ? null : distToPolyline(x, y, h.pts)),
-};
+} satisfies AnchoredTool<0>;
 
 /**
  * Brush: freehand ink. Press, drag, release. The anchors are the thinned
@@ -1297,7 +1297,7 @@ export const BRUSH: DrawingTool = {
     c.ctx.setLineDash([]);
   },
   distance: (x, y, h) => (h.pts.length < 2 ? null : distToPolyline(x, y, h.pts)),
-};
+} satisfies AnchoredTool<0>;
 
 /**
  * Rotated rectangle: anchors 0 and 1 lay out one edge (and so the rotation),
@@ -1313,7 +1313,7 @@ export const ROTATED_RECTANGLE: DrawingTool = {
     const corners = rotatedCorners(c.pts[0], c.pts[1], c.pts[2]);
     c.ctx.beginPath();
     c.ctx.moveTo(corners[0].x, corners[0].y);
-    for (let i = 1; i < 4; i++) c.ctx.lineTo(corners[i].x, corners[i].y);
+    for (let i = 1; i < 4; i++) c.ctx.lineTo(corners[i]!.x, corners[i]!.y); // four corners
     c.ctx.closePath();
     withFill(c, () => c.ctx.fill());
     applyStroke(c);
@@ -1327,17 +1327,17 @@ export const ROTATED_RECTANGLE: DrawingTool = {
     if (h.drawing.style.fill === true && pointInPolygon(x, y, corners)) return 0;
     let best = Infinity;
     for (let i = 0; i < 4; i++) {
-      best = Math.min(best, distToSegment(x, y, corners[i], corners[(i + 1) % 4]));
+      best = Math.min(best, distToSegment(x, y, corners[i]!, corners[(i + 1) % 4]!)); // four corners
     }
     return best;
   },
-};
+} satisfies AnchoredTool<3>;
 
 /**
  * The four corners of a rotated rectangle: `a` to `b` is one edge, and `c` is
  * projected onto the perpendicular to give the depth.
  */
-function rotatedCorners(a: ScreenPoint, b: ScreenPoint, c: ScreenPoint): ScreenPoint[] {
+function rotatedCorners(a: ScreenPoint, b: ScreenPoint, c: ScreenPoint): [ScreenPoint, ScreenPoint, ScreenPoint, ScreenPoint] {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -1356,8 +1356,8 @@ function rotatedCorners(a: ScreenPoint, b: ScreenPoint, c: ScreenPoint): ScreenP
 function pointInPolygon(x: number, y: number, poly: readonly ScreenPoint[]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i];
-    const b = poly[j];
+    const a = poly[i]!; // i and j stay in 0..length-1
+    const b = poly[j]!;
     if ((a.y > y) !== (b.y > y) && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
   }
   return inside;
@@ -1388,7 +1388,7 @@ export const DOUBLE_CURVE: DrawingTool = {
     const c2 = { x: a.x + b.x - mid.x, y: a.y + b.y - mid.y };
     return distToPolyline(x, y, sampleCubic(a, mid, c2, b, 24));
   },
-};
+} satisfies AnchoredTool<3>;
 
 /** Flatten a cubic bezier to `steps` segments, for hit-testing curves. */
 function sampleCubic(a: ScreenPoint, c1: ScreenPoint, c2: ScreenPoint, b: ScreenPoint, steps: number): ScreenPoint[] {
@@ -1447,7 +1447,7 @@ export const CYCLIC_LINES: DrawingTool = {
     if (k < 0 || k > CYCLE_REPEATS) return null;
     return Math.abs(x - (h.pts[0].x + step * k));
   },
-};
+} satisfies AnchoredTool<2>;
 
 /**
  * Time cycles: semicircles of the anchors' width repeating along the axis, the
@@ -1486,7 +1486,7 @@ export const TIME_CYCLES: DrawingTool = {
     }
     return Number.isFinite(best) ? best : null;
   },
-};
+} satisfies AnchoredTool<2>;
 
 /**
  * Sine line: a full wave between the anchors. The horizontal span is one
@@ -1500,8 +1500,8 @@ export const SINE_LINE: DrawingTool = {
     if (pts === null) return;
     applyStroke(c);
     c.ctx.beginPath();
-    c.ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) c.ctx.lineTo(pts[i].x, pts[i].y);
+    c.ctx.moveTo(pts[0]!.x, pts[0]!.y); // a period is 65 samples
+    for (let i = 1; i < pts.length; i++) c.ctx.lineTo(pts[i]!.x, pts[i]!.y);
     c.ctx.stroke();
     c.ctx.setLineDash([]);
   },
@@ -1509,7 +1509,7 @@ export const SINE_LINE: DrawingTool = {
     const pts = sinePoints(h.pts[0], h.pts[1]);
     return pts === null ? null : distToPolyline(x, y, pts);
   },
-};
+} satisfies AnchoredTool<2>;
 
 /** One period of a sine from `a` to `a.x + span`, amplitude `b.y - a.y`. */
 function sinePoints(a: ScreenPoint, b: ScreenPoint): ScreenPoint[] | null {
@@ -1557,7 +1557,7 @@ export const PRICE_LABEL: DrawingTool = {
     if (x >= x0 && x <= x0 + w && y >= y0 && y <= y0 + hgt) return 0;
     return Math.hypot(x - p.x, y - p.y) <= 10 ? 0 : null;
   },
-};
+} satisfies AnchoredTool<1>;
 
 /**
  * Callout: a text bubble on its own anchor with a tail back to the point it
@@ -1582,7 +1582,7 @@ export const CALLOUT: DrawingTool = {
     if (Math.abs(x - seat.x) <= 60 && Math.abs(y - seat.y) <= 16) return 0;
     return distToSegment(x, y, target, seat);
   },
-};
+} satisfies AnchoredTool<2>;
 
 /** Rounded bubble at (x, y) sized to `lines`; returns its device-px box. */
 function calloutBox(
@@ -1649,7 +1649,7 @@ function calloutText(
   c.ctx.fillStyle = t.color ?? contrastText(color);
   const lh = size * 1.4;
   const top = box.y + box.h / 2 - (lh * (lines.length - 1)) / 2;
-  for (let i = 0; i < lines.length; i++) c.ctx.fillText(lines[i], box.x + box.w / 2, top + lh * i);
+  for (let i = 0; i < lines.length; i++) c.ctx.fillText(lines[i]!, box.x + box.w / 2, top + lh * i); // i is in range
   c.ctx.restore();
 }
 
@@ -1698,7 +1698,7 @@ export const FLAG_MARK: DrawingTool = {
     if (x >= p.x - 4 && x <= p.x + 16 && y >= p.y - 24 && y <= p.y + 2) return 0;
     return Math.hypot(x - p.x, y - p.y) <= 8 ? 0 : null;
   },
-};
+} satisfies AnchoredTool<1>;
 
 
 /* ── annotations ───────────────────────────────────────────────────────────
@@ -1774,7 +1774,7 @@ function paintPlate(
   const lh = size * 1.45;
   const top = box.y + box.h / 2 - (lh * (lines.length - 1)) / 2;
   for (let i = 0; i < lines.length; i++) {
-    c.ctx.fillText(lines[i], box.x + 8 * d, top + lh * i);
+    c.ctx.fillText(lines[i]!, box.x + 8 * d, top + lh * i); // i is in range
   }
   c.ctx.restore();
 }
@@ -1849,7 +1849,7 @@ export const NOTE: DrawingTool = {
     if (hit !== null) return hit;
     return Math.hypot(x - p.x, y - p.y) <= 8 ? 0 : null;
   },
-};
+} satisfies AnchoredTool<1>;
 
 const BALLOON_PLATE: PlateDefaults = { size: 12, opacity: 0.95 };
 
@@ -1890,7 +1890,7 @@ export const BALLOON: DrawingTool = {
     if (hit !== null) return hit;
     return Math.hypot(x - p.x, y - p.y) <= 8 ? 0 : null;
   },
-};
+} satisfies AnchoredTool<1>;
 
 const COMMENT_PLATE: PlateDefaults = { size: 11, opacity: 0.92 };
 
@@ -1931,7 +1931,7 @@ export const COMMENT: DrawingTool = {
     if (hit !== null) return hit;
     return Math.hypot(x - p.x, y - p.y) <= 8 ? 0 : null;
   },
-};
+} satisfies AnchoredTool<1>;
 
 const SIGNPOST_PLATE: PlateDefaults = { size: 11, opacity: 0.95 };
 
@@ -1976,7 +1976,7 @@ export const SIGNPOST: DrawingTool = {
     // The post itself, so a signpost whose plate is off-pane stays grabbable.
     return Math.abs(x - p.x) <= 5 && y >= p.y - 34 && y <= p.y + 4 ? 0 : null;
   },
-};
+} satisfies AnchoredTool<1>;
 
 const PRICE_NOTE_PLATE: PlateDefaults = { size: 11, opacity: 0.95 };
 
@@ -2014,7 +2014,7 @@ export const PRICE_NOTE: DrawingTool = {
     if (hit !== null) return hit;
     return Math.hypot(x - p.x, y - p.y) <= 8 ? 0 : null;
   },
-};
+} satisfies AnchoredTool<1>;
 
 const TABLE_SIZE = 11;
 const TABLE_OPACITY = 0.92;
@@ -2027,9 +2027,9 @@ function tableWidths(ctx: CanvasRenderingContext2D | null, text: DrawingText, ro
     for (let r = 0; r < rows.length; r++) {
       if (ctx !== null) ctx.font = fontOf(text, size, r === 0 ? text.bold === true ? '800' : '600' : undefined);
       for (let col = 0; col < widths.length; col++) {
-        const cell = rows[r][col] ?? '';
+        const cell = rows[r]![col] ?? ''; // r and col are in range: a short row reads blank
         const width = ctx === null ? cell.length * size * 0.6 : drawingTextWidth(ctx, cell);
-        widths[col] = Math.max(widths[col], width + 14 * dpr);
+        widths[col] = Math.max(widths[col]!, width + 14 * dpr);
       }
     }
   } finally { ctx?.restore(); }
@@ -2098,7 +2098,7 @@ export const TABLE: DrawingTool = {
       }
       let cx = p.x;
       for (let i = 0; i < widths.length - 1; i++) {
-        cx += widths[i];
+        cx += widths[i]!; // i is in range
         c.ctx.moveTo(cx, p.y);
         c.ctx.lineTo(cx, p.y + h);
       }
@@ -2116,8 +2116,8 @@ export const TABLE: DrawingTool = {
       c.ctx.font = r === 0 ? headFont : bodyFont;
       let x = p.x;
       for (let i = 0; i < widths.length; i++) {
-        c.ctx.fillText(rows[r][i] ?? '', x + pad, p.y + rowH * r + rowH / 2);
-        x += widths[i];
+        c.ctx.fillText(rows[r]![i] ?? '', x + pad, p.y + rowH * r + rowH / 2); // r and i are in range
+        x += widths[i]!;
       }
     }
     c.ctx.restore();
@@ -2127,7 +2127,7 @@ export const TABLE: DrawingTool = {
     return insidePlate(x, y, r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
   },
   bounds: (pts, drawing) => tableRect(pts[0], drawing),
-};
+} satisfies AnchoredTool<1, true>;
 
 /** The table's grid in media px from its top-left anchor, laid out as it is drawn. */
 function tableRect(p: ScreenPoint, drawing: Drawing): { x0: number; y0: number; x1: number; y1: number } {
@@ -2188,7 +2188,7 @@ export const PRICE_RANGE: DrawingTool = {
     label(c, `${sign}${c.formatPrice(chg)}  (${sign}${pct.toFixed(2)}%)`, mx + 6 * d, (y0 + y1) / 2, tint);
   },
   distance: (x, y, h) => distToRect(x, y, h.pts[0], h.pts[1], true),
-};
+} satisfies AnchoredTool<2>;
 
 export const DATE_RANGE: DrawingTool = {
   id: 'date-range', name: 'Date Range', points: 2,
@@ -2226,7 +2226,7 @@ export const DATE_RANGE: DrawingTool = {
     label(c, `${bars} bars`, (x0 + x1) / 2, y0 - 10 * d, tint);
   },
   distance: (x, y, h) => distToRect(x, y, h.pts[0], h.pts[1], true),
-};
+} satisfies AnchoredTool<2>;
 
 /**
  * Position forecast: project a move from an anchor. Two anchors give the
@@ -2281,7 +2281,7 @@ export const FORECAST: DrawingTool = {
     // Verdict, once the window has actually elapsed: did price get there? A
     // forecast nobody scores is just a line.
     const bars = c.rc.bars?.();
-    if (bars !== undefined && bars.length > 0 && bars[bars.length - 1].time >= p[1].time) {
+    if (bars !== undefined && bars.length > 0 && bars[bars.length - 1]!.time >= p[1].time) {
       let hit = false;
       for (const bar of bars) {
         if (bar.time < p[0].time) continue;
@@ -2293,7 +2293,7 @@ export const FORECAST: DrawingTool = {
     }
   },
   distance: (x, y, h) => distToSegment(x, y, h.pts[0], h.pts[1]),
-};
+} satisfies AnchoredTool<2>;
 
 // ── shapes ────────────────────────────────────────────────────────────────
 
@@ -2324,7 +2324,7 @@ export const CIRCLE: DrawingTool = {
     if (h.drawing.style.fill === true && d <= r) return 0;
     return Math.abs(d - r);
   },
-};
+} satisfies AnchoredTool<2>;
 
 export const TRIANGLE: DrawingTool = {
   id: 'triangle', name: 'Triangle', points: 3,
@@ -2343,7 +2343,7 @@ export const TRIANGLE: DrawingTool = {
     shapeLabel(c, boundsOf(c.pts.slice(0, 3)), 'center', 'middle');
   },
   distance: (x, y, h) => distToPolyline(x, y, [...h.pts, h.pts[0]]),
-};
+} satisfies AnchoredTool<3>;
 
 /** Free-form polyline: click each vertex, double-click to finish. */
 export const POLYLINE: DrawingTool = {
@@ -2354,14 +2354,14 @@ export const POLYLINE: DrawingTool = {
     if (c.pts.length < 2) return;
     c.ctx.beginPath();
     c.ctx.moveTo(c.pts[0].x, c.pts[0].y);
-    for (let i = 1; i < c.pts.length; i++) c.ctx.lineTo(c.pts[i].x, c.pts[i].y);
+    for (let i = 1; i < c.pts.length; i++) c.ctx.lineTo(c.pts[i]!.x, c.pts[i]!.y); // i is in range
     if (c.style.fill === true) { c.ctx.closePath(); withFill(c, () => c.ctx.fill()); }
     applyStroke(c);
     c.ctx.stroke();
     c.ctx.setLineDash([]);
   },
   distance: (x, y, h) => distToPolyline(x, y, h.pts),
-};
+} satisfies AnchoredTool<0>;
 
 /** Sample a quadratic whose control is derived so the curve passes through `m`. */
 function quadPoints(a: ScreenPoint, m: ScreenPoint, b: ScreenPoint): ScreenPoint[] {
@@ -2392,7 +2392,7 @@ export const ARC: DrawingTool = {
     c.ctx.setLineDash([]);
   },
   distance: (x, y, h) => distToPolyline(x, y, quadPoints(h.pts[0], h.pts[1], h.pts[2])),
-};
+} satisfies AnchoredTool<3>;
 
 /** Quadratic curve: the middle anchor is a control handle, off the curve. */
 export const CURVE: DrawingTool = {
@@ -2417,7 +2417,7 @@ export const CURVE: DrawingTool = {
     }
     return distToPolyline(x, y, pts);
   },
-};
+} satisfies AnchoredTool<3>;
 
 // ── arrows & brushes ──────────────────────────────────────────────────────
 
@@ -2478,7 +2478,7 @@ function arrowMarker(
       const dy = up ? y - a.y : a.y - y;
       return Math.abs(x - a.x) <= 8 && dy >= -4 && dy <= 20 ? 0 : null;
     },
-  };
+  } satisfies AnchoredTool<1>;
 }
 export const ARROW_UP = arrowMarker('arrow-up', 'Arrow Up', true);
 export const ARROW_DOWN = arrowMarker('arrow-down', 'Arrow Down', false);
@@ -2499,7 +2499,7 @@ export const HIGHLIGHTER: DrawingTool = {
     const d = distToPolyline(x, y, h.pts);
     return d <= Math.max(6, (h.drawing.style.lineWidth ?? 12) / 2) ? 0 : d;
   },
-};
+} satisfies AnchoredTool<0>;
 
 // ── fibonacci & gann ──────────────────────────────────────────────────────
 
@@ -2561,7 +2561,7 @@ export const FIB_CHANNEL: DrawingTool = {
     }
     return best;
   },
-};
+} satisfies AnchoredTool<3>;
 
 /**
  * Fib time zone: vertical lines at Fibonacci multiples of the base leg's width.
@@ -2604,7 +2604,7 @@ export const FIB_TIME_ZONE: DrawingTool = {
     }
     return Number.isFinite(best) ? best : null;
   },
-};
+} satisfies AnchoredTool<2>;
 
 /** Rays from the anchor at fib fractions of the leg: the speed resistance fan. */
 export const FIB_FAN: DrawingTool = {
@@ -2640,7 +2640,7 @@ export const FIB_FAN: DrawingTool = {
     }
     return Number.isFinite(best) ? best : null;
   },
-};
+} satisfies AnchoredTool<2>;
 
 /**
  * Gann fan: rays from one anchor at the classic price/time angles. A level's
@@ -2684,7 +2684,7 @@ export const GANN_FAN: DrawingTool = {
     }
     return Number.isFinite(best) ? best : null;
   },
-};
+} satisfies AnchoredTool<2>;
 
 /**
  * Gann box: the drawn rectangle divided at its levels on both axes, plus the
@@ -2724,7 +2724,7 @@ export const GANN_BOX: DrawingTool = {
     c.ctx.setLineDash([]);
   },
   distance: (x, y, h) => distToRect(x, y, h.pts[0], h.pts[1], h.drawing.style.fill === true),
-};
+} satisfies AnchoredTool<2>;
 
 export const BUILTIN_DRAWING_TOOLS: readonly DrawingTool[] = [
   TREND_LINE, RAY, EXTENDED_LINE, ARROW,
