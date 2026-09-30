@@ -34,7 +34,7 @@ const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number
 const len = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
   Math.max(1, Math.floor(num(s, k, d)));
 const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string =>
-  typeof s[k] === 'string' ? (s[k] as string) : d;
+  typeof s[k] === 'string' && s[k] !== '' ? s[k] : d;
 const src = (s: Readonly<Record<string, unknown>>): IndicatorSource =>
   (s.source as IndicatorSource) ?? 'close';
 
@@ -243,7 +243,7 @@ export const PVO: IndicatorDescriptor = {
         const prev = values.hist?.[index - 1];
         const rising = prev !== null && prev !== undefined && Number.isFinite(prev) && value > prev;
         const pick = (k: string, d: string): string =>
-          typeof settings[k] === 'string' ? (settings[k] as string) : d;
+          typeof settings[k] === 'string' && settings[k] !== '' ? settings[k] : d;
         if (value >= 0) {
           return rising ? pick('histUpColor', '#26a69a') : pick('histUpFadeColor', '#b2dfdb');
         }

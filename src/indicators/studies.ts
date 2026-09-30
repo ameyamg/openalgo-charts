@@ -25,7 +25,7 @@ const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number
   return typeof v === 'number' && Number.isFinite(v) ? v : d;
 };
 const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string =>
-  typeof s[k] === 'string' ? (s[k] as string) : d;
+  typeof s[k] === 'string' && s[k] !== '' ? s[k] : d;
 const bool = (s: Readonly<Record<string, unknown>>, k: string, d: boolean): boolean =>
   typeof s[k] === 'boolean' ? (s[k] as boolean) : d;
 const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>

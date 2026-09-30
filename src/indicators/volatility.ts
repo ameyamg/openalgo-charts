@@ -29,7 +29,7 @@ const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number
 };
 const src = (s: Readonly<Record<string, unknown>>): IndicatorSource => (s.source as IndicatorSource) ?? 'close';
 const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string =>
-  typeof s[k] === 'string' ? (s[k] as string) : d;
+  typeof s[k] === 'string' && s[k] !== '' ? s[k] : d;
 
 /**
  * the reference `bb`: an SMA basis with symmetric `mult` **population** standard

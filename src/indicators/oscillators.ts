@@ -139,7 +139,7 @@ export const AWESOME_OSCILLATOR: IndicatorDescriptor = {
       colorBy: ({ value, index, values, settings }) => {
         const prev = values.ao?.[index - 1];
         const str = (k: string, d: string): string =>
-          typeof settings[k] === 'string' ? (settings[k] as string) : d;
+          typeof settings[k] === 'string' && settings[k] !== '' ? settings[k] : d;
         const rising = prev === null || prev === undefined || !Number.isFinite(prev)
           ? true
           : value - prev > 0;

@@ -118,7 +118,7 @@ export const MACD: IndicatorDescriptor = withTimeframe(withTail({
           : value >= prev;
         const pick = (key: string, fallback: string): string => {
           const c = settings[key];
-          return typeof c === 'string' ? c : fallback;
+          return typeof c === 'string' && c !== '' ? c : fallback;
         };
         if (value >= 0) {
           return rising
@@ -602,7 +602,7 @@ export const WILLIAMS_VIX_FIX: IndicatorDescriptor = {
         const upper = values.alertUpper?.[index];
         const high = values.alertHigh?.[index];
         const str = (k: string, d: string): string =>
-          typeof settings[k] === 'string' ? (settings[k] as string) : d;
+          typeof settings[k] === 'string' && settings[k] !== '' ? settings[k] : d;
         if (v === null || v === undefined) return undefined;
         const hitBand = upper !== null && upper !== undefined && v >= upper;
         const hitRange = high !== null && high !== undefined && v >= high;
