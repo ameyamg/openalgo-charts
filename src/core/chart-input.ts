@@ -61,6 +61,9 @@ type PointerLike = Partial<Pick<PointerEvent,
  */
 export interface SubscribedDrag { end: boolean; id: string; price: number; time: number }
 
+/** A pointer position projected onto the pane under it, as the handlers read it. */
+type LocalPoint = { x: number; y: number; pane: number; localY: number; paneHeight: number };
+
 /** The three pointer facts every gesture payload carries. */
 function pointerInfo(e: PointerLike): PointerInfo {
   const kind = e.pointerType;
@@ -502,21 +505,7 @@ export class ChartInput {
     // Pane divider: pressing within a few px of the boundary between two panes
     // starts a resize, redistributing weight between them.
     const divider = this._host._layout._dividerAt(p.y);
-    if (divider !== null) {
-      const layout = this._host._paneLayout();
-      const [a, b] = divider;
-      this._paneResize = {
-        a, b,
-        startY: p.y,
-        // `_dividerAt` names two panes that exist, and the layout has a box for each.
-        aWeight: this._host._panes[a]!.weight,
-        bWeight: this._host._panes[b]!.weight,
-        aHeight: layout[a]!.height,
-        bHeight: layout[b]!.height,
-      };
-      this._dragging = false;
-      return;
-    }
+    if (divider !== null) { this._beginDividerResize(divider, p); return; }
 
     // Axis-drag rescale: dragging the price axis (right strip) rescales Y;
     // dragging the time axis (bottom strip of the last pane) rescales X.
@@ -527,19 +516,7 @@ export class ChartInput {
     const onLeftAxis = this._host._leftAxisWidth > 0 && p.x < this._host._leftAxisWidth;
     const onPriceAxis = p.x >= plotWidth || onLeftAxis;
     const onTimeAxis = p.pane === this._host._bottomPaneIndex() && p.localY >= p.paneHeight - this._host._timeAxisHeight;
-    if (onPriceAxis) {
-      const slot = this._axisAt(p.pane, p.x);
-      this._dragging = false;
-      if (!slot || this._host._navigation.zoomEnabled === false) { this._axisDrag = 'empty'; return; }
-      this._axisDrag = 'price';
-      this._axisDragScale = this._host._panes[p.pane]!.scaleFor(slot.scaleId); // a projected point is on a pane
-      this._axisStartCoord = p.localY;
-      const r = this._axisDragScale.priceRange();
-      this._axisStartMin = r.min;
-      this._axisStartMax = r.max;
-      this._dragging = false;
-      return;
-    }
+    if (onPriceAxis) { this._beginPriceAxisDrag(p); return; }
     if (onTimeAxis) {
       if (this._host._navigation.zoomEnabled === false) { this._axisDrag = 'empty'; return; }
       this._axisDrag = 'time';
@@ -580,29 +557,7 @@ export class ChartInput {
     // callback: they publish through the `drag` event bus. The `ns-resize`
     // form is the original price-line path and still needs `subscribeDrag`.
     if (hit && (hit.draggable === true || (hit.cursor === 'ns-resize' && this._dragCbs.size > 0))) {
-      this._dragId = hit.externalId;
-      this._dragPriceScale = hit.priceScale ?? null;
-      this._dragCancelOnEscape = hit.cancelOnEscape === true;
-      this._dragMoved = false;
-      this._host._ensureScaled(p.pane);
-      this._dragFrom = {
-        time: this._host._xToTime(p.x),
-        price: this._dragPriceScale?.yToPrice(p.localY) ?? this._host._panes[p.pane]!.yToPrice(p.localY),
-      };
-      this._setHover(hit); // active state + cursor even when no hover preceded (touch)
-      // Hide the crosshair while dragging a line: a frozen crosshair at the
-      // grab point reads as a phantom second line (the axis tag tracks price).
-      this._cursor = null;
-      this._cursorPane = null;
-      this._readoutTime = null;
-      this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Cursor));
-      this._dragging = false;
-      this._pointerMoved = false;
-      const start: ChartDragEndEvent = {
-        id: hit.externalId, ...this._dragFrom, paneIndex: this._downPane,
-        point: { x: p.x, y: p.localY }, ...pointerInfo(e),
-      };
-      this._host._emit('drag:start', start);
+      this._beginPrimitiveDrag(e, p, hit);
       return;
     }
 
@@ -701,63 +656,8 @@ export class ChartInput {
       && (Math.abs(p.x - this._downX) > 3 || Math.abs(p.localY - this._downLocalY) > 3)) {
       this._pointerMoved = true;
     }
-    if (this._dragId !== null) {
-      const localY = p.y - (this._host._paneLayout()[this._downPane]?.top ?? 0);
-      if (Math.abs(p.x - this._downX) > 3 || Math.abs(localY - this._downLocalY) > 3) this._dragMoved = true;
-      const price = this._dragPriceScale?.yToPrice(localY) ?? this._host._panes[this._downPane]!.yToPrice(localY); // the press's pane
-      const time = this._host._xToTime(p.x);
-      dispatch(this._dragCbs, { end: false, id: this._dragId, price, time });
-      const drag: ChartDragEvent = {
-        id: this._dragId, price, time, paneIndex: this._downPane,
-        // The grab origin, so a consumer's delta starts at the press instead of
-        // the first move. Otherwise the shape lags the cursor by one event.
-        fromPrice: this._dragFrom.price, fromTime: this._dragFrom.time,
-        point: { x: p.x, y: localY },
-        samples: this._dragSamples(e),
-        ...pointerInfo(e),
-      };
-      this._host._emit('drag', drag);
-      return;
-    }
-    if (this._dragging) {
-      this._host._motion._beginAutoscaleMotion();
-      const dx = p.x - this._dragStartX;
-      if (Math.abs(dx) > 3 || Math.abs(p.y - this._dragStartY) > 3) this._pointerMoved = true;
-      if (this._pointerMoved && this._hoverId !== null) this._setHover(null);
-      // horizontal: scroll time
-      this._host._mutateTimeScale(() => this._host._timeScale.setRightOffset(this._dragStartOffset - dx / this._host._timeScale.barSpacing));
-      // Horizontal-only mode preserves autoscale when the pointer moves vertically.
-      if (e.pointerType === 'touch' || this._host._navigation.mousePan === 'both') {
-        // A strip's scale is not on screen, so a drag across it pans time only.
-        const scale = this._host._layout._collapsedShown(this._downPane) ? undefined : this._host._panes[this._downPane]?.priceScale;
-        const fromStart = p.y - this._dragStartY;
-        // Minor mouse/pen drift must not turn an automatic axis into a frozen
-        // manual range. Once vertical movement is intentional, include its full
-        // distance from the press; already-manual axes retain fine adjustments.
-        if (scale && (e.pointerType === 'touch' || !scale.autoScale || Math.abs(fromStart) > 3)) {
-          scale.panByPixels(e.pointerType !== 'touch' && scale.autoScale ? fromStart : p.y - this._lastDragY);
-        }
-      }
-      this._lastDragY = p.y;
-      const t = this._host._now();
-      const dt = t - this._host._lastDragT;
-      if (dt > 0) {
-        // Blend rather than replace, and let an idle gap wash the old value out.
-        // Sampling only on pointermove means a drag that stops and holds keeps
-        // whatever velocity its last moving frame had, so releasing after a
-        // deliberate pause flings the chart as if it were still moving. Decay is
-        // measured in elapsed time, so it works the same on a throttled feed.
-        const instant = (p.x - this._host._lastDragX) / dt;
-        const keep = Math.exp(-dt / KINETIC_VELOCITY_HALFLIFE_MS);
-        this._host._dragVelocity = this._host._dragVelocity * keep + instant * (1 - keep);
-      }
-      this._host._lastDragX = p.x;
-      this._host._lastDragT = t;
-      this._host._maybeLoadHistory();
-      this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
-      this._host._emitViewport('pan');
-      return;
-    }
+    if (this._dragId !== null) { this._movePrimitiveDrag(e, p); return; }
+    if (this._dragging) { this._movePan(e, p); return; }
     this._updateCursor(p.pane, p.x, p.localY, p.y, e);
   }
 
@@ -818,42 +718,7 @@ export class ChartInput {
       this._axisDragScale = null;
       return;
     }
-    if (this._dragId !== null) {
-      const p = this._localPoint(e);
-      const localY = p.y - (this._host._paneLayout()[this._downPane]?.top ?? 0);
-      const price = this._dragPriceScale?.yToPrice(localY) ?? this._host._panes[this._downPane]!.yToPrice(localY); // the press's pane
-      const time = this._host._xToTime(p.x);
-      dispatch(this._dragCbs, { end: true, id: this._dragId, price, time });
-      const end: ChartDragEndEvent = {
-        id: this._dragId, price, time, paneIndex: this._downPane,
-        point: { x: p.x, y: localY },
-        ...pointerInfo(e),
-      };
-      this._host._emit('drag:end', end);
-      // A press on a draggable primitive arms a drag, so this branch used to
-      // swallow the release, and a plain click on a drawing never reached the
-      // click path, leaving it unselectable. A gesture that never moved is a
-      // click by any reasonable reading.
-      if (!this._dragMoved) {
-        const id = this._dragId;
-        dispatch(this._clickCbs, id);
-        const click: ChartClickEvent = {
-          id, price, time,
-          paneIndex: this._downPane,
-          point: { x: this._downX, y: this._downLocalY },
-          ...this._clickInfo(e),
-        };
-        this._host._emit('click', click);
-      }
-      this._dragId = null;
-      this._dragPriceScale = null;
-      // Re-evaluate hover at the release point (mouse keeps hovering the line;
-      // touch has no pointer any more) and drop the dragging visual state.
-      const hit = e.pointerType === 'touch' ? null : this._hitAt(p.pane, p.x, p.localY);
-      this._setHover(hit);
-      this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Light));
-      return;
-    }
+    if (this._dragId !== null) { this._endPrimitiveDrag(e); return; }
     const wasPanning = this._dragging;
     this._dragging = false;
     // Placement mode: a press-drag-release is how every charting UI draws a
@@ -861,62 +726,219 @@ export class ChartInput {
     // stayed still, so the gesture used to place nothing at all. Replay it as the
     // two clicks it means: press point, then release point. `viaDrag` lets the
     // host ignore the second one for single-anchor tools it already completed.
-    if (this._placementMode && this._pointerMoved) {
-      if (wasPanning) this._setHover(null);
-      const p = this._localPoint(e);
-      this._host._ensureScaled(this._downPane);
-      const info = this._clickInfo(e);
-      const press: ChartClickEvent = {
-        id: null,
-        price: this._priceAt(this._downPane, this._downLocalY),
-        time: this._host._xToTime(this._downX),
-        paneIndex: this._downPane,
-        point: { x: this._downX, y: this._downLocalY },
-        ...info,
-      };
-      this._host._emit('click', press);
-      const release: ChartClickEvent = {
-        id: null,
-        price: this._priceAt(this._downPane, p.localY),
-        time: this._host._xToTime(p.x),
-        paneIndex: this._downPane,
-        point: { x: p.x, y: p.localY },
-        viaDrag: true,
-        ...info,
-      };
-      this._host._emit('click', release);
-      return;
-    }
+    if (this._placementMode && this._pointerMoved) { this._endPlacement(e, wasPanning); return; }
     // Always hit-test a clean click: the chart's own chrome (pane-legend
     // buttons) must work whether or not the host subscribed to clicks.
-    if (!this._pointerMoved) {
-      const hit = this._hitAt(this._downPane, this._downX, this._downLocalY);
-      if (wasPanning) this._setHover(e.pointerType === 'touch' ? null : hit ?? null);
-      // Pane-legend buttons are the chart's own chrome: handle them here so
-      // the host doesn't have to re-implement remove/hide/move/maximize.
-      if (hit && this._host._handleLegendAction(hit.externalId)) return;
-      if (hit) dispatch(this._clickCbs, hit.externalId);
-      // The event carries position and fires on empty plot too, which is what a
-      // tool that *places* something (a drawing, an alert) needs; `id` is null
-      // there. `subscribeClick` stays hit-only for back-compat.
-      this._host._ensureScaled(this._downPane);
-      const click: ChartClickEvent = {
-        id: hit?.externalId ?? null,
-        price: this._priceAt(this._downPane, this._downLocalY),
-        time: this._host._xToTime(this._downX),
-        paneIndex: this._downPane,
-        point: { x: this._downX, y: this._downLocalY },
-        // Modifier flags ride along so the draw tier can make a shift or
-        // ctrl click additive to the selection; the payload carries no event.
-        ...this._clickInfo(e),
-      };
-      this._host._emit('click', click);
-      return;
-    }
+    if (!this._pointerMoved) { this._endClick(e, wasPanning); return; }
     if (wasPanning) this._setHover(null);
     // A mouse or pen release places the viewport precisely; only a touch flick coasts.
     if (wasPanning && this._host._navigation.panEnabled !== false && e.pointerType === 'touch' && e.type !== 'pointercancel'
       && KineticAnimation.shouldAnimate(this._host._dragVelocity)) this._host._startKinetic(this._host._dragVelocity);
+  }
+
+  /** A press on a pane divider: start moving weight between the two panes. */
+  private _beginDividerResize(divider: readonly [number, number], p: LocalPoint): void {
+    const layout = this._host._paneLayout();
+    const [a, b] = divider;
+    this._paneResize = {
+      a, b,
+      startY: p.y,
+      // `_dividerAt` names two panes that exist, and the layout has a box for each.
+      aWeight: this._host._panes[a]!.weight,
+      bWeight: this._host._panes[b]!.weight,
+      aHeight: layout[a]!.height,
+      bHeight: layout[b]!.height,
+    };
+    this._dragging = false;
+  }
+
+  /** A press on a price axis strip: arm a rescale of the scale drawn in it. */
+  private _beginPriceAxisDrag(p: LocalPoint): void {
+    const slot = this._axisAt(p.pane, p.x);
+    this._dragging = false;
+    if (!slot || this._host._navigation.zoomEnabled === false) { this._axisDrag = 'empty'; return; }
+    this._axisDrag = 'price';
+    this._axisDragScale = this._host._panes[p.pane]!.scaleFor(slot.scaleId); // a projected point is on a pane
+    this._axisStartCoord = p.localY;
+    const r = this._axisDragScale.priceRange();
+    this._axisStartMin = r.min;
+    this._axisStartMax = r.max;
+    this._dragging = false;
+  }
+
+  /** A press on a draggable primitive: arm its drag instead of a pan. */
+  private _beginPrimitiveDrag(e: PointerEvent, p: LocalPoint, hit: PrimitiveHit): void {
+    this._dragId = hit.externalId;
+    this._dragPriceScale = hit.priceScale ?? null;
+    this._dragCancelOnEscape = hit.cancelOnEscape === true;
+    this._dragMoved = false;
+    this._host._ensureScaled(p.pane);
+    this._dragFrom = {
+      time: this._host._xToTime(p.x),
+      price: this._dragPriceScale?.yToPrice(p.localY) ?? this._host._panes[p.pane]!.yToPrice(p.localY),
+    };
+    this._setHover(hit); // active state + cursor even when no hover preceded (touch)
+    // Hide the crosshair while dragging a line: a frozen crosshair at the
+    // grab point reads as a phantom second line (the axis tag tracks price).
+    this._cursor = null;
+    this._cursorPane = null;
+    this._readoutTime = null;
+    this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Cursor));
+    this._dragging = false;
+    this._pointerMoved = false;
+    const start: ChartDragEndEvent = {
+      id: hit.externalId, ...this._dragFrom, paneIndex: this._downPane,
+      point: { x: p.x, y: p.localY }, ...pointerInfo(e),
+    };
+    this._host._emit('drag:start', start);
+  }
+
+  /** A move while a primitive is held (the caller checks `_dragId`): report the price and time under the pointer. */
+  private _movePrimitiveDrag(e: PointerEvent, p: LocalPoint): void {
+    const localY = p.y - (this._host._paneLayout()[this._downPane]?.top ?? 0);
+    if (Math.abs(p.x - this._downX) > 3 || Math.abs(localY - this._downLocalY) > 3) this._dragMoved = true;
+    const price = this._dragPriceScale?.yToPrice(localY) ?? this._host._panes[this._downPane]!.yToPrice(localY); // the press's pane
+    const time = this._host._xToTime(p.x);
+    dispatch(this._dragCbs, { end: false, id: this._dragId!, price, time });
+    const drag: ChartDragEvent = {
+      id: this._dragId!, price, time, paneIndex: this._downPane,
+      // The grab origin, so a consumer's delta starts at the press instead of
+      // the first move. Otherwise the shape lags the cursor by one event.
+      fromPrice: this._dragFrom.price, fromTime: this._dragFrom.time,
+      point: { x: p.x, y: localY },
+      samples: this._dragSamples(e),
+      ...pointerInfo(e),
+    };
+    this._host._emit('drag', drag);
+  }
+
+  /** A move while the plot is held: pan time, and price where the pointer and the scale allow. */
+  private _movePan(e: PointerEvent, p: LocalPoint): void {
+    this._host._motion._beginAutoscaleMotion();
+    const dx = p.x - this._dragStartX;
+    if (Math.abs(dx) > 3 || Math.abs(p.y - this._dragStartY) > 3) this._pointerMoved = true;
+    if (this._pointerMoved && this._hoverId !== null) this._setHover(null);
+    // horizontal: scroll time
+    this._host._mutateTimeScale(() => this._host._timeScale.setRightOffset(this._dragStartOffset - dx / this._host._timeScale.barSpacing));
+    // Horizontal-only mode preserves autoscale when the pointer moves vertically.
+    if (e.pointerType === 'touch' || this._host._navigation.mousePan === 'both') {
+      // A strip's scale is not on screen, so a drag across it pans time only.
+      const scale = this._host._layout._collapsedShown(this._downPane) ? undefined : this._host._panes[this._downPane]?.priceScale;
+      const fromStart = p.y - this._dragStartY;
+      // Minor mouse/pen drift must not turn an automatic axis into a frozen
+      // manual range. Once vertical movement is intentional, include its full
+      // distance from the press; already-manual axes retain fine adjustments.
+      if (scale && (e.pointerType === 'touch' || !scale.autoScale || Math.abs(fromStart) > 3)) {
+        scale.panByPixels(e.pointerType !== 'touch' && scale.autoScale ? fromStart : p.y - this._lastDragY);
+      }
+    }
+    this._lastDragY = p.y;
+    const t = this._host._now();
+    const dt = t - this._host._lastDragT;
+    if (dt > 0) {
+      // Blend rather than replace, and let an idle gap wash the old value out.
+      // Sampling only on pointermove means a drag that stops and holds keeps
+      // whatever velocity its last moving frame had, so releasing after a
+      // deliberate pause flings the chart as if it were still moving. Decay is
+      // measured in elapsed time, so it works the same on a throttled feed.
+      const instant = (p.x - this._host._lastDragX) / dt;
+      const keep = Math.exp(-dt / KINETIC_VELOCITY_HALFLIFE_MS);
+      this._host._dragVelocity = this._host._dragVelocity * keep + instant * (1 - keep);
+    }
+    this._host._lastDragX = p.x;
+    this._host._lastDragT = t;
+    this._host._maybeLoadHistory();
+    this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
+    this._host._emitViewport('pan');
+  }
+
+  /** The release of a primitive drag (the caller checks `_dragId`), a click on it when it never moved. */
+  private _endPrimitiveDrag(e: PointerEvent): void {
+    const p = this._localPoint(e);
+    const localY = p.y - (this._host._paneLayout()[this._downPane]?.top ?? 0);
+    const price = this._dragPriceScale?.yToPrice(localY) ?? this._host._panes[this._downPane]!.yToPrice(localY); // the press's pane
+    const time = this._host._xToTime(p.x);
+    dispatch(this._dragCbs, { end: true, id: this._dragId!, price, time });
+    const end: ChartDragEndEvent = {
+      id: this._dragId!, price, time, paneIndex: this._downPane,
+      point: { x: p.x, y: localY },
+      ...pointerInfo(e),
+    };
+    this._host._emit('drag:end', end);
+    // A press on a draggable primitive arms a drag, so this branch used to
+    // swallow the release, and a plain click on a drawing never reached the
+    // click path, leaving it unselectable. A gesture that never moved is a
+    // click by any reasonable reading.
+    if (!this._dragMoved) {
+      const id = this._dragId!;
+      dispatch(this._clickCbs, id);
+      const click: ChartClickEvent = {
+        id, price, time,
+        paneIndex: this._downPane,
+        point: { x: this._downX, y: this._downLocalY },
+        ...this._clickInfo(e),
+      };
+      this._host._emit('click', click);
+    }
+    this._dragId = null;
+    this._dragPriceScale = null;
+    // Re-evaluate hover at the release point (mouse keeps hovering the line;
+    // touch has no pointer any more) and drop the dragging visual state.
+    const hit = e.pointerType === 'touch' ? null : this._hitAt(p.pane, p.x, p.localY);
+    this._setHover(hit);
+    this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Light));
+  }
+
+  /** A press-drag-release while placing: the two clicks it means. */
+  private _endPlacement(e: PointerEvent, wasPanning: boolean): void {
+    if (wasPanning) this._setHover(null);
+    const p = this._localPoint(e);
+    this._host._ensureScaled(this._downPane);
+    const info = this._clickInfo(e);
+    const press: ChartClickEvent = {
+      id: null,
+      price: this._priceAt(this._downPane, this._downLocalY),
+      time: this._host._xToTime(this._downX),
+      paneIndex: this._downPane,
+      point: { x: this._downX, y: this._downLocalY },
+      ...info,
+    };
+    this._host._emit('click', press);
+    const release: ChartClickEvent = {
+      id: null,
+      price: this._priceAt(this._downPane, p.localY),
+      time: this._host._xToTime(p.x),
+      paneIndex: this._downPane,
+      point: { x: p.x, y: p.localY },
+      viaDrag: true,
+      ...info,
+    };
+    this._host._emit('click', release);
+  }
+
+  /** A release that did not move: a click at the press point, on a hit or on the plot. */
+  private _endClick(e: PointerEvent, wasPanning: boolean): void {
+    const hit = this._hitAt(this._downPane, this._downX, this._downLocalY);
+    if (wasPanning) this._setHover(e.pointerType === 'touch' ? null : hit ?? null);
+    // Pane-legend buttons are the chart's own chrome: handle them here so
+    // the host doesn't have to re-implement remove/hide/move/maximize.
+    if (hit && this._host._handleLegendAction(hit.externalId)) return;
+    if (hit) dispatch(this._clickCbs, hit.externalId);
+    // The event carries position and fires on empty plot too, which is what a
+    // tool that *places* something (a drawing, an alert) needs; `id` is null
+    // there. `subscribeClick` stays hit-only for back-compat.
+    this._host._ensureScaled(this._downPane);
+    const click: ChartClickEvent = {
+      id: hit?.externalId ?? null,
+      price: this._priceAt(this._downPane, this._downLocalY),
+      time: this._host._xToTime(this._downX),
+      paneIndex: this._downPane,
+      point: { x: this._downX, y: this._downLocalY },
+      // Modifier flags ride along so the draw tier can make a shift or
+      // ctrl click additive to the selection; the payload carries no event.
+      ...this._clickInfo(e),
+    };
+    this._host._emit('click', click);
   }
 
   /**

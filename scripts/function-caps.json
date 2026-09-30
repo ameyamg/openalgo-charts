@@ -1,9 +1,6 @@
 {
   "maxLines": 150,
   "caps": {
-    "src/core/chart-input.ts": {
-      "ChartInput._onPointerUp": 157
-    },
     "src/core/chart-state.ts": {
       "ChartPersistence._restoreState": 161,
       "ChartPersistence.restoreState": 155
