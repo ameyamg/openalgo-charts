@@ -30,6 +30,9 @@ export class HeikinAshiTransform implements ISeriesTransform {
     const haLow = Math.min(bar.low, haOpen, haClose);
     this._prevOpen = haOpen;
     this._prevClose = haClose;
-    return [{ time: bar.time, open: haOpen, high: haHigh, low: haLow, close: haClose, volume: bar.volume, oi: bar.oi }];
+    // Volume and open interest pass through as the source bar has them. A bar
+    // without them gives an element whose keys hold undefined, which every
+    // reader of a Bar takes as absent.
+    return [{ time: bar.time, open: haOpen, high: haHigh, low: haLow, close: haClose, volume: bar.volume, oi: bar.oi } as Bar];
   }
 }
