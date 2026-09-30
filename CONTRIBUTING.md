@@ -41,9 +41,14 @@ per tier by the path of the file each is in. It fails when a tier listed in
 so a tier that becomes clean joins the list in the same change. Code in a listed tier
 must pass both flags. Prefer a fix that shows the compiler what the code already
 guarantees (a checked index, a narrowed local, an optional property typed
-`| undefined` where `undefined` is written) over a non-null assertion. A built-in
+`| undefined` where `undefined` is written) over a non-null assertion. Widen only a
+type the host writes: one the library also hands back, such as `ChartDataContext`,
+stays exact, since a host that forwards it into an exact type of its own would stop
+compiling; assert at the site that writes the `undefined` instead. A built-in
 drawing tool ends in `satisfies AnchoredTool<N>` (`src/draw/types.ts`), which hands its
 body the anchors the layer guarantees for `points: N`, so it reads them without one.
+Indicator maths reads series by index inside loops whose bounds hold the index, which
+no type can state; those reads carry `!`, with the bound said once per block.
 
 Write regression tests around observable behavior and realistic inputs. A bug test
 should fail against the original behavior; avoid assertions that merely repeat the
