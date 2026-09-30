@@ -9,10 +9,9 @@
  * it": a field that leaves the op stream untouched fails here.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import {
-  BUILTIN_DRAWING_TOOLS, RECTANGLE, TEXT,
-  registerBuiltinDrawingTools, registeredDrawingTools, drawingSettingsSchema,
-} from '../src/draw/tools';
+import { BUILTIN_DRAWING_TOOLS, RECTANGLE, registerBuiltinDrawingTools } from '../src/draw/tools';
+import { TEXT } from '../src/draw/annotation-tools';
+import { registeredDrawingTools, drawingSettingsSchema } from '../src/draw/registry';
 import {
   LINE_FIELDS, FILL_FIELDS, TEXT_FIELDS, LEVEL_FIELDS, EXTEND_FIELDS, FONT_FIELDS,
   SHAPE_TEXT_FIELDS, PLATE_TEXT_FIELDS, COLOR_FIELD,
@@ -20,6 +19,7 @@ import {
   type SettingsField, type SettingsSchema,
 } from '../src/draw/schema';
 import { RecordingContext } from './helpers/fake-ctx';
+import { darkTheme } from '../src/theme';
 import { projectAnchors } from '../src/draw/layer';
 import type { Drawing, DrawingPoint, DrawingTool, DrawContext, FibLevel } from '../src/draw/types';
 
@@ -29,7 +29,7 @@ beforeAll(() => { registerBuiltinDrawingTools(); });
 
 const RC = {
   plotWidth: 800, plotHeight: 400, dpr: 1, priceAxisWidth: 60,
-  theme: { background: '#0d0e12', lineColor: '#4f8cff' },
+  theme: { ...darkTheme, background: '#0d0e12', lineColor: '#4f8cff' },
   priceScale: { priceToY: (p: number) => 400 - p, format: (p: number) => p.toFixed(2) },
   timeScale: { indexToX: (i: number) => i },
   dataLayer: { timeToIndexFloat: (t: number) => t / 6 },

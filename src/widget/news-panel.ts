@@ -6,7 +6,7 @@
  * shows the markup rather than running it, and an article opens only through
  * an http or https link that cannot reach back into this page.
  */
-import type { InstrumentKey, NewsFeed, NewsItem } from 'openalgo-charts';
+import { DEFAULT_TIMEZONE, type InstrumentKey, type NewsFeed, type NewsItem } from 'openalgo-charts';
 import type { WidgetContext } from './context';
 import { button, el } from './form';
 import { widgetText } from './localization';
@@ -80,7 +80,7 @@ export function mountNewsPanel(ctx: WidgetContext, host: HTMLElement, options: N
   let snapshot: NewsSnapshot | null = null;
   let openId: string | null = null;
   const items = new Map<string, { li: HTMLElement; open: HTMLButtonElement; item: NewsItem }>();
-  const zone = (): string => { try { return ctx.chart.timezone(); } catch { return 'Asia/Kolkata'; } };
+  const zone = (): string => { try { return ctx.chart.timezone(); } catch { return DEFAULT_TIMEZONE; } };
   const formatter = (style: Intl.DateTimeFormatOptions): Intl.DateTimeFormat => {
     try { return new Intl.DateTimeFormat(ctx.locale, { timeZone: zone(), ...style }); }
     catch { return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...style }); }

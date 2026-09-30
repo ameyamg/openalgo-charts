@@ -13,8 +13,8 @@ import {
 } from '../src/draw/levels';
 import {
   FIB_RETRACEMENT, FIB_EXTENSION, FIB_CHANNEL, FIB_FAN, FIB_TIME_ZONE, GANN_FAN, GANN_BOX,
-  registerBuiltinDrawingTools,
-} from '../src/draw/tools';
+} from '../src/draw/fib-tools';
+import { registerBuiltinDrawingTools } from '../src/draw/tools';
 import { RecordingContext } from './helpers/fake-ctx';
 import type { Drawing, DrawingPoint, DrawingTool, DrawContext, FibLevel } from '../src/draw/types';
 

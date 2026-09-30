@@ -117,7 +117,9 @@ The lookup receives a second argument, `{ signal }`, which aborts once a newer
 query or a closed picker makes the answer stale; pass it to `fetch` so a
 superseded request is cancelled. A callback that takes only the query still
 works. A lookup that fails shows "Search unavailable" under the box, and Enter
-still commits the typed symbol. Existing results with
+still commits the typed symbol. While a search is still running, Enter waits for it
+rather than charting the half-typed text, in the top bar, the phone header, the
+watchlist's add box and the typing-navigation box alike (since 2.6.0). Existing results with
 `symbol`, `exchange`, and `name` still work. Add `assetClass` to expose category
 filters, `iconUrl` for a symbol image, and `contractGroup` for an explicit list of
 futures contracts. A contract's symbol and exchange come from your lookup; the
@@ -239,6 +241,13 @@ to English. `widgetText` exposes this resolver for custom panels, with typed
 parameters through `WidgetMessageParameters`. Generated field labels use
 `schema.settings.<fieldKey>.label`, `schema.indicator.<id>.<key>.label`,
 `schema.drawing.<toolId>.<path>.label` and `schema.alert.<key>.label`.
+
+Widget text has three kinds of key, and none is ever renamed. Most chrome uses its
+English words as the key (the `WidgetBuiltinMessage` union, so a typed catalog lists
+them). Descriptor metadata uses `schema.*`, and some chrome is keyed by where it sits,
+under `schema.ui.<area>.<key>` (the bottom bar, the watchlist, the symbol picker), with
+its English as the fallback your translator receives. The chart grid's words are their
+own union, `ChartGridMessage`, already part of `WidgetMessageKey`.
 
 Symbols, exchanges, interval codes, values, user alert/drawing text, search result
 names, object names, configured branding and engine/provider diagnostics remain
@@ -541,7 +550,7 @@ passes through to `createChart` unchanged.
 | `locale` | `string` | A BCP 47 tag the status line formats numbers with. |
 | `symbolSearch` | `(query, { signal }?) => SymbolMatch[] \| Promise<SymbolMatch[]>` | Called as the user types in the symbol box; the results open as a menu under it. Default (since 2.6.0): the feed's `searchSymbols`, when it has one. |
 | `lookbackBars` | `number` | Bars per load. Default 500. |
-| `now` | `() => number` | The clock for the load window and the capture filename. Default `Date.now`. |
+| `now` | `() => number` | The widget's wall clock in epoch milliseconds: the load window, the loading controller (unless `loading.now`, in UTC seconds, gives it its own), the status line and the bottom bar's clock and ranges. Default `Date.now`. Not the chart option of the same name, the monotonic clock of kinetic animation, which the widget does not pass on. |
 | `onOrder` | `(order: OrderRequest) => void` | Order entry from the right-click menu (`{ side, type, price, paneIndex }`). `price` is the pointer's price, not snapped to the instrument's tick or tick schedule: round it, for example with `validatePrice`, before sending. Without it the menu draws no trade rows. Limit and stop rows appear only over the price pane, where the pointer's price is the instrument's; a study pane offers the market rows alone. |
 | `movablePrimaryPane` | `boolean` | Off by default, as in the engine. Pass `true` to let a trader move the price pane below the studies; all of the widget's chrome follows it. Leave it off while your own code drives `widget.chart` with an explicit pane `0` for the price, or drop those zeros first. `createChartGrid` hands it to every chart it builds. See [Opting in](/docs/scales-and-panes#opting-in). |
 | `account` | `AccountStateSource` | The selected account's equity and margin in the status line, with a menu to switch account, usually a trade-tier `AccountManager`. A source whose provider declares no accounts shows disabled with the reason; omitted shows nothing. It reads and switches accounts only. See [Accounts and advanced orders](/docs/trading-accounts). |
@@ -645,6 +654,11 @@ narrow layout keeps its own selection bar.
 - **One step each.** Every change, to one drawing or twenty, is one Ctrl+Z.
 - **Policies.** A drawing its host made read-only shows the edit controls greyed with the
   reason.
+- **The same on every surface.** Lock, hide, the order moves and delete keep one set of
+  rules on the toolbar, the right-click menu, the properties dialog, the rail, the phone bar
+  and the keys (since 2.6.0): each press is one Ctrl+Z, lock and hide read the whole
+  selection, so a partly locked selection locks, and a selection whose every drawing is
+  locked is neither deleted nor cut, whichever way you ask.
 - **Keyboard.** Tab from the focused chart reaches the toolbar; the arrow keys, Home and End
   move between its controls, and Escape goes back to the chart with the selection kept.
 

@@ -1,4 +1,3 @@
-import { widgetText } from './localization';
 /**
  * The status line: one row under the chart with the engine's status-line
  * fields in HTML, so a host that turns the on-canvas legend off still has a
@@ -28,6 +27,7 @@ import { widgetText } from './localization';
  * last read left a grid cell nobody was hovering on the previous
  * instrument's prices after a symbol, interval or linked change.
  */
+import { widgetText } from './localization';
 import type { Bar, Chart, CrosshairMoveEvent } from 'openalgo-charts';
 import { formatZonedCrosshairLabel } from 'openalgo-charts';
 import { h, type WidgetContext } from './context';

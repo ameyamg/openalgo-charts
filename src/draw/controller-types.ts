@@ -168,7 +168,8 @@ export interface DrawingControllerOptions {
    * with a `timeKey` and `anchor: true`): a handle at the point the pair
    * names that drags both as one settings change and one step of this undo
    * history. Default true; false draws none, and the inputs are still edited
-   * in settings and picked with `Chart.beginPick('point')`.
+   * in settings and picked with `Chart.beginPick('point')`. Read when the
+   * controller is built: `setOptions` does not change it.
    */
   inputAnchors?: boolean;
   /**

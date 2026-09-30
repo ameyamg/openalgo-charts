@@ -75,6 +75,36 @@ export function renderIndicatorChips() {
   if (!chart.indicators().length) host.innerHTML = '<span style="color:var(--faint);font-size:12px">none</span>';
 }
 
+/**
+ * Why a study stopped drawing, in words that name it once, or null while it
+ * draws. Its calculation failed, or the chart refuses its inputs (a
+ * timeframe on Renko bricks); either way the error rides on its data status.
+ */
+function studyErrorText(inst) {
+  const status = inst.dataStatus?.();
+  if (status?.state !== 'error') return null;
+  const why = status.error instanceof Error && status.error.message ? status.error.message : 'its calculation failed';
+  return why.startsWith(`${inst.name}: `) ? why : `${inst.name}: ${why}`;
+}
+
+/**
+ * Say so when a study on `chart` stops drawing: the status line and a toast
+ * carry the reason once per new reason, not on every tick that fails again.
+ * Returns the call that stops listening.
+ */
+export function watchStudyStatus(chart) {
+  const said = new Map();
+  return chart.on('indicator:data-status', ({ id }) => {
+    const inst = chart.indicators().find((study) => study.id === id);
+    const message = inst ? studyErrorText(inst) : null;
+    if (message === null) { said.delete(id); return; }
+    if (said.get(id) === message) return;
+    said.set(id, message);
+    el('status').textContent = message;
+    toast('error', message);
+  });
+}
+
 // A study whose defaults cannot know the loaded history takes its first
 // settings from it: an anchor starts where the user can see and grab it.
 const SEEDS = { 'anchored-growth-sample': anchoredGrowthSeed };

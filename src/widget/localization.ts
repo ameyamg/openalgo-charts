@@ -1,19 +1,16 @@
-// Hook (chart grid, 2.5.10): the grid keeps its messages beside it in grid-text.ts.
+// The grid keeps its messages beside it, in grid-text.ts, and the catalog takes them in here.
 import type { ChartGridMessage } from './grid-text';
 
 /** English source keys keep fallback messages available without a locale bundle. */
 export type WidgetBuiltinMessage =
   | ChartGridMessage
   | "Only loaded rows are exported. Blank bounds include all loaded times."
-  | "From (UTC seconds)"
-  | "To (UTC seconds)"
   | "Study alignment"
   | "Source rows"
   | "Displayed rows"
   | "Use captured visible range"
   | "All loaded rows"
   | "Download CSV"
-  | "Enter finite UTC seconds or leave the bound blank"
   | "The From bound must be before or equal to the To bound"
   | "Enable panning"
   | "Enable zooming"
@@ -135,6 +132,12 @@ export type WidgetBuiltinMessage =
   | "Could not focus {name}"
   | "Could not load"
   | "{name} could not load: {error}"
+  | "{name}: {error}"
+  | "Event details"
+  | "Events"
+  | "Loading details..."
+  | "No additional details."
+  | "Unable to load additional details."
   | "Could not load older history"
   | "Could not load {symbol} {interval}"
   | "Could not load {symbol} {interval}: {error}"
@@ -206,6 +209,11 @@ export type WidgetBuiltinMessage =
   | "Click for strong: every anchor lands on the nearest O/H/L/C"
   | "Ratio"
   | "Remove level"
+  // The chart data dialog's bounds in UTC seconds, which it asks for on the
+  // chart clock since 2.6.0.
+  | "From (UTC seconds)"
+  | "To (UTC seconds)"
+  | "Enter finite UTC seconds or leave the bound blank"
   | "Enter an expiry date and time"
   | "Every match"
   | "Expired"
@@ -372,7 +380,7 @@ export type WidgetBuiltinMessage =
   | "The indicator picker is not in this build"
   | "The instrument context changed. Reopen the editor for the intended instrument."
   | "The saved layout could not be restored: {error}"
-  // Hook (widget storage, 2.5.10): an asynchronous store that failed to read or write.
+  // An asynchronous store that failed to read or write.
   | "Saved chart settings could not be read, so changes are kept for this session only: {error}"
   | "Saved chart settings could not be written: {error}"
   | "The scale could not be moved"
@@ -524,7 +532,21 @@ export type WidgetBuiltinMessage =
   | "{count} chart shortcut struck through: the same chord arms a drawing tool here and takes precedence."
   | "{count} chart shortcuts struck through: the same chord arms a drawing tool here and takes precedence.";
 
-/** Schema keys name descriptor metadata, never saved user values. */
+/**
+ * Every key a translator is asked for. Widget text is keyed three ways, and
+ * no published key is ever renamed:
+ *
+ * - The English source in `WidgetBuiltinMessage`, typed, for new chrome text.
+ * - `schema.*`: descriptor metadata (a settings field's label, a study input,
+ *   a drawing tool's name, a chart type), and under `schema.ui.<area>.<key>`
+ *   chrome keyed by where it sits (the bottom bar, the watchlist, the symbol
+ *   picker), with its English passed as the fallback. A surface already keyed
+ *   there keeps adding its words there, so its catalog entries stay together.
+ * - A feature's own typed union joined into the English one
+ *   (`ChartGridMessage`), for a feature that keeps its words beside it.
+ *
+ * None of them carries saved user values: symbols, names and user text stay literal.
+ */
 export type WidgetMessageKey = WidgetBuiltinMessage | `schema.${string}`;
 export type WidgetMessageValues = Readonly<Record<string, string | number>>;
 

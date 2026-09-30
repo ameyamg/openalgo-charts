@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { Chart, registerIndicator, type Bar, type DataFeed, type BarsRequest } from '../src/index';
+import { Chart, IndicatorInputError, registerIndicator, type Bar, type DataFeed, type BarsRequest } from '../src/index';
 import { createTier2Indicator } from '../src/indicators/external';
 import { createWidget, type Widget, type WidgetOptions } from '../src/widget/widget';
 import { ensureWindowGlobal, fakeContainer, fakeWidgetDocument, fire, fireKey, type FakeElement } from './helpers/fake-dom-widget';
@@ -119,6 +119,37 @@ describe('widget managed data loading', () => {
     expect(status.hidden).toBe(true);
     widget.chart.removeIndicator(indicator.id);
     expect(widget.chart.panes()).toHaveLength(1);
+  });
+
+  it('says why a study its inputs refuse is off, with no Retry that cannot help', async () => {
+    registerIndicator({
+      id: 'widget-refused-study', name: 'Session fold', placement: 'onchart',
+      inputs: [{ key: 'mode', type: 'select', label: 'Mode', default: 'plain', options: [{ value: 'plain', label: 'Plain' }, { value: 'fold', label: 'Fold' }, { value: 'broken', label: 'Broken' }] }],
+      plots: [{ key: 'v', title: 'Value', type: 'line' }],
+      calc: (bars, settings) => {
+        if (settings.mode === 'fold') throw new IndicatorInputError('Session fold: this chart draws transformed bars, which cannot be folded');
+        if (settings.mode === 'broken') throw new Error('division by zero');
+        return { v: bars.map(b => b.close) };
+      },
+    });
+    const { widget, root } = make();
+    widget.series.setData(Array.from({ length: 30 }, (_, i) => bar(i * 60, 10 + (i % 7) * 0.5)));
+    const study = widget.chart.addIndicator('widget-refused-study');
+    const status = root.querySelector('.oac-data-status')!;
+    study.setSettings({ mode: 'fold' });
+    await flush();
+    expect(study.dataStatus()?.state).toBe('error');
+    // The refusal names the study once, and a retry would be refused the same way.
+    expect(status.textContent).toBe('Session fold: this chart draws transformed bars, which cannot be folded');
+    expect(status.querySelector('button')).toBeNull();
+    // Any other failure keeps the words and the retry it had.
+    study.setSettings({ mode: 'broken' });
+    await flush();
+    expect(status.textContent).toContain('Session fold: Could not load');
+    expect(status.querySelector('button')?.getAttribute('aria-label')).toBe('Retry Session fold');
+    study.setSettings({ mode: 'plain' });
+    await flush();
+    expect(status.hidden).toBe(true);
   });
 
   it('holds replay bars while the managed store continues receiving live data', async () => {

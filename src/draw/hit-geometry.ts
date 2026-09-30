@@ -13,7 +13,7 @@
  */
 import type { PrimitiveRenderContext } from 'openalgo-charts';
 import type { Drawing, DrawingTool, HitContext, ScreenPoint } from './types';
-import { getDrawingTool, hasDrawingTool } from './tools';
+import { getDrawingTool, hasDrawingTool } from './registry';
 import { projectAnchors } from './layer';
 import { anchorCount } from './viewport';
 import type { GestureBox } from './gesture-layer';

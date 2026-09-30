@@ -6,7 +6,11 @@ import '../src/indicators/index';
 
 const widgets: Widget[] = [];
 const downloads: Blob[] = [];
-const rows = [1, 3, 5, 7].map((close, index) => ({ time: -0.25 + index * 0.125, open: close, high: close + 1, low: close - 1, close }));
+// Four one-minute bars from 09:15 IST on 28 September 2026: the dialog's
+// bounds are typed on the chart's clock, which is IST by default.
+const T0 = Date.UTC(2026, 8, 28, 3, 45) / 1000;
+const rows = [1, 3, 5, 7].map((close, index) => ({ time: T0 + index * 60, open: close, high: close + 1, low: close - 1, close }));
+const at = (index: number): number => T0 + index * 60;
 beforeEach(() => {
   ensureWindowGlobal();
   downloads.length = 0;
@@ -72,17 +76,27 @@ describe('widget chart data download options', () => {
     expect(labels).toEqual([`${host.name} (3)`, `${first.name} (1)`, `${second.name} (2)`, lone.name]);
   });
 
-  it('downloads only captured checked IDs and custom inclusive UTC bounds after full warmup', async () => {
+  it('asks for the bounds as dates and times on the chart clock, not as epoch seconds', () => {
+    const { root } = make(); const dialog = open(root);
+    for (const key of ['from', 'to']) expect(field(dialog, key).type).toBe('datetime-local');
+    expect(dialog.querySelector('[data-key="from"] label')!.textContent).toBe('From');
+    expect(dialog.querySelector('[data-key="to"] label')!.textContent).toBe('To');
+    expect(dialog.textContent).toContain('Times are on the chart clock, Asia/Kolkata.');
+    expect(dialog.textContent).not.toContain('UTC seconds');
+  });
+
+  it('downloads only captured checked IDs and custom inclusive bounds after full warmup', async () => {
     const { widget, root } = make();
     const first = widget.chart.addIndicator('sma', { length: 1 });
     const second = widget.chart.addIndicator('sma', { length: 3 });
     const dialog = open(root);
     field(dialog, 'study-0').checked = false;
-    edit(dialog, 'from', '0'); edit(dialog, 'to', '0.125');
+    // A To written to the minute takes in every bar that opens inside it.
+    edit(dialog, 'from', '2026-09-28T09:17'); edit(dialog, 'to', '2026-09-28T09:18');
     widget.chart.addIndicator('ema', { length: 1 });
     action(dialog, 'download-csv').click();
     expect(downloads).toHaveLength(1);
-    expect(await downloads[0].text()).toBe(`time,open,high,low,close,volume,oi,indicator:${second.id}:ma\r\n0,5,6,4,5,,,3\r\n0.125,7,8,6,7,,,5\r\n`);
+    expect(await downloads[0].text()).toBe(`time,open,high,low,close,volume,oi,indicator:${second.id}:ma\r\n${at(2)},5,6,4,5,,,3\r\n${at(3)},7,8,6,7,,,5\r\n`);
     expect(await downloads[0].text()).not.toContain(first.id);
     expect(root.querySelector('.oac-csv')).toBeNull();
   });
@@ -96,8 +110,8 @@ describe('widget chart data download options', () => {
     const dialog = open(root);
     widget.chart.fitContent();
     action(dialog, 'csv-visible').click();
-    expect(field(dialog, 'from').value).toBe('-0.125');
-    expect(field(dialog, 'to').value).toBe('0');
+    expect(field(dialog, 'from').value).toBe('2026-09-28T09:16:00');
+    expect(field(dialog, 'to').value).toBe('2026-09-28T09:17:00');
     action(dialog, 'csv-all').click();
     expect(field(dialog, 'from').value).toBe('');
     expect(field(dialog, 'to').value).toBe('');
@@ -105,7 +119,7 @@ describe('widget chart data download options', () => {
     expect((await downloads[0].text()).trim().split('\r\n')).toHaveLength(5);
   });
 
-  it.each(['bad', 'Infinity', '1e309'])('retains invalid UTC draft %s without downloading', draft => {
+  it.each(['bad', '2026-02-30T09:15', '2026-09-28T25:00', String(T0)])('retains the invalid draft %s without downloading', draft => {
     const { root } = make(); const dialog = open(root);
     edit(dialog, 'from', draft); action(dialog, 'download-csv').click();
     expect(field(dialog, 'from').value).toBe(draft);
@@ -116,10 +130,10 @@ describe('widget chart data download options', () => {
 
   it('rejects reversed bounds and allows a corrected draft', async () => {
     const { root } = make(); const dialog = open(root);
-    edit(dialog, 'from', '2'); edit(dialog, 'to', '1'); action(dialog, 'download-csv').click();
+    edit(dialog, 'from', '2026-09-28T09:18'); edit(dialog, 'to', '2026-09-28T09:17'); action(dialog, 'download-csv').click();
     expect(downloads).toHaveLength(0);
     expect(dialog.querySelector('.oac-csv__error')?.textContent).toMatch(/before|range|bound/i);
-    edit(dialog, 'from', '-0.25'); edit(dialog, 'to', '-0.25'); action(dialog, 'download-csv').click();
+    edit(dialog, 'from', '2026-09-28T09:15'); edit(dialog, 'to', '2026-09-28T09:15'); action(dialog, 'download-csv').click();
     expect((await downloads[0].text()).trim().split('\r\n')).toHaveLength(2);
   });
 
@@ -188,8 +202,8 @@ describe('widget chart data download options', () => {
     select.value = 'display'; fire(select, 'change'); action(dialog, 'download-csv').click();
     const csv = await downloads[0].text();
     expect(csv).toBe(`time,logical_index,time_origin,open,high,low,close,volume,oi,indicator:${study.id}:ma\r\n`
-      + '-0.25,0,axis,1,2,0,1,,,\r\n-0.125,1,axis,3,4,2,3,,,1\r\n0,2,axis,5,6,4,5,,,3\r\n'
-      + '0.125,3,projected,,,,,,,5\r\n');
+      + `${at(0)},0,axis,1,2,0,1,,,\r\n${at(1)},1,axis,3,4,2,3,,,1\r\n${at(2)},2,axis,5,6,4,5,,,3\r\n`
+      + `${at(3)},3,projected,,,,,,,5\r\n`);
     // The offset projects an accepted value; the unrevealed source row is absent.
     expect(csv).not.toContain(',7,8,6,7,'); replay.stop();
   });

@@ -20,7 +20,10 @@ chart's current timezone and widget locale. Event data is supplied through
 Symbol changes, replaced events and widget disposal close the popup and cancel
 pending detail loading. (unreleased) Details may carry rich `blocks`, rendered as
 text with vetted links, and `eventDetails.actions` adds host buttons (the type is
-`EventDetailAction`). See the timeline section in `primitives-and-plugins.md`.
+`EventDetailAction`). (unreleased) The widget's popup takes its words from the widget's
+`translate` (message keys `Event details`, `Close`, `Events`, `Loading details...`,
+`No additional details.`, `Unable to load additional details.`); `eventDetails.labels`
+still wins, one label at a time. See the timeline section in `primitives-and-plugins.md`.
 
 ```ts
 import { createWidget } from 'openalgo-charts/widget';
@@ -157,7 +160,7 @@ The sprite is injected once per document on the body (`id="oac-rail-sprite"`), s
 | Export | Kind | Purpose |
 |---|---|---|
 | `mountTopbar(ctx, host, opts)` | function | Symbol box with search, interval pills, chart type menu, Indicators, Go to (with `onGoTo`), Objects, capture, settings, theme. Returns a `TopbarHandle` (`refresh`, `destroy`). |
-| `openMenu(ctx, anchor, rows, opts?)` | function | A popover menu under `anchor`, with an optional filter box; the chart type menu and the symbol results share it. A row's optional `icon` (a chrome icon id, since 2.5.10) draws that glyph before its label; once one row has one, every row keeps the column, and an id the registry does not carry leaves the slot empty. Returns the closer. |
+| `openMenu(ctx, anchor, rows, opts?)` | function | A popover menu under `anchor`, with an optional filter box; the chart type menu and the symbol results share it. A row's optional `icon` (a chrome icon id, since 2.5.10) draws that glyph before its label; once one row has one, every row keeps the column, and an id the registry does not carry leaves the slot empty. (unreleased) `opts.placement: 'beside'` opens it beside the anchor instead, clearing `opts.edge` too (the rail's right-click menus use it). The first parameter needs only `document`, `openOverlay` and `translate`, so a bottom bar context serves. Returns the closer. |
 | `chartTypeChoices()` | function | The registered chart types a user can pick for the instrument (the registry minus histogram-family internals), then (unreleased) every transform the chart applies, point and figure and Kagi listed once, there. |
 | `chartTypeLabel(id)` | function | A label from `CHART_TYPE_LABELS`, else the id. |
 | `CHART_TYPE_LABELS` | const | Labels for the built-in chart types. |
@@ -165,7 +168,7 @@ The sprite is injected once per document on the body (`id="oac-rail-sprite"`), s
 | `downloadText(doc, filename, text, mime)` | function | Hand text to the browser as a file; false when the runtime cannot. |
 | `captureName(symbol, interval, now?)` | function | `SYMBOL-5m-2026-01-31-09-15`, filename-safe. |
 | `SEARCH_DEBOUNCE_MS` | const `150` | Quiet before `symbolSearch` runs. |
-| `TopbarOptions`, `TopbarHandle`, `TopbarState`, `SymbolMatch`, `SymbolSearch`, `MenuRow`, `MenuOptions` | types | (unreleased) `SymbolMatch` is the base package's type, re-exported. The results panel keeps focus in its field while a row is pressed, and a failed lookup shows "Search unavailable" (`schema.ui.symbolSearchFailed`) with typed entry still committing. |
+| `TopbarOptions`, `TopbarHandle`, `TopbarState`, `SymbolMatch`, `SymbolSearch`, `MenuRow`, `MenuOptions` | types | (unreleased) `SymbolMatch` is the base package's type, re-exported. The results panel keeps focus in its field while a row is pressed, and a failed lookup shows "Search unavailable" (`schema.ui.symbolSearchFailed`) with typed entry still committing. (unreleased) Enter in the top bar, the phone header and the watchlist's add box waits for a search that is still running (its debounce or the host lookup), as the typing-navigation box already did, so it picks the result the user was about to see; typed text commits once a search finishes without matches or fails (`SymbolPickerHandle.canCommitRaw`). |
 
 The Capture menu includes **Download chart data (CSV)**, using the base
 `exportChartDataCsv` API. It captures source identity when opened and refuses a
@@ -173,6 +176,10 @@ changed, empty or loading source. The widget supplies source readiness; custom
 `mountTopbar` hosts can supply `TopbarOptions.dataAvailable()` for their own loading
 boundary. Active replay exports only installed rows. File failures surface in
 the status line and download resources are released after handoff or failure.
+(unreleased) The dialog asks for its From and To bounds as a date and a time on
+the chart's clock (the chart's timezone, named under the fields), not as UTC
+seconds; a To written to the minute takes in every bar that opens inside it, and
+the captured visible range fills both to the second.
 
 ### The bottom bar (`bottombar.ts`, `ranges.ts`) (since 2.5.10)
 
@@ -203,7 +210,7 @@ the status line and download resources are released after handoff or failure.
 | `applyTokens(el, tokens)` | function | Write a token set inline on an element. |
 | `themeMode(theme)` | function | `'dark'` or `'light'`, judged from the theme background. |
 | `token(name)` | function | `var(--oac-name)`. |
-| `parseColor(input)`, `formatColor(c)`, `luminance(color)`, `mix(a, b, t)`, `withAlpha(color, alpha)` | functions | The colour maths the tokens are built from; exported for a host deriving its own. |
+| `parseColor(input)`, `formatColor(c)`, `luminance(color)`, `mix(a, b, t)`, `withAlpha(color, alpha)` | functions | The colour maths the tokens are built from; exported for a host deriving its own. This `withAlpha` is not the base package's: it writes a CSS token value, `#rrggbb` when the result is opaque and `rgba()` otherwise, with the alpha clamped to 0..1, where the base one always writes `rgba(r,g,b,a)` with the alpha as given, for canvas. Use this one for chrome styles and the base one for anything the chart paints; alias one when a module imports both. |
 | `contrastRatio(a, b)`, `readableOn(color, surfaces, pole, min?)`, `TEXT_CONTRAST` | functions, const `4.5` | (since 2.5.9) The WCAG ratio of two colours, and a colour stepped toward `pole` by the least amount that reads at `min` on every one of `surfaces`. The text tokens (`mut`, `faint`, `up`, `down`, `amber`, `danger`) are built with it, so they read at 4.5 to 1 in both built-in themes and in a host theme. |
 | `TOKEN_PREFIX` | const `'--oac-'` | |
 | `WIDGET_FONT`, `WIDGET_MONO` | consts | The UI and monospace font stacks. |
@@ -341,7 +348,7 @@ Color swatches stay compact. Theme overrides should target these tokens.
 | `locale` | `string` | the runtime's | BCP 47 tag for the numbers on the status line. |
 | `symbolSearch` | `(query, { signal }?) => SymbolMatch[] \| Promise<SymbolMatch[]>` | the feed's `searchSymbols`, when it has one (unreleased); else none | Called as the user types in the symbol box, after `SEARCH_DEBOUNCE_MS`. (unreleased) The second argument's `signal` aborts once a newer query or a closed picker makes the answer stale; a one-argument callback still works. Without a callback, a feed with `searchSymbols` (both OpenAlgo feeds) serves every picker: the top bar, the phone layout, typed entry, the watchlist and study symbol inputs. That lookup lists the exact symbol on the chart's exchange first, because Enter takes the first result. |
 | `lookbackBars` | `number` | `DEFAULT_LOOKBACK_BARS` | Bars per load. |
-| `now` | `() => number` | `Date.now` | Clock for the load window and the capture filename. |
+| `now` | `() => number` | `Date.now` | The widget's wall clock in epoch milliseconds: the load window, the loading controller (unless `loading.now`, in UTC seconds, gives it its own), the status line and the bottom bar's clock and ranges. It shadows `ChartOptions.now`, the monotonic animation clock, which the widget does not pass to its chart. |
 | `onOrder` | `(order: OrderRequest) => void` | none | Order entry from the right-click menu. Without it the menu draws no trade rows. |
 | `movablePrimaryPane` | `boolean` | `false`, as in the engine | Pass `true` to let a trader move the price pane below its studies; the widget's own chrome (pane menu, status line, alerts, Objects panel) follows it wherever it sits. Leave it off while host code drives `widget.chart` with an explicit pane `0` for the price, or drop those zeros first. `createChartGrid` hands it to every chart it builds. See [scales-and-panes](scales-and-panes.md#moving-the-price-pane-opt-in). |
 | `account` | `AccountStateSource` | none | Account summary in the status line (see `mountAccountSummary`). Omitted shows nothing; a source whose provider declares no accounts shows disabled with the reason. Hidden with the status line (`statusline: false`, and the compact mobile controls, which hide the status line). It only reads and switches accounts. |
@@ -1095,7 +1102,10 @@ widget.openNews();
   reorders in list order with the revision it was computed from, one move at a time so
   a held key lands every step; ArrowUp/Down moves between rows.
 - Rows take prices only from `quotes`. Without it every row is `unavailable` and shows
-  `n/a`. Row `data-state` is a `QuoteRowStatus`: `loading`, `live`, `delayed`,
+  `n/a`. (unreleased) That word, the `...` of a loading row and the name a row and a
+  message give an instrument (`{symbol} on {exchange}`) translate through
+  `schema.ui.watchlist.noQuote`, `schema.ui.watchlist.quoteLoading` and
+  `schema.ui.watchlist.entry`. Row `data-state` is a `QuoteRowStatus`: `loading`, `live`, `delayed`,
   `snapshot`, `stale`, `unavailable`, `error`; the status line reads the
   `QuoteBoardStatus`, and warns that values are stale only when one is on screen. The
   board holds one timer, for the next visible snapshot to age past `staleAfterMs`; a
@@ -1254,6 +1264,11 @@ while a tool is placing, while a drawing is dragged (`draw:preview`), in the nar
 - A selection with nothing the user may edit (`policy.editable: false`) shows its edit
   controls disabled with "(read-only)" in the title. Delete is also disabled when every
   selected drawing is locked, as in the context menu.
+- (unreleased) The toolbar, the context menu, the properties dialog, the rail, the phone bar
+  and the Delete, Backspace and cut keys share these rules (`drawing-actions.ts`): each
+  press is one history step; lock and hide read every drawing the user may edit, on when
+  every one is, so a partly locked selection locks; a selection whose every drawing is
+  locked is neither deleted nor cut; the order moves and duplicate reach every drawing.
 - Keyboard: it follows the chart in the tab order, so Tab from the focused chart reaches it,
   with one tab stop. Inside it, the arrow keys (with or without Shift), Home and End move
   between controls, and Escape goes back to the chart with the selection kept. Its key scope,

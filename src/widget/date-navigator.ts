@@ -49,8 +49,12 @@ export type HistoryReach = 'loaded' | 'empty' | 'exhausted' | 'limited' | 'unava
 /**
  * `placed`: the request is in view. `partial`: something is in view, but
  * history stops after the requested start or the range is wider than the
- * chart. `no-data`: nothing to show, the view is unchanged. `cancelled`: a
- * newer request, a context change or destruction took over.
+ * chart. `no-data`: nothing to show, the view is unchanged. `unsupported`:
+ * the interval has no time buckets (tick or volume bars), so it has no dates
+ * to go to. `invalid`: `from` or `to` is not a finite time, `to` is before
+ * `from`, or (from `setRange`) the range id is not one the widget has.
+ * `cancelled`: a newer request, a context change or destruction took over.
+ * `error`: the history loader failed; the result's `error` says how.
  */
 export type DateNavigationStatus = 'placed' | 'partial' | 'no-data' | 'unsupported' | 'invalid' | 'cancelled' | 'error';
 

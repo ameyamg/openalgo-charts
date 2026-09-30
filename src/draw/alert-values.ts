@@ -1,6 +1,6 @@
 import type { AlertDrawingLevel, AlertDrawingValue } from 'openalgo-charts';
 import type { AtLeast, Drawing, DrawingValueContext, FibLevel, ScreenPoint } from './types';
-import { formatRatio } from './levels';
+import { activeLevels, formatRatio } from './levels';
 
 type Value = Omit<AlertDrawingValue, 'paneIndex'>;
 
@@ -67,12 +67,8 @@ export function channelAlertValue(kind: 'parallel' | 'disjoint' | 'flat'): (c: D
   };
 }
 
-function active(drawing: Drawing, fallback: readonly FibLevel[]): readonly FibLevel[] {
-  return (drawing.style.levels ?? fallback).filter(level => level.enabled !== false && Number.isFinite(level.ratio));
-}
-
 export function fibAlertLevels(fallback: readonly FibLevel[]): (drawing: Drawing) => readonly AlertDrawingLevel[] {
-  return drawing => [...new Map(active(drawing, fallback).map(level => {
+  return drawing => [...new Map(activeLevels(drawing.style.levels, fallback).map(level => {
     const id = `ratio:${level.ratio}`;
     return [id, { id, title: level.label ?? formatRatio(level.ratio) }];
   })).values()];
@@ -80,7 +76,7 @@ export function fibAlertLevels(fallback: readonly FibLevel[]): (drawing: Drawing
 
 export function fibAlertValue(anchors: 2 | 3 | 'channel', fallback: readonly FibLevel[]): (c: DrawingValueContext, level?: string) => Value | undefined {
   return (c, level) => {
-    const rung = active(c.drawing, fallback).find(item => `ratio:${item.ratio}` === level);
+    const rung = activeLevels(c.drawing.style.levels, fallback).find(item => `ratio:${item.ratio}` === level);
     if (!rung || c.pts.length < (anchors === 2 ? 2 : 3)) return undefined;
     const [a, b, w] = c.pts as AtLeast<ScreenPoint, 2>;
     const left = c.drawing.style.extendLeft === true, right = c.drawing.style.extendRight === true;

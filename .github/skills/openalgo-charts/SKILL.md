@@ -46,7 +46,7 @@ Eight layers, in dependency order. Most bugs come from confusing one for another
 5. **Series** - `chart.addSeries(type, options)` returns a `SeriesApi`. The type names an entry in the chart-type **registry**; the core never switches on type.
 6. **Registries** - chart types, indicators, and drawing tools are all descriptors in a Map. Adding one is a registration, never a core change.
 7. **Primitives** - the extension point. Anything that draws but is not a series: price lines, markers, legends, profiles, trading pills, drawings.
-8. **Tiers** - `indicators`, `draw`, `transform`, `profile`, `trade`, `webgl` are separate bundles that register into the base engine's registries on import; `widget` sits above them all and is the one tier that builds DOM.
+8. **Tiers** - `indicators`, `draw`, `transform`, `profile`, `trade`, `webgl` are separate bundles that register what they add on import (the draw tier into its own tool registry, the others into the base engine's registries); `widget` sits above them all and is the one tier that builds DOM.
 
 ## Install and tiers
 

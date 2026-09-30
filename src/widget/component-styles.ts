@@ -15,7 +15,7 @@ import { ACCOUNT_SUMMARY_CSS } from './account-summary';
 import { DRAWING_TOOLBAR_CSS } from './drawing-toolbar';
 import { DRAWING_TEMPLATES_CSS } from './drawing-templates';
 import { DRAWING_COORDINATES_CSS } from './dialogs/drawing-coordinates';
-// Bottom bar hook: its rules ride the shared sheet, so a custom host's bar is styled under CSP too.
+// The bottom bar's rules ride the shared sheet, so a custom host's bar is styled under CSP too.
 import { BOTTOMBAR_CSS } from './bottombar';
 import { LAYOUTS_BUTTON_CSS } from './layouts-widget';
 

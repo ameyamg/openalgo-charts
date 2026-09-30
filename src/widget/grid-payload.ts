@@ -7,7 +7,7 @@
  * data in and plain data out.
  */
 import { isKnownInterval, registeredIndicators } from 'openalgo-charts';
-import { isChartTypeChoice } from './topbar';
+import { isChartTypeChoice } from './chart-type-choice';
 import type { DrawingDocumentStore, DrawingsDocument } from 'openalgo-charts/draw';
 import type { WorkspacePayload } from 'openalgo-charts/workspace';
 import { checkLinks } from './grid-links';

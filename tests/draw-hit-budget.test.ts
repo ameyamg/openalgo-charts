@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { DrawingLayer } from '../src/draw/layer';
-import { registerDrawingTool } from '../src/draw/tools';
+import { registerDrawingTool } from '../src/draw/registry';
 import type { PrimitiveRenderContext } from '../src/primitives/primitive';
 
 const rc = { plotWidth: 800, plotHeight: 500,

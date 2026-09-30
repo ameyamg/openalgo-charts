@@ -26,18 +26,22 @@
  * drawings in place and hands the list over again.
  */
 import type { PrimitiveRenderContext } from 'openalgo-charts';
-import type { AtLeast, Drawing, DrawingTool, FibLevel, ScreenPoint } from './types';
+import type { AtLeast, Drawing, DrawingTool, ScreenPoint } from './types';
 import { extendSegment } from './geometry';
-import { DEFAULT_FIB, DEFAULT_FIB_FAN, DEFAULT_FIB_TIME_ZONE, DEFAULT_GANN_FAN } from './levels';
+import { activeLevels, DEFAULT_FIB, DEFAULT_FIB_FAN, DEFAULT_FIB_TIME_ZONE, DEFAULT_GANN_FAN } from './levels';
+import { getDrawingTool, hasDrawingTool } from './registry';
 import {
-  getDrawingTool, hasDrawingTool,
   TREND_LINE, RAY, EXTENDED_LINE, ARROW, HORIZONTAL_LINE, HORIZONTAL_RAY, VERTICAL_LINE,
-  RECTANGLE, ELLIPSE, PARALLEL_CHANNEL, FIB_RETRACEMENT, FIB_EXTENSION, MEASURE, LONG_POSITION, SHORT_POSITION,
-  TEXT, TABLE, PATH, BRUSH, POLYLINE, TRIANGLE, CURVE, ARC, DOUBLE_CURVE, ROTATED_RECTANGLE, CIRCLE,
-  PRICE_RANGE, DATE_RANGE, FORECAST, GANN_BOX, HIGHLIGHTER, CYCLIC_LINES, TIME_CYCLES, SINE_LINE,
-  FIB_TIME_ZONE, FIB_FAN, GANN_FAN, FIB_CHANNEL, PRICE_LABEL, CALLOUT, FLAG_MARK,
-  ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, NOTE, BALLOON, COMMENT, SIGNPOST, PRICE_NOTE,
+  RECTANGLE, ELLIPSE, PARALLEL_CHANNEL,
+  PATH, BRUSH, POLYLINE, TRIANGLE, CURVE, ARC, DOUBLE_CURVE, ROTATED_RECTANGLE, CIRCLE,
+  HIGHLIGHTER, CYCLIC_LINES, TIME_CYCLES, SINE_LINE,
 } from './tools';
+import { FIB_RETRACEMENT, FIB_EXTENSION, GANN_BOX, FIB_TIME_ZONE, FIB_FAN, GANN_FAN, FIB_CHANNEL } from './fib-tools';
+import { MEASURE, LONG_POSITION, SHORT_POSITION, PRICE_RANGE, DATE_RANGE, FORECAST } from './measure-tools';
+import {
+  annotationBox, TEXT, TABLE, PRICE_LABEL, CALLOUT, FLAG_MARK,
+  ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, NOTE, BALLOON, COMMENT, SIGNPOST, PRICE_NOTE,
+} from './annotation-tools';
 import { PATTERN_DRAWING_TOOLS } from './pattern-tools';
 
 /** A hit box in media px relative to the plot, edges inclusive. */
@@ -81,10 +85,6 @@ const join = (a: HitBox, b: HitBox): HitBox => ({
 type BoxOf<N extends number = 1> = { of(pts: Pts<N>, d: Drawing, rc: PrimitiveRenderContext, grab: number): HitBox }['of'];
 type Pts<N extends number> = AtLeast<ScreenPoint, N>;
 
-/** The levels a ladder tool hit-tests: the same filter its `distance` runs. */
-const levelsOf = (own: readonly FibLevel[] | undefined, fallback: readonly FibLevel[]): FibLevel[] =>
-  (own ?? fallback).filter((l) => l.enabled !== false && Number.isFinite(l.ratio));
-
 /** Segments, polylines, closed shapes and curves inside the hull of their anchors. */
 const around: BoxOf = (pts, _d, _rc, grab) => spanOf(pts, grab);
 
@@ -114,7 +114,7 @@ const fib = (anchors: 2 | 3): BoxOf<2> => (pts, d, rc, grab) => {
   const x0 = d.style.extendLeft === true ? 0 : Math.min(xa, xb);
   const x1 = d.style.extendRight === true ? rc.plotWidth : Math.max(xa, xb);
   let y0 = Infinity, y1 = -Infinity;
-  for (const lv of levelsOf(d.style.levels, DEFAULT_FIB)) {
+  for (const lv of activeLevels(d.style.levels, DEFAULT_FIB)) {
     const y = rc.priceScale.priceToY(from + span * lv.ratio);
     y0 = Math.min(y0, y); y1 = Math.max(y1, y);
   }
@@ -152,20 +152,11 @@ const mark = (dx0: number, dy0: number, dx1: number, dy1: number): BoxOf => (pts
 };
 
 /**
- * The plate annotations (note, balloon, comment, signpost, price note): a
- * plate at most 120 px wide, placed left, right, above or below the anchor,
- * plus the anchor dot and the signpost's post. The plate's height follows the
- * font size and the lines; one box that holds every placement costs a few
- * spare pixels and restates no tool's layout.
+ * The annotations grabbed on a plate or a bubble measured from their text
+ * (the plate notes, the price label, the callout's bubble): the box comes from
+ * annotation-tools.ts, off the plate their own hit test measures.
  */
-const plate: BoxOf = (pts, d) => {
-  const value = d.text?.value;
-  if (value !== undefined && typeof value !== 'string') return EVERYWHERE;
-  const lines = (value === undefined || value === '' ? 1 : value.split('\n').length) + 1;
-  const h = Math.abs(d.text?.fontSize ?? 12) * 1.45 * lines + 10;
-  const p = pts[0];
-  return { x0: p.x - 60, y0: p.y - 34 - h, x1: p.x + 136, y1: p.y + 8 + h };
-};
+const annotated = (tool: DrawingTool): BoxOf => (pts, d, rc) => annotationBox(tool, pts, d, rc) ?? EVERYWHERE;
 
 const BOXES = new Map<DrawingTool, BoxOf>([
   [TREND_LINE, line(false, false)], [RAY, line(false, true)], [EXTENDED_LINE, line(true, true)],
@@ -225,24 +216,24 @@ const BOXES = new Map<DrawingTool, BoxOf>([
   }],
   [FIB_TIME_ZONE, (pts: Pts<2>, d, _rc, g) => {
     const [a, b] = pts;
-    const xs = levelsOf(d.style.levels, DEFAULT_FIB_TIME_ZONE).map((lv) => ({ x: a.x + (b.x - a.x) * lv.ratio, y: 0 }));
+    const xs = activeLevels(d.style.levels, DEFAULT_FIB_TIME_ZONE).map((lv) => ({ x: a.x + (b.x - a.x) * lv.ratio, y: 0 }));
     const r = spanOf(xs, g);
     return { x0: r.x0, y0: xs.length === 0 ? Infinity : -Infinity, x1: r.x1, y1: xs.length === 0 ? -Infinity : Infinity };
   }],
   [FIB_FAN, (pts: Pts<2>, d, rc, g) => {
     const [a, b] = pts;
-    return spanOf([a, ...levelsOf(d.style.levels, DEFAULT_FIB_FAN).map((lv) =>
+    return spanOf([a, ...activeLevels(d.style.levels, DEFAULT_FIB_FAN).map((lv) =>
       extendSegment(a, { x: b.x, y: a.y + (b.y - a.y) * lv.ratio }, rc.plotWidth, false, true)[1])], g);
   }],
   [GANN_FAN, (pts: Pts<2>, d, rc, g) => {
     const [a, b] = pts;
-    return spanOf([a, ...levelsOf(d.style.levels, DEFAULT_GANN_FAN).map((lv) =>
+    return spanOf([a, ...activeLevels(d.style.levels, DEFAULT_GANN_FAN).map((lv) =>
       extendSegment(a, { x: b.x, y: a.y + (b.y - a.y) * lv.ratio }, rc.plotWidth, false, true)[1])], g);
   }],
   [FIB_CHANNEL, (pts: Pts<3>, d, rc, g) => {
     const [a, b, w] = pts, ox = w.x - b.x, oy = w.y - b.y;
     let box = NOWHERE;
-    for (const lv of levelsOf(d.style.levels, DEFAULT_FIB)) {
+    for (const lv of activeLevels(d.style.levels, DEFAULT_FIB)) {
       box = join(box, spanOf(extendSegment(
         { x: a.x + ox * lv.ratio, y: a.y + oy * lv.ratio }, { x: b.x + ox * lv.ratio, y: b.y + oy * lv.ratio },
         rc.plotWidth, d.style.extendLeft === true, d.style.extendRight === true,
@@ -250,13 +241,14 @@ const BOXES = new Map<DrawingTool, BoxOf>([
     }
     return box;
   }],
-  [CALLOUT, (pts: Pts<2>, _d, _rc, g) => pts.length < 2 ? NOWHERE
-    : join(spanOf(pts.slice(0, 2), g), { x0: pts[1].x - 60, y0: pts[1].y - 16, x1: pts[1].x + 60, y1: pts[1].y + 16 })],
-  [PRICE_LABEL, mark(-10, -41, 82, 10)],
+  // The tail is a segment, grabbed within the radius, and the bubble anywhere on it.
+  [CALLOUT, (pts: Pts<2>, d, rc, g) => pts.length < 2 ? NOWHERE : join(spanOf(pts.slice(0, 2), g), annotated(CALLOUT)(pts, d, rc, g))],
+  [PRICE_LABEL, annotated(PRICE_LABEL)],
   [FLAG_MARK, mark(-8, -24, 16, 8)],
   [ARROW_UP, mark(-8, -20, 8, 20)], [ARROW_DOWN, mark(-8, -20, 8, 20)],
   [ARROW_LEFT, mark(-8, -20, 8, 20)], [ARROW_RIGHT, mark(-8, -20, 8, 20)],
-  [NOTE, plate], [BALLOON, plate], [COMMENT, plate], [SIGNPOST, plate], [PRICE_NOTE, plate],
+  [NOTE, annotated(NOTE)], [BALLOON, annotated(BALLOON)], [COMMENT, annotated(COMMENT)],
+  [SIGNPOST, annotated(SIGNPOST)], [PRICE_NOTE, annotated(PRICE_NOTE)],
 ]);
 // Legs, necklines and filled triangles, all between the pattern's own anchors.
 for (const tool of PATTERN_DRAWING_TOOLS) BOXES.set(tool, around);

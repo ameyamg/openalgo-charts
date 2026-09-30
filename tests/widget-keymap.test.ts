@@ -72,6 +72,15 @@ describe('formatKeyCombo and fromChartCombo', () => {
     expect(formatKeyCombo('nonsense+', false)).toBe('');
   });
 
+  it('reads the platform as the engine does, so the two never say Cmd and Ctrl side by side', () => {
+    // A browser that blanks the platform string still names the machine in its user agent.
+    vi.stubGlobal('navigator', { platform: '', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)' });
+    try {
+      expect(new Keymap().isMac).toBe(true);
+      expect(formatKeyCombo('Mod+z')).toBe('Cmd+Z');
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('translates the engine code-based combos into the key form', () => {
     expect(fromChartCombo('Alt+KeyV')).toBe('Alt+v');
     expect(fromChartCombo('Mod+Shift+KeyS')).toBe('Mod+Shift+s');

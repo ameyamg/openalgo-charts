@@ -120,11 +120,13 @@
     "skills:coverage": "node scripts/check-skills-coverage.mjs",
     "docs": "typedoc",
     "test:demo": "vitest run --config examples/yfinance/vitest.config.ts",
-    "verify": "npm run lint && npm run typecheck && npm run test && npm run test:endurance && npm run build && npm run test:demo && npm run check:dts && npm run check:exports && npm run check:compat && npm run size && npm run shake",
+    "verify": "npm run lint && npm run typecheck && npm run check:cycles && npm run check:unused-exports && npm run test && npm run test:endurance && npm run build && npm run test:demo && npm run check:dts && npm run check:exports && npm run check:compat && npm run size && npm run shake",
     "prepublishOnly": "npm run verify",
     "check:dts": "node scripts/check-dts.mjs",
     "check:exports": "node scripts/check-exports.mjs",
     "check:compat": "node scripts/check-compat.mjs",
+    "check:cycles": "node scripts/check-cycles.mjs",
+    "check:unused-exports": "node scripts/check-unused-exports.mjs",
     "shake": "node scripts/check-shake.mjs"
   },
   "engines": {

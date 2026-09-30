@@ -5,7 +5,8 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { utcSecondsToZonedParts, zonedWallClockToUtcSeconds, type Bar } from '../src/index';
 import { createWidget, mountDrawingProperties, type Widget, type WidgetOptions } from '../src/widget/index';
-import { anchorWallClock, formatAnchorPrice, parseAnchorTime, parseTypedPrice } from '../src/widget/dialogs/drawing-coordinates';
+import { formatAnchorPrice, parseTypedPrice } from '../src/widget/dialogs/drawing-coordinates';
+import { formatWallClock as anchorWallClock, parseWallClock as parseAnchorTime } from '../src/widget/wall-clock';
 import { ensureWindowGlobal, fakeContainer, fakeWidgetDocument, fire, fireKey, type FakeElement } from './helpers/fake-dom-widget';
 
 beforeAll(ensureWindowGlobal);

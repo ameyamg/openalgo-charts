@@ -32,7 +32,7 @@ import {
 import { DrawingLinkGroup } from 'openalgo-charts/draw';
 import type { WorkspaceLinkChannels, WorkspaceLinkGroup, WorkspacePayload, WorkspaceSync } from 'openalgo-charts/workspace';
 import type { Widget } from './widget';
-import { isChartTypeChoice } from './topbar';
+import { isChartTypeChoice } from './chart-type-choice';
 
 /** One link group as the grid reports it. */
 export interface ChartGridLinkGroup {

@@ -1,4 +1,3 @@
-import { widgetText } from '../localization';
 /**
  * The indicator picker: everything the indicator registry holds, grouped by
  * category, with a search box that filters as you type. Built from
@@ -14,8 +13,9 @@ import { widgetText } from '../localization';
  * button opens the saved study sets, bottom left where a dialog keeps its
  * secondary control.
  */
+import { widgetText } from '../localization';
 import { registeredIndicators } from 'openalgo-charts';
-import type { IndicatorApi, IndicatorDescriptor, IndicatorPolicy } from 'openalgo-charts';
+import type { IndicatorApi, IndicatorDescriptor } from 'openalgo-charts';
 import type { WorkspaceStore } from 'openalgo-charts/workspace';
 import type { WidgetContext } from '../context';
 import { button, dialogFrame, el, openPanel, type PanelHandle } from '../form';
@@ -131,8 +131,7 @@ export function mountIndicatorPicker(
   function paintRunning(): void {
     running.innerHTML = '';
     // A study its host keeps out of the inventory stays out of this list too.
-    const policy = (inst: IndicatorApi): Readonly<IndicatorPolicy> => (inst as Partial<IndicatorApi>).policy?.() ?? {};
-    const instances = chart.indicators().filter(inst => policy(inst).listed !== false);
+    const instances = chart.indicators().filter(inst => inst.policy().listed !== false);
     if (instances.length === 0) {
       running.appendChild(el(doc, 'div', 'oac-empty oac-pick__running-empty', widgetText(ctx, 'schema.ui.indicatorPicker.empty', {}, 'No running studies')));
       return;
@@ -153,7 +152,7 @@ export function mountIndicatorPicker(
       remove.classList.add('oac-pick__remove');
       remove.setAttribute('aria-label', `${removeLabel} ${inst.name} ${n}`);
       // Shown greyed with its reason: the host keeps this study on the chart.
-      if (policy(inst).removable === false) {
+      if (inst.policy().removable === false) {
         remove.disabled = true;
         remove.title = widgetText(ctx, 'protected');
         remove.setAttribute('aria-label', `${removeLabel} ${inst.name} ${n}, ${widgetText(ctx, 'protected')}`);

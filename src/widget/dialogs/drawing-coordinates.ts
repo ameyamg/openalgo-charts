@@ -18,11 +18,11 @@
  * writes nothing. A drawing pinned to the screen has no time or price, and a
  * freehand stroke has a point per sample, so neither lists its anchors.
  */
-import { utcSecondsToZonedParts, zonedWallClockToUtcSeconds } from 'openalgo-charts';
-import { getDrawingTool, type Drawing, type DrawingPoint } from 'openalgo-charts/draw';
-import { editableIds, type WidgetContext } from '../context';
+import type { Drawing, DrawingPoint } from 'openalgo-charts/draw';
+import { drawingToolOf, editableIds, type WidgetContext } from '../context';
 import { el } from '../form';
 import { widgetText } from '../localization';
+import { formatWallClock, parseWallClock } from '../wall-clock';
 import { MIN_PRICE_DIGITS } from '../statusline';
 
 export interface DrawingCoordinatesHandle {
@@ -31,10 +31,6 @@ export interface DrawingCoordinatesHandle {
   refresh(): void;
   destroy(): void;
 }
-
-const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-const TIME = /^(\d{2}):(\d{2})(?::(\d{2}))?$/;
-const pad = (n: number): string => String(n).padStart(2, '0');
 
 /** A typed price: digits with an optional sign and decimal point; thousands separators and spaces are ignored. */
 export function parseTypedPrice(text: string): number | null {
@@ -49,32 +45,6 @@ export function formatAnchorPrice(price: number, digits: number): string {
   const fixed = price.toFixed(Math.max(0, Math.min(10, digits)));
   if (Number(fixed) === price) return fixed;
   return String(Number(price.toFixed(10)));
-}
-
-/** The date and time fields for `time` on `zone`'s clock; seconds only when the anchor has them. */
-export function anchorWallClock(time: number, zone: string): { date: string; time: string; seconds: boolean } {
-  const p = utcSecondsToZonedParts(time, zone);
-  const seconds = p.second !== 0;
-  return {
-    date: `${p.year}-${pad(p.month)}-${pad(p.day)}`,
-    time: `${pad(p.hour)}:${pad(p.minute)}${seconds ? `:${pad(p.second)}` : ''}`,
-    seconds,
-  };
-}
-
-/** UTC seconds for a typed date and time on `zone`'s clock, or null when either does not read. */
-export function parseAnchorTime(date: string, time: string, zone: string): number | null {
-  const d = DATE.exec(date.trim());
-  const t = TIME.exec(time.trim());
-  if (d === null || t === null) return null;
-  const [year, month, day] = [Number(d[1]), Number(d[2]), Number(d[3])];
-  const [hour, minute, second] = [Number(t[1]), Number(t[2]), Number(t[3] ?? 0)];
-  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
-  // A calendar date that does not exist (the 31st of a 30-day month) rolls over in Date.UTC; refuse it instead.
-  const probe = new Date(Date.UTC(year, month - 1, day));
-  if (probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return null;
-  const out = zonedWallClockToUtcSeconds(year, month, day, hour, minute, second, zone);
-  return Number.isFinite(out) ? out : null;
 }
 
 interface Row {
@@ -113,7 +83,7 @@ export function mountDrawingCoordinates(
   const logarithmic = (d: Drawing): boolean => chart.panes()[d.paneIndex]?.priceScale.options.mode === 'logarithmic';
 
   function fill(row: Row, d: Drawing, point: DrawingPoint): void {
-    const wall = anchorWallClock(point.time, zone);
+    const wall = formatWallClock(point.time, zone);
     const price = formatAnchorPrice(point.price, digitsOf(d));
     row.date.value = wall.date;
     row.time.step = wall.seconds ? '1' : '60';
@@ -140,10 +110,10 @@ export function mountDrawingCoordinates(
     row.error.hidden = true;
     let time = point.time;
     if (row.date.value !== row.shown.date || row.time.value !== row.shown.time) {
-      const typed = parseAnchorTime(row.date.value, row.time.value, zone);
+      const typed = parseWallClock(row.date.value, row.time.value, zone);
       if (typed === null) {
         // The field to fix: the date when it names no day, else the time.
-        const dateReads = parseAnchorTime(row.date.value, '00:00', zone) !== null;
+        const dateReads = parseWallClock(row.date.value, '00:00', zone) !== null;
         fail(row, dateReads ? row.time : row.date, widgetText(ctx, 'Enter a date and a time on the chart clock'));
         return;
       }
@@ -239,8 +209,8 @@ export function mountDrawingCoordinates(
       root.append(head, el(doc, 'p', 'oac-coords__zone', widgetText(ctx, 'Times are on the chart clock, {zone}.', { zone })));
     }
     for (const d of drawings) {
-      let tool: ReturnType<typeof getDrawingTool> | null = null;
-      try { tool = getDrawingTool(d.tool); } catch { /* an unregistered tool still has its anchors */ }
+      // An unregistered tool still has its anchors.
+      const tool = drawingToolOf(d.tool);
       if (rebuild && drawings.length > 1) root.appendChild(el(doc, 'div', 'oac-head', widgetText(ctx, `schema.drawing.${d.tool}.name`, {}, tool?.name ?? d.tool)));
       if (d.space === 'viewport') { if (rebuild) note(widgetText(ctx, 'Pinned to the screen: its anchors are not a time and a price.')); continue; }
       if (tool?.freehand === true) { if (rebuild) note(widgetText(ctx, 'A freehand stroke has {count} points. Move it on the chart.', { count: d.points.length })); continue; }
