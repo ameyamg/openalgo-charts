@@ -1,4 +1,4 @@
-import { parseColor, type Rgba } from '../render/pill';
+import { parseColor, srgbLuminance, type Rgba } from '../render/pill';
 
 /** Text coloring is independent of the footprint's background display mode. */
 export type FootprintTextColorMode = 'contrast' | 'side' | 'delta' | 'dominant' | 'imbalance' | 'volume';
@@ -26,14 +26,6 @@ function mix(a: Rgba, b: Rgba, t: number): Rgba {
   return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t, a: 1 };
 }
 
-function luminance(color: Rgba): number {
-  const linear = (channel: number): number => {
-    const c = Math.max(0, Math.min(255, channel)) / 255;
-    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b);
-}
-
 /**
  * Keep readable preferences; otherwise mix toward black or white until WCAG
  * normal-text contrast reaches 4.5:1. Ten bounded bisection steps retain as much
@@ -45,9 +37,9 @@ function luminance(color: Rgba): number {
 export function readableTextColor(preferred: string, background: string): string {
   const bg = parseColor(background);
   if (!bg) return preferred;
-  const bgLum = luminance(bg);
+  const bgLum = srgbLuminance(bg);
   const contrast = (color: Rgba): number => {
-    const lum = luminance(color);
+    const lum = srgbLuminance(color);
     return (Math.max(lum, bgLum) + 0.05) / (Math.min(lum, bgLum) + 0.05);
   };
   const endpoint = (bgLum + 0.05) / 0.05 >= 1.05 / (bgLum + 0.05) ? 0 : 255;
