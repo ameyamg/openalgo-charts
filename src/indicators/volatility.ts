@@ -11,7 +11,8 @@
  */
 import { trueRange, sourceValues } from 'openalgo-charts';
 import type { IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
-import { sma, stdev, highest, lowest, nulls, smaSeededEma, rollingSum, roc } from './calc';
+import { sma, stdev, highest, lowest, nulls, smaSeededEma, rollingSum, roc, linreg } from './calc';
+import { withTail, windowTail } from './tail';
 
 /**
  * the reference `color.new(c, t)` transparency, where 0 is opaque and 100 invisible.
@@ -545,6 +546,92 @@ export const STANDARD_ERROR: IndicatorDescriptor = {
   },
 };
 
+/** A length for the squeeze: its momentum fits a line, which needs two points. */
+const squeezeLength = (s: Readonly<Record<string, unknown>>): number => Math.max(2, Math.round(num(s, 'length', 20)));
+
+/**
+ * Volatility Squeeze: whether the Bollinger Bands have contracted inside the
+ * Keltner Channel, the quiet stretch that tends to come before a move, and a
+ * momentum histogram that says which way the move is leaning.
+ *
+ *   basis    = sma(close, length)
+ *   bands    = basis +/- bbMult * stdev(close, length)
+ *   channel  = basis +/- kcMult * sma(true range, length)
+ *   on       = lower band > lower channel and upper band < upper channel
+ *   momentum = linreg(close - ((highest(high, length) + lowest(low, length)) / 2 + basis) / 2, length)
+ *
+ * Both envelopes share one basis and one length, so the squeeze is either on
+ * or off; `state` carries it (1 on, 0 off) for the dots on the zero line. The
+ * state needs one window and prints from `length - 1`; the momentum fits a line
+ * to `length` values that each read a window, so it prints from
+ * `2 * length - 2`. The histogram is coloured by sign and by direction against
+ * the previous bar, a missing previous bar reading as zero.
+ */
+export const VOLATILITY_SQUEEZE: IndicatorDescriptor = withTail({
+  id: 'volatility-squeeze',
+  name: 'Volatility Squeeze',
+  category: 'Volatility',
+  placement: 'pane',
+  inputs: [
+    { key: 'length', type: 'number', label: 'Length', default: 20, min: 2, max: 1000, step: 1 },
+    { key: 'bbMult', type: 'number', label: 'BB StdDev', default: 2, min: 0.1, max: 10, step: 0.1 },
+    { key: 'kcMult', type: 'number', label: 'KC Multiplier', default: 1.5, min: 0.1, max: 10, step: 0.1 },
+    { key: 'upColor', type: 'color', label: 'Momentum up', default: '#26a69a' },
+    { key: 'upFadeColor', type: 'color', label: 'Momentum up (weakening)', default: '#a7d8d2' },
+    { key: 'downColor', type: 'color', label: 'Momentum down', default: '#ef5350' },
+    { key: 'downFadeColor', type: 'color', label: 'Momentum down (weakening)', default: '#f5b0ae' },
+    { key: 'onColor', type: 'color', label: 'Squeeze on', default: '#ff9800' },
+    { key: 'offColor', type: 'color', label: 'Squeeze off', default: '#787b86' },
+  ],
+  plots: [
+    {
+      key: 'momentum', type: 'histogram', title: 'Momentum', colorKey: 'upColor',
+      style: { color: '#26a69a', base: 0 },
+      colorBy: ({ value, index, values, settings }) => {
+        const prev = values.momentum?.[index - 1];
+        const before = typeof prev === 'number' && Number.isFinite(prev) ? prev : 0;
+        if (value > 0) return value > before ? str(settings, 'upColor', '#26a69a') : str(settings, 'upFadeColor', '#a7d8d2');
+        return value < before ? str(settings, 'downColor', '#ef5350') : str(settings, 'downFadeColor', '#f5b0ae');
+      },
+    },
+    {
+      key: 'squeeze', type: 'line', title: 'Squeeze', colorKey: 'offColor',
+      style: { color: '#787b86', markersOnly: true, markerRadius: 3 },
+      colorBy: ({ index, values, settings }) =>
+        values.state?.[index] === 1 ? str(settings, 'onColor', '#ff9800') : str(settings, 'offColor', '#787b86'),
+    },
+  ],
+  calc: (bars, s) => {
+    const n = bars.length;
+    const length = squeezeLength(s);
+    const high = bars.map((b) => b.high);
+    const low = bars.map((b) => b.low);
+    const close = bars.map((b) => b.close);
+    const { middle, upper, lower } = bands(close, length, num(s, 'bbMult', 2));
+    const range = sma(trueRange(high, low, close), length);
+    const kcMult = num(s, 'kcMult', 1.5);
+    const hh = highest(high, length);
+    const ll = lowest(low, length);
+    const delta = close.map((c, i) => c - ((hh[i] + ll[i]) / 2 + middle[i]) / 2);
+    const state = new Array<number | null>(n).fill(null);
+    const squeeze = new Array<number | null>(n).fill(null);
+    for (let i = 0; i < n; i++) {
+      const rail = kcMult * range[i];
+      const upperKc = middle[i] + rail;
+      const lowerKc = middle[i] - rail;
+      if (![upper[i], lower[i], upperKc, lowerKc].every(Number.isFinite)) continue;
+      state[i] = lower[i] > lowerKc && upper[i] < upperKc ? 1 : 0;
+      squeeze[i] = 0;
+    }
+    return { momentum: nulls(linreg(delta, length)), squeeze, state };
+  },
+}, (calc) => windowTail(calc, (s) => {
+  // The momentum at a bar fits `length` values that each read `length` bars,
+  // and a slice's first true range has no previous close, so it must fall
+  // outside the last channel window: both hold at 2 * length - 2 for length 2 up.
+  return 2 * squeezeLength(s) - 2;
+}));
+
 export const VOLATILITY_INDICATORS: readonly IndicatorDescriptor[] = [
   BOLLINGER_PERCENT_B,
   BOLLINGER_BANDWIDTH,
@@ -556,4 +643,5 @@ export const VOLATILITY_INDICATORS: readonly IndicatorDescriptor[] = [
   CHAIKIN_VOLATILITY,
   STANDARD_DEVIATION,
   STANDARD_ERROR,
+  VOLATILITY_SQUEEZE,
 ];

@@ -19,6 +19,11 @@
  * rebuilds it once by walking the history from bar 0. Every later tick costs a
  * step or two.
  *
+ * A variant of the second places a value on a bar only once later bars confirm
+ * it (the ZigZag in ./swings). It resumes its walk from the same checkpoint and,
+ * in place of the check below, compares the few earlier bars that walk can
+ * still rewrite with what the runtime holds.
+ *
  * Either way the tail also recomputes the bar before it and compares that with
  * the result the runtime still holds. A disagreement means the held result is
  * not this study's own (a descriptor that copied a built-in's tail and reshaped
@@ -144,7 +149,7 @@ function agrees(previous: IndicatorValues, keys: readonly string[], row: readonl
 }
 
 /** The checkpoint a tail from `from` resumes, when the last tail left it exactly there. */
-function resumable(claim: Claim, key: string, bars: readonly Bar[], from: number): Checkpoint | undefined {
+export function resumable(claim: Claim, key: string, bars: readonly Bar[], from: number): Checkpoint | undefined {
   const at = claim.at;
   return at !== undefined && at.key === key && at.index === from - 1 &&
     (from === 0 || at.time === bars[from - 1].time) ? at : undefined;
@@ -232,6 +237,24 @@ export function machineTail<S>(
     for (let k = 0; k < cols.length; k++) cols[k][i - from] = row[k];
   }
   claim.misses = 0;
+  const out: Record<string, Cell[]> = {};
+  machine.keys.forEach((k, j) => { out[k] = cols[j]; });
+  return out;
+}
+
+/**
+ * The full result of a study written only as a machine: every bar stepped from
+ * bar 0. Its `calc` and its tail then walk one piece of arithmetic, so the two
+ * cannot drift apart the way a batch kernel and its stepper copy can.
+ */
+export function stepAll<S>(machine: Machine<S>, n: number): IndicatorValues {
+  const state = machine.start();
+  const row: Cell[] = machine.keys.map(() => null);
+  const cols = machine.keys.map(() => new Array<Cell>(n));
+  for (let i = 0; i < n; i++) {
+    machine.step(state, i, row);
+    for (let k = 0; k < cols.length; k++) cols[k][i] = row[k];
+  }
   const out: Record<string, Cell[]> = {};
   machine.keys.forEach((k, j) => { out[k] = cols[j]; });
   return out;

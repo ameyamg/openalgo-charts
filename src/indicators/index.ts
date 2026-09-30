@@ -1,7 +1,7 @@
 /**
  * Indicator tier (opt-in: "openalgo-charts/indicators").
  *
- * 105 Tier-1 built-ins, computed from the chart's own bars, no extra data,
+ * 112 Tier-1 built-ins, computed from the chart's own bars, no extra data,
  * plus the Tier-2 contract for indicators that own an external fetch/subscribe
  * lifecycle. Importing this module registers every built-in as a side effect.
  *
@@ -41,6 +41,8 @@ import { SIGNAL_INDICATORS } from './signals';
 import { STUDY_INDICATORS } from './studies';
 import { WAVETREND_INDICATORS } from './wavetrend';
 import { SEASONALITY_INDICATORS } from './seasonality';
+import { EXPONENTIAL_INDICATORS } from './exponential';
+import { SWING_INDICATORS } from './swings';
 
 export const INDICATORS_TIER = 'indicators' as const;
 
@@ -63,6 +65,8 @@ export const BUILTIN_INDICATORS: readonly IndicatorDescriptor[] = [
   ...STUDY_INDICATORS,
   ...WAVETREND_INDICATORS,
   ...SEASONALITY_INDICATORS,
+  ...EXPONENTIAL_INDICATORS,
+  ...SWING_INDICATORS,
 ];
 
 let _registered = false;
@@ -97,6 +101,8 @@ export * from './signals';
 export * from './studies';
 export * from './wavetrend';
 export * from './seasonality';
+export * from './exponential';
+export * from './swings';
 export { sma, wma, rma, stdev, highest, lowest, nulls } from './calc';
 // The rest of `./calc`: the shared TA helpers. Every built-in already
 // pulls these out of this bundle, so exporting them adds names and no code, and
