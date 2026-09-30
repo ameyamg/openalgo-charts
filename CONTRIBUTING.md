@@ -33,22 +33,30 @@ This runs lint, TypeScript, unit tests, the library build, demo tests, declarati
 checks, bundle budgets and tree-shaking checks. Run a focused test while developing,
 for example `npx vitest run tests/navigation-settings.test.ts`.
 
-TypeScript runs twice. `npm run typecheck` uses `tsconfig.json`. `npm run
-typecheck:strict` compiles `src` under `tsconfig.strict.json`, which adds
-`noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`, and counts the errors
-per tier by the path of the file each is in. It fails when a tier listed in
-`scripts/strict-tiers.json` has an error, or when a tier with none is not listed yet,
-so a tier that becomes clean joins the list in the same change. Code in a listed tier
-must pass both flags. Prefer a fix that shows the compiler what the code already
-guarantees (a checked index, a narrowed local, an optional property typed
-`| undefined` where `undefined` is written) over a non-null assertion. Widen only a
-type the host writes: one the library also hands back, such as `ChartDataContext`,
-stays exact, since a host that forwards it into an exact type of its own would stop
-compiling; assert at the site that writes the `undefined` instead. A built-in
-drawing tool ends in `satisfies AnchoredTool<N>` (`src/draw/types.ts`), which hands its
-body the anchors the layer guarantees for `points: N`, so it reads them without one.
-Indicator maths reads series by index inside loops whose bounds hold the index, which
-no type can state; those reads carry `!`, with the bound said once per block.
+TypeScript runs twice, and `npm run typecheck` runs both. `tsconfig.json` compiles
+`src`, the code that ships, with `strict` and two more flags:
+`noUncheckedIndexedAccess` (an index read may be `undefined`) and
+`exactOptionalPropertyTypes` (an optional property that is absent is not one set to
+`undefined`). `tests/tsconfig.json` compiles the tests without those two. A test reads
+back by index the bars, rows and calls it built itself, on almost every line, and a
+read that misses already fails the test when it runs, so asserting each read would add
+thousands of `!` that catch nothing. That file says the same, and
+`tests/typecheck-config.test.ts` keeps it to exactly those two flags. Editors pick the
+configuration by folder, so a test gets the tests' and a source file the stricter one.
+
+In `src`, prefer a fix that shows the compiler what the code already guarantees (a
+checked index, a narrowed local, an optional property typed `| undefined` where
+`undefined` is written) over a non-null assertion. Widen only a type the host writes:
+one the library also hands back, such as `ChartDataContext`, stays exact, since a host
+that forwards it into an exact type of its own would stop compiling. A literal that
+writes `undefined` into such a type is written `{ ... } satisfies LooseOptional<T> as T`
+(`src/helpers/types.ts`), which still checks every member against `T` where a bare
+`as T` would not. A built-in drawing tool ends in `satisfies AnchoredTool<N>`
+(`src/draw/types.ts`), which hands its body the anchors the layer guarantees for
+`points: N`, so it reads them without one. Indicator maths and the renderers read
+series by index inside loops whose bounds hold the index, which no type can state;
+those reads carry `!`, with the bound said once per block. A read that nothing bounds
+is not asserted: it is a defect, and it is fixed with a test first.
 
 Write regression tests around observable behavior and realistic inputs. A bug test
 should fail against the original behavior; avoid assertions that merely repeat the
