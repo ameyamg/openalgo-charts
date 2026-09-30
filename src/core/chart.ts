@@ -41,7 +41,7 @@ import {
   resolveRenderBackend, type IRenderBackend, type RenderBackendFactory, type RenderBackendKind, type RendererChoice,
   type RendererFallbackReason,
 } from '../render/backend';
-import { DataLayer, type SessionCalendarSource } from '../model/data-layer';
+import { DataLayer, barAtIndex, type SessionCalendarSource } from '../model/data-layer';
 import { type SeriesApi, type SeriesRecord, type PriceScaleId } from '../model/series';
 import { type SeriesProvenance } from '../model/series-provenance';
 import { type SeriesType } from '../model/chart-type-registry';
@@ -1076,7 +1076,7 @@ export class Chart {
     this._input._readoutTime = time;
     for (const indicator of this._indicators) indicator.updateLegendValues(index ?? undefined);
     const bar = index === null || this._firstDataId.value === null ? null
-      : this._dataLayer.visibleBars(this._firstDataId.value, index, index)[0]?.bar ?? null;
+      : barAtIndex(this._dataLayer, this._firstDataId.value, index) ?? null;
     const readout: CrosshairMoveEvent = { source: 'linked', time, index,
       bar, price: null, point: null, paneIndex: null };
     dispatch(this._input._crosshairCbs, readout);
@@ -2287,7 +2287,7 @@ export class Chart {
     const snapSeries = this._firstDataId.value ?? this._primaryPane.series()[0]?.dataId;
     if (this._cursor !== null && this._crosshairSnapToBar && snapSeries !== undefined) {
       const index = Math.round(this._timeScale.xToIndex(crosshairX));
-      if (this._dataLayer.visibleBars(snapSeries, index, index).length > 0) {
+      if (barAtIndex(this._dataLayer, snapSeries, index) !== undefined) {
         crosshairX = this._timeScale.indexToX(index);
       }
     }

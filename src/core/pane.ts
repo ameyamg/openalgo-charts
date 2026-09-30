@@ -33,7 +33,7 @@
 import { CanvasLayer, hairlineHeight, separatorIsBorder } from './canvas';
 import { PriceScale } from '../scale/price-scale';
 import { type TimeScale } from '../scale/time-scale';
-import { type DataLayer } from '../model/data-layer';
+import { barAtIndex, visibleSpan, type DataLayer, type VisibleSpan } from '../model/data-layer';
 import type { SeriesRecord, PriceScaleId } from '../model/series';
 import type { PriceScaleState } from '../model/chart-state';
 import { PriceAxisLayout, isPriceScaleId, type PriceAxisPlacement, type PriceAxisSide, type PriceAxisSlot } from '../model/price-axis-layout';
@@ -41,7 +41,7 @@ import { computeGridLines, drawGrid, resolveGridStyle, resolveScaleStyle, type C
 import { getChartType, registeredChartTypes, type SeriesRenderContext } from '../model/chart-type-registry';
 import type { SeriesStyle } from '../render/series-style';
 import { lodActive, lodColumnWidth, lodKind } from '../model/conflation';
-import { createSeriesDrawItems, visibleSpan, type LodRequest, type SeriesDrawItems, type VisibleSpan } from '../render/draw-items';
+import { createSeriesDrawItems, type LodRequest, type SeriesDrawItems } from '../render/draw-items';
 import { announcingHost, createHitBoxes, inHitBox } from '../render/hit-boxes';
 import {
   drawPriceAxis, drawLeftPriceAxis, drawTimeAxis, drawLastPriceLabel, drawSessionClock,
@@ -1243,8 +1243,8 @@ export class Pane {
       // for the lookup, and only a series with no bar there falls back.
       if (s.style.colorByPreviousClose === true && items.length > 0) {
         const at = buffer.firstIndex() - 1;
-        const before = ctx.dataLayer.visibleBars(s.dataId, at, at);
-        if (before.length > 0) items[0]!.prevClose = before[0]!.bar.close; // both lengths checked
+        const before = barAtIndex(ctx.dataLayer, s.dataId, at);
+        if (before !== undefined) items[0]!.prevClose = before.close; // items is not empty, checked above
       }
       let maxVolume = 0;
       for (let i = 0; i < items.length; i++) {

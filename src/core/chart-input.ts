@@ -27,6 +27,7 @@ import { getChartType } from '../model/chart-type-registry';
 import { getIndicator } from '../model/indicator-registry';
 import type { PriceAxisSlot } from '../model/price-axis-layout';
 import type { Bar } from '../model/bar';
+import { barAtIndex } from '../model/data-layer';
 import { KineticAnimation } from '../input/kinetic';
 import { ZoomGlide } from '../input/zoom-glide';
 import { wheelPixels, wheelLogFactor } from '../input/wheel';
@@ -424,9 +425,9 @@ export class ChartInput {
     for (let position = records.length - 1; position >= 0; position--) {
       const record = records[position]!; // walks the list from its end
       if (record.style.visible === false) continue;
-      const bars = this._host._dataLayer.visibleBars(record.dataId, index, index);
-      if (bars.length === 0) continue;
-      const ext = getChartType(record.type).extents(bars[0]!.bar, record.style);
+      const bar = barAtIndex(this._host._dataLayer, record.dataId, index);
+      if (bar === undefined) continue;
+      const ext = getChartType(record.type).extents(bar, record.style);
       if (!isFinite(ext.min) || !isFinite(ext.max)) continue;
       const scale = pane.scaleOf(record);
       const a = scale.priceToY(ext.max);
@@ -1335,9 +1336,9 @@ export class ChartInput {
     const index = Math.round(this._host._timeScale.xToIndex(plotX));
     let hoveredBar: Bar | null = null;
     if (this._host._firstDataId.value !== null) {
-      const bars = this._host._dataLayer.visibleBars(this._host._firstDataId.value, index, index);
-      if (bars.length > 0) {
-        hoveredBar = bars[0]!.bar;
+      const bar = barAtIndex(this._host._dataLayer, this._host._firstDataId.value, index);
+      if (bar !== undefined) {
+        hoveredBar = bar;
         // Magnet only snaps within the pane that holds the price series, never
         // in the volume/indicator panes (their scale isn't a price scale).
         if (this._host._crosshairMode === 'magnet' && paneIndex === this._host._layout._firstPaneSlot()) {
