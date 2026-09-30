@@ -25,7 +25,7 @@
  * a text. A new drawing list lets every box go, since the controller edits
  * drawings in place and hands the list over again.
  */
-import type { PrimitiveRenderContext } from 'openalgo-charts';
+import { PRICE_SCALE_MODES, type PrimitiveRenderContext } from 'openalgo-charts';
 import type { AtLeast, Drawing, DrawingTool, ScreenPoint } from './types';
 import { extendSegment } from './geometry';
 import { activeLevels, DEFAULT_FIB, DEFAULT_FIB_FAN, DEFAULT_FIB_TIME_ZONE, DEFAULT_GANN_FAN } from './levels';
@@ -295,8 +295,6 @@ function watchFonts(): void {
   }
 }
 
-const MODES = ['linear', 'logarithmic', 'percentage', 'indexed-to-100'];
-
 /** One layer's kept boxes, and the key they were measured against. */
 export interface DrawingHitIndex {
   /** A drawing's body box by paint position, or undefined before it is measured. */
@@ -356,7 +354,7 @@ export function createDrawingHitIndex(): DrawingHitIndex {
       put(dl.indexToTime?.(0)); put(dl.indexToTime?.(1));
       put(dl.indexToTime?.(n - 2)); put(dl.indexToTime?.(n - 1));
       put(dl.sessionCalendar);
-      put(ps.priceToY(1)); put(ps.priceToY(1000)); put(MODES.indexOf(ps.options?.mode));
+      put(ps.priceToY(1)); put(ps.priceToY(1000)); put(ps.options?.mode === undefined ? -1 : PRICE_SCALE_MODES.indexOf(ps.options.mode));
       const bars = rc.bars?.();
       put(bars !== undefined && bars.length > 0 ? bars : null);
       probe(drawings[0], rc);

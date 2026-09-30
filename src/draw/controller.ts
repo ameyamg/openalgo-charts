@@ -5,8 +5,8 @@
  * controller runs placement, selection, dragging, undo, and serialisation.
  *
  * It listens on the chart's event bus (`click`, `crosshair:move`, `drag`,
- * `drag:end`) rather than the single-slot `subscribeClick`/`subscribeDrag`
- * callbacks, so a host keeps using those for its own order lines.
+ * `drag:end`) rather than `subscribeClick`/`subscribeDrag`, which stay the
+ * host's for its own order lines.
  *
  * Selection is a list. Every method that edits takes the whole list into one
  * undo entry, so a multi-drag, a batch delete or a paste of ten shapes is one
