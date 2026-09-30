@@ -7,7 +7,7 @@
  * code from the workspace tier to save a layout: the payload is written here
  * in the form `migrateWidgetWorkspace` produces, and the store parses it.
  *
- * Two decisions worth recording:
+ * Three decisions worth recording:
  *
  * - **A layout is what is on the chart, not where it was scrolled.** The
  *   capture leaves out the viewport, the bar spacing and every pinned price

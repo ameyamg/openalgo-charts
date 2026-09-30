@@ -1,8 +1,9 @@
 /**
  * Deterministic in-memory broker simulator (ARCHITECTURE.md §11.1). Holds order
  * and position snapshots and notifies subscribers, so the trade layer can be
- * tested and demoed with zero network. Phase 9 extends it with the place/modify/
- * cancel state machine; Phase 8 uses it read-only (seed snapshots + emit LTP).
+ * tested and demoed with zero network. It answers the order engine's place,
+ * modify and cancel with an order state machine of its own, and a host that
+ * only reads can seed snapshots and emit LTP.
  *
  * Constructed with `accounts`, it also simulates a provider with account
  * ledgers: balances and margin, fills at a mark price, executions and order

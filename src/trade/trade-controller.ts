@@ -1,5 +1,6 @@
 /**
- * Trade controller (ARCHITECTURE.md §9.3) — read-only in Phase 8. The single
+ * Trade controller (ARCHITECTURE.md §9.3), read-only by design: the order
+ * engine owns the write path. The single
  * source of truth: it reconciles order/position book snapshots into on-chart
  * primitives (add/update/remove) and pushes LTP into them for live P&L. On a
  * reconnect, a fresh snapshot is diffed against current primitives, so vanished

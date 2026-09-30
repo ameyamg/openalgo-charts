@@ -5,7 +5,7 @@
  * (sandbox) mode. Network-agnostic: it talks to an injected OrderFeed (the
  * FakeBroker simulates it in tests/demos).
  *
- * Two lifecycles are tracked per order and they are deliberately not merged:
+ * Three lifecycles are tracked per order and they are deliberately not merged:
  *
  *   state         the historical `ClientOrderState`. Existing consumers read it
  *                 and its meaning is unchanged, including the parts that are
