@@ -285,29 +285,6 @@ export function controlsFromFields(fields: readonly SettingsField[], translation
 
 // ── value helpers ─────────────────────────────────────────────────────────
 
-/**
- * A six-digit hex an `<input type=color>` will take, from the forms a theme
- * or a drawing uses. Alpha is dropped: the picker has no channel for it, and
- * the swatch still has to show the colour the chart is drawing. Null for
- * anything else (a named colour), which the caller turns into a fallback.
- */
-export function toHexColor(input: unknown): string | null {
-  if (typeof input !== 'string') return null;
-  const s = input.trim();
-  const hex = /^#([0-9a-f]{3,8})$/i.exec(s);
-  if (hex !== null) {
-    const h = hex[1]!; // the group is not optional, so any match fills it
-    if (h.length === 3 || h.length === 4) return '#' + h.slice(0, 3).split('').map((c) => c + c).join('').toLowerCase();
-    if (h.length === 6 || h.length === 8) return '#' + h.slice(0, 6).toLowerCase();
-    return null;
-  }
-  // See tokens.ts: one unambiguous separator alternation, not `\s*[, ]\s*`.
-  const fn = /^rgba?\(\s*([\d.]+)(?:\s*,\s*|\s+)([\d.]+)(?:\s*,\s*|\s+)([\d.]+)/i.exec(s);
-  if (fn === null) return null;
-  const part = (v: string): string => Math.round(Math.max(0, Math.min(255, Number(v)))).toString(16).padStart(2, '0');
-  return `#${part(fn[1]!)}${part(fn[2]!)}${part(fn[3]!)}`; // three required groups, as above
-}
-
 /** Print a number without float noise: 1.5 stays 1.5, 2.0000000000000004 prints 2. */
 export function formatNumber(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000);

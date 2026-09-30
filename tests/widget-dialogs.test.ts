@@ -16,16 +16,19 @@ import type { Bar, ContextMenuEvent, ContextMenuTarget, IndicatorDescriptor } fr
 import { DrawingController, registerBuiltinDrawingTools, DEFAULT_FIB, formatRatio, type FibLevel } from 'openalgo-charts/draw';
 import { createOverlayStack, WidgetBus, WidgetStorage, type OverlayStack, type WidgetContext } from '../src/widget/context';
 import {
-  mountSettingsDialog, tabDefaults,
-  mountIndicatorPicker, filterIndicators, groupIndicators,
-  mountIndicatorSettings, resolveInstance,
-  mountDrawingProperties, commonSchema, resolvedDrawingValues,
-  mountLevelEditor, nextRatio, FIB_SEQUENCE,
-  mountTextEditor, fontOf, wrapLines, textFrame, readEditable, DEFAULT_FONT, TEXT_PAD, LINE_GAP, TEXT_SIZE,
-  mountContextMenu, attachContextMenu, contextMenuEntries, drawingIdOf,
+  mountSettingsDialog, mountIndicatorPicker, mountIndicatorSettings, mountDrawingProperties, mountLevelEditor, mountTextEditor,
+  mountContextMenu, attachContextMenu, contextMenuEntries,
   WIDGET_DIALOGS, DIALOG_CSS,
   type MenuEntry, type MenuItem, type OrderRequest,
 } from '../src/widget/dialogs/index';
+// Each dialog's helpers, from the module that defines them.
+import { tabDefaults } from '../src/widget/dialogs/settings';
+import { filterIndicators, groupIndicators } from '../src/widget/dialogs/indicator-picker';
+import { resolveInstance } from '../src/widget/dialogs/indicator-settings';
+import { commonSchema, resolvedDrawingValues } from '../src/widget/dialogs/drawing-properties';
+import { nextRatio, FIB_SEQUENCE } from '../src/widget/dialogs/level-editor';
+import { fontOf, wrapLines, textFrame, readEditable, DEFAULT_FONT, TEXT_PAD, LINE_GAP, TEXT_SIZE } from '../src/widget/dialogs/text-editor';
+import { drawingIdOf } from '../src/widget/dialogs/context-menu';
 import { registeredWidgetDialogs } from '../src/widget/context';
 import { installDom, asDoc, asEl, type FakeElement, type Dom } from './widget-form.test';
 
