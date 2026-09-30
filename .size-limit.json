@@ -88,5 +88,21 @@
     ],
     "limit": "409.14 kB",
     "brotli": true
+  },
+  {
+    "name": "Script tags (the nine classic-script files, widget first-use parts inlined)",
+    "path": [
+      "dist/openalgo-charts.standalone.js",
+      "dist/openalgo-charts.trade.standalone.js",
+      "dist/openalgo-charts.transform.standalone.js",
+      "dist/openalgo-charts.profile.standalone.js",
+      "dist/openalgo-charts.indicators.standalone.js",
+      "dist/openalgo-charts.draw.standalone.js",
+      "dist/openalgo-charts.webgl.standalone.js",
+      "dist/openalgo-charts.widget.standalone.js",
+      "dist/openalgo-charts.workspace.standalone.js"
+    ],
+    "limit": "421.21 kB",
+    "brotli": true
   }
 ]

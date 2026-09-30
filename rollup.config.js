@@ -75,9 +75,9 @@ const abs = (rel) => new URL(rel, import.meta.url).pathname.replace(/^\/([A-Za-z
 
 /**
  * Resolve the package's own specifiers to their source entries. Used only by
- * the bundles that must inline everything (the IIFE and the combined docs
- * bundle); tier bundles leave them external so the import survives into the
- * output.
+ * the bundles that must inline everything (the combined docs bundle and the
+ * base declarations); tier bundles, ESM and script-tag alike, leave them
+ * external so the import survives into the output.
  */
 const aliasSelf = {
   name: 'alias-self-reference',
@@ -92,7 +92,7 @@ const aliasSelf = {
  * Layouts menu, the templates list, the grid bar's menus) with `import()`
  * on first use (src/widget/lazy.ts). Those chunks are written beside the tier
  * as `openalgo-charts.widget.<part>-<hash>.mjs`: a chunk resolves against the
- * tier's own URL, so a CDN or script-tag page needs nothing more, and a bundler
+ * tier's own URL, so a CDN or `type="module"` page needs nothing more, and a bundler
  * follows the import and splits it the same way. Every other tier is one file.
  * The tier file itself keeps everything a widget loads before anyone opens a
  * part: `allow-extension` lets the chunks import the shell's helpers from it,
@@ -125,20 +125,53 @@ const js = Object.entries(entries).map(([key, input]) => ({
   ],
 }));
 
-// Standalone IIFE for plain <script> / CDN drop-in (base bundle, window.OpenAlgoCharts).
-const iife = {
-  input: entries.index,
+/**
+ * The script-tag build: one classic script per tier, for a page that loads no
+ * modules. The base file defines the `OpenAlgoCharts` global, as it always
+ * has, and each tier file adds itself to it under its subpath name, so
+ * `import { X } from 'openalgo-charts/draw'` reads `OpenAlgoCharts.draw.X`.
+ * A key per tier rather than one flat object keeps two tiers' names from
+ * colliding (base and widget both export `withAlpha`, with different code).
+ *
+ * A tier file leaves the same specifiers external as its ESM build and reads
+ * them from that global, for the reason given where `PKG` is defined: it must
+ * register into the base the page loaded, never a private copy. Its banner stops it before it
+ * runs when what it reads is missing, and names the files to load first,
+ * where it would otherwise fail somewhere inside with a bare TypeError.
+ *
+ * The widget's first-use parts are bundled into its file. A classic script
+ * cannot share a split chunk, and a part fetched as a module would import the
+ * ESM base and widget files, whose registries are not the ones on the page.
+ */
+const GLOBAL = 'OpenAlgoCharts';
+const keyOfSpecifier = (id) => (id === PKG ? 'index' : id.slice(PKG.length + 1));
+const globalOf = (id) => (!tierExternal(id) ? undefined : id === PKG ? GLOBAL : `${GLOBAL}.${keyOfSpecifier(id)}`);
+const scriptFile = (key) => `${outFile[key]}.standalone.js`;
+
+const loadFirst = (key) => (chunk) => {
+  const tiers = chunk.imports.filter((id) => id !== PKG);
+  const missing = [`typeof ${GLOBAL}=="undefined"`, ...tiers.map((id) => `!${globalOf(id)}`)].join('||');
+  const first = ['index', ...tiers.map(keyOfSpecifier)].map(scriptFile).join(' and ');
+  return `if(${missing})throw new Error(${JSON.stringify(`${scriptFile(key)} needs ${first} loaded before it`)});`;
+};
+
+const scriptTags = Object.entries(entries).map(([key, input]) => ({
+  input,
+  external: key === 'index' ? undefined : tierExternal,
   output: {
-    file: 'dist/openalgo-charts.standalone.js',
+    file: `dist/${scriptFile(key)}`,
     format: 'iife',
-    name: 'OpenAlgoCharts',
+    name: key === 'index' ? GLOBAL : `${GLOBAL}.${key}`,
+    globals: globalOf,
+    banner: key === 'index' ? undefined : loadFirst(key),
+    inlineDynamicImports: key === 'widget',
     sourcemap: true,
   },
   plugins: [
     typescript({ tsconfig: './tsconfig.build.json' }),
     terser({ format: { comments: false } }),
   ],
-};
+}));
 
 // Combined bundle (base + every tier in one module instance), docs live demos
 // only. Nothing is external here, so the tiers resolve the package specifiers
@@ -165,4 +198,4 @@ const types = Object.entries(entries).map(([key, input]) => ({
   plugins: [...(key === 'index' ? [aliasSelf] : []), dts()],
 }));
 
-export default [...js, iife, allBundle, ...types];
+export default [...js, ...scriptTags, allBundle, ...types];
