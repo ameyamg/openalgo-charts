@@ -216,9 +216,12 @@ export function trimToView(
 
 /** The line renderer's own dash table (it does not share the grid's). */
 export function lineDash(style: SeriesStyle, dpr: number): number[] {
-  if (style.lineStyle === 'dashed') return [6 * dpr, 4 * dpr];
-  if (style.lineStyle === 'dotted') return [1 * dpr, 3 * dpr];
-  return [];
+  return dashFor(style.lineStyle, dpr);
+}
+
+/** The dash pattern of a named line style in device px: the one table series and study drawings share. */
+export function dashFor(lineStyle: SeriesStyle['lineStyle'], dpr: number): number[] {
+  return lineStyle === 'dashed' ? [6 * dpr, 4 * dpr] : lineStyle === 'dotted' ? [1 * dpr, 3 * dpr] : [];
 }
 
 /**

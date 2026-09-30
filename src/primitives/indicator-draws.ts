@@ -12,9 +12,10 @@
  * its pivots the moment it did.
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from './primitive';
-import type { IndicatorDrawing, IndicatorLineStyle, DrawAnchor } from '../model/indicator-registry';
+import type { IndicatorDrawing, DrawAnchor } from '../model/indicator-registry';
 import type { PriceScale } from '../scale/price-scale';
 import { roundRectPath, contrastText } from '../render/pill';
+import { dashFor } from '../render/line';
 import { hasTextStyle, textFont, validateTextStyle } from '../render/text-style';
 
 type Caption = Extract<IndicatorDrawing, { kind: 'label' | 'box' }>;
@@ -70,11 +71,6 @@ function smoothPath(xs: number[], ys: number[], closed: boolean): { points: Scre
     }
   }
   return { points, segments };
-}
-
-/** Dash pattern in device px, matching the drawing tier's vocabulary. */
-function dashOf(style: IndicatorLineStyle | undefined, d: number): number[] {
-  return style === 'dashed' ? [6 * d, 4 * d] : style === 'dotted' ? [1 * d, 3 * d] : [];
 }
 
 /**
@@ -332,7 +328,7 @@ export class IndicatorDrawings implements IPrimitive {
         }
       }
       if (offPane(ax, ay, bx, by)) continue;
-      ctx.setLineDash(dashOf(item.lineStyle, d));
+      ctx.setLineDash(dashFor(item.lineStyle, d));
       ctx.strokeStyle = color;
       ctx.beginPath();
       ctx.moveTo(ax, ay);
