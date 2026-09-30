@@ -12,7 +12,7 @@
     "src/workspace/index.ts"
   ],
   "out": "website/public/api",
-  "tsconfig": "tsconfig.json",
+  "tsconfig": "tsconfig.build.json",
   "excludeInternal": true,
   "readme": "docs/api-introduction.md",
   "name": "OpenAlgo Charts API",

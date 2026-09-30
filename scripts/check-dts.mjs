@@ -18,9 +18,14 @@
  * different class from the one `openalgo-charts/draw` exports, and
  * `widget.draw` stops being assignable to a host's own controller variable.
  *
+ * Last, a host compiles against the built declarations, so the draw tier's
+ * events on the chart bus are known to arrive typed (see the note at the end).
+ *
  * Runs after `build` in `npm run verify`.
  */
 import { readFileSync, existsSync } from 'node:fs';
+import process from 'node:process';
+import ts from 'typescript';
 
 /** Declarations that must never appear in any tier's bundle. */
 const FORBIDDEN = [
@@ -99,5 +104,35 @@ try {
   failed = true;
 }
 
+// The draw tier types its events on the chart bus by merging them into the
+// base's `ChartEventMap`, inside `declare module 'openalgo-charts'`. A
+// declaration bundler may drop a block like that, and nothing else would
+// notice: the draw names would fall back to the deprecated string overload and
+// compile anyway. So compile a host against the built declarations, where
+// `chart.on('draw:add', ...)` must be typed and a wrong field must not compile.
+const HOST = 'tests/types/chart-events-host.ts';
+const DIST_PATHS = {
+  'openalgo-charts': ['dist/index.d.ts'],
+  ...Object.fromEntries(Object.keys(TIERS).map((file) => [`openalgo-charts/${file.split('/')[1]}`, [file]])),
+};
+const program = ts.createProgram([HOST], {
+  strict: true, noEmit: true, skipLibCheck: true, types: [],
+  target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler,
+  lib: ['lib.es2020.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
+  baseUrl: process.cwd(), paths: DIST_PATHS,
+});
+const loaded = program.getSourceFiles().map((f) => f.fileName.replace(/\\/g, '/'));
+if (!loaded.some((f) => f.endsWith('/dist/draw/index.d.ts'))) {
+  console.error(`check-dts: ${HOST} did not resolve openalgo-charts/draw to dist/draw/index.d.ts`);
+  failed = true;
+}
+const typeErrors = ts.getPreEmitDiagnostics(program).filter((d) => d.category === ts.DiagnosticCategory.Error);
+if (typeErrors.length > 0) {
+  console.error(`check-dts: ${HOST} does not compile against the built declarations:\n` + ts.formatDiagnostics(typeErrors, {
+    getCanonicalFileName: (name) => name, getCurrentDirectory: () => process.cwd(), getNewLine: () => '\n',
+  }));
+  failed = true;
+}
+
 if (failed) process.exit(1);
-console.log(`check-dts: ${Object.keys(TIERS).length} tier declarations and shared capability identity clean`);
+console.log(`check-dts: ${Object.keys(TIERS).length} tier declarations, shared capability identity and the typed event map clean`);
