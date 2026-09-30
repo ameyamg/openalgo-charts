@@ -5,10 +5,10 @@
  * `ema`, `supertrend`, and the `sourceValues` helper come from the base bundle
  * (`../index`), not deep paths — see the note in `src/indicators/index.ts`.
  */
-import { supertrend, atr, sourceValues, sourceValue,
-  sessionStartFlags, calendarPeriodFlags, isNewZonedPeriod, isNewIstDay, isNewZonedDay,
-  utcSecondsToIstParts, IST_OFFSET_SECONDS,
-  DEFAULT_TIMEZONE } from 'openalgo-charts';
+import {
+  supertrend, atr, sourceValues, sourceValue,
+  sessionStartFlags, calendarPeriodFlags, isNewIstDay, isNewZonedDay, DEFAULT_TIMEZONE,
+} from 'openalgo-charts';
 import type { Bar, IndicatorDescriptor, IndicatorSource, IndicatorStudySource } from 'openalgo-charts';
 import { sma, wma, stdev, highest, lowest, nulls, smaSeededEma } from './calc';
 import type { NumericalWindowOptions } from './statistics';
@@ -17,6 +17,7 @@ import { seeded, smooth, observed, observedStep, supertrendState, supertrendStep
 import { withTimeframe } from './timeframe';
 import { num, int, offsetOf, str, src, zoneOf } from './settings';
 import { shift, zip } from './series';
+import { periodBoundary } from './calendar';
 
 type Calc = IndicatorDescriptor['calc'];
 
@@ -149,48 +150,6 @@ export const BOLLINGER: IndicatorDescriptor = withTimeframe(withTail({
  */
 type VwapAnchor = 'session' | 'week' | 'month' | 'quarter' | 'year' | 'continuous';
 
-/** The anchors that are a calendar period rather than a trading session. */
-type CalendarAnchor = Exclude<VwapAnchor, 'session' | 'continuous'>;
-
-/** Epoch day in IST. Cheap only because IST is a fixed offset; nothing else is. */
-const istDay = (t: number): number => Math.floor((t + IST_OFFSET_SECONDS) / 86400);
-
-/** Monday-based week index. Epoch day 4 is Monday 1970-01-05. */
-const istWeek = (t: number): number => Math.floor((istDay(t) - 4) / 7);
-
-function istPeriodBoundary(period: CalendarAnchor, prev: number, now: number): boolean {
-  // Week first: a Monday-start week straddles the turn of the year, so the year
-  // test below would report a boundary the week itself does not have.
-  if (period === 'week') return istWeek(prev) !== istWeek(now);
-  const a = utcSecondsToIstParts(prev);
-  const b = utcSecondsToIstParts(now);
-  if (a.year !== b.year) return true;
-  if (period === 'year') return false;
-  if (period === 'quarter') return Math.floor((a.month - 1) / 3) !== Math.floor((b.month - 1) / 3);
-  return a.month !== b.month;
-}
-
-/**
- * The boundary test for one anchor period, on the calendar of `zone`.
- *
- * The default zone keeps the offset arithmetic. Intl is the right answer for an
- * arbitrary zone and the wrong price for the one zone that has no DST to get
- * wrong: measured over twelve thousand daily bars the sweep costs 38ms through
- * Intl against 3ms through `utcSecondsToIstParts`, and a week anchor runs one
- * test per bar. The two answers are pinned identical for Asia/Kolkata by
- * `tests/indicator-timezone.test.ts`, so the branch buys back the old speed for
- * every existing caller and changes nothing about what it returns. The
- * foundation's own `sessionStartFlags` splits on the same line for the same
- * reason.
- */
-function periodBoundary(
-  period: CalendarAnchor,
-  zone: string,
-): (prev: number, now: number) => boolean {
-  return zone === DEFAULT_TIMEZONE
-    ? (prev, now): boolean => istPeriodBoundary(period, prev, now)
-    : (prev, now): boolean => isNewZonedPeriod(prev, now, period, zone);
-}
 
 /**
  * Per-bar flags for the first bar of each anchor period, on the calendar of

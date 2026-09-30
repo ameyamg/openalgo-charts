@@ -7,19 +7,14 @@
  * ARCHITECTURE.md 0.1. Warmup slots return `null`, never a guessed value, so a
  * plot that starts one bar early reads as the bug it is.
  */
-import {
-  trueRange, rsi, sourceValues,
-  sessionStartFlags, calendarPeriodFlags,
-  isNewZonedWeek, isNewZonedMonth,
-  utcSecondsToIstParts, IST_OFFSET_SECONDS,
-  DEFAULT_TIMEZONE,
-} from 'openalgo-charts';
+import { trueRange, rsi, sourceValues, sessionStartFlags, calendarPeriodFlags } from 'openalgo-charts';
 import type { Bar, IndicatorDescriptor, IndicatorInput, IndicatorPlot } from 'openalgo-charts';
 import { sma, nulls, barsSince, mfiFromFlows } from './calc';
 import { windowMean } from './window-mean';
 import { num, int, str, flag, src, zoneOf } from './settings';
 import { crossesAbove, crossesBelow } from './statistics';
 import { shift, shiftFlags } from './series';
+import { periodBoundary } from './calendar';
 
 /** A NaN-filled column of the right length, the shape every `calc` here starts from. */
 const blank = (n: number): number[] => new Array<number>(n).fill(NaN);
@@ -35,49 +30,6 @@ type PivotPeriod = 'daily' | 'weekly' | 'monthly';
 
 const DAY_SECONDS = 86400;
 
-/**
- * The frames that are a calendar period. A daily frame is a trading session and
- * is read from the bar gaps instead, so it never reaches the calendar tests.
- */
-type CalendarFrame = Exclude<PivotPeriod, 'daily'>;
-
-/** Epoch day in IST. Cheap only because IST is a fixed offset; nothing else is. */
-const istDay = (t: number): number => Math.floor((t + IST_OFFSET_SECONDS) / DAY_SECONDS);
-
-/** Monday-based week index. Epoch day 4 is Monday 1970-01-05. */
-const istWeek = (t: number): number => Math.floor((istDay(t) - 4) / 7);
-
-/**
- * Whether `now` opens a new week or month on the calendar of `zone`. Index
- * arithmetic rather than a day-of-week test: a holiday, a half session or a feed
- * outage can drop the bar that sits on the boundary, and comparing indices still
- * catches the crossing.
- *
- * The default zone keeps the offset arithmetic it always used. Intl is the right
- * answer for an arbitrary zone and the wrong price for the one zone that has no
- * DST to get wrong: measured over twelve thousand daily bars the sweep costs
- * 38ms through Intl against 3ms through `utcSecondsToIstParts`, and on daily
- * bars this runs once per bar. The two answers are pinned identical for
- * Asia/Kolkata by `tests/indicator-timezone.test.ts`, so the branch changes
- * nothing about what the frame returns. The foundation's own `sessionStartFlags`
- * splits on the same line for the same reason.
- */
-function frameBoundary(
-  period: CalendarFrame,
-  zone: string,
-): (prev: number, now: number) => boolean {
-  if (zone !== DEFAULT_TIMEZONE) {
-    return period === 'weekly'
-      ? (prev, now): boolean => isNewZonedWeek(prev, now, zone)
-      : (prev, now): boolean => isNewZonedMonth(prev, now, zone);
-  }
-  if (period === 'weekly') return (prev, now): boolean => istWeek(prev) !== istWeek(now);
-  return (prev, now): boolean => {
-    const a = utcSecondsToIstParts(prev);
-    const b = utcSecondsToIstParts(now);
-    return a.year !== b.year || a.month !== b.month;
-  };
-}
 
 /**
  * Per-bar flags for the first bar of each pivot frame.
@@ -99,7 +51,7 @@ function pivotFrameStarts(bars: readonly Bar[], period: PivotPeriod, zone: strin
   const times = bars.map((b) => b.time);
   return period === 'daily'
     ? sessionStartFlags(times, zone)
-    : calendarPeriodFlags(times, frameBoundary(period, zone));
+    : calendarPeriodFlags(times, periodBoundary(period === 'weekly' ? 'week' : 'month', zone));
 }
 
 /**
