@@ -86,8 +86,8 @@ export class VolumeProfile implements IPrimitive {
     let max = -Infinity;
     for (const s of this._result.sessions) {
       if (s.levels.length === 0) continue;
-      max = Math.max(max, s.levels[0].price);
-      min = Math.min(min, s.levels[s.levels.length - 1].price);
+      max = Math.max(max, s.levels[0]!.price);
+      min = Math.min(min, s.levels[s.levels.length - 1]!.price);
     }
     return Number.isFinite(min) ? { min, max } : null;
   }

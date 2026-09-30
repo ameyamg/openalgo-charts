@@ -50,9 +50,9 @@ export function computeFootprint(
   const cells = Array.from(map.values()).sort((a, b) => b.price - a.price);
   const bar: FootprintBar = { time, cells, delta, minDelta, maxDelta, rowSize: row, tradeCount: trades.length };
   if (trades.length > 0) {
-    bar.open = trades[0].price;
-    bar.close = trades[trades.length - 1].price;
-    bar.high = bar.low = trades[0].price;
+    bar.open = trades[0]!.price;
+    bar.close = trades[trades.length - 1]!.price;
+    bar.high = bar.low = trades[0]!.price;
     for (const trade of trades) {
       bar.high = Math.max(bar.high, trade.price);
       bar.low = Math.min(bar.low, trade.price);
@@ -85,7 +85,7 @@ export function validateClassifiedTrade(trade: ClassifiedTrade): void {
 function observedRowSize(cells: readonly FootprintCell[]): number {
   let row = Infinity;
   for (let i = 1; i < cells.length; i++) {
-    const gap = cells[i - 1].price - cells[i].price;
+    const gap = cells[i - 1]!.price - cells[i]!.price;
     if (gap > 0) row = Math.min(row, gap);
   }
   return row;
@@ -113,7 +113,7 @@ export function diagonalImbalances(cells: readonly FootprintCell[], ratio = 3, r
   const dominates = (volume: number, opposing: number): boolean => volume > 0 && volume >= threshold && volume >= ratio * opposing;
   const out: Imbalance[] = [];
   for (let i = 0; i < sorted.length; i++) {
-    const here = sorted[i];
+    const here = sorted[i]!;
     const below = sorted[i + 1];
     const above = sorted[i - 1];
     if (below && adjacent(here.price, below.price, row) && dominates(here.askVol, below.bidVol)) out.push({ price: here.price, side: 'buy' });

@@ -58,6 +58,26 @@ describe('MarketProfile primitive', () => {
     expect(calls.fillRect).toBeGreaterThan(0);
   });
 
+  it('paints period blocks in the base colour when the period palette is empty', () => {
+    // A palette with no colours used to hand the canvas `undefined`, which a
+    // real canvas ignores, so the blocks took whatever fill came before them.
+    const { result, t0 } = makeResult();
+    const blocksOnly = {
+      blockDisplay: 'blocks', showValueAreaLabels: false, showPocLabel: false, showSessionLabel: false,
+      showPoc: false, showValueArea: false, fillValueArea: false, showInitialBalance: false,
+      showSinglePrints: false, showTails: false, colorMode: 'period', color: '#3a6ea5',
+    } as const;
+    const fills = (periodColors: readonly string[]): unknown[] => {
+      const { ctx } = recorder();
+      const seen: unknown[] = [];
+      ctx.fillRect = () => { seen.push(ctx.fillStyle); };
+      new MarketProfile(result, { ...blocksOnly, periodColors }).draw(ctx, makeRc(t0, t0 + 1800));
+      return [...new Set(seen)];
+    };
+    expect(fills(['#aa3322', '#22aa33'])).toEqual(['#aa3322', '#22aa33']);
+    expect(fills([])).toEqual(['#3a6ea5']);
+  });
+
   it('reports its price extent via autoscaleInfo', () => {
     const { result } = makeResult();
     const mp = new MarketProfile(result);

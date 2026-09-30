@@ -40,25 +40,27 @@ export function computeTpo(
   }
 
   const total = buckets.reduce((s, b) => s + b.count, 0);
+  // Every index below stays in 0..buckets.length - 1: the loop bound and the
+  // guards on each step keep it there, and buckets is not empty.
   let pocIdx = 0;
-  for (let i = 1; i < buckets.length; i++) if (buckets[i].count > buckets[pocIdx].count) pocIdx = i;
+  for (let i = 1; i < buckets.length; i++) if (buckets[i]!.count > buckets[pocIdx]!.count) pocIdx = i;
 
   let upper = pocIdx;
   let lower = pocIdx;
-  let acc = buckets[pocIdx].count;
+  let acc = buckets[pocIdx]!.count;
   const target = total * valueAreaPercent;
   while (acc < target && (upper > 0 || lower < buckets.length - 1)) {
-    const up = upper > 0 ? buckets[upper - 1].count : -1;
-    const down = lower < buckets.length - 1 ? buckets[lower + 1].count : -1;
-    if (up >= down) { upper -= 1; acc += buckets[upper].count; }
-    else { lower += 1; acc += buckets[lower].count; }
+    const up = upper > 0 ? buckets[upper - 1]!.count : -1;
+    const down = lower < buckets.length - 1 ? buckets[lower + 1]!.count : -1;
+    if (up >= down) { upper -= 1; acc += buckets[upper]!.count; }
+    else { lower += 1; acc += buckets[lower]!.count; }
   }
 
   return {
     buckets,
-    poc: buckets[pocIdx].price,
-    vah: buckets[upper].price,
-    val: buckets[lower].price,
+    poc: buckets[pocIdx]!.price,
+    vah: buckets[upper]!.price,
+    val: buckets[lower]!.price,
     ib: { high: ibHigh, low: ibLow },
   };
 }

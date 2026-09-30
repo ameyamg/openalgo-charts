@@ -64,7 +64,7 @@ export interface DrawingTemplateCatalog {
 
 export interface DrawingTemplateOperationOptions {
   /** Cancellation is effective until the storage transaction commits. */
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
   /** Refuse the change when the catalog has moved past this revision. */
   expectedRevision?: number;
 }

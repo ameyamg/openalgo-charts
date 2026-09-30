@@ -577,6 +577,7 @@ See [Contributing](./CONTRIBUTING.md) for setup, targeted checks, documentation 
 ```bash
 npm install        # install dev toolchain
 npm run typecheck  # strict TypeScript check
+npm run typecheck:strict # stricter flags, tier by tier (scripts/strict-tiers.json)
 npm test           # engine unit tests (Vitest): 11118 across 469 files
 npm run test:demo  # reference-host tests: 683 across 64 files
 npm run test:endurance # node endurance-harness tests: 7 cases
@@ -584,7 +585,7 @@ npm run build      # Rollup -> dist/ (minified ESM per tier + types)
 npm run size       # size-limit (Brotli) against the budget
 npm run e2e        # Playwright Chromium smoke tests
 npm run bench:render # render bench: pan, zoom-out and tick frame budgets per bar count
-npm run verify     # lint + types + unit + endurance harness + build + demo + dts + size + shake
+npm run verify     # lint + types + strict tiers + unit + endurance harness + build + demo + dts + size + shake
 ```
 
 ## Principles

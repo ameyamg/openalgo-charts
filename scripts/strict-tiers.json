@@ -1,0 +1,3 @@
+{
+  "clean": ["profile", "trade", "webgl", "workspace"]
+}

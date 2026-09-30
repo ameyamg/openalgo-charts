@@ -168,27 +168,29 @@ export function computeVolumeProfileSessions(
 
     if (levels.length === 0) continue;
 
-    // POC + value-area expansion by volume.
+    // POC + value-area expansion by volume. Every index below stays in
+    // 0..levels.length - 1 (the loop bound and the guards on each step keep it
+    // there), and neither levels nor the session's bars are empty.
     let pocIdx = 0;
-    for (let i = 1; i < levels.length; i++) if (levels[i].volume > levels[pocIdx].volume) pocIdx = i;
+    for (let i = 1; i < levels.length; i++) if (levels[i]!.volume > levels[pocIdx]!.volume) pocIdx = i;
     let upper = pocIdx;
     let lower = pocIdx;
-    let acc = levels[pocIdx].volume;
+    let acc = levels[pocIdx]!.volume;
     const target = totalVolume * vaPct;
     while (acc < target && (upper > 0 || lower < levels.length - 1)) {
-      const up = upper > 0 ? levels[upper - 1].volume : -1;
-      const down = lower < levels.length - 1 ? levels[lower + 1].volume : -1;
-      if (up >= down) { upper -= 1; acc += levels[upper].volume; }
-      else { lower += 1; acc += levels[lower].volume; }
+      const up = upper > 0 ? levels[upper - 1]!.volume : -1;
+      const down = lower < levels.length - 1 ? levels[lower + 1]!.volume : -1;
+      if (up >= down) { upper -= 1; acc += levels[upper]!.volume; }
+      else { lower += 1; acc += levels[lower]!.volume; }
     }
 
     sessions.push({
-      startTime: g[0].time,
-      endTime: g[g.length - 1].time,
+      startTime: g[0]!.time,
+      endTime: g[g.length - 1]!.time,
       levels,
-      poc: levels[pocIdx].price,
-      vah: levels[upper].price,
-      val: levels[lower].price,
+      poc: levels[pocIdx]!.price,
+      vah: levels[upper]!.price,
+      val: levels[lower]!.price,
       totalVolume,
       buyVolume,
       sellVolume,

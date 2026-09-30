@@ -97,7 +97,7 @@ function metadata(input: Record<string, Json>, kind: WorkspaceKind): DocumentMet
     createdAt, updatedAt: number(input.updatedAt, 'updatedAt', createdAt) };
 }
 
-function priceScaleId(input: Json, label: string): PriceScaleId {
+function priceScaleId(input: Json | undefined, label: string): PriceScaleId {
   if (typeof input !== 'string' || (input !== 'right' && input !== 'left' && input !== '' && !input.startsWith('overlay:'))) {
     throw new WorkspaceDocumentError(`Invalid ${label}`);
   }
@@ -222,11 +222,12 @@ function templateIndicatorStates(input: Json | undefined, requireIdentity = fals
     return target;
   }));
   const active = new Set<number>(), complete = new Set<number>();
+  // Every index visited is a study's: the loop below, or a target read from `identities`.
   const visit = (index: number): void => {
     if (active.has(index)) throw new WorkspaceDocumentError('Study dependencies contain a cycle');
     if (complete.has(index)) return;
     active.add(index);
-    for (const target of dependencies[index]) visit(target);
+    for (const target of dependencies[index]!) visit(target);
     active.delete(index);
     complete.add(index);
   };
@@ -290,8 +291,9 @@ function templatePayload(input: Json): IndicatorTemplatePayload {
       throw new WorkspaceDocumentError('Template scale range owner is missing');
     }
   }
+  // Called with a binding's pane, range-checked against `panes`, or with pane zero, which exists.
   const requireScale = (paneIndex: number, scaleId: PriceScaleId): void => {
-    if (scaleId !== 'right' && !panes[paneIndex].scales?.[scaleId]) {
+    if (scaleId !== 'right' && !panes[paneIndex]!.scales?.[scaleId]) {
       throw new WorkspaceDocumentError('Template plot or primary scale is missing');
     }
   };

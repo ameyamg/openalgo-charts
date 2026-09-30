@@ -16,9 +16,9 @@ export interface TradingCapabilities {
 export interface TradingCapabilityRequest {
   readonly operation: TradingOperation;
   readonly symbol?: string;
-  readonly exchange?: string;
-  readonly orderId?: string;
-  readonly type?: OrderType;
+  readonly exchange?: string | undefined;
+  readonly orderId?: string | undefined;
+  readonly type?: OrderType | undefined;
   readonly mode?: 'live' | 'analyzer';
 }
 

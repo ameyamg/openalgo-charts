@@ -87,7 +87,7 @@ export interface AccountHistoryQuery {
  * `features` says which are real, and a method without a declaration is unused.
  */
 export interface AccountFeed {
-  readonly features?: TradingFeatureSource;
+  readonly features?: TradingFeatureSource | undefined;
   listAccounts?(signal: AbortSignal): Promise<readonly TradingAccount[]>;
   getAccountSnapshot?(accountId: string, signal: AbortSignal): Promise<AccountSnapshot>;
   /** Push readings as they change. `onError` reports a dead stream; the returned function stops it. */
@@ -139,6 +139,9 @@ export interface AccountManagerOptions {
   /** Selected after the first listing when the provider offers it. Default: the first account. */
   initialAccount?: string;
 }
+
+/** A change to the state. `reason: undefined` clears the reason, which the state then omits. */
+type AccountPatch = Partial<Omit<AccountState, 'reason'>> & { readonly reason?: string | undefined };
 
 const CANCELLED = 'The account changed before the read finished';
 const DISCONNECTED = 'The connection dropped; account figures may be out of date';
@@ -198,8 +201,8 @@ function readHistory(raw: unknown, accountId: string): OrderHistoryEntry | null 
 export class AccountManager implements AccountStateSource {
   private readonly _feed: AccountFeed;
   private readonly _mode: TradeMode;
-  private readonly _hostFeatures?: TradingFeatureSource;
-  private readonly _initial?: string;
+  private readonly _hostFeatures?: TradingFeatureSource | undefined;
+  private readonly _initial?: string | undefined;
   private readonly _listeners = new Set<(state: AccountState) => void>();
   /** Aborted together whenever the generation moves on. */
   private _aborts = new Set<AbortController>();
@@ -245,9 +248,11 @@ export class AccountManager implements AccountStateSource {
     return implemented ? null : `${feature === 'accounts' ? 'Account data' : feature === 'executions' ? 'Execution history' : 'Order history'} is not implemented by this feed`;
   }
 
-  private _set(patch: Partial<AccountState>): void {
-    const next = { ...this._state, ...patch };
-    if (patch.reason === undefined && 'reason' in patch) delete (next as { reason?: string }).reason;
+  private _set(patch: AccountPatch): void {
+    const merged = { ...this._state, ...patch };
+    if (patch.reason === undefined && 'reason' in patch) delete (merged as { reason?: string }).reason;
+    // Only a patch brings `reason: undefined`, and the line above removed it.
+    const next = merged as AccountState;
     this._state = next;
     for (const listener of [...this._listeners]) {
       try { listener(next); } catch { /* A host listener's bug must not stop the others or the manager. */ }

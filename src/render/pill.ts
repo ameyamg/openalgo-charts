@@ -116,7 +116,7 @@ export interface PillStyle {
   /** Corner radius in device px. */
   radius: number;
   /** Opaque under-fill so chart lines don't bleed through a translucent pill. */
-  backplate?: string;
+  backplate?: string | undefined;
 }
 
 /** Filled rounded pill with centered-baseline text; returns the pill width. */
@@ -184,7 +184,7 @@ export function drawPillGroup(
   x: number,
   yCenter: number,
   segments: readonly PillSegment[],
-  opts: { height: number; padX: number; radius: number; gap: number; backplate?: string; dpr: number },
+  opts: { height: number; padX: number; radius: number; gap: number; backplate?: string | undefined; dpr: number },
 ): PillGroupMetrics {
   const { height, padX, radius, gap, dpr } = opts;
   const widths = segments.map((s) => (s.close === true ? CLOSE_SEGMENT_W * dpr : ctx.measureText(s.text ?? '').width + padX * 2));

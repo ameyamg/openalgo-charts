@@ -227,8 +227,8 @@ export class MarketProfile implements IPrimitive {
     let max = -Infinity;
     for (const s of this._result.sessions) {
       if (s.levels.length === 0) continue;
-      max = Math.max(max, s.levels[0].price);
-      min = Math.min(min, s.levels[s.levels.length - 1].price);
+      max = Math.max(max, s.levels[0]!.price);
+      min = Math.min(min, s.levels[s.levels.length - 1]!.price);
     }
     return Number.isFinite(min) ? { min, max } : null;
   }
@@ -320,7 +320,7 @@ export class MarketProfile implements IPrimitive {
       ctx.clip();
     }
     for (let i = 0; i < this._result.sessions.length; i++) {
-      this._drawSession(ctx, rc, this._result.sessions[i], row, i);
+      this._drawSession(ctx, rc, this._result.sessions[i]!, row, i);
     }
     if (this._opts.showNakedLevels) this._drawNaked(ctx, rc);
     if (compact) ctx.restore();
@@ -341,7 +341,8 @@ export class MarketProfile implements IPrimitive {
 
   private _blockColor(l: MarketProfileLevel, periodIdx: number, s: MarketProfileSessionResult): string {
     const o = this._opts;
-    if (o.colorMode === 'period') return o.periodColors[periodIdx % o.periodColors.length];
+    // An empty palette has no colour for any period, so the base colour stands in.
+    if (o.colorMode === 'period') return o.periodColors[periodIdx % o.periodColors.length] ?? o.color;
     if (o.colorMode === 'valueArea') return l.price <= s.vah && l.price >= s.val ? o.vaColor : o.color;
     return o.color;
   }
@@ -424,11 +425,11 @@ export class MarketProfile implements IPrimitive {
       for (let j = 0; j < l.periods.length; j++) {
         // `split` gives each period its own column slot, so a gap shows which
         // periods never traded that row; packed mode closes the gaps up.
-        const slot = split ? l.periods[j] : j;
+        const slot = split ? l.periods[j]! : j;
         const bx = x0 + slot * lw;
         if (bx > x1) break;
         if (compact && (bx + lw > x1 || bx + lw < 0 || bx > rc.plotWidth * dpr)) continue;
-        const color = this._blockColor(l, l.periods[j], s);
+        const color = this._blockColor(l, l.periods[j]!, s);
         if (drawBlock) {
           ctx.globalAlpha = baseAlpha;
           ctx.fillStyle = color;

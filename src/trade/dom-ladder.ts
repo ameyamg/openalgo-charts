@@ -52,10 +52,13 @@ function scheduleBucket(ticks: TickSchedule, n: number): (p: number) => number {
   return (p) => {
     const price = ticks.round(p), { bands } = ticks;
     if (n === 1 || !Number.isFinite(price)) return price;
+    // A schedule has at least one band (its constructor refuses none), and i
+    // walks down from the last to no lower than the first.
     let i = bands.length - 1;
-    while (i > 0 && price < bands[i].from!) i--;
-    const step = bands[i].tick * n;
-    const lower = bands[i].from ?? -Infinity, upper = bands[i + 1]?.from ?? Infinity;
+    while (i > 0 && price < bands[i]!.from!) i--;
+    const band = bands[i]!;
+    const step = band.tick * n;
+    const lower = band.from ?? -Infinity, upper = bands[i + 1]?.from ?? Infinity;
     // A boundary is valid in both bands, so it is where a group stops.
     return ticks.round(Math.min(Math.max(Math.round(price / step) * step, lower), upper));
   };
