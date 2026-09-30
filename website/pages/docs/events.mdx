@@ -91,7 +91,8 @@ remains the hit handle for a single event when that ID is unique. Anonymous even
 duplicate IDs and clusters receive generated handles; details preserve the original
 event IDs. You can also supply `color`, `title`,
 `group` and `details`. Details accept a string or a `ChartEventDetails` object
-containing `summary` and a list of `{ label, value }` text fields.
+containing `summary`, a list of `{ label, value }` text fields and, from 2.6.0,
+rich `blocks` (see [Rich details and actions](#rich-details-and-actions)).
 
 ```ts
 chart.setEventGroups([
@@ -155,8 +156,8 @@ then resolve ordinary chart `click` or `hover` IDs through its `detailsForHit`.
 ### Widget popup and host loaders
 
 The widget opens an accessible details popup when a chart-owned badge is clicked.
-Cluster members are selectable buttons. All titles, summaries and field values
-are rendered as text. Escape and Close dismiss it, Tab stays within its controls,
+Cluster members are selectable buttons. All titles, summaries, field values and
+rich blocks are rendered as text. Escape and Close dismiss it, Tab stays within its controls,
 and closing returns focus to the opener when appropriate.
 
 ```ts
@@ -186,6 +187,55 @@ create `new EventDetailsPopup(container, options)` from the widget tier, call
 `styleNonce`, a shared `overlays` stack and `injectStyles: false` for hosts that
 already include `EVENT_DETAILS_CSS`. Standalone time formatting defaults to
 `Asia/Kolkata`; supply `formatTime` for another timezone or locale.
+
+### Rich details and actions
+
+From 2.6.0, `details.blocks` adds headings, paragraphs and bulleted lists after
+the fields, and `eventDetails.actions` adds buttons under them.
+
+```ts
+widget.chart.setEvents([{
+  id: 'sample-results', time: 1705315500, type: 'earnings', label: 'E',
+  title: 'Sample results announcement',
+  details: {
+    summary: 'Demonstration data supplied by this application.',
+    blocks: [
+      { type: 'heading', text: 'Highlights' },
+      { type: 'paragraph', text: [
+        { text: 'Margins ' }, { text: 'widened', strong: true }, { text: ' on lower costs. ', em: true },
+        { text: 'Read the filing', href: 'https://example.com/filing' },
+      ] },
+      { type: 'list', items: ['Volume up 9%', 'Guidance kept'] },
+    ],
+  },
+}]);
+
+const widget = createWidget(container, {
+  eventDetails: {
+    actions: event => event.type === 'earnings'
+      ? [{ label: 'Mark on chart', run: shown => markTime(shown.time) }]
+      : [],
+  },
+});
+```
+
+Event content usually comes from a feed, so it is treated as untrusted:
+
+- Blocks are structure, not markup. A block's `text` is a string or a list of
+  spans `{ text, strong?, em?, href? }`, and every string is shown as text: a
+  feed that sends `<img onerror=...>` shows those characters, and nothing runs.
+- A span's `href` becomes a link only when it is an absolute `http` or `https`
+  URL without credentials. It opens in a new tab with no opener and no referrer.
+  `javascript:`, `data:`, `vbscript:`, relative and protocol-relative values
+  show the span's text alone.
+- A block of an unknown type or a malformed shape is skipped, and `setEvents`
+  copies blocks all the way down, so later edits to your objects change nothing.
+
+`actions(event)` is asked each time an event is shown and returns
+`{ label, run }` pairs; labels are text. A press closes the popup first, then
+calls `run` with a copy of the event, so a dialog the action opens is not closed
+under it. Without `actions` the popup has no buttons. Custom hosts pass the same
+option to `new EventDetailsPopup(container, { actions })`.
 
 The [linked analysis example](/examples) uses explicitly labelled sample events.
 No live calendar source is bundled.

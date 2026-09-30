@@ -18,7 +18,9 @@ Use `WidgetOptions.eventDetails` for its detail loader, labels and formatter, or
 chart's current timezone and widget locale. Event data is supplied through
 `widget.chart.setEvents()`, with optional groups and clustering controls.
 Symbol changes, replaced events and widget disposal close the popup and cancel
-pending detail loading. See the timeline section in `primitives-and-plugins.md`.
+pending detail loading. (unreleased) Details may carry rich `blocks`, rendered as
+text with vetted links, and `eventDetails.actions` adds host buttons (the type is
+`EventDetailAction`). See the timeline section in `primitives-and-plugins.md`.
 
 ```ts
 import { createWidget } from 'openalgo-charts/widget';
@@ -163,7 +165,7 @@ The sprite is injected once per document on the body (`id="oac-rail-sprite"`), s
 | `downloadText(doc, filename, text, mime)` | function | Hand text to the browser as a file; false when the runtime cannot. |
 | `captureName(symbol, interval, now?)` | function | `SYMBOL-5m-2026-01-31-09-15`, filename-safe. |
 | `SEARCH_DEBOUNCE_MS` | const `150` | Quiet before `symbolSearch` runs. |
-| `TopbarOptions`, `TopbarHandle`, `TopbarState`, `SymbolMatch`, `SymbolSearch`, `MenuRow`, `MenuOptions` | types | |
+| `TopbarOptions`, `TopbarHandle`, `TopbarState`, `SymbolMatch`, `SymbolSearch`, `MenuRow`, `MenuOptions` | types | (unreleased) `SymbolMatch` is the base package's type, re-exported. The results panel keeps focus in its field while a row is pressed, and a failed lookup shows "Search unavailable" (`schema.ui.symbolSearchFailed`) with typed entry still committing. |
 
 The Capture menu includes **Download chart data (CSV)**, using the base
 `exportChartDataCsv` API. It captures source identity when opened and refuses a
@@ -337,7 +339,7 @@ Color swatches stay compact. Theme overrides should target these tokens.
 | `layouts` | `LayoutsController \| false` | a controller over this widget | (since 2.5.10) What the Layouts menu drives. A chart grid gives its charts `false` (no chart saves a layout of its own there) unless the host passes one controller for the whole grid, which every chart's menu then drives. `false` keeps `workspaces` for templates only. |
 | `drawingStore` | `DrawingDocumentStore` | beside the layout with `persist`, else in memory | (since 2.5.9) Where each instrument's drawings are kept in `'instrument'` scope. Not a `ChartGridOptions` field: the grid gives each cell its own. |
 | `locale` | `string` | the runtime's | BCP 47 tag for the numbers on the status line. |
-| `symbolSearch` | `(query) => SymbolMatch[] \| Promise<SymbolMatch[]>` | none | Called as the user types in the symbol box, after `SEARCH_DEBOUNCE_MS`. |
+| `symbolSearch` | `(query, { signal }?) => SymbolMatch[] \| Promise<SymbolMatch[]>` | the feed's `searchSymbols`, when it has one (unreleased); else none | Called as the user types in the symbol box, after `SEARCH_DEBOUNCE_MS`. (unreleased) The second argument's `signal` aborts once a newer query or a closed picker makes the answer stale; a one-argument callback still works. Without a callback, a feed with `searchSymbols` (both OpenAlgo feeds) serves every picker: the top bar, the phone layout, typed entry, the watchlist and study symbol inputs. That lookup lists the exact symbol on the chart's exchange first, because Enter takes the first result. |
 | `lookbackBars` | `number` | `DEFAULT_LOOKBACK_BARS` | Bars per load. |
 | `now` | `() => number` | `Date.now` | Clock for the load window and the capture filename. |
 | `onOrder` | `(order: OrderRequest) => void` | none | Order entry from the right-click menu. Without it the menu draws no trade rows. |

@@ -1,19 +1,30 @@
+import type { DataFeed, SymbolMatch } from 'openalgo-charts';
 import { h, type WidgetContext } from './context';
 import { widgetText } from './localization';
 
-/** One result from a host's lookup. Each contract carries its own symbol and exchange. */
-export interface SymbolMatch {
-  symbol: string;
-  exchange?: string;
-  name?: string;
-  assetClass?: string;
-  iconUrl?: string;
-  contractGroup?: { label?: string; contracts: readonly SymbolMatch[] };
-}
+export type { SymbolMatch };
 
-/** The original query-only callback remains valid. */
-export type SymbolSearch = (query: string) => Promise<readonly SymbolMatch[]> | readonly SymbolMatch[];
+/**
+ * A host's lookup. The original query-only callback remains valid; `signal`
+ * aborts once a newer query or a closed picker makes the answer stale.
+ */
+export type SymbolSearch = (query: string, context?: { signal: AbortSignal }) => Promise<readonly SymbolMatch[]> | readonly SymbolMatch[];
 export const SEARCH_DEBOUNCE_MS = 150;
+
+/**
+ * The feed's own search, for a widget whose host passes no lookup. The exact
+ * symbol on the chart's exchange goes first: Enter takes the first result,
+ * and typed text alone used to keep the chart's exchange.
+ */
+export function feedSymbolSearch(feed: DataFeed | undefined, exchange: () => string): SymbolSearch | undefined {
+  if (typeof feed?.searchSymbols !== 'function') return undefined;
+  return async (query, context) => {
+    const hits = await feed.searchSymbols!({ query, signal: context?.signal });
+    const typed = query.trim().toUpperCase();
+    const at = hits.findIndex(hit => !hit.contractGroup && hit.exchange === exchange() && hit.symbol.toUpperCase() === typed);
+    return at > 0 ? [hits[at], ...hits.slice(0, at), ...hits.slice(at + 1)] : hits;
+  };
+}
 
 export interface SymbolPickerOptions {
   search: SymbolSearch;
@@ -50,6 +61,7 @@ export function mountSymbolPicker(ctx: WidgetContext, input: HTMLInputElement, o
   let destroyed = false;
   let sequence = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending: AbortController | null = null;
   let panel: HTMLElement | null = null;
   let list: HTMLElement | null = null;
   let closeOverlay: (() => void) | null = null;
@@ -63,7 +75,7 @@ export function mountSymbolPicker(ctx: WidgetContext, input: HTMLInputElement, o
   let searching = false;
 
   const clearTimer = (): void => { if (timer !== null) { clearTimeout(timer); timer = null; } };
-  const invalidate = (): void => { sequence++; clearTimer(); };
+  const invalidate = (): void => { sequence++; clearTimer(); pending?.abort(); pending = null; };
   const close = (): void => {
     invalidate();
     const closer = closeOverlay;
@@ -84,6 +96,10 @@ export function mountSymbolPicker(ctx: WidgetContext, input: HTMLInputElement, o
     panel = h(doc, 'div', `oac-symbol-picker ${mobile ? 'oac-mobile-results' : 'oac-menu oac-sym__results'}`, {
       role: mobile ? 'region' : 'listbox', 'aria-label': widgetText(ctx, 'schema.ui.symbolResults', {}, 'Symbols'),
     });
+    // Focus stays in the field, as in any combobox: the top bar puts the
+    // chart's symbol back into its field on blur, and a selection is refused
+    // once the field no longer holds the text that was searched.
+    panel.addEventListener('mousedown', event => event.preventDefault());
     if (mobile) {
       const header = h(doc, 'div', 'oac-mobile-results__head');
       const title = h(doc, 'strong');
@@ -114,9 +130,11 @@ export function mountSymbolPicker(ctx: WidgetContext, input: HTMLInputElement, o
       || (options.context === undefined ? undefined : JSON.stringify(options.context())) !== contextAtQuery) return;
     const symbol = hit.symbol.trim();
     if (symbol === '') return;
+    // Leave the field while the results still show: a field that commits on
+    // change holds its typed text back until then, so only the pick lands.
+    input.blur();
     close();
     options.onSelect(symbol, hit.exchange);
-    input.blur();
   };
   const paint = (): void => {
     if (panel === null || list === null) return;
@@ -179,11 +197,21 @@ export function mountSymbolPicker(ctx: WidgetContext, input: HTMLInputElement, o
     searching = true;
     ensurePanel();
     if (panel !== null) (panel.querySelector('.oac-symbol-picker__categories') as HTMLElement).textContent = '';
-    if (list !== null) { list.textContent = ''; const status = h(doc, 'div', 'oac-symbol-picker__status', { role: 'status' }); status.textContent = widgetText(ctx, 'schema.ui.searchingSymbols', {}, 'Searching'); list.appendChild(status); }
+    const status = (key: `schema.${string}`, fallback: string): void => {
+      if (list === null) return;
+      const row = h(doc, 'div', 'oac-symbol-picker__status', { role: 'status' });
+      row.textContent = widgetText(ctx, key, {}, fallback);
+      list.textContent = '';
+      list.appendChild(row);
+    };
+    status('schema.ui.searchingSymbols', 'Searching');
+    // Typed text stays committable: a lookup that fails leaves raw entry to the field.
+    const failed = (): void => { if (ticket !== sequence) return; searching = false; status('schema.ui.symbolSearchFailed', 'Search unavailable'); };
     timer = setTimeout(() => {
       timer = null;
+      pending = new AbortController();
       let answer: Promise<readonly SymbolMatch[]>;
-      try { answer = Promise.resolve(options.search(query)); } catch { close(); return; }
+      try { answer = Promise.resolve(options.search(query, { signal: pending.signal })); } catch { failed(); return; }
       void answer.then(next => {
         if (destroyed || ticket !== sequence || panel === null || input.value.trim() !== query || (options.context === undefined ? undefined : JSON.stringify(options.context())) !== contextAtQuery) return;
         searching = false;
@@ -191,7 +219,7 @@ export function mountSymbolPicker(ctx: WidgetContext, input: HTMLInputElement, o
         if (hits.length === 0) { close(); return; }
         active = 0;
         paint();
-      }, () => { if (ticket === sequence) close(); });
+      }, failed);
     }, SEARCH_DEBOUNCE_MS);
   };
   const onInput = (): void => search(input.value);
@@ -214,8 +242,8 @@ export function mountSymbolPicker(ctx: WidgetContext, input: HTMLInputElement, o
     }
   };
   const onBlur = (event: FocusEvent): void => {
-    const next = event.relatedTarget as Node | null;
-    if (next === null || panel?.contains(next) !== true) close();
+    const next = event.relatedTarget as Node | null | undefined;
+    if (!next || panel?.contains(next) !== true) close();
   };
   input.addEventListener('input', onInput);
   input.addEventListener('keydown', onKey);

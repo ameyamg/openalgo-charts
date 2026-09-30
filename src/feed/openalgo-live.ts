@@ -5,7 +5,7 @@
  * interval bars instead of being a no-op trap.
  */
 import type { Bar } from '../model/bar';
-import type { BarsRequest, BarSubscriptionOptions, DataFeed, LiveBarMeta, MarketDepth, UnsubscribeFn } from './types';
+import type { BarsRequest, BarSubscriptionOptions, DataFeed, LiveBarMeta, MarketDepth, SymbolMatch, SymbolSearchRequest, UnsubscribeFn } from './types';
 import { OpenAlgoDataFeed, type OpenAlgoConfig } from './openalgo-rest';
 import { OpenAlgoWsFeed, type OpenAlgoWsConfig, type SocketFactory, type LtpEvent, type WsMode } from './openalgo-ws';
 import { CandleBuilder, type VolumeMode } from './candle-builder';
@@ -172,6 +172,10 @@ export class OpenAlgoLiveDataFeed implements DataFeed {
 
   public getBars(req: BarsRequest): Promise<Bar[]> {
     return this._rest.getBars(req);
+  }
+
+  public searchSymbols(request: SymbolSearchRequest): Promise<SymbolMatch[]> {
+    return this._rest.searchSymbols(request);
   }
 
   /**

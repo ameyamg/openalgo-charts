@@ -18,6 +18,8 @@ interface DataFeed {
   // optional: live updates to the last bar, or a new last bar
   subscribeBars?(req: BarsRequest, onBar: (bar: Bar, meta?: LiveBarMeta) => void, opts?: BarSubscriptionOptions): () => void;
   subscribeDepth?(req: BarsRequest, onDepth: (depth: MarketDepth) => void, opts?: { depthLevel?: number }): () => void;
+  // optional: instruments matching what the user typed, closest first
+  searchSymbols?(request: SymbolSearchRequest): Promise<SymbolMatch[]>;
 }
 
 interface BarsRequest {
@@ -43,8 +45,8 @@ interface LiveBarMeta {
 }
 ```
 
-`DataFeed`, `BarsRequest`, `BarSubscriptionOptions`, `LiveBarMeta` and `MarketDepth` are exported from
-`openalgo-charts`. The third subscription argument is optional; existing feeds with
+`DataFeed`, `BarsRequest`, `BarSubscriptionOptions`, `LiveBarMeta`, `MarketDepth`,
+`SymbolSearchRequest` and `SymbolMatch` are exported from `openalgo-charts`. The third subscription argument is optional; existing feeds with
 two-argument `subscribeBars` implementations remain compatible. A history-only feed
 omits `subscribeBars` so hosts can detect whether live data is available.
 
@@ -74,6 +76,46 @@ class MyFeed implements DataFeed {
     })).sort((a, b) => a.time - b.time);
   }
 }
+```
+
+## Symbol search
+
+From 2.6.0 a feed can also answer symbol lookups. The widget uses
+`searchSymbols` for its symbol box, typed entry, watchlist and study symbol
+inputs whenever the host passes no `symbolSearch`, so a feed that searches needs
+no host code for it. A host `symbolSearch` still wins.
+
+```ts
+interface SymbolSearchRequest {
+  query: string;
+  signal?: AbortSignal;   // aborted once a newer query replaces this one
+}
+
+interface SymbolMatch {
+  symbol: string;
+  exchange?: string;
+  name?: string;
+  assetClass?: string;    // shown as category filters
+  iconUrl?: string;
+  contractGroup?: { label?: string; contracts: readonly SymbolMatch[] };
+}
+```
+
+Both OpenAlgo feeds implement it through `POST /api/v1/search`, with the API key
+in the body as history sends it. They keep the platform's ranking, show at most
+50 rows, file each row under `Index`, `Equity`, `Futures` or `Options`, and gather
+the options of one underlying and expiry into one row that opens onto its
+contracts, so a search for an index lists expiries rather than every strike.
+`withBarCache` passes `searchSymbols` through when the wrapped feed has it.
+
+```ts
+import { OpenAlgoDataFeed } from 'openalgo-charts';
+import { createWidget } from 'openalgo-charts/widget';
+
+// Keep the key out of source control; a backend proxy is better still.
+const feed = new OpenAlgoDataFeed({ baseUrl: 'http://127.0.0.1:5000', apiKey: 'YOUR_KEY' });
+createWidget(container, { feed, symbol: 'RELIANCE', exchange: 'NSE' });
+// The symbol box now searches OpenAlgo's instruments.
 ```
 
 ## Continuing history and recovering a stream

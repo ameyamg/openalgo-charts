@@ -42,6 +42,7 @@ import { Keymap } from './keymap';
 import { mountRail, toolName, type RailHandle, type RailOptions, type RailPrefs } from './rail';
 import { mountStatusline, type StatuslineHandle } from './statusline';
 import { mountTopbar, type MenuRow, type SymbolSearch, type TopbarHandle } from './topbar';
+import { feedSymbolSearch } from './symbol-picker';
 import { mountToasts, type ToastHandle, type ToastKind, type Toaster } from './toast';
 import { applyTokens, themeMode, widgetTokens, type WidgetThemeName } from './tokens';
 import { injectWidgetStyles } from './styles';
@@ -208,7 +209,7 @@ export interface WidgetOptions extends Omit<ChartOptions, 'theme'>, WidgetBottom
   translate?: WidgetTranslator;
   /** Show the Indicators button. Default true. */
   indicators?: boolean;
-  /** Symbol lookup for the top bar's box, called as the user types. */
+  /** Symbol lookup for the top bar's box, called as the user types. Default: the feed's `searchSymbols`, when it has one. */
   symbolSearch?: SymbolSearch;
   /** How many bars a load asks the feed for. Default `DEFAULT_LOOKBACK_BARS`. */
   lookbackBars?: number;
@@ -721,6 +722,8 @@ class WidgetImpl implements Widget {
     this._keymap = new Keymap({ chart: sc, scopes: () => keyScopes.call(this as unknown as KeysHost) });
     this._keymap.onConflict((c) => this._bus.emit('keymap:conflict', { combo: c.combo, kept: c.kept, shadowed: c.shadowed }));
 
+    // The host's lookup wins; without one, a feed that searches serves every picker.
+    const symbolSearch = options.symbolSearch ?? feedSymbolSearch(options.feed, () => this._exchange);
     this.context = new WidgetContextImpl(this, {
       chart: this.chart,
       draw: this.draw,
@@ -734,7 +737,7 @@ class WidgetImpl implements Widget {
       storage: this._storage,
       locale: options.locale,
       translate: options.translate,
-      symbolSearch: options.symbolSearch,
+      symbolSearch,
       toast: (message: string, kind?: ToastKind): ToastHandle => this._toasts.toast(message, kind),
       openOverlay: (el: HTMLElement, o?: OverlayOptions): (() => void) => overlays.open(el, o),
       status: (text: string, kind: 'info' | 'error' = 'info'): void => {
@@ -819,7 +822,7 @@ class WidgetImpl implements Widget {
       this._topbar = mountTopbar(this.context, topbarEl, {
         intervals: this._intervals,
         indicators: options.indicators,
-        search: options.symbolSearch,
+        search: symbolSearch,
         state: () => ({ symbol: this._symbol, exchange: this._exchange, interval: this._interval, chartType: this.chartType(), theme: this._themeName }),
         onSymbol: (s, ex) => this.setSymbol(s, ex),
         onInterval: (code) => this.setInterval(code),
@@ -848,7 +851,7 @@ class WidgetImpl implements Widget {
       rail: this._rail,
       tools: typeof options.rail === 'object' ? options.rail.tools : undefined,
       indicators: options.indicators !== false,
-      search: options.symbolSearch,
+      search: symbolSearch,
       state: () => ({ symbol: this._symbol, exchange: this._exchange, interval: this._interval, chartType: this.chartType(), theme: this._themeName }),
       onSymbol: (symbol, exchange) => this.setSymbol(symbol, exchange),
       onInterval: (code) => this.setInterval(code),
@@ -879,7 +882,7 @@ class WidgetImpl implements Widget {
         enabled: () => !this._destroyed && this._doc.activeElement !== null
           && this._chartEl.contains(this._doc.activeElement) && this.draw.selection().length === 0,
         onSymbol: (symbol, exchange) => this.setSymbol(symbol, exchange),
-        onInterval: code => this.setInterval(code), search: options.symbolSearch,
+        onInterval: code => this.setInterval(code), search: symbolSearch,
       });
     }
     trackPointer.call(this as unknown as KeysHost);

@@ -34,7 +34,7 @@ WebGL rendering and widget controls.
 |---|---|
 | Analysis drawings | Anchored VWAP and fixed-range Volume Profile use time anchors and the owning pane's OHLCV bars. Missing volume remains unavailable; fixed-range profiles estimate volume across candle price ranges. |
 | Drawing and appearance links | Opt-in appearance adapters copy supported visual settings in base. The draw tier owns same-symbol, same-exchange replication, drag previews, local undo and persisted drawing lineage. |
-| Timeline events | Base primitives own group visibility and zoom-dependent clustering. The widget owns text-only details and guarded asynchronous lookups; event feeds remain host-supplied. |
+| Timeline events | Base primitives own group visibility and zoom-dependent clustering. The widget owns the details popup, which renders rich blocks as elements and text only with vetted links, runs host action callbacks, and guards asynchronous lookups; event feeds remain host-supplied. |
 | Open interest | `Bar.oi` is a position level: aggregation takes the latest defined reading, while volume is summed. Missing OI remains absent and zero remains a real reading. Instrument capability is separate host metadata. |
 | Alerts | Price and study thresholds preview during a drag and commit once on release. Versioned alert documents validate before replacement and seed restored evaluation without replaying historical triggers; the host delivers notifications. |
 | Shared replay | `ReplayGroup` advances participating charts by one UTC availability clock. Coarse bars wait for their close or form from available finer observations, without revealing the final candle early. |

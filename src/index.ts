@@ -236,7 +236,7 @@ export type {
 export { TimeNavigator, DEFAULT_TIME_NAVIGATOR_OPTIONS } from './primitives/time-navigator';
 export type { TimeNavigatorOptions, TimeNavigatorAction } from './primitives/time-navigator';
 export { EventMarkers } from './primitives/event-markers';
-export type { ChartEvent, ChartEventDetails, EventDetailField, EventGroup, EventMarkersOptions, EventMarkerDetails } from './primitives/event-markers';
+export type { ChartEvent, ChartEventDetails, EventDetailField, EventDetailSpan, EventDetailInline, EventDetailBlock, EventGroup, EventMarkersOptions, EventMarkerDetails } from './primitives/event-markers';
 
 // indicators
 export { ema, emaSeries } from './indicators/ema';
@@ -253,7 +253,7 @@ export { conflationGroupSize, conflateBars, conflateItems, mergeBars } from './m
 export type { Bar, LinePoint, Whitespace, SeriesDataItem, UTCSeconds, OriginalTime } from './model/bar';
 export { isWhitespace, toBar } from './model/bar';
 
-export type { DataFeed, TradeFeed, BarsRequest, BarsPageRequest, BarsPage, BarSubscriptionOptions, LiveBarMeta, MarketDepth, DepthLevel, OrderSide, OrderType, PlaceOrder, UnsubscribeFn } from './feed/types';
+export type { DataFeed, TradeFeed, BarsRequest, BarsPageRequest, BarsPage, BarSubscriptionOptions, LiveBarMeta, MarketDepth, DepthLevel, OrderSide, OrderType, PlaceOrder, UnsubscribeFn, SymbolMatch, SymbolSearchRequest } from './feed/types';
 export type { InstrumentKey, QuoteSnapshot, QuoteRequest, QuoteStreamStatus, QuoteStreamHandlers, QuoteFeed, NewsRequest, NewsItem, NewsPage, NewsFeed } from './feed/types';
 export { Instrument, SessionCalendar } from './feed/instrument';
 export type { InstrumentMetadata, InstrumentCalendar, InstrumentSession, SessionCalendarSpec } from './feed/instrument';

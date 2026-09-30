@@ -722,7 +722,7 @@ describe('dialogs and the toolbar', () => {
       fire(input, 'input');
       expect(search).not.toHaveBeenCalled();
       vi.advanceTimersByTime(200);
-      expect(search).toHaveBeenCalledWith('hdfc');
+      expect(search).toHaveBeenCalledWith('hdfc', { signal: expect.any(AbortSignal) });
       return Promise.resolve().then(() => {
         const rows = root.querySelectorAll('.oac-sym__results .oac-menu__row');
         expect(rows).toHaveLength(2);
