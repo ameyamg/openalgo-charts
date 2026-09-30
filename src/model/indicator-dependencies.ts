@@ -74,28 +74,32 @@ export function cloneIndicatorSettings(settings: Readonly<IndicatorSettings>): I
   return result;
 }
 
-/** A min-heap keeps ready nodes in display order without repeated full scans. */
+/**
+ * A min-heap keeps ready nodes in display order without repeated full scans.
+ * Parents and children are read only below the heap's length.
+ */
 function enqueue(heap: number[], value: number): void {
   let index = heap.length;
   heap.push(value);
   while (index > 0) {
     const parent = (index - 1) >>> 1;
-    if (heap[parent] <= value) break;
-    heap[index] = heap[parent];
+    if (heap[parent]! <= value) break;
+    heap[index] = heap[parent]!;
     index = parent;
   }
   heap[index] = value;
 }
 
+/** The least node; the caller dequeues only from a heap that holds one. */
 function dequeue(heap: number[]): number {
-  const first = heap[0], last = heap.pop()!;
+  const first = heap[0]!, last = heap.pop()!;
   if (heap.length === 0) return first;
   let index = 0;
   while (index * 2 + 1 < heap.length) {
     let child = index * 2 + 1;
-    if (child + 1 < heap.length && heap[child + 1] < heap[child]) child++;
-    if (heap[child] >= last) break;
-    heap[index] = heap[child];
+    if (child + 1 < heap.length && heap[child + 1]! < heap[child]!) child++;
+    if (heap[child]! >= last) break;
+    heap[index] = heap[child]!;
     index = child;
   }
   heap[index] = last;
@@ -111,7 +115,7 @@ function dequeue(heap: number[]): number {
 export function planIndicatorDependencies(nodes: readonly IndicatorDependencyNode[]): IndicatorDependencyPlan {
   const positions = new Map<string, number>();
   for (let i = 0; i < nodes.length; i++) {
-    const id = nodes[i].id;
+    const id = nodes[i]!.id;
     if (!nonemptyString(id)) throw new TypeError('Indicator instance id must be a nonempty string.');
     if (positions.has(id)) throw new TypeError(`Duplicate indicator instance id "${id}".`);
     positions.set(id, i);
@@ -120,8 +124,9 @@ export function planIndicatorDependencies(nodes: readonly IndicatorDependencyNod
   const dependencies = new Map<string, readonly IndicatorDependencyEdge[]>();
   const dependents = nodes.map(() => [] as number[]);
   const pending = nodes.map(() => 0);
+  // `dependents`, `pending` and every position are indices into `nodes`.
   for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i], settings = cloneIndicatorSettings(node.settings);
+    const node = nodes[i]!, settings = cloneIndicatorSettings(node.settings);
     for (const key of Object.keys(settings)) {
       if (hasStudyKind(settings[key]) && !node.descriptor.inputs.some(input =>
         input.key === key && input.type === 'source' && input.allowStudyOutputs === true)) {
@@ -142,25 +147,25 @@ export function planIndicatorDependencies(nodes: readonly IndicatorDependencyNod
       if (source.instanceId === node.id) throw new TypeError(`Indicator "${node.id}" cannot reference itself (self dependency).`);
       const producer = positions.get(source.instanceId);
       if (producer !== undefined) {
-        const plots = nodes[producer].descriptor.plots.filter(plot => plot.key === source.plotKey);
+        const plots = nodes[producer]!.descriptor.plots.filter(plot => plot.key === source.plotKey);
         if (plots.length !== 1) throw new TypeError(`Study source plot "${source.plotKey}" must identify one declared plot on "${source.instanceId}".`);
-        if (plots[0].ohlc !== undefined) throw new TypeError(`Study source plot "${source.plotKey}" must be scalar, without an OHLC mapping.`);
+        if (plots[0]!.ohlc !== undefined) throw new TypeError(`Study source plot "${source.plotKey}" must be scalar, without an OHLC mapping.`);
         producers.add(producer);
       }
       edges.push({ inputKey: input.key, source, available: producer !== undefined });
     }
     dependencies.set(node.id, edges);
     pending[i] = producers.size;
-    for (const producer of producers) dependents[producer].push(i);
+    for (const producer of producers) dependents[producer]!.push(i);
   }
 
   const ready: number[] = [], order: string[] = [];
   for (let i = 0; i < nodes.length; i++) if (pending[i] === 0) enqueue(ready, i);
   while (ready.length > 0) {
     const index = dequeue(ready);
-    order.push(nodes[index].id);
-    for (const dependent of dependents[index]) {
-      pending[dependent]--;
+    order.push(nodes[index]!.id);
+    for (const dependent of dependents[index]!) {
+      pending[dependent]!--;
       if (pending[dependent] === 0) enqueue(ready, dependent);
     }
   }

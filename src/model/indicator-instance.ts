@@ -15,7 +15,7 @@ import { validateIndicatorInputs } from './indicator-inputs';
 import { parseIndicatorPolicy, type IndicatorEditOptions, type IndicatorPolicy } from './indicator-policy';
 import type { PriceFormat, PriceScaleId, SeriesApi, SeriesDataState } from './series';
 import type { PriceLine } from '../primitives/price-line';
-import type { PaneLegend, LegendValue } from '../primitives/pane-legend';
+import type { PaneLegend, LegendValue, PaneLegendOptions } from '../primitives/pane-legend';
 import { SeriesMarkers } from '../primitives/markers';
 import type { ChartTable } from '../primitives/table';
 import type { IPrimitive } from '../primitives/primitive';
@@ -44,7 +44,7 @@ import {
   type ChartDataContext,
   type IndicatorDataChange,
   type IndicatorDataStatus,
-  type IndicatorCalcContext,
+  type IndicatorCalcContext, type IndicatorAttachContext,
   type IndicatorDescriptor,
   type IndicatorLevelContext,
   type IndicatorLineStyle,
@@ -54,6 +54,7 @@ import {
   type IndicatorStore,
   type IndicatorValues,
 } from './indicator-registry';
+import type { LooseOptional } from '../helpers/types';
 
 const num = (v: unknown, fallback: number): number =>
   (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
@@ -621,7 +622,7 @@ export class IndicatorInstance implements IndicatorApi {
       row: host.legendRowsOn(this.paneIndex),
       paneIndex: this.paneIndex,
       hasSource: descriptor.hasSource === true,
-    });
+    } satisfies LooseOptional<Parameters<IndicatorHost['addIndicatorLegend']>[0]> as Parameters<IndicatorHost['addIndicatorLegend']>[0]); // `color` may be written undefined, read as absent
 
     this._applyRange();
     // Levels are applied inside `recompute`, so a data-derived one is built
@@ -741,7 +742,7 @@ export class IndicatorInstance implements IndicatorApi {
 
   private _overlayScaleOverrides(): Record<string, PriceScaleId> {
     return Object.fromEntries(this._d.plots.filter(plot => plot.overlay === true
-      && Object.prototype.hasOwnProperty.call(this._plotScaleOverrides, plot.key)).map(plot => [plot.key, this._plotScaleOverrides[plot.key]]));
+      && Object.prototype.hasOwnProperty.call(this._plotScaleOverrides, plot.key)).map(plot => [plot.key, this._plotScaleOverrides[plot.key]!]));
   }
 
   public policy(): Readonly<IndicatorPolicy> { return this._policy; }
@@ -808,11 +809,11 @@ export class IndicatorInstance implements IndicatorApi {
       return api ? [{ api, scaleId: target }] : [];
     });
     const primitives: { primitive: IPrimitive; scaleId: PriceScaleId }[] = [];
-    for (let i = 0; i < this._fills.length; i++) {
-      const scale = this._fillScale(this._d.fills![i], scaleId, this.paneIndex, assignments);
+    for (let i = 0; i < this._fills.length; i++) { // one band per descriptor fill, in order
+      const scale = this._fillScale(this._d.fills![i]!, scaleId, this.paneIndex, assignments);
       if (scale === null) return false;
-      if ((overlays || this._d.fills![i].overlay !== true)
-        && scale !== this._fillScale(this._d.fills![i], this._scaleOverride)) primitives.push({ primitive: this._fills[i], scaleId: scale });
+      if ((overlays || this._d.fills![i]!.overlay !== true)
+        && scale !== this._fillScale(this._d.fills![i]!, this._scaleOverride)) primitives.push({ primitive: this._fills[i]!, scaleId: scale });
     }
     const local = this._localScale(scaleId, assignments);
     if (local !== this._localScale()) for (const primitive of [...this._levels, this._draws, ...this._attachedPrimitives]) {
@@ -911,7 +912,7 @@ export class IndicatorInstance implements IndicatorApi {
       const api = this._series.get(plot.key);
       return api ? [{ api, overlay: plot.overlay === true }] : [];
     });
-    const primitives = this._fills.map((primitive, index) => ({ primitive: primitive as IPrimitive, overlay: this._d.fills?.[index].overlay === true }));
+    const primitives = this._fills.map((primitive, index) => ({ primitive: primitive as IPrimitive, overlay: this._d.fills?.[index]!.overlay === true }));
     for (const { table, overlay } of this._tables.values()) primitives.push({ primitive: table, overlay });
     // A pass's restack hands the host routed layers alone (see `restacking`),
     // so series and every other layer, all of a study that names no target
@@ -1002,7 +1003,7 @@ export class IndicatorInstance implements IndicatorApi {
       if (color !== undefined && isInvisible(color)) continue;
       const text = this._host.formatPrice?.(pane, v, this._series.get(plot.key))
         ?? formatValue(v, this._host.tickSize?.(pane));
-      out.push({ text, color });
+      out.push({ text, color } satisfies LooseOptional<LegendValue> as LegendValue);
     }
     this._legend.setValues(out);
   }
@@ -1023,7 +1024,7 @@ export class IndicatorInstance implements IndicatorApi {
     for (let i = 0; i < fills.length; i++) {
       const band = this._fills[i];
       if (band === undefined) continue;
-      const spec = fills[i];
+      const spec = fills[i]!;
       const a = this._values[spec.between[0]];
       const b = this._values[spec.between[1]];
       band.setOptions({
@@ -1278,8 +1279,8 @@ export class IndicatorInstance implements IndicatorApi {
       this._host.addIndicatorPrimitive(this._background, this.paneIndex);
     }
     this._background?.setColors(colors, bars);
-    this._syncRouted(this._bgLayers, groups, ([spec]) => (spec.colors.length > 0 ? new IndicatorBackground() : null),
-      (layer, [spec]) => layer.setColors(spec.colors, bars));
+    this._syncRouted(this._bgLayers, groups, ([spec]) => (spec!.colors.length > 0 ? new IndicatorBackground() : null),
+      (layer, [spec]) => layer.setColors(spec!.colors, bars)); // `_route` keeps no empty group, and one spec each passed above
   }
 
   /**
@@ -1319,9 +1320,9 @@ export class IndicatorInstance implements IndicatorApi {
     const n = bars.length;
     if (specs === undefined || !current()) return;
     const seen = this._alertTime;
-    if (n > 0) this._alertTime = bars[n - 1].time;
+    if (n > 0) this._alertTime = bars[n - 1]!.time;
     let from = n;
-    if (tailOnly && !refresh) while (from > 0 && bars[from - 1].time > seen) from--;
+    if (tailOnly && !refresh) while (from > 0 && bars[from - 1]!.time > seen) from--;
     let failed = false;
     let failure: unknown;
     for (let i = from; i < n; i++) {
@@ -1337,7 +1338,7 @@ export class IndicatorInstance implements IndicatorApi {
           if (!current()) return;
           this._host.emit?.('indicator:alert', {
             indicatorId: this.indicatorId, instanceId: this.id, alertId: spec.id,
-            title: spec.title, message, time: bars[i].time, index: i,
+            title: spec.title, message, time: bars[i]!.time, index: i,
           });
         } catch (error) {
           if (!current()) return;
@@ -1370,11 +1371,11 @@ export class IndicatorInstance implements IndicatorApi {
     const now = (): number => this._host.now?.() ?? Date.now() / 1000;
     const interval = this._host.interval?.();
     const timezone = this._host.timezone?.() ?? DEFAULT_TIMEZONE;
-    const step = n > 1 ? bars[n - 1].time - bars[n - 2].time : 0;
+    const step = n > 1 ? bars[n - 1]!.time - bars[n - 2]!.time : 0;
     let isConfirmed = n === 0;
     let confirmationSource: NonNullable<IndicatorCalcContext['execution']>['confirmationSource'] = n === 0 ? 'empty' : 'unknown';
     if (n > 0) {
-      const open = bars[n - 1].time;
+      const open = bars[n - 1]!.time;
       if (interval === undefined) {
         isConfirmed = step <= 0 || now() >= open + step;
         confirmationSource = 'clock';
@@ -1405,7 +1406,7 @@ export class IndicatorInstance implements IndicatorApi {
       } }),
       barState: {
         isNew: source === undefined ? appended : realtime && n > 0 &&
-          (this._sourceLastTime === undefined || bars[n - 1].time > this._sourceLastTime),
+          (this._sourceLastTime === undefined || bars[n - 1]!.time > this._sourceLastTime),
         isConfirmed,
         isRealtime: realtime,
         lastIndex: n - 1,
@@ -1422,7 +1423,7 @@ export class IndicatorInstance implements IndicatorApi {
       // would asking slot 0 once a study pane sits above the price pane.
       // 0 is the scale's "infer from the visible range" sentinel, not a tick.
       tickSize: this._host.tickSize?.(this._pricePane()) || undefined,
-    };
+    } satisfies LooseOptional<IndicatorCalcContext> as IndicatorCalcContext; // unknown members go as undefined, which `calc` reads as absent
   }
 
   /** The chart type to draw a plot as: the settings override, else declared. */
@@ -1510,7 +1511,7 @@ export class IndicatorInstance implements IndicatorApi {
       },
       removePrimitive: (p: IPrimitive) => { this._attachedPrimitives.delete(p); this._host.removeIndicatorPrimitive?.(p); },
       emit: (event: string, payload: unknown) => { this._host.emit?.(event, payload); },
-    });
+    } satisfies LooseOptional<IndicatorAttachContext> as IndicatorAttachContext); // as the calc context: hooks the host lacks go as undefined
     this._detach = typeof detach === 'function' ? detach : null;
   }
 
@@ -1570,7 +1571,7 @@ export class IndicatorInstance implements IndicatorApi {
       source: this._outputSource, values: this._values[plotKey] ?? [],
       available: !this._removed && this._outputRevision > 0 && !this._outputPending && !this._calcFailed && !this._dependencyUnavailable
         && (this._lifecycleStatus === null || this._lifecycleStatus.state === 'ready'),
-    };
+    } satisfies LooseOptional<IndicatorStudyOutput> as IndicatorStudyOutput; // `source` is undefined before the first source write
   }
 
   private _studyBindings(bars: readonly Bar[], source: SeriesDataState | undefined): StudyBindings {
@@ -1707,7 +1708,7 @@ export class IndicatorInstance implements IndicatorApi {
       }
       this._series.get(plot.key)?.applyOptions(this._plotStyle(plot) as never);
     }
-    this._legend?.setOptions({ params: this._paramSummary(), color: this._legendColor() });
+    this._legend?.setOptions({ params: this._paramSummary(), color: this._legendColor() } satisfies LooseOptional<Partial<PaneLegendOptions>> as Partial<PaneLegendOptions>);
     this._applyRange();
     this._values = {};
     this._barCount = 0; // force a full recompute; settings invalidate any tail state
@@ -1790,10 +1791,10 @@ export class IndicatorInstance implements IndicatorApi {
     // Native revisions retain historical invalidation across coalesced writes.
     // Hosts without them retain the timestamp heuristic: the first bar is
     // unchanged and the last is replaced or followed by exactly one new bar.
-    const appended = this._barCount > 0 && n === this._barCount + 1 &&
-      bars[n - 2].time === this._lastTime && bars[0].time === this._firstTime;
-    const tailOnly = n > 0 && this._barCount > 0 && bars[0].time === this._firstTime &&
-      ((n === this._barCount && bars[n - 1].time === this._lastTime) || appended) &&
+    const appended = this._barCount > 0 && n === this._barCount + 1 && // so two bars or more
+      bars[n - 2]!.time === this._lastTime && bars[0]!.time === this._firstTime;
+    const tailOnly = n > 0 && this._barCount > 0 && bars[0]!.time === this._firstTime &&
+      ((n === this._barCount && bars[n - 1]!.time === this._lastTime) || appended) &&
       (source === undefined || (source.sourceId === this._sourceId && source.revision !== this._sourceRevision &&
         source.historyRevision === this._sourceHistoryRevision && source.provenance === 'live'));
     // Older hosts have no mutation provenance and retain the live heuristic.
@@ -1821,8 +1822,8 @@ export class IndicatorInstance implements IndicatorApi {
     if (!usedTail) this._outputHistoryRevision++;
     this._outputSource = source ? { ...source } : undefined;
     this._barCount = n;
-    this._firstTime = n > 0 ? bars[0].time : 0;
-    this._lastTime = n > 0 ? bars[n - 1].time : 0;
+    this._firstTime = n > 0 ? bars[0]!.time : 0;
+    this._lastTime = n > 0 ? bars[n - 1]!.time : 0;
     if (source !== undefined) {
       this._sourceId = source.sourceId;
       this._sourceRevision = source.revision;
@@ -1846,7 +1847,7 @@ export class IndicatorInstance implements IndicatorApi {
     this._applyLevels(bars, settings);
     if (this._alertNeedsSeed) {
       this._alertNeedsSeed = false;
-      const seed = { ...ctx, execution: ctx.execution ? { ...ctx.execution, provenance: 'history' as const } : undefined };
+      const seed = { ...ctx, execution: ctx.execution ? { ...ctx.execution, provenance: 'history' as const } : undefined } satisfies LooseOptional<IndicatorCalcContext> as IndicatorCalcContext;
       this._syncAlerts(bars, settings, false, seed, false, current);
     } else this._syncAlerts(bars, settings, tailOnly, ctx, refresh, current);
     if (!current()) return;
@@ -1893,7 +1894,7 @@ export class IndicatorInstance implements IndicatorApi {
           this.paneIndex,
         ),
       );
-      this._host.bindIndicatorPrimitiveScale?.(this._levels[this._levels.length - 1], this._localScale());
+      this._host.bindIndicatorPrimitiveScale?.(this._levels[this._levels.length - 1]!, this._localScale()); // the one just pushed
     }
   }
 

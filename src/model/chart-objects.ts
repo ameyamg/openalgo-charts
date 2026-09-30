@@ -1,5 +1,6 @@
 import type { Chart } from '../core/chart';
 import type { IndicatorDataStatus } from './indicator-registry';
+import type { LooseOptional } from '../helpers/types';
 
 export type ChartObjectKind = 'source' | 'indicator' | 'drawing' | 'profile' | 'group';
 
@@ -58,8 +59,8 @@ export interface ChartObjectDefinition {
   visible?: boolean;
   locked?: boolean;
   selected?: boolean;
-  groupId?: string;
-  dataStatus?: Readonly<IndicatorDataStatus>;
+  groupId?: string | undefined;
+  dataStatus?: Readonly<IndicatorDataStatus> | undefined;
   /** Kept but not on the chart at its current interval; see `ChartObjectSnapshot.hiddenOnInterval`. */
   hiddenOnInterval?: boolean;
 }
@@ -149,11 +150,11 @@ export interface ChartObjectsOptions {
 type Actions = Pick<ChartObjectProvider, 'select' | 'setVisible' | 'setLocked' | 'remove' | 'openSettings' | 'focus' | 'reorder' | 'move'>
   & { ungroup?(): boolean; place?(target: string, where: 'above' | 'below'): boolean };
 interface Entry { row: ChartObjectSnapshot; actions: Actions }
-interface Registration { provider: ChartObjectProvider; off?: () => void }
+interface Registration { provider: ChartObjectProvider; off?: (() => void) | undefined }
 const EMPTY: readonly ChartObjectSnapshot[] = Object.freeze([]);
 const sameRows = (a: readonly ChartObjectSnapshot[], b: readonly ChartObjectSnapshot[]): boolean =>
   a.length === b.length && a.every((x, i) => {
-    const y = b[i];
+    const y = b[i]!; // the lengths match
     return x.id === y.id && x.name === y.name && x.kind === y.kind && x.paneIndex === y.paneIndex
       && x.band === y.band && x.stackAbove === y.stackAbove && x.hiddenOnInterval === y.hiddenOnInterval
       && x.visible === y.visible && x.locked === y.locked && x.selected === y.selected && x.groupId === y.groupId
@@ -471,7 +472,7 @@ export class ChartObjects {
         dataStatus: state.dataStatus ? Object.freeze({ ...state.dataStatus }) : undefined, capabilities,
         ...(band === undefined ? {} : { band }), ...(stackAbove === undefined ? {} : { stackAbove }),
         ...(state.hiddenOnInterval === true ? { hiddenOnInterval: true } : {}),
-      });
+      } satisfies LooseOptional<ChartObjectSnapshot> as ChartObjectSnapshot); // an unset `locked`, `groupId` or `dataStatus` goes as undefined, read as absent
       rows.set(id, { row, actions });
     };
     const settings = (id: string): Pick<Actions, 'openSettings'> => this._options.onSettings
@@ -525,7 +526,8 @@ export class ChartObjects {
       for (const group of draw.groups?.() ?? []) {
         // A member the source no longer holds is skipped, as it always was.
         const found = group.members.flatMap(id => { const drawing = draw.get(id); return drawing ? [drawing] : []; });
-        const members = found.filter(listed);
+        // Typed non-empty for the reads below, which the check on the next line guards.
+        const members = found.filter(listed) as [ChartObjectDrawing, ...ChartObjectDrawing[]];
         if (!members.length) continue;
         const id = 'group:' + group.id;
         for (const member of members) membership.set(member.id, id);
@@ -604,7 +606,8 @@ export class ChartObjects {
     const to = Math.max(...indices);
     const current = chart.getVisibleLogicalRange();
     const span = Math.max(current.to - current.from, (to - from) * 1.2, 10);
-    const scale = chart.panes()[drawing.paneIndex].readoutScale();
+    // `_act` refreshes first, and a row offers focus only while its pane is there.
+    const scale = chart.panes()[drawing.paneIndex]!.readoutScale();
     const prices = drawing.points.map(point => point.price);
     const min = Math.min(...prices);
     const max = Math.max(...prices);

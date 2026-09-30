@@ -33,7 +33,7 @@ function copyValues(values: IndicatorValues, end?: number): IndicatorValues {
   const result: IndicatorValues = {};
   for (const key of Object.keys(values)) {
     Object.defineProperty(result, key, {
-      value: Object.freeze(values[key].slice(0, end)), enumerable: true,
+      value: Object.freeze(values[key]!.slice(0, end)), enumerable: true, // an own key
     });
   }
   return Object.freeze(result);
@@ -115,9 +115,9 @@ export class IndicatorAlertPolicy {
       if (entry.busy || (entry.spec.frequency === 'once' && entry.onceSpent)) continue;
       const close = entry.spec.frequency === 'onBarClose';
       const indices = close ? this._closeIndices(entry, bars, closed) : [last];
-      for (const index of indices) {
+      for (const index of indices) { // bar indices, `last` at most
         if (!current()) return;
-        const time = bars[index].time;
+        const time = bars[index]!.time;
         if (entry.spec.frequency === 'oncePerBar' && time <= entry.perBarTime) continue;
         const context: IndicatorAlertContext = {
           bars: close ? Object.freeze(bars.slice(0, index + 1)) : bars,
@@ -160,7 +160,7 @@ export class IndicatorAlertPolicy {
 
   private _seed(bars: readonly Bar[], confirmed: boolean): void {
     const index = bars.length - (confirmed ? 1 : 2);
-    const time = index >= 0 ? bars[index].time : -Infinity;
+    const time = index >= 0 ? bars[index]!.time : -Infinity;
     for (const entry of this._entries) {
       entry.perBarTime = time;
       entry.closedTime = time;
@@ -176,8 +176,8 @@ export class IndicatorAlertPolicy {
   private _closeIndices(entry: Entry, bars: readonly Bar[], end: number): number[] {
     const indices: number[] = [];
     const available = new Set<number>();
-    for (let i = 0; i <= end; i++) {
-      const time = bars[i].time;
+    for (let i = 0; i <= end; i++) { // `end` is a bar index
+      const time = bars[i]!.time;
       if (time > entry.closedTime || entry.failedCloses.has(time)) indices.push(i);
       available.add(time);
     }

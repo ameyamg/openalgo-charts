@@ -1172,6 +1172,6 @@ export function sourceValues(bars: readonly Bar[], source: IndicatorSource | Ind
     return values.slice();
   }
   const out = new Array<number>(bars.length);
-  for (let i = 0; i < bars.length; i++) out[i] = sourceValue(bars[i], source);
+  for (let i = 0; i < bars.length; i++) out[i] = sourceValue(bars[i]!, source);
   return out;
 }

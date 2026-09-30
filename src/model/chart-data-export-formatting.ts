@@ -17,11 +17,12 @@ export function serializeCsv(columns: CsvSnapshotColumn[], rows: CsvRow[], align
   const labels = metadata.map(column => formatters.header ? protectedText(formatters.header(column)) : column.key);
   const counts = new Map<string, number>();
   labels.forEach(label => counts.set(label, (counts.get(label) ?? 0) + 1));
-  const headers = labels.map((label, index) => (formatters.header && counts.get(label)! > 1 ? `${metadata[index].key}:${label}` : label));
+  // `labels` and `headers` hold one entry per `metadata` column.
+  const headers = labels.map((label, index) => (formatters.header && counts.get(label)! > 1 ? `${metadata[index]!.key}:${label}` : label));
   // A callback can deliberately use another column's canonical-prefixed label.
   // Resolve that secondary collision as well without changing default headers.
   if ((formatters.header || alignment === 'display') && new Set(headers).size !== headers.length) {
-    headers.forEach((label, index) => { headers[index] = `${index + 1}:${metadata[index].key}:${label}`; });
+    headers.forEach((label, index) => { headers[index] = `${index + 1}:${metadata[index]!.key}:${label}`; });
   }
   const lines = [headers.map(cell).join(',')];
   for (const row of rows) {

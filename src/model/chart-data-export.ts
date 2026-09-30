@@ -59,8 +59,8 @@ function selectedFormatters(input: unknown): ChartDataCsvFormatters {
   if (input === null || typeof input !== 'object'
     || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw new TypeError('Invalid CSV formatters');
   const properties = Object.getOwnPropertyDescriptors(input);
-  for (const key of Reflect.ownKeys(properties)) {
-    if (!['time', 'value', 'header'].includes(key as string) || !('value' in properties[key as string])) {
+  for (const key of Reflect.ownKeys(properties)) { // own keys, so each has a descriptor
+    if (!['time', 'value', 'header'].includes(key as string) || !('value' in properties[key as string]!)) {
       throw new TypeError('Invalid CSV formatter property');
     }
   }
@@ -100,8 +100,8 @@ function selectedRange(input: unknown): ChartDataCsvRange {
   if (input === null || typeof input !== 'object'
     || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw new TypeError('Invalid CSV range');
   const properties = Object.getOwnPropertyDescriptors(input);
-  for (const key of Reflect.ownKeys(properties)) {
-    if ((key !== 'from' && key !== 'to') || !('value' in properties[key])) throw new TypeError('Invalid CSV range property');
+  for (const key of Reflect.ownKeys(properties)) { // own keys, as above
+    if ((key !== 'from' && key !== 'to') || !('value' in properties[key]!)) throw new TypeError('Invalid CSV range property');
   }
   const range: { from?: number; to?: number } = {};
   for (const key of ['from', 'to'] as const) {

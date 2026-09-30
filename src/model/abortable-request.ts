@@ -5,7 +5,7 @@ export function runAbortable<T>(
 ): Promise<T> {
   const sources = [...new Set(signals.filter((signal): signal is AbortSignal => signal !== undefined))];
   const controller = sources.length === 1 ? null : new AbortController();
-  const signal = controller?.signal ?? sources[0];
+  const signal = controller?.signal ?? sources[0]!; // no controller means exactly one source
   return new Promise<T>((resolve, reject) => {
     let settled = false;
     const listeners = new Map<AbortSignal, () => void>();

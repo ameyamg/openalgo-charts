@@ -44,24 +44,25 @@ export function alignCsvRows(snapshot: CsvSnapshot, alignment: 'source' | 'displ
   const rows = [...union.values()].sort((a, b) => a.logicalIndex! - b.logicalIndex!);
   let previousTime: number | undefined;
   for (const row of rows) {
+    // Every axis read sits inside the range the test before it checked.
     const position = row.logicalIndex!;
     if (Number.isInteger(position) && position >= 0 && position < axis.length) {
-      row.time = axis[position]; row.origin = 'axis';
+      row.time = axis[position]!; row.origin = 'axis';
     } else if (position >= 0 && position < axis.length - 1) {
       const left = Math.floor(position);
-      row.time = axis[left] + (axis[left + 1] - axis[left]) * (position - left); row.origin = 'interpolated';
-      if (!(row.time > axis[left] && row.time < axis[left + 1])) throw new RangeError('CSV interpolated time collides with the axis');
+      row.time = axis[left]! + (axis[left + 1]! - axis[left]!) * (position - left); row.origin = 'interpolated';
+      if (!(row.time > axis[left]! && row.time < axis[left + 1]!)) throw new RangeError('CSV interpolated time collides with the axis');
     } else {
       row.origin = 'unknown';
       if (projectTime) row.time = projectTime(position, snapshot.context);
       else if (axis.length > 1) {
         const edge = position < 0 ? 0 : axis.length - 1;
-        const spacing = position < 0 ? axis[1] - axis[0] : axis[edge] - axis[edge - 1];
-        row.time = axis[edge] + (position - edge) * spacing;
+        const spacing = position < 0 ? axis[1]! - axis[0]! : axis[edge]! - axis[edge - 1]!;
+        row.time = axis[edge]! + (position - edge) * spacing;
       }
       if (row.time !== null) {
         if (typeof row.time !== 'number' || !Number.isFinite(row.time)) throw new TypeError('CSV projected time must be finite or null');
-        if (axis.length && (position < 0 ? row.time >= axis[0] : row.time <= axis[axis.length - 1])) {
+        if (axis.length && (position < 0 ? row.time >= axis[0]! : row.time <= axis[axis.length - 1]!)) {
           throw new RangeError('CSV projected time collides with the axis');
         }
         row.origin = 'projected';
