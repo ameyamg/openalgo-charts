@@ -30,7 +30,7 @@ import { createSeriesRecord, type SeriesApi, type BarConfirmationOptions, type S
 import { bindSeriesProvenance, SeriesProvenance, validateSeriesOptions } from '../model/series-provenance';
 import { getChartType, type SeriesType } from '../model/chart-type-registry';
 import {
-  getSeriesTransform, parseSeriesTransformSpec, type SeriesTransformRun, type SeriesTransformSpec,
+  getSeriesTransform, type SeriesTransformRun, type SeriesTransformSpec,
 } from '../model/series-transform';
 import type { SeriesStyle } from '../render/series-style';
 import type { Bar, SeriesDataItem } from '../model/bar';
@@ -177,9 +177,11 @@ export class ChartSeries {
     return run === undefined ? null : { bars: run.source(), sourceIndex: run.sourceIndex() };
   }
 
+  /** A run for a spec, and a detached copy of it to keep. The transform refuses an option it does not take. */
   private _newTransform(spec: SeriesTransformSpec): Transformed {
-    const parsed = parseSeriesTransformSpec(spec);
-    return { spec: parsed, run: getSeriesTransform(parsed.type).create(parsed.options ?? {}) };
+    const options = { ...spec.options };
+    const run = getSeriesTransform(spec.type).create(options);
+    return { spec: Object.keys(options).length > 0 ? { type: spec.type, options } : { type: spec.type }, run };
   }
 
   /**

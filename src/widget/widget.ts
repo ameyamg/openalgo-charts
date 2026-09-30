@@ -27,7 +27,7 @@
  */
 import {
   AlertController, ChartObjects, DataLoadingController, ShortcutManager, createChart, darkTheme, lightTheme, registeredIntervals, registeredChartTypes, tryResolveInterval, resolveInterval, isKnownInterval,
-  dataVariantKey, normalizeDataVariant, publishDataContext, getSeriesTransform, parseSeriesTransformSpec, registeredSeriesTransforms,
+  dataVariantKey, normalizeDataVariant, publishDataContext, getSeriesTransform, registeredSeriesTransforms,
   type Chart, type ChartOptions, type ChartTheme, type DataFeed, type Bar, type SeriesApi, type SeriesType, type DataVariant, type SeriesTransformSpec,
   type RestoreReport, type BarsRequest, type DataLoadingOptions, type DataLoadingSnapshot, type AlertTriggeredPayload, type TradingCapabilityRequest, type TradingCapabilitySource,
 } from 'openalgo-charts';
@@ -937,7 +937,8 @@ class WidgetImpl implements Widget {
     if (!registeredSeriesTransforms().includes(id) || (this._opts.feed === undefined && registeredChartTypes().includes(id))) return null;
     const series = Array.isArray(saved?.series) ? (saved.series as readonly ({ transform?: SeriesTransformSpec } | null)[]) : [];
     const options = series.find(item => item?.transform?.type === id)?.transform?.options;
-    try { return parseSeriesTransformSpec({ type: id, options }); }
+    if (options === undefined) return { type: id };
+    try { getSeriesTransform(id).create(options); return { type: id, options }; }
     catch { return { type: id }; } // options this build refuses: the transform's defaults
   }
 

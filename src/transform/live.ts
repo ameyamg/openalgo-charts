@@ -16,7 +16,7 @@
  * on one bar, exactly as `runTransform` does, so a run's elements are always
  * the batch transform of its source bars.
  */
-import { parseSeriesTransformSpec, registerSeriesTransform } from 'openalgo-charts';
+import { registerSeriesTransform } from 'openalgo-charts';
 import type { Bar, IndicatorInput, SeriesTransformRun, SeriesType } from 'openalgo-charts';
 import type { ISeriesTransform } from './transform';
 import { HeikinAshiTransform } from './heikin-ashi';
@@ -146,6 +146,28 @@ class LiveTransform implements SeriesTransformRun {
   }
 }
 
+/**
+ * The options a spec gives, checked against the transform's own inputs: a key
+ * it does not declare, or a value outside what the input allows, throws before
+ * a run exists, so a bad spec never leaves a series half changed.
+ */
+function checked(type: string, inputs: readonly IndicatorInput[], options: Options): Options {
+  const fail = (reason: string): never => { throw new TypeError(`openalgo-charts: invalid series transform: ${reason}`); };
+  if (options === null || typeof options !== 'object' || Array.isArray(options)) fail('options must be an object');
+  const out: Record<string, number | string> = {};
+  for (const [key, value] of Object.entries(options)) {
+    const input = inputs.find(item => item.key === key);
+    if (input === undefined) fail(`${type} option "${key}" is not one it takes`);
+    const ok = input!.type === 'number'
+      ? typeof value === 'number' && Number.isFinite(value) && (input!.min === undefined || value >= input!.min)
+        && (input!.max === undefined || value <= input!.max) && (input!.step !== 1 || Number.isInteger(value))
+      : input!.type === 'select' && input!.options.some(option => option.value === value);
+    if (!ok) fail(`${type} option "${key}" cannot be ${String(value)}`);
+    out[key] = value;
+  }
+  return out;
+}
+
 /** The history-sized option, with its 0 standing for "from history". */
 const historySize = (key: string, label: string): IndicatorInput =>
   ({ key, type: 'number', label: `${label} (0 = from history)`, default: 0, min: 0 });
@@ -160,7 +182,7 @@ function define(
 ): void {
   registerSeriesTransform(type, {
     name, renderer, inputs,
-    create: (options) => new LiveTransform(parseSeriesTransformSpec({ type, options }).options ?? {}, resolve, make, oneToOne),
+    create: (options) => new LiveTransform(checked(type, inputs, options), resolve, make, oneToOne),
   });
 }
 

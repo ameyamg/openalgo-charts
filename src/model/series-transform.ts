@@ -70,11 +70,15 @@ export interface SeriesTransformDefinition {
   renderer: SeriesType;
   /**
    * The options it takes, described the way a study describes its inputs, so
-   * the chart validates a spec against them and a settings dialog renders
+   * `create` checks a spec against them and a settings dialog renders
    * them. Only `number` and `select` inputs are used.
    */
   inputs: readonly IndicatorInput[];
-  /** Build a run over validated options. */
+  /**
+   * Build a run. Throws a `TypeError` naming an option the transform does not
+   * take or a value outside what its input allows, before anything is built:
+   * how a host checks a spec from outside (a saved layout).
+   */
   create(options: Readonly<Record<string, number | string>>): SeriesTransformRun;
 }
 
@@ -97,28 +101,3 @@ export function registeredSeriesTransforms(): string[] {
   return Array.from(registry.keys());
 }
 
-/**
- * A detached, validated copy of a spec, or a throw naming what is wrong.
- * Everything that accepts one goes through here: a host's call, a saved
- * state, a settings patch, so none of them can leave a series half changed.
- */
-export function parseSeriesTransformSpec(input: unknown): SeriesTransformSpec {
-  const fail = (reason: string): never => { throw new TypeError(`openalgo-charts: invalid series transform: ${reason}`); };
-  if (input === null || typeof input !== 'object' || Array.isArray(input)) fail('expected an object');
-  const { type, options } = input as { type?: unknown; options?: unknown };
-  if (typeof type !== 'string') fail('type must be a string');
-  const definition = getSeriesTransform(type as string);
-  if (options !== undefined && (options === null || typeof options !== 'object' || Array.isArray(options))) fail('options must be an object');
-  const out: Record<string, number | string> = {};
-  for (const [key, value] of Object.entries((options ?? {}) as Record<string, unknown>)) {
-    const declared = definition.inputs.find(item => item.key === key);
-    if (declared === undefined) fail(`${type as string} option "${key}" is not one it takes`);
-    const ok = declared!.type === 'number'
-      ? typeof value === 'number' && Number.isFinite(value) && (declared!.min === undefined || value >= declared!.min)
-        && (declared!.max === undefined || value <= declared!.max) && (declared!.step !== 1 || Number.isInteger(value))
-      : declared!.type === 'select' && declared!.options.some(option => option.value === value);
-    if (!ok) fail(`${type as string} option "${key}" cannot be ${String(value)}`);
-    out[key] = value as number | string;
-  }
-  return Object.keys(out).length > 0 ? { type: type as string, options: out } : { type: type as string };
-}
