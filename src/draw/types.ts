@@ -519,7 +519,7 @@ export type ToolAnchors<N extends number, V extends boolean = false> =
  * `distance` are methods of {@link DrawingTool}, the tool is still one. It
  * costs nothing at run time: the guarantee is the layer's, stated here once.
  * `bounds` is promised the full set too: it is asked only of a complete
- * drawing (layer.ts, `placeViewportAnchors`; screen.ts, `toViewport`).
+ * anchor set (layer.ts, `toolBounds`).
  */
 export type AnchoredTool<N extends number, V extends boolean = false> =
   Omit<DrawingTool, 'points' | 'viewport' | 'expand' | 'bounds' | 'draw' | 'distance'> & {

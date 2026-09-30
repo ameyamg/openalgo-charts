@@ -1024,7 +1024,7 @@ function positionTool(id: string, name: string, long: boolean): DrawingTool {
       const x1 = Math.max(...xs);
       if (x < x0 - 4 || x > x1 + 4) return null;
       const [entry, target] = pts;
-      const stopPrice = pts.length >= 3 ? pts[2]!.price : entry.price - (target.price - entry.price) / POSITION_RR; // by the length
+      const stopPrice = pts.length >= 3 ? pts[2]!.price : entry.price - (target.price - entry.price) / POSITION_RR; // by the length check
       const ys = [entry.price, target.price, stopPrice].map((p) => h.rc.priceScale.priceToY(p));
       const lo = Math.min(...ys);
       const hi = Math.max(...ys);
