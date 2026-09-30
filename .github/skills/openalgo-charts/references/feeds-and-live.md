@@ -13,6 +13,13 @@ interface DataFeed {
   getCachedBars?(req: BarsRequest): Promise<Bar[] | undefined>;
   subscribeBars?(req: BarsRequest, onBar: (bar: Bar) => void, opts?: BarSubscriptionOptions): UnsubscribeFn;
   subscribeDepth?(req: BarsRequest, onDepth: (depth: MarketDepth) => void, opts?: { depthLevel?: number }): UnsubscribeFn;
+  searchSymbols?(request: SymbolSearchRequest): Promise<SymbolMatch[]>;
+}
+
+interface SymbolSearchRequest { query: string; signal?: AbortSignal }
+interface SymbolMatch {
+  symbol: string; exchange?: string; name?: string; assetClass?: string; iconUrl?: string;
+  contractGroup?: { label?: string; contracts: readonly SymbolMatch[] };
 }
 
 interface BarsRequest {
@@ -35,6 +42,8 @@ interface BarSubscriptionOptions {
 ```
 
 **`subscribeBars` and `subscribeDepth` are optional.** A history-only feed omits them so callers can feature-detect (`if (feed.subscribeBars)`). `OpenAlgoDataFeed` deliberately does not implement `subscribeBars`; `OpenAlgoLiveDataFeed` implements both.
+
+**`searchSymbols` is optional too** (unreleased). A feed that has it serves the widget's symbol search with no host code: `createWidget` uses it wherever the host passes no `symbolSearch`, and a host callback still wins. Answer closest first, and honour `signal`, which aborts once a newer query replaces this one. `SymbolMatch` and `SymbolSearchRequest` are exported from the base package; the widget re-exports `SymbolMatch`. Both OpenAlgo feeds implement it.
 
 `BarSubscriptionOptions` is exported from the base package. Its optional third argument keeps existing two-argument feed implementations compatible. `seedFrom` continues the last time-bucketed history bar; `cumDayVolumeSoFar` is the cumulative day total at that snapshot for day-delta volume accounting. A feed calls `onResync` when a recovered stream may have missed data. A host should pause display updates, buffer incoming bars while loading the current window with `noCache: true`, merge the observations before `setData`, then seed the replacement subscription from the merged last bar. Keep resync monitoring active so a repeated reconnect can supersede the pending request. Preserve the viewport, guard against stale requests, and keep a visible error plus retry path if recovery fails. Older gap-fill bars do not belong in the tail-only `onBar` / `series.update` path.
 
@@ -68,6 +77,22 @@ const bars = await feed.getBars({
 - **`from` and `to` are mandatory.** `getBars` throws without them: OpenAlgo history requires a date range. They are UTC seconds; the adapter converts to IST `YYYY-MM-DD` via `utcSecondsToIstDateString`. That is the OpenAlgo server's own convention, not the chart's display zone: `chart.setTimezone(...)` does not change what date this adapter asks for, so widen the range by a day rather than assuming the two agree.
 - A non-OK HTTP response throws `history request failed (<status>)`. JSON `status: 'error'` also throws, using its `message` or `OpenAlgo history request failed`, even for HTTP 200.
 - `fetchImpl` is injectable so the adapter is unit-testable offline. The default binds global `fetch` to `globalThis` (an unbound `window.fetch` throws "Illegal invocation").
+
+Symbol search (unreleased):
+
+```ts
+const hits = await feed.searchSymbols({ query: 'NIFTY', signal });
+// [{ symbol: 'NIFTY', exchange: 'NSE_INDEX', name: 'NIFTY', assetClass: 'Index' },
+//  { symbol: 'NIFTY28OCT26FUT', exchange: 'NFO', name: 'NIFTY', assetClass: 'Futures' },
+//  { symbol: 'NIFTY 28-OCT-26', exchange: 'NFO', assetClass: 'Options',
+//    contractGroup: { label: 'NIFTY 28-OCT-26', contracts: [/* one hit per strike and side */] } }, ...]
+```
+
+- `POST ${baseUrl}/api/v1/search` with `{ apikey, query }` across every exchange, under the same deadline and cancellation as history. A blank query answers `[]` without a request.
+- The platform's ranking is kept, capped at 50 rows. `assetClass` is `Index` on an `*_INDEX` exchange, `Equity` without an expiry, `Options` for a contract whose symbol ends in `CE` or `PE`, else `Futures`.
+- The options of one underlying and expiry on one exchange share a row whose `contractGroup` holds them, so an index search lists expiries rather than hundreds of strikes. An expiry with a single option lists that option itself.
+- A non-OK response throws `symbol search failed (<status>)`; a JSON `status: 'error'` throws its string `message`. Neither carries the key.
+- `OpenAlgoLiveDataFeed.searchSymbols` delegates to its REST adapter.
 
 Two pure helpers are exported for reuse and testing:
 
@@ -346,6 +371,7 @@ Other behaviour worth knowing:
 - `BarsRequest.noCache: true` bypasses the cached result and refreshes the entry from the source. Honor or forward it in custom wrappers so reconnect recovery cannot reuse history from before the interruption. `CachedBarsRequest` remains available for existing callers.
 - A rejected fetch propagates untouched and leaves the previous entry alone. Nothing is written unless bars arrive.
 - Bars are cloned in and out, because live builders mutate bar objects in place.
+- `searchSymbols` (unreleased) is forwarded the same way, only when the wrapped feed has it.
 - `subscribeBars` and `subscribeDepth` are forwarded **only when the wrapped feed has them**, with every argument, so feature detection still tells a history-only feed from a live one and `OpenAlgoLiveDataFeed`'s third `opts` argument survives the hop. `cache.source` is the wrapped feed.
 - Bounds are LRU on entries **and** on total bars, because one intraday series can be 100k bars and an entry count alone does not bound memory. A single series larger than `maxBars` is simply not cached.
 - `invalidate({ symbol, exchange, interval })` drops one series; `invalidate()` and `clear()` drop everything this instance knows of. With an injected persistent store, keys written by an earlier session are dropped when next read and found expired, not by `clear()`.

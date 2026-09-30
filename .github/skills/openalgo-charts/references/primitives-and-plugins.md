@@ -271,6 +271,27 @@ with `summary?: string` and `fields?: readonly EventDetailField[]`, where each f
 has text `label` and `value` strings. Events and nested detail fields are copied on
 assignment and on return.
 
+(unreleased) `ChartEventDetails.blocks?: readonly EventDetailBlock[]` carries rich
+content as structure, never markup, so a feed's text cannot run as code:
+`{ type: 'heading' | 'paragraph', text: EventDetailInline }` or
+`{ type: 'list', items: readonly EventDetailInline[] }`. `EventDetailInline` is a
+plain string or `readonly EventDetailSpan[]`, where a span is
+`{ text, strong?, em?, href? }`. Blocks are copied all the way down, whatever
+shape a feed sends, and a malformed block never makes `setEvents` throw. All
+three types are exported from the base package.
+
+```ts
+details: {
+  summary: 'Quarter in brief.',
+  blocks: [
+    { type: 'heading', text: 'Highlights' },
+    { type: 'paragraph', text: [{ text: 'Margins ' }, { text: 'widened', strong: true },
+      { text: ' Filing', href: 'https://example.com/filing' }] },
+    { type: 'list', items: ['Volume up 9%', [{ text: 'Guidance kept', em: true }]] },
+  ],
+}
+```
+
 `EventGroup` is `{ id, label, parentId?, visible? }`. `setGroups` replaces the
 hierarchy atomically, rejecting empty or duplicate IDs, missing parents and cycles.
 `setGroupVisible(id, visible)` sets local visibility; a hidden ancestor hides every
@@ -325,7 +346,7 @@ the calendar feed and supplies new instrument events.
 ### Widget details popup
 
 The widget tier exports `EventDetailsPopup`, `EVENT_DETAILS_CSS`, `EventDetailsLoader`,
-`EventDetailsLabels` and `EventDetailsPopupOptions`. `createWidget` opens details
+`EventDetailsLabels`, `EventDetailsPopupOptions` and (unreleased) `EventDetailAction`. `createWidget` opens details
 for chart-owned markers by default. `WidgetOptions.eventDetails: false` disables
 the popup; an options object customizes it:
 
@@ -353,6 +374,32 @@ stack and `injectStyles: false` if the host bundles `EVENT_DETAILS_CSS` itself.
 `error`. Standalone time formatting defaults to `Asia/Kolkata`. All supplied
 content is rendered as text. Cluster-member buttons, focus containment, focus
 restoration, Escape/Close and pointer isolation are built in.
+
+(unreleased) Rich blocks and host actions. The popup renders `details.blocks`
+after the fields: `heading` as a subheading, `paragraph` as a paragraph, `list`
+as a bulleted list, each built with elements and text nodes only, never
+`innerHTML`. A span's `strong` and `em` wrap it in those elements; its `href`
+becomes a link only for an absolute http or https URL without credentials (the
+news reader's `safeNewsUrl` check), opened in a new tab with
+`rel="noopener noreferrer"` and no referrer. `javascript:`, `data:`,
+`vbscript:`, relative and protocol-relative values show the span's text alone.
+A block of any other shape, or one that renders no text, is skipped.
+
+`EventDetailsPopupOptions.actions(event)` returns `readonly EventDetailAction[]`
+(`{ label, run(event) }`) for the event on show, asked each time a member is
+selected. The buttons sit bottom right; a label is text. A press closes the popup
+first, so whatever the action opens is not closed under it, then calls `run`
+with a copy of the event. No actions, no buttons.
+
+```ts
+const widget = createWidget(container, {
+  eventDetails: {
+    actions: event => event.type === 'earnings'
+      ? [{ label: 'Add alert', run: shown => openAlertAt(shown.time) }]
+      : [],
+  },
+});
+```
 
 ## `PriceLevels`: the reference-level family
 

@@ -590,7 +590,7 @@ exists to show one engine surface carrying real use, not just being present.
 | `chart-data.js` | Download the captured chart's loaded OHLC/volume/OI, study plots and eligible comparison closes through the shared CSV serializer. Reject obsolete/loading owners and release file resources on success or failure. |
 | `chart-data-controls.js` | Capture a study checklist and visible time bounds, validate custom UTC bounds, and choose source or display alignment before download. |
 | `alerts.js` | The Alerts toolbar button opens the focused chart's lifecycle list and source editor. Price, study plots, supported drawing levels and registered candle conditions use the same controls as the packaged widget. Local notices display fired events; the demo does not send notifications or orders for an alert. |
-| `timeline.js` | The Events menu enables labelled sample events, clustering and group visibility. Click a marker to read its details. These are demonstration events, not a company calendar feed. |
+| `timeline.js` | The Events menu enables labelled sample events, clustering and group visibility. Click a marker to read its details: the sample results event carries rich content (a heading, emphasis, a link and a list whose markup stays text), and **Mark on chart** draws a vertical line at the event through the popup's `actions` option. These are demonstration events, not a company calendar feed. |
 | `market-panels.js` | The Watchlist and News buttons open the widget's panels in each chart's dock. Named lists live in IndexedDB through the workspace tier's `WatchlistRepository`, one store for both charts, with a first list on a first visit. Quotes come from `/api/quotes` only, through one shared poll for every visible row's stream; a failed poll reports the stream as reconnecting, so the rows go stale until the next good answer. An arithmetic symbol has no quote and shows `n/a`. The watchlist sort sits in `localStorage` under the `yfinance-panels` namespace, so it survives the dock rebuild every symbol load causes. News pages come from `/api/news` with the server's cursor. Without `--fixture` the endpoints answer 501. The first 501 is the page's only quote request: from then on the quote source answers every snapshot and poll with that error itself, each row shows `n/a`, and the status line reads "Quotes disconnected." with no claim about values shown. The news panel shows the server's message. |
 
 ### Analysis and linking in 2.5.2
@@ -608,7 +608,9 @@ namespace used for drawing matching does not change saved alert scopes.
 
 The Events button opens sample timeline controls. Enable **Show sample events**,
 then click a marker or clustered count to read details. Group filters include
-child groups. Your production host must supply its own event data.
+child groups. The sample results event shows rich details, and **Mark on chart**
+draws a vertical line at the event on the chart it was clicked on. Your
+production host must supply its own event data.
 
 Click or focus a chart, or use the Chart selector, to select it for symbol,
 interval, history range, chart type, study, grid, drawing, alert and snapshot
