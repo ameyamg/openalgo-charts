@@ -112,7 +112,7 @@ function emaTail(calc: Calc): Tail {
       return machineTail(calc, `${length}|${source}`, {
         keys: ['ma'],
         start: seeded,
-        step: (st, i, row) => { row[0] = cell(smooth(st, sourceValue(bars[i], source), length, true)); },
+        step: (st, i, row) => { row[0] = cell(smooth(st, sourceValue(bars[i]!, source), length, true)); },
       }, bars, from, previous, store);
     }
     if (claimOf(store, calc, bars, from) === undefined) return null;
@@ -141,8 +141,9 @@ function bollinger(bars: readonly Bar[], s: Readonly<Record<string, unknown>>): 
   const mult = num(s, 'stdDev', 2);
   const basis = sma(values, length);
   const dev = stdev(values, length);
-  const upper = basis.map((b, i) => b + mult * dev[i]);
-  const lower = basis.map((b, i) => b - mult * dev[i]);
+  // Both kernels return one value per input, so `dev[i]` is there.
+  const upper = basis.map((b, i) => b + mult * dev[i]!);
+  const lower = basis.map((b, i) => b - mult * dev[i]!);
   return { upper: nulls(upper), basis: nulls(basis), lower: nulls(lower) };
 }
 
@@ -242,7 +243,7 @@ function shiftColumn(col: readonly number[], by: number): number[] {
   const out = new Array<number>(col.length).fill(NaN);
   for (let i = 0; i < col.length; i++) {
     const to = i + by;
-    if (to >= 0 && to < col.length) out[to] = col[i];
+    if (to >= 0 && to < col.length) out[to] = col[i]!;
   }
   return out;
 }
@@ -267,21 +268,22 @@ const breakGap = (r: Reading): number => Math.max(4 * r.median, 4 * HOUR);
 /** Sessions are read from the gaps; otherwise every bar is tested against the calendar. */
 const bySession = (r: Reading): boolean => readable(r) && r.opens > 0 && r.short > r.opens >> 1;
 
+/** `times` holds at least one bar: the tail's head always ends at bar `from`. */
 function readingOf(times: readonly number[], flag: boolean): Reading {
   const gaps: number[] = [];
-  for (let i = 1; i < times.length; i++) if (times[i] > times[i - 1]) gaps.push(times[i] - times[i - 1]);
+  for (let i = 1; i < times.length; i++) if (times[i]! > times[i - 1]!) gaps.push(times[i]! - times[i - 1]!);
   gaps.sort((a, b) => a - b);
-  const median = gaps.length === 0 ? 0 : gaps[gaps.length >> 1];
+  const median = gaps.length === 0 ? 0 : gaps[gaps.length >> 1]!;
   const r: Reading = {
-    gaps: gaps.length, median, below: 0, equal: 0, opens: 0, short: 0, open: times[0], last: times[times.length - 1], flag,
+    gaps: gaps.length, median, below: 0, equal: 0, opens: 0, short: 0, open: times[0]!, last: times[times.length - 1]!, flag,
   };
   for (const g of gaps) if (g < median) r.below++; else if (g === median) r.equal++;
   if (readable(r)) {
     for (let i = 1; i < times.length; i++) {
-      if (times[i] - times[i - 1] < breakGap(r)) continue;
+      if (times[i]! - times[i - 1]! < breakGap(r)) continue;
       r.opens++;
-      if (times[i] - r.open <= 36 * HOUR) r.short++;
-      r.open = times[i];
+      if (times[i]! - r.open <= 36 * HOUR) r.short++;
+      r.open = times[i]!;
     }
   }
   return r;
@@ -347,12 +349,14 @@ function vwapTail(calc: Calc): Tail {
     let ahead: boolean[] = [];
     return machineTail(calc, `${anchor}|${source}|${zone}|${percent}|${shows.join()}|${mults.join()}`, {
       keys: ['vwap', 'upper1', 'lower1', 'upper2', 'lower2', 'upper3', 'lower3'],
+      // `machineTail` runs these only once `from` indexes a bar, so the head
+      // and its flags run through bar `from`.
       start: (): VwapState => {
         const head = from + 1 === n ? bars : bars.slice(0, from + 1);
         flags = anchorRestarts(head, anchor, zone);
         return {
           pv: 0, vol: 0, pv2: 0,
-          reading: anchor === 'continuous' ? null : readingOf(head.map((b) => b.time), flags[from]),
+          reading: anchor === 'continuous' ? null : readingOf(head.map((b) => b.time), flags[from]!),
         };
       },
       ready: (st) => {
@@ -361,16 +365,16 @@ function vwapTail(calc: Calc): Tail {
           ahead = [false, false];
           return true;
         }
-        if (r.last !== bars[from].time) return false;
+        if (r.last !== bars[from]!.time) return false;
         // Read before `advance`, which moves the reading on to the appended bar.
         const current = r.flag;
-        const appended = n === from + 2 ? advance(r, bars[n - 1].time, anchor, zone) : false;
+        const appended = n === from + 2 ? advance(r, bars[n - 1]!.time, anchor, zone) : false;
         ahead = [current, appended === true];
         return appended !== null;
       },
       step: (st, i, row) => {
         if (i < from ? flags[i] : ahead[i - from]) { st.pv = 0; st.vol = 0; st.pv2 = 0; }
-        const bar = bars[i];
+        const bar = bars[i]!;
         const v = bar.volume ?? 0;
         const x = sourceValue(bar, source);
         let mean = NaN;
@@ -388,8 +392,8 @@ function vwapTail(calc: Calc): Tail {
         row[0] = cell(mean);
         const live = Number.isFinite(mean) && Number.isFinite(basis);
         for (let b = 0; b < 3; b++) {
-          row[1 + 2 * b] = shows[b] && live ? cell(mean + basis * mults[b]) : null;
-          row[2 + 2 * b] = shows[b] && live ? cell(mean - basis * mults[b]) : null;
+          row[1 + 2 * b] = shows[b] && live ? cell(mean + basis * mults[b]!) : null;
+          row[2 + 2 * b] = shows[b] && live ? cell(mean - basis * mults[b]!) : null;
         }
       },
     }, bars, from, previous, store);
@@ -474,10 +478,11 @@ export const VWAP: IndicatorDescriptor = withTail({
     let pv = 0;
     let vol = 0;
     let pv2 = 0;
+    // `values`, `vwap` and `basis` hold one value per bar.
     for (let i = 0; i < n; i++) {
       if (restarts[i]) { pv = 0; vol = 0; pv2 = 0; }
-      const v = bars[i].volume ?? 0;
-      const x = values[i];
+      const v = bars[i]!.volume ?? 0;
+      const x = values[i]!;
       // A missing price or an unusable volume leaves this bar absent and the
       // totals as they were. Adding it in would blank the line and every band
       // until the next restart, which on the continuous anchor is never. An
@@ -500,7 +505,7 @@ export const VWAP: IndicatorDescriptor = withTail({
       if (!show) return out;
       for (let i = 0; i < n; i++) {
         if (Number.isFinite(vwap[i]) && Number.isFinite(basis[i])) {
-          out[i] = vwap[i] + sign * basis[i] * mult;
+          out[i] = vwap[i]! + sign * basis[i]! * mult;
         }
       }
       return out;
@@ -560,7 +565,7 @@ export const SUPERTREND: IndicatorDescriptor = withTimeframe(withTail({
     const down: (number | null)[] = [];
     const bodyMid: (number | null)[] = [];
     for (let i = 0; i < st.length; i++) {
-      const p = st[i];
+      const p = st[i]!;
       const live = Number.isFinite(p.value);
       up.push(live && p.direction === -1 ? p.value : null);
       down.push(live && p.direction === 1 ? p.value : null);
@@ -624,7 +629,7 @@ export const PARABOLIC_SAR: IndicatorDescriptor = withTimeframe(withTail({
     let af = step;
 
     for (let i = 0; i < n; i++) {
-      const bar = bars[i];
+      const bar = bars[i]!;
       if (!Number.isFinite(bar.high) || !Number.isFinite(bar.low) || !Number.isFinite(bar.close)) continue;
       if (prev === undefined) { prev = bar; continue; }
       if (prev2 === undefined) {
@@ -676,7 +681,7 @@ export const PARABOLIC_SAR: IndicatorDescriptor = withTimeframe(withTail({
   return machineTail(calc, `${start}|${inc}|${max}`, {
     keys: ['sar'],
     start: () => sarState(start),
-    step: (st, i, row) => { row[0] = cell(sarStep(st, bars[i], start, inc, max)); },
+    step: (st, i, row) => { row[0] = cell(sarStep(st, bars[i]!, start, inc, max)); },
   }, bars, from, previous, store);
 }));
 
@@ -684,9 +689,10 @@ export const PARABOLIC_SAR: IndicatorDescriptor = withTimeframe(withTail({
 function shift(values: readonly number[], k: number): number[] {
   const n = values.length;
   const out = new Array<number>(n).fill(NaN);
+  // Callers shift by whole bars, so a `j` inside [0, n) is an index.
   for (let i = 0; i < n; i++) {
     const j = i - k;
-    if (j >= 0 && j < n) out[i] = values[j];
+    if (j >= 0 && j < n) out[i] = values[j]!;
   }
   return out;
 }
@@ -736,15 +742,17 @@ export const ICHIMOKU: IndicatorDescriptor = {
     const lag = period('laggingSpanPeriod', 52);
     const disp = Math.round(num(s, 'displacement', 26));
 
-    // Donchian midpoint over `p` bars.
+    // Donchian midpoint over `p` bars, a whole period of one or more, so the
+    // window [i - p + 1, i] lies inside the bars.
     const mid = (p: number): number[] => {
       const out = new Array<number>(n).fill(NaN);
       for (let i = p - 1; i < n; i++) {
         let hi = -Infinity;
         let lo = Infinity;
         for (let k = 0; k < p; k++) {
-          if (bars[i - k].high > hi) hi = bars[i - k].high;
-          if (bars[i - k].low < lo) lo = bars[i - k].low;
+          const bar = bars[i - k]!;
+          if (bar.high > hi) hi = bar.high;
+          if (bar.low < lo) lo = bar.low;
         }
         out[i] = (hi + lo) / 2;
       }
@@ -753,7 +761,7 @@ export const ICHIMOKU: IndicatorDescriptor = {
 
     const conversion = mid(conv);
     const baseLine = mid(base);
-    const spanA = conversion.map((c, i) => (c + baseLine[i]) / 2);
+    const spanA = conversion.map((c, i) => (c + baseLine[i]!) / 2);
     const spanB = mid(lag);
     const closes = bars.map((b) => b.close);
     return {
@@ -843,7 +851,7 @@ export const HALFTREND: IndicatorDescriptor = {
       const b = buy[i];
       if (b !== null && b !== undefined) {
         out.push({
-          time: bars[i].time, position: 'atPrice' as const, price: b,
+          time: bars[i]!.time, position: 'atPrice' as const, price: b,
           shape: 'labelUp' as const, size: 'small' as const,
           color: str(settings, 'upColor', '#2962ff'), text: 'Buy',
         });
@@ -852,7 +860,7 @@ export const HALFTREND: IndicatorDescriptor = {
       const sg = sell[i];
       if (sg !== null && sg !== undefined) {
         out.push({
-          time: bars[i].time, position: 'atPrice' as const, price: sg,
+          time: bars[i]!.time, position: 'atPrice' as const, price: sg,
           shape: 'labelDown' as const, size: 'small' as const,
           color: str(settings, 'downColor', '#ef5350'), text: 'Sell',
         });
@@ -885,35 +893,36 @@ export const HALFTREND: IndicatorDescriptor = {
     const rollLow = lowest(lows, amp);
 
     // 0 = uptrend, 1 = downtrend. `armed` is the flip currently being tracked.
+    // Every series here has one value per bar, and there is at least one bar.
     let trend = 0;
     let armed = 0;
-    let maxLow = lows[0];
-    let minHigh = highs[0];
+    let maxLow = lows[0]!;
+    let minHigh = highs[0]!;
     let upLevel = 0;
     let downLevel = 0;
     let seeded = false;
 
     for (let i = 0; i < n; i++) {
-      const half = halfAtr[i] / 2;
+      const half = halfAtr[i]! / 2;
       const dev = chDev * half;
-      const barHigh = rollHigh[i];
-      const barLow = rollLow[i];
+      const barHigh = rollHigh[i]!;
+      const barLow = rollLow[i]!;
       // Bar 0 has no predecessor; comparing against itself can never satisfy the
       // flip condition, which is the correct no-signal answer for a single bar.
-      const prevHigh = i > 0 ? highs[i - 1] : highs[0];
-      const prevLow = i > 0 ? lows[i - 1] : lows[0];
+      const prevHigh = i > 0 ? highs[i - 1]! : highs[0]!;
+      const prevLow = i > 0 ? lows[i - 1]! : lows[0]!;
       const wasTrend = seeded ? trend : -1;
 
       if (armed === 1) {
         if (Number.isFinite(barLow)) maxLow = Math.max(barLow, maxLow);
-        if (Number.isFinite(meanHigh[i]) && meanHigh[i] < maxLow && bars[i].close < prevLow) {
+        if (Number.isFinite(meanHigh[i]) && meanHigh[i]! < maxLow && bars[i]!.close < prevLow) {
           trend = 1;
           armed = 0;
           minHigh = barHigh;
         }
       } else {
         if (Number.isFinite(barHigh)) minHigh = Math.min(barHigh, minHigh);
-        if (Number.isFinite(meanLow[i]) && meanLow[i] > minHigh && bars[i].close > prevHigh) {
+        if (Number.isFinite(meanLow[i]) && meanLow[i]! > minHigh && bars[i]!.close > prevHigh) {
           trend = 0;
           armed = 1;
           maxLow = barLow;

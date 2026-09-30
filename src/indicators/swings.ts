@@ -99,7 +99,7 @@ const zigzagCalc: Calc = (bars, s) => {
   const deviation = deviationOf(s);
   const st = swingStart();
   const write = (j: number, v: Cell): void => { out[j] = v; };
-  for (let i = 0; i < bars.length; i++) swingStep(st, bars[i], i, deviation, write);
+  for (let i = 0; i < bars.length; i++) swingStep(st, bars[i]!, i, deviation, write);
   return { zigzag: out };
 };
 
@@ -123,7 +123,8 @@ function zigzagTail(calc: Calc): Tail {
     const key = `${deviation}`;
     const at = resumable(claim, key, bars, from);
     const st = at !== undefined ? { ...(at.state as Swing) } : swingStart();
-    if (at === undefined) for (let i = 0; i < from; i++) swingStep(st, bars[i], i, deviation, skip);
+    // `from` has passed `claimOf`, so every index walked here is a bar.
+    if (at === undefined) for (let i = 0; i < from; i++) swingStep(st, bars[i]!, i, deviation, skip);
     // What each open bar holds now: the running end is drawn, the extremes
     // before the first reversal are not yet.
     const open = new Map<number, Cell>();
@@ -136,8 +137,8 @@ function zigzagTail(calc: Calc): Tail {
       else open.set(j, v);
     };
     for (let i = from; i < n; i++) {
-      if (i === n - 1) claim.at = { key, index: i - 1, time: i > 0 ? bars[i - 1].time : NaN, state: { ...st }, row: [] };
-      swingStep(st, bars[i], i, deviation, write);
+      if (i === n - 1) claim.at = { key, index: i - 1, time: i > 0 ? bars[i - 1]!.time : NaN, state: { ...st }, row: [] };
+      swingStep(st, bars[i]!, i, deviation, write);
     }
     for (const [j, v] of open) if (!Object.is(held[j] ?? null, v)) return null;
     claim.misses = 0;
@@ -190,7 +191,7 @@ export const ZIGZAG: IndicatorDescriptor = withTail({
     const points: DrawAnchor[] = [];
     for (let i = 0; i < bars.length; i++) {
       const v = col[i];
-      if (typeof v === 'number' && Number.isFinite(v)) points.push({ time: bars[i].time, price: v });
+      if (typeof v === 'number' && Number.isFinite(v)) points.push({ time: bars[i]!.time, price: v });
     }
     const keys = plotStyleKeys(ZIGZAG_PLOT);
     const color = str(settings, keys.color, '#2962ff');
@@ -201,7 +202,7 @@ export const ZIGZAG: IndicatorDescriptor = withTail({
     const legs: IndicatorDrawing[] = [];
     for (let j = 1; j < points.length; j++) {
       legs.push({
-        kind: 'line', from: points[j - 1], to: points[j],
+        kind: 'line', from: points[j - 1]!, to: points[j]!,
         color: opacity >= 100 ? color : withAlpha(color, Math.max(0, opacity) / 100),
         lineWidth: width > 0 ? width : 2,
         // The last leg is provisional, so it never shares the style of the
@@ -228,7 +229,10 @@ function yearRange(bars: readonly Bar[], zone: string, start: number): { high: C
   const high = new Array<Cell>(n - start).fill(null);
   const low = new Array<Cell>(n - start).fill(null);
   if (n === 0) return { high, low };
-  const dayOf = (j: number): number => zonedDayIndex(bars[j].time, zone);
+  // Every read below is of a bar index: the scans stop at 0 and at n, the
+  // queues hold bars from `first` on and are read behind their length, and
+  // `days` holds one day for each bar from `first`.
+  const dayOf = (j: number): number => zonedDayIndex(bars[j]!.time, zone);
   const opened = dayOf(0);
   // Days only rise, so the bars whose window the history covers are a suffix.
   let begin = n;
@@ -243,22 +247,22 @@ function yearRange(bars: readonly Bar[], zone: string, start: number): { high: C
   let hi = 0;
   let lo = 0;
   for (let i = first; i < n; i++) {
-    const b = bars[i];
+    const b = bars[i]!;
     days.push(dayOf(i));
     if (Number.isFinite(b.high)) {
-      while (highs.length > hi && bars[highs[highs.length - 1]].high <= b.high) highs.pop();
+      while (highs.length > hi && bars[highs[highs.length - 1]!]!.high <= b.high) highs.pop();
       highs.push(i);
     }
     if (Number.isFinite(b.low)) {
-      while (lows.length > lo && bars[lows[lows.length - 1]].low >= b.low) lows.pop();
+      while (lows.length > lo && bars[lows[lows.length - 1]!]!.low >= b.low) lows.pop();
       lows.push(i);
     }
     if (i < begin) continue;
-    const cut = days[i - first] - WINDOW_DAYS;
-    while (hi < highs.length && days[highs[hi] - first] <= cut) hi++;
-    while (lo < lows.length && days[lows[lo] - first] <= cut) lo++;
-    if (hi < highs.length) high[i - start] = bars[highs[hi]].high;
-    if (lo < lows.length) low[i - start] = bars[lows[lo]].low;
+    const cut = days[i - first]! - WINDOW_DAYS;
+    while (hi < highs.length && days[highs[hi]! - first]! <= cut) hi++;
+    while (lo < lows.length && days[lows[lo]! - first]! <= cut) lo++;
+    if (hi < highs.length) high[i - start] = bars[highs[hi]!]!.high;
+    if (lo < lows.length) low[i - start] = bars[lows[lo]!]!.low;
   }
   return { high, low };
 }

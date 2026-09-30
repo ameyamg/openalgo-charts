@@ -208,13 +208,15 @@ export function securitySeries(
   if (n === 0) return { open, high, low, close, volume, oi, bucketStart, isNew };
 
   // One pass groups the bars, which are time-sorted, into contiguous buckets
-  // and folds each bucket's final values. A second pass reads them out.
+  // and folds each bucket's final values. A second pass reads them out. Bar 0
+  // opens the first bucket, so a later bar always has one to fold into, and
+  // `of` gives every bar the index of its bucket.
   const buckets: Bucket[] = [];
   const of = new Array<number>(n);
   const keyAt = bucketKeys(bucketing, zone, sessionStart);
   let prevKey = NaN;
   for (let i = 0; i < n; i++) {
-    const bar = bars[i];
+    const bar = bars[i]!;
     const key = keyAt(bar.time);
     if (i === 0 || key !== prevKey) {
       buckets.push({
@@ -225,7 +227,7 @@ export function securitySeries(
       });
       isNew[i] = true;
     } else {
-      const k = buckets[buckets.length - 1];
+      const k = buckets[buckets.length - 1]!;
       if (!finite(k.open) && finite(bar.open)) k.open = bar.open;
       if (finite(bar.high) && (!finite(k.high) || bar.high > k.high)) k.high = bar.high;
       if (finite(bar.low) && (!finite(k.low) || bar.low < k.low)) k.low = bar.low;
@@ -244,17 +246,17 @@ export function securitySeries(
   let runVolume: number | null = null;
   let runOi: number | null = null;
   for (let i = 0; i < n; i++) {
-    const bar = bars[i];
-    const bi = of[i];
+    const bar = bars[i]!;
+    const bi = of[i]!;
     if (offset > 0) {
       const src = bi - offset;
       if (src < 0) continue;
-      const k = buckets[src];
+      const k = buckets[src]!;
       open[i] = k.open; high[i] = k.high; low[i] = k.low; close[i] = k.close;
       volume[i] = k.volume; oi[i] = k.oi; bucketStart[i] = k.start;
       continue;
     }
-    const k = buckets[bi];
+    const k = buckets[bi]!;
     bucketStart[i] = k.start;
     if (lookahead) {
       open[i] = k.open; high[i] = k.high; low[i] = k.low; close[i] = k.close;
@@ -342,14 +344,19 @@ export function securityExpression(
     keys = names;
     return result;
   };
+  // `keys` are the columns `evaluate` just checked on `result`. The requested
+  // index is -1 before the first confirmed bucket, and that read is undefined.
   const write = (result: IndicatorValues, sourceIndex: number, requestedIndex: number): void => {
     for (const key of keys ?? []) {
-      const value = result[key][requestedIndex];
+      const value = result[key]![requestedIndex];
       (out[key] as (number | null)[])[sourceIndex] = typeof value === 'number' && Number.isFinite(value) ? value : null;
     }
   };
+  // The first bar's key differs from the undefined `previousKey`, so a bar
+  // folds into an existing bar only after one was pushed; `indices` gains one
+  // entry per bar.
   for (let i = 0; i < bars.length; i++) {
-    const bar = bars[i];
+    const bar = bars[i]!;
     if (!Number.isFinite(bar.time) || bar.time <= previousTime) {
       throw new IndicatorInputError('securityExpression: source times must be finite and strictly increasing');
     }
@@ -357,7 +364,7 @@ export function securityExpression(
     const key = keyAt(bar.time);
     if (key !== previousKey) folded.push(Object.freeze({ ...bar }));
     else {
-      const old = folded[folded.length - 1];
+      const old = folded[folded.length - 1]!;
       const next = { ...old };
       if (!finite(old.open) && finite(bar.open)) next.open = bar.open;
       if (finite(bar.high) && (!finite(old.high) || bar.high > old.high)) next.high = bar.high;
@@ -373,7 +380,7 @@ export function securityExpression(
   }
   if (mode !== 'developing') {
     const result = evaluate();
-    for (let i = 0; i < bars.length; i++) write(result, i, indices[i] - (mode === 'confirmed' ? 1 : 0));
+    for (let i = 0; i < bars.length; i++) write(result, i, indices[i]! - (mode === 'confirmed' ? 1 : 0));
   }
   return out;
 }

@@ -139,12 +139,12 @@ function medianSpacing(bars: readonly Bar[]): number {
   if (bars.length < 2) return 0;
   const gaps: number[] = [];
   for (let i = 1; i < bars.length; i++) {
-    const d = bars[i].time - bars[i - 1].time;
+    const d = bars[i]!.time - bars[i - 1]!.time;
     if (d > 0) gaps.push(d);
   }
   if (gaps.length === 0) return 0;
   gaps.sort((a, b) => a - b);
-  return gaps[Math.floor(gaps.length / 2)];
+  return gaps[Math.floor(gaps.length / 2)]!;
 }
 
 /**
@@ -263,7 +263,7 @@ function pivotColumns(
         prevLow = curLow;
         prevClose = curClose;
       }
-      const bar = bars[i];
+      const bar = bars[i]!;
       const high = Number.isFinite(bar.high) ? bar.high : NaN;
       const low = Number.isFinite(bar.low) ? bar.low : NaN;
       // An unknown extreme invalidates this period; only a boundary can seed again.
@@ -398,10 +398,11 @@ function moneyFlowIndex(
   if (period <= 0 || n === 0) return out;
   const positive = new Array<number>(n).fill(0);
   const negative = new Array<number>(n).fill(0);
+  // `volume` runs alongside `typical`, and both sums keep their length.
   for (let i = 1; i < n; i++) {
-    const flow = typical[i] * volume[i];
-    if (typical[i] > typical[i - 1]) positive[i] = flow;
-    else if (typical[i] < typical[i - 1]) negative[i] = flow;
+    const flow = typical[i]! * volume[i]!;
+    if (typical[i]! > typical[i - 1]!) positive[i] = flow;
+    else if (typical[i]! < typical[i - 1]!) negative[i] = flow;
   }
   const up = windowSum(positive, period);
   const down = windowSum(negative, period);
@@ -410,7 +411,7 @@ function moneyFlowIndex(
     // A window with no down-flow has nothing to divide by, so the index pins at
     // 100. That also covers a feed with no volume at all, where both sides are
     // zero and the ratio is undefined rather than merely extreme.
-    out[i] = down[i] === 0 ? 100 : 100 - 100 / (1 + up[i] / down[i]);
+    out[i] = down[i] === 0 ? 100 : 100 - 100 / (1 + up[i]! / down[i]!);
   }
   return out;
 }
@@ -467,7 +468,7 @@ export const ALPHATREND: IndicatorDescriptor = {
       const b = buy[i];
       if (b !== null && b !== undefined) {
         out.push({
-          time: bars[i].time, position: 'atPrice' as const, price: b,
+          time: bars[i]!.time, position: 'atPrice' as const, price: b,
           shape: 'labelUp' as const, size: 'tiny' as const,
           color: str(settings, 'buyColor', '#0022fc'), text: 'BUY',
         });
@@ -476,7 +477,7 @@ export const ALPHATREND: IndicatorDescriptor = {
       const sg = sell[i];
       if (sg !== null && sg !== undefined) {
         out.push({
-          time: bars[i].time, position: 'atPrice' as const, price: sg,
+          time: bars[i]!.time, position: 'atPrice' as const, price: sg,
           shape: 'labelDown' as const, size: 'tiny' as const,
           color: str(settings, 'sellColor', '#880e4f'), text: 'SELL',
         });
@@ -507,27 +508,28 @@ export const ALPHATREND: IndicatorDescriptor = {
       ? rsi(sourceValues(bars, src(s)), period)
       : moneyFlowIndex(bars.map((b) => (b.high + b.low + b.close) / 3), bars.map((b) => b.volume ?? 0), period);
 
+    // Every series here holds one value per bar.
     for (let i = 0; i < n; i++) {
       // The recursion reads its own previous value through `nz`, so an
       // unresolved slot counts as zero rather than propagating a gap. That is
       // load-bearing: on the first resolved bar the falling branch clamps to
       // zero, and the level stays pinned there until the first rising leg.
-      const prev = i > 0 && Number.isFinite(level[i - 1]) ? level[i - 1] : 0;
+      const prev = i > 0 && Number.isFinite(level[i - 1]) ? level[i - 1]! : 0;
       if (!Number.isFinite(band[i]) || !Number.isFinite(gauge[i])) continue;
-      const offset = band[i] * coeff;
-      level[i] = gauge[i] >= 50
-        ? Math.max(bars[i].low - offset, prev)
-        : Math.min(bars[i].high + offset, prev);
+      const offset = band[i]! * coeff;
+      level[i] = gauge[i]! >= 50
+        ? Math.max(bars[i]!.low - offset, prev)
+        : Math.min(bars[i]!.high + offset, prev);
     }
-    for (let i = 2; i < n; i++) lagged[i] = level[i - 2];
+    for (let i = 2; i < n; i++) lagged[i] = level[i - 2]!;
 
     const crossUp = new Array<boolean>(n).fill(false);
     const crossDown = new Array<boolean>(n).fill(false);
     for (let i = 1; i < n; i++) {
-      const a = level[i];
-      const b = lagged[i];
-      const pa = level[i - 1];
-      const pb = lagged[i - 1];
+      const a = level[i]!;
+      const b = lagged[i]!;
+      const pa = level[i - 1]!;
+      const pb = lagged[i - 1]!;
       if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(pa) || !Number.isFinite(pb)) continue;
       if (a > b && pa <= pb) crossUp[i] = true;
       else if (a < b && pa >= pb) crossDown[i] = true;
@@ -539,15 +541,15 @@ export const ALPHATREND: IndicatorDescriptor = {
       // shifted counters are what make that comparison strict; before either
       // side has ever fired they are NaN, and every comparison against NaN is
       // false, which suppresses the very first signal exactly as the original.
-      const shiftedUp = crossUp.map((_, i) => i > 0 && crossUp[i - 1]);
-      const shiftedDown = crossDown.map((_, i) => i > 0 && crossDown[i - 1]);
+      const shiftedUp = crossUp.map((_, i) => i > 0 && crossUp[i - 1]!);
+      const shiftedDown = crossDown.map((_, i) => i > 0 && crossDown[i - 1]!);
       const sinceUp = barsSince(crossUp);
       const sinceDown = barsSince(crossDown);
       const sinceShiftedUp = barsSince(shiftedUp);
       const sinceShiftedDown = barsSince(shiftedDown);
       for (let i = 0; i < n; i++) {
-        if (crossUp[i] && sinceShiftedUp[i] > sinceDown[i]) buy[i] = lagged[i] * 0.9999;
-        else if (crossDown[i] && sinceShiftedDown[i] > sinceUp[i]) sell[i] = lagged[i] * 1.0001;
+        if (crossUp[i] && sinceShiftedUp[i]! > sinceDown[i]!) buy[i] = lagged[i]! * 0.9999;
+        else if (crossDown[i] && sinceShiftedDown[i]! > sinceUp[i]!) sell[i] = lagged[i]! * 1.0001;
       }
     }
 

@@ -59,7 +59,8 @@ export const ZLEMA: IndicatorDescriptor = withTimeframe(withTail({
     const length = int(s, 'length', 20);
     const lag = lagOf(length);
     const values = sourceValues(bars, src(s));
-    const data = values.map((x, i) => (i >= lag ? x + (x - values[i - lag]) : NaN));
+    // `lag` is a whole number of bars, read only once `i` has passed it.
+    const data = values.map((x, i) => (i >= lag ? x + (x - values[i - lag]!) : NaN));
     return { zlema: nulls(smaSeededEma(data, length)) };
   },
 }, (calc) => (bars, s, from, previous, store) => {
@@ -70,8 +71,8 @@ export const ZLEMA: IndicatorDescriptor = withTimeframe(withTail({
     keys: ['zlema'],
     start: seeded,
     step: (st, i, row) => {
-      const x = sourceValue(bars[i], source);
-      row[0] = cell(smooth(st, i >= lag ? x + (x - sourceValue(bars[i - lag], source)) : NaN, length, true));
+      const x = sourceValue(bars[i]!, source);
+      row[0] = cell(smooth(st, i >= lag ? x + (x - sourceValue(bars[i - lag]!, source)) : NaN, length, true));
     },
   }, bars, from, previous, store);
 }));
@@ -100,7 +101,8 @@ function vidyaMachine(bars: readonly Bar[], s: Settings): Machine<{ value: numbe
   const alpha = 2 / (int(s, 'length', 9) + 1);
   const cmoLength = int(s, 'cmoLength', 9);
   const source = src(s);
-  const at = (j: number): number => sourceValue(bars[j], source);
+  // Read at `i` and, once `i` reaches `cmoLength`, back to `i - cmoLength`.
+  const at = (j: number): number => sourceValue(bars[j]!, source);
   return {
     keys: ['vidya'],
     start: () => ({ value: NaN }),
@@ -177,9 +179,10 @@ export const ELDER_RAY: IndicatorDescriptor = withTail({
   ],
   calc: (bars, s) => {
     const ema = smaSeededEma(sourceValues(bars, 'close'), int(s, 'length', 13));
+    // `ema` holds one value per bar.
     return {
-      bull: nulls(bars.map((b, i) => b.high - ema[i])),
-      bear: nulls(bars.map((b, i) => b.low - ema[i])),
+      bull: nulls(bars.map((b, i) => b.high - ema[i]!)),
+      bear: nulls(bars.map((b, i) => b.low - ema[i]!)),
     };
   },
   levels: () => [{ price: 0, color: '#787b86', title: 'Zero', dashed: true }],
@@ -189,7 +192,7 @@ export const ELDER_RAY: IndicatorDescriptor = withTail({
     keys: ['bull', 'bear'],
     start: seeded,
     step: (st, i, row) => {
-      const b = bars[i];
+      const b = bars[i]!;
       const ema = smooth(st, b.close, length, true);
       row[0] = cell(b.high - ema);
       row[1] = cell(b.low - ema);
@@ -236,7 +239,7 @@ function stcMachine(bars: readonly Bar[], s: Settings): Machine<Stc> {
     keys: ['stc'],
     start: () => ({ fast: seeded(), slow: seeded(), macd: [], pfs: [], f1: NaN, pf: NaN, f2: NaN, stc: NaN }),
     step: (st, i, row) => {
-      const x = sourceValue(bars[i], source);
+      const x = sourceValue(bars[i]!, source);
       const macd = smooth(st.fast, x, fast, true) - smooth(st.slow, x, slow, true);
       const f1 = cycleStochastic(st.macd, macd, cycle, st.f1);
       // A bar with no first stochastic leaves pf as it was and puts a gap in
