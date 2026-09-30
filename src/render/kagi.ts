@@ -25,15 +25,16 @@ export function drawKagi(
   // The vertex beyond each edge of the view (kagi joins bars, so it gets
   // them) can be millions of pixels away: its connector is cut at the edge,
   // and the vertical move at it is out of sight altogether.
-  const head = items[0].edgeX;
-  const tail = items[items.length - 1].edgeX;
+  // Two items or more (above), and the loop keeps i and i - 1 among them.
+  const head = items[0]!.edgeX;
+  const tail = items[items.length - 1]!.edgeX;
   const lo = head === undefined ? -Infinity : head - EDGE_PAD;
   const hi = tail === undefined ? Infinity : tail + EDGE_PAD;
 
   ctx.save();
   for (let i = 1; i < items.length; i++) {
-    const prev = items[i - 1];
-    const cur = items[i];
+    const prev = items[i - 1]!;
+    const cur = items[i]!;
     const thick = (cur.bar.volume ?? 0) >= 1;
     ctx.strokeStyle = thick ? thickColor : thinColor;
     ctx.lineWidth = thick ? thickW : thinW;

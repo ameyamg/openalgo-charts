@@ -169,11 +169,12 @@ export const AXIS_LABEL_PRIORITY = {
  */
 export function resolveAxisLabels(bands: readonly AxisLabelBand[], minGap = 0): boolean[] {
   const allowed = new Array<boolean>(bands.length).fill(false);
+  // `order` holds the indices of `bands`, so every read of it by one is there.
   const order = bands.map((_, i) => i);
-  order.sort((a, b) => bands[b].priority - bands[a].priority || a - b);
+  order.sort((a, b) => bands[b]!.priority - bands[a]!.priority || a - b);
   const taken: AxisLabelBand[] = [];
   for (const i of order) {
-    const band = bands[i];
+    const band = bands[i]!;
     if (!Number.isFinite(band.y) || !Number.isFinite(band.height)) continue;
     let clear = true;
     for (const t of taken) {
@@ -265,7 +266,7 @@ export function drawPriceAxis(
 
   for (let i = 0; i < ticks.length; i++) {
     if (keep !== null && !keep[i]) continue;
-    const price = ticks[i];
+    const price = ticks[i]!;
     const y = Math.round(priceScale.priceToY(price) * dpr);
     if (!tickFits(y, layout.plotHeight * dpr, dpr)) continue;
     ctx.fillText(priceScale.format(price), xStart + 6 * dpr, y);
@@ -309,7 +310,7 @@ export function drawLeftPriceAxis(
 
   for (let i = 0; i < ticks.length; i++) {
     if (keep !== null && !keep[i]) continue;
-    const price = ticks[i];
+    const price = ticks[i]!;
     const y = Math.round(priceScale.priceToY(price) * dpr);
     if (!tickFits(y, plotHeight * dpr, dpr)) continue;
     ctx.fillText(priceScale.format(price), xEdge - 6 * dpr, y);
@@ -582,7 +583,7 @@ export function medianBarInterval(bars: BarTimeSource, sample = 64): number {
   }
   if (gaps.length === 0) return 0;
   gaps.sort((a, b) => a - b);
-  return gaps[gaps.length >> 1];
+  return gaps[gaps.length >> 1]!; // gaps is not empty (above)
 }
 
 /** The countdown row inside the last-price tag. Absent or `visible: false` draws no row. */
@@ -670,11 +671,12 @@ function fillLeftTag(
   ctx.fillStyle = fill;
   ctx.fillRect(x, y - height / 2, width, height);
   ctx.fillStyle = text;
+  // widths maps rows, so both hold every i of the loop.
   for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
+    const row = rows[i]!;
     const size = Number(/(^|[^\d.])(\d{1,5}(?:\.\d{1,4})?)px/.exec(row.font)?.[2]);
     const heightFactor = size > 0 ? (height / rows.length - 2 * dpr) / size : 1;
-    const widthFactor = widths[i] > 0 ? (width - pad * 2) / widths[i] : 1;
+    const widthFactor = widths[i]! > 0 ? (width - pad * 2) / widths[i]! : 1;
     ctx.font = scaleFont(row.font, Math.min(1, widthFactor, heightFactor));
     ctx.fillText(row.text, x + pad, y + row.offset);
   }
@@ -896,7 +898,7 @@ export interface SessionClockOptions {
   /** IANA zone the clock reads in; unset means the shipped default. */
   timezone?: string;
   /** Second row carrying the zone's offset from UTC. Default true. */
-  showOffset?: boolean;
+  showOffset?: boolean | undefined;
 }
 
 /**

@@ -14,9 +14,10 @@ export function parseColor(color: string): Rgba | null {
   if (c.startsWith('#')) {
     const hex = c.slice(1);
     if (hex.length === 3 || hex.length === 4) {
-      const [r, g, b, a] = [...hex].map((h) => parseInt(h + h, 16));
+      // Three or four digits: r, g and b are always there, a only with four.
+      const [r, g, b, a] = [...hex].map((h) => parseInt(h + h, 16)) as [number, number, number, number?];
       if ([r, g, b].some(Number.isNaN)) return null;
-      return { r, g, b, a: hex.length === 4 ? a / 255 : 1 };
+      return { r, g, b, a: hex.length === 4 ? a! / 255 : 1 };
     }
     if (hex.length === 6 || hex.length === 8) {
       const n = parseInt(hex.slice(0, 6), 16);
@@ -198,8 +199,8 @@ export function drawPillGroup(
   let closeX0 = Number.POSITIVE_INFINITY;
   let cx = x;
   for (let i = 0; i < segments.length; i++) {
-    const s = segments[i];
-    const w = widths[i];
+    const s = segments[i]!;
+    const w = widths[i]!; // widths maps segments, so both hold i
     ctx.beginPath();
     roundRectPath(ctx, cx, yCenter - height / 2, w, height, radius);
     ctx.fillStyle = s.fill;
