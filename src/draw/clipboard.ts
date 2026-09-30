@@ -35,6 +35,10 @@ import { hasDrawingTool, viewportDrawingTool } from './registry';
 import { migrateDrawings } from './migrate';
 import { readViewportPoints } from './viewport';
 import { drawingsDocumentVersion, readIntervalRange } from './intervals';
+import {
+  isNum, isRecord, isUnsafeKey, legacyTextFields, oneOf, readPoints, readText,
+  LINE_STYLES, STYLE_FLAGS, STYLE_NUMBERS, STYLE_STRINGS,
+} from './drawing-fields';
 
 /**
  * Top-level key of the JSON payload. Namespaced so a paste of arbitrary text,
@@ -160,19 +164,7 @@ export function encodeClipboardPayload(drawings: readonly Drawing[]): string {
   });
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
-
-const isFinite_ = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-
 const isShortString = (v: unknown): v is string => typeof v === 'string' && v.length <= MAX_STRING;
-
-/** Never let a payload reach Object.prototype through a spread. */
-const isUnsafeKey = (key: string): boolean =>
-  key === '__proto__' || key === 'constructor' || key === 'prototype';
-
-const oneOf = <T extends string>(v: unknown, allowed: readonly T[]): v is T =>
-  typeof v === 'string' && (allowed as readonly string[]).includes(v);
 
 /**
  * The 1.9.x text fields, and where each one went. Anything still carrying them
@@ -186,26 +178,7 @@ const LEGACY_TEXT_KEYS = [
 ] as const;
 
 function liftLegacyText(style: Record<string, unknown>): DrawingText | null {
-  if (typeof style.text !== 'string') return null;
-  const t: Record<string, unknown> = {
-    value: style.text,
-    color: style.fontColor,
-    fontSize: style.fontSize,
-    fontFamily: style.fontFamily,
-    bold: style.fontWeight === 'bold' ? true : undefined,
-    italic: style.fontStyle === 'italic' ? true : undefined,
-    align: style.textAlign,
-    valign: style.textVAlign,
-    wrap: style.wrap,
-    wrapWidth: style.wrapWidth,
-    background: style.background,
-    backgroundColor: style.backgroundColor,
-    backgroundOpacity: style.backgroundOpacity,
-    border: style.border,
-    borderColor: style.borderColor,
-    position: style.textPosition,
-  };
-  return sanitizeText(t);
+  return typeof style.text === 'string' ? sanitizeText({ value: style.text, ...legacyTextFields(style) }) : null;
 }
 
 /**
@@ -217,9 +190,9 @@ function sanitizeLevels(value: unknown): FibLevel[] | null {
   if (!Array.isArray(value) || value.length > MAX_ARRAY) return null;
   const out: FibLevel[] = [];
   for (const v of value) {
-    if (isFinite_(v)) {
+    if (isNum(v)) {
       out.push({ ratio: v });
-    } else if (isRecord(v) && isFinite_(v.ratio)) {
+    } else if (isRecord(v) && isNum(v.ratio)) {
       const l: FibLevel = { ratio: v.ratio };
       if (isShortString(v.color)) l.color = v.color;
       if (typeof v.enabled === 'boolean') l.enabled = v.enabled;
@@ -239,6 +212,10 @@ function sanitizeLevels(value: unknown): FibLevel[] | null {
  * still yields a drawing the current renderer can handle. Functions, nested
  * objects and giant strings are dropped. The 1.9.x text keys are removed here
  * and reappear as the drawing's `text`, see {@link liftLegacyText}.
+ *
+ * Kept by `sanitizeDrawing` called directly, that is. A paste goes on through
+ * the migration (`decodeClipboardPayload`), whose style bag is closed to the
+ * keys this build declares, so a pasted drawing carries no unknown key.
  */
 function sanitizeStyle(value: unknown): DrawingStyle | null {
   if (value === undefined) return {};
@@ -249,60 +226,34 @@ function sanitizeStyle(value: unknown): DrawingStyle | null {
     if (isUnsafeKey(key)) continue;
     if (++n > MAX_KEYS) return null;
     if ((LEGACY_TEXT_KEYS as readonly string[]).includes(key)) continue;
-    switch (key) {
-      case 'color': case 'fillColor':
-        if (isShortString(v)) out[key] = v;
-        break;
-      case 'lineWidth': case 'fillOpacity': case 'accountSize': case 'risk':
-        if (isFinite_(v)) out[key] = v;
-        break;
-      case 'lineStyle':
-        if (oneOf(v, ['solid', 'dashed', 'dotted'])) out[key] = v;
-        break;
-      case 'fill': case 'extendLeft': case 'extendRight': case 'showLabels': case 'showStats': case 'pressure':
-        if (typeof v === 'boolean') out[key] = v;
-        break;
-      case 'levels': {
-        const levels = sanitizeLevels(v);
-        if (levels !== null) out[key] = levels;
-        break;
-      }
-      default:
-        if (typeof v === 'string') {
-          if (v.length > MAX_STRING) return null;
-          out[key] = v;
-        } else if (typeof v === 'boolean' || isFinite_(v)) {
-          out[key] = v;
-        } else if (Array.isArray(v)) {
-          if (v.length > MAX_ARRAY) return null;
-          if (v.every(isFinite_)) out[key] = v.slice();
-        }
-        // Anything else (null, undefined, object, function) is simply not copied.
+    if (oneOf(key, STYLE_STRINGS)) {
+      if (isShortString(v)) out[key] = v;
+    } else if (oneOf(key, STYLE_NUMBERS)) {
+      if (isNum(v)) out[key] = v;
+    } else if (oneOf(key, STYLE_FLAGS)) {
+      if (typeof v === 'boolean') out[key] = v;
+    } else if (key === 'lineStyle') {
+      if (oneOf(v, LINE_STYLES)) out[key] = v;
+    } else if (key === 'levels') {
+      const levels = sanitizeLevels(v);
+      if (levels !== null) out[key] = levels;
+    } else if (typeof v === 'string') {
+      if (v.length > MAX_STRING) return null;
+      out[key] = v;
+    } else if (typeof v === 'boolean' || isNum(v)) {
+      out[key] = v;
+    } else if (Array.isArray(v)) {
+      if (v.length > MAX_ARRAY) return null;
+      if (v.every(isNum)) out[key] = v.slice();
     }
+    // Anything else (null, undefined, object, function) is simply not copied.
   }
   return out as DrawingStyle;
 }
 
 /** The text block. Closed: a key this build does not draw is dropped. */
 function sanitizeText(value: unknown): DrawingText | null {
-  if (!isRecord(value) || !isShortString(value.value)) return null;
-  const t: DrawingText = { value: value.value };
-  for (const key of ['color', 'fontFamily', 'backgroundColor', 'borderColor'] as const) {
-    const v = value[key];
-    if (isShortString(v)) t[key] = v;
-  }
-  for (const key of ['fontSize', 'wrapWidth', 'backgroundOpacity'] as const) {
-    const v = value[key];
-    if (isFinite_(v)) t[key] = v;
-  }
-  for (const key of ['bold', 'italic', 'wrap', 'background', 'border'] as const) {
-    const v = value[key];
-    if (typeof v === 'boolean') t[key] = v;
-  }
-  if (oneOf(value.align, ['left', 'center', 'right'])) t.align = value.align;
-  if (oneOf(value.valign, ['top', 'middle', 'bottom'])) t.valign = value.valign;
-  if (oneOf(value.position, ['inside', 'outside'])) t.position = value.position;
-  return t;
+  return isRecord(value) && isShortString(value.value) ? readText(value.value, value, isShortString) : null;
 }
 
 /**
@@ -324,7 +275,7 @@ function sanitizeProps(value: unknown, depth = 0): Record<string, unknown> | nul
 }
 
 function sanitizePropValue(v: unknown, depth: number): unknown {
-  if (typeof v === 'boolean' || isFinite_(v)) return v;
+  if (typeof v === 'boolean' || isNum(v)) return v;
   if (typeof v === 'string') return v.length <= MAX_STRING ? v : undefined;
   if (Array.isArray(v)) {
     if (v.length > MAX_ARRAY || depth + 1 >= MAX_PROPS_DEPTH) return undefined;
@@ -354,18 +305,6 @@ function sanitizeIntervals(value: unknown): DrawingIntervalRange | null {
   return kept('from') && kept('to') ? range : null;
 }
 
-function sanitizePoints(value: unknown): DrawingPoint[] | null {
-  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_POINTS) return null;
-  const out: DrawingPoint[] = [];
-  for (const p of value) {
-    if (!isRecord(p) || !isFinite_(p.time) || !isFinite_(p.price)) return null;
-    const q: DrawingPoint = { time: p.time, price: p.price };
-    if (isFinite_(p.pressure) && p.pressure >= 0 && p.pressure <= 1) q.pressure = p.pressure;
-    out.push(q);
-  }
-  return out;
-}
-
 /**
  * Validate one entry into a drawing with no id. Returns null for anything that
  * cannot be rendered: an unknown tool would throw inside the controller, and a
@@ -380,14 +319,14 @@ export function sanitizeDrawing(value: unknown): Omit<Drawing, 'id'> | null {
   // hold the space, and every anchor must be a finite fraction.
   const viewport = value.space === 'viewport' ? readViewportPoints(value.viewportPoints, MAX_POINTS) : undefined;
   if (viewport === null || (viewport !== undefined && !viewportDrawingTool(value.tool))) return null;
-  const points = viewport === undefined ? sanitizePoints(value.points) : [];
+  const points = viewport === undefined ? readPoints(value.points, MAX_POINTS) : [];
   if (points === null) return null;
   const style = sanitizeStyle(value.style);
   if (style === null) return null;
   // An absent pane is pane zero; a bogus one is a rejection, because a drawing
   // parked on a pane that does not exist is invisible and unfindable.
   const paneIndex = value.paneIndex === undefined ? 0 : value.paneIndex;
-  if (!isFinite_(paneIndex) || paneIndex < 0 || !Number.isInteger(paneIndex)) return null;
+  if (!isNum(paneIndex) || paneIndex < 0 || !Number.isInteger(paneIndex)) return null;
   if (value.locked !== undefined && typeof value.locked !== 'boolean') return null;
   if (value.visible !== undefined && typeof value.visible !== 'boolean') return null;
   const intervals = value.intervals === undefined ? undefined : sanitizeIntervals(value.intervals);
@@ -401,7 +340,7 @@ export function sanitizeDrawing(value: unknown): Omit<Drawing, 'id'> | null {
     ...(viewport === undefined ? {} : { space: 'viewport' as const, viewportPoints: viewport }),
     style,
     paneIndex,
-    zIndex: isFinite_(value.zIndex) ? value.zIndex : 0,
+    zIndex: isNum(value.zIndex) ? value.zIndex : 0,
   };
   if (text !== null) out.text = text;
   if (props !== null) out.props = props;
@@ -409,7 +348,7 @@ export function sanitizeDrawing(value: unknown): Omit<Drawing, 'id'> | null {
   if (value.visible !== undefined) out.visible = value.visible;
   if (intervals !== undefined) out.intervals = intervals;
   if (isShortString(value.stackAbove) && value.stackAbove !== '') out.stackAbove = value.stackAbove;
-  if (isFinite_(value.createdAt)) out.createdAt = value.createdAt;
+  if (isNum(value.createdAt)) out.createdAt = value.createdAt;
   return out;
 }
 
@@ -433,7 +372,7 @@ export function decodeClipboardPayload(text: unknown): Omit<Drawing, 'id'>[] | n
   // A payload from a future version may carry fields this build cannot honour,
   // so refuse it rather than paste a half-understood drawing. Older versions
   // are accepted: they go through the same upgrade a saved layout does.
-  if (!isFinite_(body.version) || body.version < 1 || body.version > DRAWING_CLIPBOARD_VERSION) return null;
+  if (!isNum(body.version) || body.version < 1 || body.version > DRAWING_CLIPBOARD_VERSION) return null;
   const list = body.drawings;
   if (!Array.isArray(list) || list.length === 0 || list.length > MAX_DRAWINGS) return null;
   // The gate runs on the raw entries first. The migration keeps any drawing it

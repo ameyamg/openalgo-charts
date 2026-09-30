@@ -619,7 +619,7 @@ The clipboard is shared with everything else on the machine, so a paste can arri
 1. **One namespaced top-level key**, `openalgo-charts/drawings`, carrying a `version`. Anything else is recognised as not ours by looking at one property, and pastes nothing. A Ctrl+V handler must not throw at the user because the last thing they copied was a spreadsheet cell.
 2. **Field-by-field validation**, all-or-nothing. The tool must be registered (`hasDrawingTool`), every anchor must be finite, `paneIndex` must be a non-negative integer, style values must be renderable primitives or a short array of numbers, and there are caps on counts and string length. One corrupt entry rejects the whole payload, because pasting the other nine silently is worse than pasting none.
 
-`encodeClipboardPayload`, `decodeClipboardPayload` and `sanitizeDrawing` are exported from `openalgo-charts/draw` if you want to move drawings through your own transport (a websocket, a saved template) with the same validation.
+`encodeClipboardPayload`, `decodeClipboardPayload` and `sanitizeDrawing` are exported from `openalgo-charts/draw` if you want to move drawings through your own transport (a websocket, a saved template). `decodeClipboardPayload` validates exactly as a paste does. `sanitizeDrawing` is the per-entry gate alone, without the migration a paste runs after it: it keeps a style key this build does not declare, where a paste drops it.
 
 ### Degrading instead of breaking
 

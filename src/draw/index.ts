@@ -150,9 +150,11 @@ export {
 // Clipboard transfer. `DrawingControllerOptions.clipboard` is typed as
 // `ClipboardPort` and `DrawingController.clipboard()` returns a
 // `DrawingClipboard`, so both have to be nameable from the tier entry or a
-// TypeScript host can use neither. The encode / decode / sanitize trio is
-// exported for a host moving drawings over its own transport (a websocket, a
-// saved template) with the same validation a paste gets.
+// TypeScript host can use neither. The encode and decode pair is exported for
+// a host moving drawings over its own transport (a websocket, a saved
+// template): decoding validates exactly as a paste does. `sanitizeDrawing` is
+// the paste's per-entry gate alone, without the migration a paste runs after
+// it, so it keeps a style key this build does not declare, which a paste drops.
 export {
   DrawingClipboard,
   clearMemoryClipboard,
