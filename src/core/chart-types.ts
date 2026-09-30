@@ -318,7 +318,7 @@ export interface ChartOptions {
   barsProvider?: IndicatorBarsProvider | IndicatorBarsProviderAccess;
   /**
    * Custom time-axis and crosshair label formatter (receives UTC seconds). When
-   * omitted, labels use IST (Indian market default). e.g. for UTC:
+   * omitted, labels follow `timezone`, which is IST unless set. e.g. for UTC:
    * `(s) => new Date(s * 1000).toISOString().slice(11, 16)`.
    */
   timeFormatter?: (utcSeconds: number, tickMark?: TickMarkType) => string;

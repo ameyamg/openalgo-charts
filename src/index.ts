@@ -1,5 +1,5 @@
-// OpenAlgo Charts — public API surface (base tier).
-// Phase 0: foundation only. createChart and series factories arrive in Phases 1–2.
+// OpenAlgo Charts public API: the base tier, the `openalgo-charts` entry.
+// Every other tier has an entry of its own and imports its base from here.
 
 export { VERSION, version } from './version';
 

@@ -1,7 +1,7 @@
 /**
  * Background grid (ARCHITECTURE.md §6) and the shared "Canvas" option block the
- * settings dialog drives. Phase 1 draws an evenly-spaced grid; Phase 2 will
- * drive line positions from the time/price scale tick marks.
+ * settings dialog drives. The grid is evenly spaced (`spacing`, 60 px unless
+ * the canvas block sets it), independent of the axis tick marks.
  *
  * WHY the options live next to the grid: the grid is the largest of the canvas
  * controls and already owned the line-style vocabulary, so the sibling

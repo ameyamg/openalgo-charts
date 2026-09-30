@@ -1,8 +1,9 @@
 /**
- * Top-level chart orchestrator (ARCHITECTURE.md §3.3). Owns the shared
- * DataLayer + time scale, the panes, the invalidate mask, and the render loop.
- * Phase 2 renders static candlesticks with price/time axes; pan/zoom (Phase 3)
- * and live data (Phase 4) build on this.
+ * The chart (ARCHITECTURE.md §3.3): it owns the shared DataLayer and time
+ * scale, the panes, the invalidate mask and the render loop, and it is the
+ * API a host calls. Most of the work lives in the chart-*.ts collaborators;
+ * this file holds the state they share and the methods that carry the
+ * documented contracts.
  */
 import { InvalidateMask, InvalidationLevel } from './invalidate-mask';
 import { RenderLoop, type RafScheduler, type RafCanceller } from './render-loop';
@@ -1755,7 +1756,8 @@ export class Chart {
 
   /**
    * Set a custom time-axis + crosshair label formatter (UTC seconds -> string)
-   * at runtime. Pass undefined to restore the IST default.
+   * at runtime. Pass undefined to go back to the default labels, which follow
+   * the chart's `timezone` (IST unless set).
    */
   public setTimeFormatter(fn: ((utcSeconds: number, tickMark?: TickMarkType) => string) | undefined): void {
     this._timeFormatter = fn;

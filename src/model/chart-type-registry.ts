@@ -2,7 +2,8 @@
  * Chart-type registry (ARCHITECTURE.md §6A). Every series type registers a
  * descriptor: how to draw it and how it contributes to autoscale. The core
  * iterates descriptors, so adding a style is one registration and no core change.
- * Phase 5 fills the Family-A (time-indexed) types; Families B/C plug in later.
+ * The time-indexed types register here; the transform tier registers the ones
+ * it draws from its own elements (Point & Figure, Kagi).
  */
 import type { Bar } from './bar';
 import type { SeriesStyle } from '../render/series-style';

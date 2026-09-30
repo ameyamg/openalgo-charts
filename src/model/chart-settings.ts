@@ -19,9 +19,9 @@
  * there.
  *
  * The tabs are our own five, not a reference terminal's seven. Alerts are not
- * here because the feature is not built, and corporate events are not here
- * because nothing in the engine sources them: an empty tab is worse than an
- * absent one.
+ * here because they have a dialog and a saved document of their own, and
+ * corporate events are not here because nothing in the engine sources them:
+ * an empty tab is worse than an absent one.
  *
  * Keys are dotted paths (`symbol.upColor`, `canvas.grid.vertColor`), so a patch
  * is a flat `Record<string, value>` that survives JSON. They are a wire format
@@ -405,12 +405,8 @@ function priceControls(chart: Chart): Control[] {
   out.push(...transformControls(chart));
   if (type === 'candlestick' || type === 'hollow-candle' || type === 'volume-candle') {
     out.push(
-      // No switch on Body: a candle with no body is not a candle, and there is
-      // no style flag behind such a checkbox. Borders and wicks have one.
-      // Body carries a switch like its neighbours now that the renderer can
-      // actually skip the fill. Before `bodyVisible` existed this row was
-      // deliberately left without one rather than shipping a checkbox that
-      // toggled nothing.
+      // Body carries a switch like its neighbours: `bodyVisible` skips the fill
+      // and leaves the outline and the wick.
       seriesColorPair('symbol.body', 'Body', 'Candles',
         { key: 'upColor', label: 'Up', def: t.upColor },
         { key: 'downColor', label: 'Down', def: t.downColor },

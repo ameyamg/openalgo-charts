@@ -521,7 +521,7 @@ yToPrice(y) = min + (1 - y/height) * (max - min)
 
 Log uses `log10(p)`; percentage normalizes to the first visible bar. **Autoscale**: each frame (on Full or a pane `autoScale` flag), gather min/max `low`/`high` over the visible logical range from each series **plus each primitive's `autoscaleInfo`** (so order/SL/TP lines and indicator bands are never clipped), add top/bottom margins, and snap the range to nice tick boundaries via `scale/ticks.ts`.
 
-`ticks.ts` implements the classic "nice number" algorithm (round step to 1/2/2.5/5 × 10ⁿ) shared by both axes.
+`ticks.ts` implements the classic "nice number" algorithm (round step to 1/2/2.5/5 × 10ⁿ) for the price axis; the time axis picks its labels from calendar boundaries instead.
 
 #### 5.2.1 Price-scale features & edge cases (review point 9)
 

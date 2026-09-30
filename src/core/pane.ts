@@ -103,7 +103,7 @@ export interface PaneRenderContext {
    * canvas element. Every field is an override: unset falls back to the theme.
    */
   canvasOptions?: CanvasOptions;
-  /** Optional custom time label formatter (UTC seconds -> string). Defaults to IST. */
+  /** Optional custom time label formatter (UTC seconds -> string). Omitted, labels follow `timezone`. */
   timeFormatter?: ((utcSeconds: number, tickMark?: TickMarkType) => string) | undefined;
   /**
    * IANA zone the time axis and crosshair label in. Absent means the shipped
