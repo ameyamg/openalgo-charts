@@ -17,7 +17,7 @@ const draw = new DrawingController(chart, { magnet: 'weak' });   // or 'strong',
 draw.setTool('trend-line');   // the next two clicks place it
 ```
 
-Importing `openalgo-charts/draw` calls `registerBuiltinDrawingTools()` as a side effect, registering all 87 tools into the base bundle's registry. No separate registration call is needed.
+Importing `openalgo-charts/draw` calls `registerBuiltinDrawingTools()` as a side effect, registering all 87 tools into the tier's own tool registry. No separate registration call is needed.
 
 **The controller is headless: it ships no toolbar, no dialogs, no key listener.** It owns the model (`Drawing[]`), placement, selection, dragging, undo, and serialisation. Every button, flyout, colour picker, and text prompt is the host's.
 

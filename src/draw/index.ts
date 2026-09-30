@@ -22,9 +22,12 @@
  * to `setTool` / `undo` / `remove`, and its own `keydown` to
  * `keyToDrawingAction`.
  *
- * Tools register into the base bundle's registry through the package entry, not
- * a deep path, so `createChart` and this tier share one registry; see
- * rollup.config.js.
+ * The drawing-tool registry is this tier's own (registry.ts), and importing
+ * the tier fills it with the built-ins. What the tier needs from the base at
+ * run time, the interval and indicator lookups (`tryResolveInterval`,
+ * `getIndicator`, `plotStyleKeys`), it imports from the package entry rather
+ * than a deep path, because those registries live in the base bundle and a
+ * deep import would inline a second, empty copy of them; see rollup.config.js.
  */
 import { registerBuiltinDrawingTools } from './tools';
 
