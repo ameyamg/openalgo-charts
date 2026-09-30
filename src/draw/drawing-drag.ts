@@ -15,7 +15,7 @@ import type { DrawingController, DragPayload } from './controller';
 import type { DrawingHistoryEntry } from './drawing-history';
 import { placeViewportAnchors, readOnly } from './layer';
 import { getDrawingTool, hasDrawingTool } from './registry';
-import { cloneDrawing } from './clipboard';
+import { cloneDrawing, freshCopy } from './clipboard';
 import { clamp } from '../helpers/math';
 import { barAt } from './snap';
 
@@ -188,17 +188,13 @@ export class DrawingDrag {
    * id, and `_insert` drops the link lineage.
    */
   private _copies(sources: readonly Drawing[]): Drawing[] {
-    const copies = sources.map((m) => {
-      const { id: _id, createdAt: _createdAt, policy: _policy, ...rest } = cloneDrawing(m);
-      void _id; void _createdAt; void _policy;
-      return this._host._insert(rest);
-    });
+    const copies = sources.map((m) => this._host._insert(freshCopy(m)));
     this._host._setSelection(copies.map((c) => c.id));
     return copies;
   }
 
   /** A cancelled copy leaves nothing: its copies go, and the selection is what they were copied from. */
-  public _dropCopies(start: NonNullable<typeof this._dragStart>): void {
+  private _dropCopies(start: NonNullable<typeof this._dragStart>): void {
     if (start.copy === undefined) return;
     const gone = new Set(start.copy.ids);
     this._host._drawings = this._host._drawings.filter((d) => !gone.has(d.id));
@@ -210,7 +206,12 @@ export class DrawingDrag {
     this._host._chart.emit('draw:preview', { drawings: drawings.map(cloneDrawing) });
   }
 
-  public cancelDrag(): boolean {
+  /**
+   * Roll back an interrupted drag and put back the undo and redo branches it
+   * found. `sync` false leaves the layers and the chart state as they are,
+   * for a caller that is about to renumber the panes they are listed by.
+   */
+  public cancelDrag(sync = true): boolean {
     const start = this._dragStart;
     if (start === null) return false;
     this._dragStart = null;
@@ -223,7 +224,7 @@ export class DrawingDrag {
     this._host._history._redo = start.redo;
     this._host._history._pendingHistory = null;
     this._lifted.clear();
-    if (this._host._chart.isDestroyed !== true) this._host._sync();
+    if (sync && this._host._chart.isDestroyed !== true) this._host._sync();
     this._host._chart.emit('draw:preview-clear', { ids: start.items.map(item => item.id) });
     return true;
   }
@@ -294,7 +295,7 @@ export class DrawingDrag {
   }
 
   /** Put a drawing's anchors back as a gesture found them. */
-  public _restoreAnchors(d: Drawing, item: { points: readonly DrawingPoint[]; viewportPoints?: readonly ViewportPoint[] }): void {
+  private _restoreAnchors(d: Drawing, item: { points: readonly DrawingPoint[]; viewportPoints?: readonly ViewportPoint[] }): void {
     d.points = item.points.map((point) => ({ ...point }));
     if (item.viewportPoints !== undefined) d.viewportPoints = item.viewportPoints.map((point) => ({ ...point }));
   }

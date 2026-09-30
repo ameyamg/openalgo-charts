@@ -92,6 +92,16 @@ export function systemClipboard(): ClipboardPort | null {
   return c as ClipboardPort;
 }
 
+/**
+ * A deep copy of `d` to insert as the user's own new drawing: no id, no
+ * creation time and no policy, as a duplicate or a drag that copies makes.
+ */
+export function freshCopy(d: Drawing): Omit<Drawing, 'id' | 'createdAt' | 'policy'> {
+  const { id: _id, createdAt: _createdAt, policy: _policy, ...rest } = cloneDrawing(d);
+  void _id; void _createdAt; void _policy;
+  return rest;
+}
+
 /** Deep copy of the persisted fields, so a clone shares nothing with its source. */
 export function cloneDrawing(d: Drawing): Drawing {
   const out: Drawing = {

@@ -88,10 +88,12 @@ export class DrawingHistory {
   }
 
   /**
-   * Move the model from one snapshot to the other; false when the policy left
-   * nothing to move. Without `kind` it only answers, and moves nothing.
+   * What moving the model from one snapshot to the other changes, the policy
+   * allowing: the drawings whose content or place differs (`ids`), the
+   * groups, and whether the order moved. `idle` when nothing is left to
+   * move, and `held` when the policy kept a change back.
    */
-  private _applyHistory(from: string, to: string, kind?: 'undo' | 'redo'): boolean {
+  private _delta(from: string, to: string) {
     const beforeDocument = migrateDrawings(JSON.parse(from));
     const afterDocument = migrateDrawings(JSON.parse(to));
     const before = beforeDocument.drawings;
@@ -113,31 +115,41 @@ export class DrawingHistory {
         && !(a && b && JSON.stringify({ ...a, zIndex: 0 }) === JSON.stringify({ ...b, zIndex: 0 }))) { held = true; return false; }
       return true;
     });
-    const changed = new Set(ids);
-    const previous = new Map(this._host._drawings.map(d => [d.id, d]));
     const beforeGroups = new Map((beforeDocument.groups ?? []).map(group => [group.id, group]));
     const afterGroups = new Map((afterDocument.groups ?? []).map(group => [group.id, group]));
-    const fixed = (member: string): boolean => readOnly(this._host.get(member));
-    // Where a step leaves group `id`, the policy allowing: a read-only drawing
-    // stays in the group it is in now, and that group keeps its name. The
-    // `order` form is what is applied; the other puts the read-only members
-    // last, so a step that differs only in them compares as doing nothing.
-    const place = (group: DrawingGroup | undefined, id: string, order?: boolean): DrawingGroup | undefined => {
-      const now = this._host._groups.find(item => item.id === id);
-      const kept = now?.members.filter(fixed) ?? [];
-      if (!kept.length && !group?.members.some(fixed)) return group;
-      const rest = group?.members.filter(member => !fixed(member) || (order && kept.includes(member))) ?? [];
-      const members = [...new Set([...rest, ...kept])];
-      return members.length ? { id, name: (kept.length ? now : group)!.name, members } : undefined;
-    };
     const changedGroups = new Set([...beforeGroups.keys(), ...afterGroups.keys()]
-      .filter(id => JSON.stringify(place(beforeGroups.get(id), id)) !== JSON.stringify(place(afterGroups.get(id), id))));
-    // A step with nothing left to do is skipped by a press, and dropped by a
-    // rewrite (`kind` absent), which is where a grouping step the policy has
-    // emptied goes; one that never did anything still runs, as it always has.
-    if (!ids.length && !changedGroups.size && !moved && (held || !kind)) return false;
-    if (!kind) return true;
-    const regrouped = [...changedGroups].map(id => place(afterGroups.get(id), id, true));
+      .filter(id => JSON.stringify(this._place(beforeGroups.get(id), id)) !== JSON.stringify(this._place(afterGroups.get(id), id))));
+    const idle = !ids.length && !changedGroups.size && !moved;
+    return { left, right, after, beforeOrder, afterOrder, ids, afterGroups, changedGroups, idle, held };
+  }
+
+  /**
+   * Where a step leaves group `id`, the policy allowing: a read-only drawing
+   * stays in the group it is in now, and that group keeps its name. The
+   * `order` form is what is applied; the other puts the read-only members
+   * last, so a step that differs only in them compares as doing nothing.
+   */
+  private _place(group: DrawingGroup | undefined, id: string, order?: boolean): DrawingGroup | undefined {
+    const fixed = (member: string): boolean => readOnly(this._host.get(member));
+    const now = this._host._groups.find(item => item.id === id);
+    const kept = now?.members.filter(fixed) ?? [];
+    if (!kept.length && !group?.members.some(fixed)) return group;
+    const rest = group?.members.filter(member => !fixed(member) || (order && kept.includes(member))) ?? [];
+    const members = [...new Set([...rest, ...kept])];
+    return members.length ? { id, name: (kept.length ? now : group)!.name, members } : undefined;
+  }
+
+  /**
+   * Move the model from one snapshot to the other; false when the policy left
+   * nothing to move. A step that never did anything still runs, as it always
+   * has; one the policy has emptied is skipped, so the press goes on.
+   */
+  private _applyHistory(from: string, to: string, kind: 'undo' | 'redo'): boolean {
+    const { left, right, after, beforeOrder, afterOrder, ids, afterGroups, changedGroups, idle, held } = this._delta(from, to);
+    if (idle && held) return false;
+    const changed = new Set(ids);
+    const previous = new Map(this._host._drawings.map(d => [d.id, d]));
+    const regrouped = [...changedGroups].map(id => this._place(afterGroups.get(id), id, true));
     this._host._groups = this._host._groups.filter(group => !changedGroups.has(group.id));
     for (const group of regrouped) if (group) this._host._groups.push(group);
     // Property history patches in place. Removing and reinserting every edited
@@ -282,7 +294,7 @@ export class DrawingHistory {
       entry.before = rewrite(entry.before);
       entry.after = rewrite(entry.after);
       // A step outside the drawings keeps whatever the host did to them.
-      return entry === this._pendingHistory || entry.external !== undefined || this._applyHistory(entry.before, entry.after);
+      return entry === this._pendingHistory || entry.external !== undefined || !this._delta(entry.before, entry.after).idle;
     };
     // A drag holds the branches as they were when it began, for a cancel to
     // put back. They share their steps with the live ones, and taking an

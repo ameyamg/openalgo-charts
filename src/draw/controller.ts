@@ -30,7 +30,7 @@ import type {
 import { placeViewportAnchors, readOnly, sortByZIndex, type DrawingPointerKind } from './layer';
 import { getDrawingTool, hasDrawingTool, viewportDrawingTool } from './registry';
 import { readViewportPoints } from './viewport';
-import { DrawingClipboard, cloneDrawing } from './clipboard';
+import { DrawingClipboard, cloneDrawing, freshCopy } from './clipboard';
 import { migrateDrawings, migrateGroups } from './migrate';
 import { InputAnchors, type InputAnchorStep } from './input-anchors';
 import { DrawingScreen, type PaneProjection, type PointerSample } from './screen';
@@ -543,17 +543,7 @@ export class DrawingController {
 
   private _remapPanes(map: (index: number) => number | null): void {
     // Cancel without syncing to numeric slots which have already shifted.
-    const drag = this._drag._dragStart;
-    if (drag) {
-      this._drag._dragStart = null;
-      for (const item of drag.items) { const drawing = this.get(item.id); if (drawing) this._drag._restoreAnchors(drawing, item); }
-      this._drag._dropCopies(drag);
-      this._history._undo = drag.undo;
-      this._history._redo = drag.redo;
-      this._history._pendingHistory = null;
-      this._drag._lifted.clear();
-      this._chart.emit('draw:preview-clear', { ids: drag.items.map(item => item.id) });
-    }
+    this._drag.cancelDrag(false);
     this._pending = [];
     this._lastCursor = null;
     this._gestures.reset();
@@ -1161,11 +1151,7 @@ export class DrawingController {
     const sources = this._targets(ids);
     if (sources.length === 0) return [];
     this._history._pushUndo();
-    const clones = sources.map((d) => {
-      const { id: _id, createdAt: _createdAt, policy: _policy, ...rest } = cloneDrawing(d);
-      void _id; void _createdAt; void _policy;
-      return this._insert({ ...rest, ...this._offsetAnchors(d, d.paneIndex) });
-    });
+    const clones = sources.map((d) => this._insert({ ...freshCopy(d), ...this._offsetAnchors(d, d.paneIndex) }));
     this._sync();
     for (const c of clones) this._chart.emit('draw:add', { drawing: c });
     this._emitChange(clones.map((c) => c.id), 'add');
