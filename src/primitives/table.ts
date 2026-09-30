@@ -132,6 +132,36 @@ function widestLine(ctx: CanvasRenderingContext2D, lines: readonly string[]): nu
   return widest;
 }
 
+/**
+ * The bitmap font size a cell's text is drawn at, leaving `ctx` in the last
+ * font it tried. `room` is the width inside the cell's padding.
+ */
+function cellFontSize(ctx: CanvasRenderingContext2D, cell: TableCell, lines: readonly string[], rowH: number,
+  room: number, o: ChartTableOptions, dpr: number): number {
+  const px = (v: number): number => Math.round(v * dpr);
+  // Shrink the type when a stretched row is shorter than the declared
+  // font, so a tall grid in a short pane stays legible instead of
+  // overlapping into its neighbours.
+  const rowMax = maximumFontSize(rowH, lines.length, dpr);
+  let size: number;
+  if (cell.fontSize === undefined && o.fontSize === 'auto') {
+    // Fit: as large as the row allows, then shrunk until the text also
+    // fits its column, so one long label sizes only itself down.
+    const singleLine = lines.length === 1;
+    const floor = singleLine ? px(6) : Math.min(px(6), rowMax);
+    size = singleLine ? Math.max(floor, rowMax) : rowMax;
+    ctx.font = cellFont(cell, size);
+    const step = singleLine ? Math.max(1, px(1)) : 1;
+    while (size > floor && widestLine(ctx, lines) > room) {
+      size = singleLine ? size - step : Math.max(floor, size - step);
+      ctx.font = cellFont(cell, size);
+    }
+  } else {
+    size = clampedFontSize(cell.fontSize ?? (o.fontSize === 'auto' ? 11 : o.fontSize), rowH, dpr, lines.length);
+  }
+  return size;
+}
+
 interface PositionedCell {
   cell: TableCell;
   row: number;
@@ -417,27 +447,7 @@ export class ChartTable implements IPrimitive {
       ctx.rect(cellLeft, cellTop, cellW, rowH);
       ctx.clip();
       const lines = textLines(cell);
-      // Shrink the type when a stretched row is shorter than the declared
-      // font, so a tall grid in a short pane stays legible instead of
-      // overlapping into its neighbours.
-      const rowMax = maximumFontSize(rowH, lines.length, dpr);
-      let size: number;
-      if (cell.fontSize === undefined && o.fontSize === 'auto') {
-        // Fit: as large as the row allows, then shrunk until the text also
-        // fits its column, so one long label sizes only itself down.
-        const singleLine = lines.length === 1;
-        const floor = singleLine ? px(6) : Math.min(px(6), rowMax);
-        size = singleLine ? Math.max(floor, rowMax) : rowMax;
-        ctx.font = cellFont(cell, size);
-        const room = cellW - pad * 2;
-        const step = singleLine ? Math.max(1, px(1)) : 1;
-        while (size > floor && widestLine(ctx, lines) > room) {
-          size = singleLine ? size - step : Math.max(floor, size - step);
-          ctx.font = cellFont(cell, size);
-        }
-      } else {
-        size = clampedFontSize(cell.fontSize ?? (o.fontSize === 'auto' ? 11 : o.fontSize), rowH, dpr, lines.length);
-      }
+      const size = cellFontSize(ctx, cell, lines, rowH, cellW - pad * 2, o, dpr);
       if (size <= 0) { ctx.restore(); continue; }
       ctx.font = cellFont(cell, size);
       // A cell with a fill picks its own readable ink; one without falls back
