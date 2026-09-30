@@ -55,10 +55,12 @@ const srgbLinear = (v: number): number => {
 
 /**
  * Relative luminance (0 black, 1 white) of parsed channels on the sRGB curve.
- * The one copy of this arithmetic: the widget's tokens import it by path and
- * feed it from their own parser. The parsers stay separate on purpose, since
- * the widget's also reads space-separated `rgb()` and the two disagree on
- * malformed input, so sharing one would move a colour on one side or the other.
+ * Code that needs it imports this by path instead of keeping a copy: two
+ * copies of the curve can disagree at its threshold, and the widget's tokens
+ * already feed this one from their own parser. The parsers stay separate on
+ * purpose, since the widget's also reads space-separated `rgb()` and the two
+ * disagree on malformed input, so sharing one would move a colour on one side
+ * or the other.
  */
 export function srgbLuminance(c: Rgba): number {
   return 0.2126 * srgbLinear(c.r) + 0.7152 * srgbLinear(c.g) + 0.0722 * srgbLinear(c.b);
