@@ -216,7 +216,7 @@ export function mountAlertEditor(ctx: WidgetContext, anchor?: HTMLElement, opts:
   }
   render();
   refreshAvailability();
-  for (const event of ['data:context', 'data:update', 'objects:change', 'alert:removed', 'alerts:restored']) off.push(ctx.chart.on(event, refreshAvailability));
+  for (const event of ['data:context', 'data:update', 'objects:change', 'alert:removed', 'alerts:restored'] as const) off.push(ctx.chart.on(event, refreshAvailability));
   off.push(ctx.chart.on('destroy', close));
   const panel = openPanel(ctx, frame.el, { anchor, modal: true, placement: 'center' }, close);
   return { el: frame.el, close, isOpen: () => !closed && panel.isOpen() };
@@ -331,7 +331,7 @@ export function mountAlertsPanel(ctx: WidgetContext, anchor?: HTMLElement, opts:
     } finally { rendering = false; }
   }
   for (const event of ['alert:created', 'alert:updated', 'alert:removed', 'alert:triggered', 'alert:expired', 'alerts:restored',
-    'data:context', 'data:update', 'data:range', 'objects:change', 'replay:start', 'replay:stop']) off.push(ctx.chart.on(event, render));
+    'data:context', 'data:update', 'data:range', 'objects:change', 'replay:start', 'replay:stop'] as const) off.push(ctx.chart.on(event, render));
   off.push(ctx.chart.on('destroy', close));
   render();
   const panel = openPanel(ctx, frame.el, { anchor, modal: true, placement: 'center' }, close);

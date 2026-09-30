@@ -9,7 +9,7 @@ import { dataVariantKey, normalizeDataVariant, passingDataContext, type DataVari
 import type {
   Alert, AlertChartHost, AlertControllerOptions, AlertInput, AlertPatch, AlertScope,
   AlertTriggeredPayload, ChartDataUpdate, AlertAvailability, IndicatorAlertSource,
-  AlertDrawingProvider, AlertDrawingValue, DrawingAlertSource, AlertsDocument,
+  AlertDrawingProvider, AlertDrawingValue, DrawingAlertSource, AlertsDocument, AlertsChangedEvent,
 } from './types';
 
 interface RecordState {
@@ -246,7 +246,7 @@ export class AlertController {
       ? { ...source, ...(drag.index === 0 ? { price } : { upperPrice: price }) }
       : { ...source, ...(drag.index === 0 ? { value: price } : { upperValue: price }) };
     this.update(drag.record.alert.id, { source: next });
-    this._chart.emit('alerts:changed', { id: drag.record.alert.id, reason: 'dragged' });
+    this._chart.emit('alerts:changed', { id: drag.record.alert.id, reason: 'dragged' } satisfies AlertsChangedEvent);
   }
 
   public add(input: AlertInput): Alert {

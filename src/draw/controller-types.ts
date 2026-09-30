@@ -10,7 +10,7 @@
 import type {
   IPrimitive, DataLayer, PlotRect, Bar, IndicatorApi, SeriesApi,
 } from 'openalgo-charts';
-import type { DrawingStyle, DrawingSpace, MagnetMode } from './types';
+import type { Drawing, DrawingStyle, DrawingSpace, MagnetMode } from './types';
 import type { ClipboardPort } from './clipboard';
 
 /**
@@ -27,12 +27,17 @@ import type { ClipboardPort } from './clipboard';
 export interface DrawingChartHost {
   readonly isDestroyed?: boolean;
   /**
-   * The event bus. The controller listens for `click`, `crosshair:move`,
-   * `drag`, `drag:end` and `dblclick`, and for `hover` (`{ id }`, the hit id
-   * under the pointer whenever it changes), which is what drives the hover
-   * state: the chart has already hit-tested the move, so the controller
-   * reads its answer rather than testing a second time. A host that never
-   * emits `hover` has drawings that select and drag but do not light up.
+   * The event bus, with the names and payloads of `ChartEventMap`. The
+   * controller listens for `click`, `crosshair:move`, `drag`, `drag:end`,
+   * `drag:cancel`, `dblclick` and `hover` (`{ id }`, the hit id under the pointer
+   * whenever it changes), which is what drives the hover state: the chart has
+   * already hit-tested the move, so the controller reads its answer rather than
+   * testing a second time. A host that never emits `hover` has drawings that
+   * select and drag but do not light up. It also follows `data:context`,
+   * `drawings:restore`, `pick:start`, `pick:end`, `paneRemoved`, `paneMoved`,
+   * `objects:change` and `indicatorRemoved`; a host that moves or removes panes
+   * without `paneRemoved` and `paneMoved` leaves drawings on the old slots. It
+   * emits the `draw:*` and `drawing:*` names this tier adds to `ChartEventMap`.
    */
   on(event: string, handler: (payload: unknown) => void): () => void;
   emit(event: string, payload: unknown): void;
@@ -241,6 +246,41 @@ export interface DrawingChangeEvent {
    * {@link DrawingController.historySteps} lists the step by this number.
    */
   step?: number;
+}
+
+/**
+ * Payload of `draw:add`, `draw:update` and `draw:remove`: the drawing itself.
+ * `history` is set when an undo or redo step applied the change.
+ */
+export interface DrawingEvent {
+  drawing: Drawing;
+  history?: true | undefined;
+}
+
+/** Payload of `draw:copy`, `draw:cut`, `draw:paste` and `draw:preview`. */
+export interface DrawingListEvent {
+  drawings: Drawing[];
+}
+
+/** Payload of `drawing:select` (the whole selection, in pick order) and `draw:preview-clear`. */
+export interface DrawingIdsEvent {
+  ids: string[];
+}
+
+/** Payload of `draw:select` (the primary selection) and `drawing:hover`; null when there is none. */
+export interface DrawingIdEvent {
+  id: string | null;
+}
+
+/** Payload of `draw:tool`: the active tool, null when none; `space` only for a screen-pinned placement. */
+export interface DrawingToolEvent {
+  tool: string | null;
+  space?: 'viewport' | undefined;
+}
+
+/** Payload of `draw:measure` and `draw:eraser`: the mode switched on or off. */
+export interface DrawingModeEvent {
+  active: boolean;
 }
 
 /** Options for a call that changes, groups or deletes drawings. */

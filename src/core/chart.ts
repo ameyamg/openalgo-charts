@@ -81,6 +81,7 @@ import { ChartSeries, type SeriesHost } from './chart-series';
 import { ChartScales, type ScalesHost } from './chart-scales';
 import { ChartPrimitives, type PrimitivesHost } from './chart-primitives';
 import { ChartAppearance, type AppearanceHost } from './chart-appearance';
+import { ChartEventBus, type ChartEventMap } from './chart-events';
 
 /** A zone name the runtime recognises, or a readable failure at the call site. */
 function checkedTimezone(zone: string): string {
@@ -513,9 +514,9 @@ export class Chart {
       this._remeasureHandle = null;
       this._layout._remeasure();
     });
-    // 'ready' fires on a microtask so `createChart(el).on('ready', ...)` — a
-    // subscription registered on the very next line — still receives it.
-    if (typeof queueMicrotask === 'function') queueMicrotask(() => this.emit('ready', {}));
+    // 'ready' fires on a microtask so `createChart(el).on('ready', ...)`, a
+    // subscription registered on the very next line, still receives it.
+    if (typeof queueMicrotask === 'function') queueMicrotask(() => this._emit('ready', {}));
   }
 
   /** Register a callback fired when the user pans near the left (oldest) edge. */
@@ -593,7 +594,7 @@ export class Chart {
     const pan = this._navigation.panEnabled, zoom = this._navigation.zoomEnabled;
     this._input._patchNavigation(patch);
     if (before !== this._navigation.defaultVisibleBars || spacing !== this._navigation.defaultBarSpacing) this.resetScale();
-    if (pan !== this._navigation.panEnabled || zoom !== this._navigation.zoomEnabled) this.emit('objects:change', undefined);
+    if (pan !== this._navigation.panEnabled || zoom !== this._navigation.zoomEnabled) this._emit('objects:change', {});
   }
 
   private _fitDefaultView(): boolean {
@@ -672,7 +673,7 @@ export class Chart {
    */
   private _layoutChanged(setter: LayoutSetter): void {
     if (this._layoutDepth > 0 || this._destroyed) return;
-    this.emit('layout:change', { setter } satisfies LayoutChangeEvent);
+    this._emit('layout:change', { setter } satisfies LayoutChangeEvent);
   }
 
   /** Run `fn` with the layout setters it calls counted as part of the caller's change. */
@@ -717,7 +718,7 @@ export class Chart {
     if (record.style.precision !== undefined) this._series._applyPrecision(target, record.style.precision);
     this._layout._recomputeAxisColumns();
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
-    this.emit('objects:change', {});
+    this._emit('objects:change', {});
     return true;
   }
 
@@ -811,12 +812,12 @@ export class Chart {
 
   public setEventGroups(groups: readonly EventGroup[]): void {
     this._primitives._ensureEventMarkers().setGroups(groups);
-    this.emit('events:change', undefined);
+    this._emit('events:change', undefined);
   }
 
   public setEventGroupVisible(id: string, visible: boolean): void {
     this._primitives._ensureEventMarkers().setGroupVisible(id, visible);
-    this.emit('events:change', undefined);
+    this._emit('events:change', undefined);
   }
 
   /** Turn event types on/off. Unlisted types stay visible. */
@@ -977,7 +978,7 @@ export class Chart {
     }
     for (const entry of this._legends) entry.legend.setOptions({ hasOpenInterest: this.hasOpenInterest });
     this._appearance._syncWatermark();
-    this.emit('data:context', this._dataContext);
+    this._emit('data:context', this._dataContext);
   }
 
   /**
@@ -990,7 +991,7 @@ export class Chart {
     this._barsProvider = provider;
     this._barsProviderRevision++;
     this._cancelBarsRequests();
-    this.emit('data:requests', {});
+    this._emit('data:requests', {});
   }
 
   private _cancelBarsRequests(): void {
@@ -1004,7 +1005,7 @@ export class Chart {
   public invalidateRequestedData(): void {
     if (this._destroyed || this._destroying) return;
     this._requestedDataRevision++;
-    this.emit('data:requests', {});
+    this._emit('data:requests', {});
   }
 
   /** Whether the configured provider supplies explicit availability snapshots. */
@@ -1080,7 +1081,7 @@ export class Chart {
     const readout: CrosshairMoveEvent = { source: 'linked', time, index,
       bar, price: null, point: null, paneIndex: null };
     this._input._crosshairCb?.(readout);
-    this.emit('crosshair:readout', readout);
+    this._emit('crosshair:readout', readout);
   }
 
   private _readoutIndex(): number | undefined {
@@ -1132,68 +1133,40 @@ export class Chart {
     return this._xToTime(x);
   }
 
-  // ── unified event bus ─────────────────────────────────────────────────────
-  // One `on(name, cb)` surface for every chart event, complementing the typed
-  // `subscribe*` helpers. Names emitted by the core: 'ready', 'crosshair:move',
-  // 'click', 'dblclick', 'hover', 'drag:start', 'drag', 'drag:end', 'drag:cancel', 'pan', 'zoom', 'resize',
-  // 'lazy-load', 'paneAdded', 'paneRemoved', 'paneMoved', 'paneMaximized', 'paneCollapsed', 'paneResized',
-  // 'priceAxisMoved', 'indicatorRemoved', 'indicatorSettings', 'indicatorSource',
-  // 'renderer:fallback',
-  // 'branding:changed', 'destroy'. The
-  // trading layer routes its 'trading:*' events through here too, and the draw
-  // tier emits 'draw:*' plus the 2.0 pair 'drawing:select' and 'drawing:change'
-  // (the legacy names carry one id; the new ones carry the whole selection).
-  //
-  // 'symbol' is a name the *host* emits on this bus, not the core: the engine
-  // has no instrument concept, and a link group listens for it to slave a grid
-  // of charts to one symbol (payload `{ symbol: string }` or a bare string).
-  //
-  // Event names are the same string on both buses: `TradingController` keys its
-  // own listener map on the full name, so it is `chart.trading.on(
-  // 'trading:order_modify')`, never the bare 'order_modify'.
-  private readonly _listeners = new Map<string, Set<(payload: unknown) => void>>();
+  // ── event bus (chart-events.ts holds the names, the payloads and the registry) ──
+  // The trading layer mirrors its 'trading:*' events here under the same full
+  // name, so it is `chart.trading.on('trading:order_modify')`, never the bare 'order_modify'.
+  private readonly _bus = new ChartEventBus();
 
-  /** Subscribe to a named chart event. Returns an unsubscribe function. */
-  public on(event: string, cb: (payload: unknown) => void): () => void {
-    let set = this._listeners.get(event);
-    if (set === undefined) {
-      set = new Set();
-      this._listeners.set(event, set);
-    }
-    set.add(cb);
-    return (): void => this.off(event, cb);
-  }
+  /** Subscribe to a chart event, typed by its {@link ChartEventMap} name. Returns an unsubscribe function. */
+  public on<K extends keyof ChartEventMap>(event: K, cb: (payload: ChartEventMap[K]) => void): () => void;
+  /** @deprecated Removed in 3.0.0. Use a {@link ChartEventMap} name, or add yours to it by declaration merging (since 2.6.0). */
+  public on(event: string, cb: (payload: unknown) => void): () => void;
+  public on(event: string, cb: (payload: never) => void): () => void { return this._bus.on(event, cb); }
 
-  /** Subscribe to the next occurrence of an event, then auto-unsubscribe. */
-  public once(event: string, cb: (payload: unknown) => void): () => void {
-    const wrap = (payload: unknown): void => {
-      this.off(event, wrap);
-      cb(payload);
-    };
-    return this.on(event, wrap);
-  }
+  /** Subscribe to the next occurrence of an event, then unsubscribe. Returns a function that cancels it first. */
+  public once<K extends keyof ChartEventMap>(event: K, cb: (payload: ChartEventMap[K]) => void): () => void;
+  /** @deprecated Removed in 3.0.0. Use a {@link ChartEventMap} name, or add yours to it by declaration merging (since 2.6.0). */
+  public once(event: string, cb: (payload: unknown) => void): () => void;
+  public once(event: string, cb: (payload: never) => void): () => void { return this._bus.once(event, cb); }
 
   /** Remove one listener, or (when `cb` is omitted) every listener for an event. */
-  public off(event: string, cb?: (payload: unknown) => void): void {
-    if (cb === undefined) {
-      this._listeners.delete(event);
-      return;
-    }
-    this._listeners.get(event)?.delete(cb);
-  }
+  public off<K extends keyof ChartEventMap>(event: K, cb?: (payload: ChartEventMap[K]) => void): void;
+  /** @deprecated Removed in 3.0.0. Use a {@link ChartEventMap} name, or add yours to it by declaration merging (since 2.6.0). */
+  public off(event: string, cb?: (payload: unknown) => void): void;
+  public off(event: string, cb?: (payload: never) => void): void { this._bus.off(event, cb); }
 
-  /** Dispatch a named event. Public so the lazy trade layer can route through it. */
-  public emit(event: string, payload: unknown): void {
-    const set = this._listeners.get(event);
-    if (set === undefined) return;
-    for (const cb of [...set]) {
-      try {
-        cb(payload);
-      } catch {
-        /* one bad listener must not break the others or the render loop */
-      }
-    }
-  }
+  /**
+   * Put an event on the chart's bus, for every listener of that name.
+   *
+   * @deprecated Removed in 3.0.0. The bus carries the chart's own events. Announce an
+   *   instrument with `setDataContext`, drive a link group with `LinkGroup.setSymbol`,
+   *   `setInterval` and `setChartType` (all three since 2.5.10), and keep events of your own on your own emitter.
+   */
+  public emit(event: string, payload: unknown): void { this._bus.emit(event, payload); }
+
+  /** @internal The engine's own emit, checked against {@link ChartEventMap}. */
+  public _emit<K extends keyof ChartEventMap>(event: K, payload: ChartEventMap[K]): void { this._bus.emit(event, payload); }
 
   /** Keep internal intermediate ranges from repainting or interrupting a gesture. */
   private _mutateTimeScale<T>(apply: () => T): T {
@@ -1204,9 +1177,9 @@ export class Chart {
 
   /** Emit a viewport event ('pan' | 'zoom') carrying the visible time + logical range. */
   private _emitViewport(type: 'pan' | 'zoom'): void {
-    if (this._listeners.get(type) === undefined) return;
+    if (!this._bus.has(type)) return;
     const r = this._timeScale.visibleRange();
-    this.emit(type, {
+    this._emit(type, {
       from: this._dataLayer.indexToTime(Math.round(r.from)) ?? null,
       to: this._dataLayer.indexToTime(Math.round(r.to)) ?? null,
       logicalFrom: r.from,
@@ -1411,7 +1384,7 @@ export class Chart {
     if (typeof on !== 'boolean' || on === this._priceOnlyAutoScale) return;
     this._priceOnlyAutoScale = on;
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
-    this.emit('objects:change', {});
+    this._emit('objects:change', {});
   }
 
   // ── one price axis at a time (what a price-axis menu acts on) ─────────────
@@ -1445,8 +1418,8 @@ export class Chart {
     if (!pane || !this._validPriceScaleId(scaleId) || !pane.setAxisPlacement(scaleId, side, order)) return false;
     this._layout._recomputeAxisColumns();
     this.invalidate(m => m.invalidateGlobal(InvalidationLevel.Full));
-    this.emit('priceAxisPlacementChanged', { paneIndex, scaleId, ...pane.axisPlacement(scaleId) });
-    this.emit('objects:change', {});
+    this._emit('priceAxisPlacementChanged', { paneIndex, scaleId, ...pane.axisPlacement(scaleId) });
+    this._emit('objects:change', {});
     return true;
   }
 
@@ -1536,7 +1509,7 @@ export class Chart {
     vacated.setPriceFormatter(this._priceFormatter);
     this._layout._recomputeAxisColumns(); // the columns are reserved by what is in use
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
-    this.emit('priceAxisMoved', { paneIndex, from, to });
+    this._emit('priceAxisMoved', { paneIndex, from, to });
     return true;
   }
 
@@ -1567,7 +1540,7 @@ export class Chart {
     this._indicatorLegendCollapsed = on;
     this._legendStack._restackLegends();
     this.invalidate(m => m.invalidateGlobal(InvalidationLevel.Cursor));
-    this.emit('objects:change', {});
+    this._emit('objects:change', {});
   }
 
   /**
@@ -1742,7 +1715,7 @@ export class Chart {
     for (const pane of this._panes) pane.setBackend(this._newBackend());
     this._rendererKind = 'canvas2d';
     const event: RendererFallbackEvent = { from, to: 'canvas2d', reason };
-    this.emit('renderer:fallback', event);
+    this._emit('renderer:fallback', event);
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
   }
 
@@ -1794,7 +1767,7 @@ export class Chart {
     // changes the numbers and not just the axis under them.
     this._studies._invalidateIndicators();
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
-    this.emit('timezone:changed', { timezone: next });
+    this._emit('timezone:changed', { timezone: next });
   }
 
   /**
@@ -1921,7 +1894,7 @@ export class Chart {
 
   public setDrawingState(value: unknown): void {
     this._drawingState = value;
-    this.emit('objects:change', {});
+    this._emit('objects:change', {});
   }
 
   /**
@@ -2017,7 +1990,7 @@ export class Chart {
     // Hidden tabs can receive history before they have any usable plot width.
     if (!this._hasFitContent) this._hasFitContent = this._fitDefaultView();
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
-    this.emit('resize', { width, height });
+    this._emit('resize', { width, height });
   }
 
   /** Stays on the chart by name: its callers here and tests read the bottom pane through it. */
@@ -2447,7 +2420,7 @@ export class Chart {
     const range = this._timeScale.visibleRange();
     if (range.from < 10) {
       this._loadingHistory = true;
-      this.emit('lazy-load', {
+      this._emit('lazy-load', {
         from: this._dataLayer.indexToTime(Math.round(range.from)) ?? null,
         to: this._dataLayer.indexToTime(Math.round(range.to)) ?? null,
         direction: 'backward',
@@ -2516,10 +2489,10 @@ export class Chart {
     // there to let go of it (unsubscribe, drop it from a link group), not to
     // read it, and it must see the same dead object every other holder sees.
     this._destroyed = true;
-    this.emit('destroy', {});
+    this._emit('destroy', {});
     // Subscriptions on a destroyed chart would otherwise be retained forever,
     // keeping every listener's closure (and whatever it captured) alive.
-    this._listeners.clear();
+    this._bus.clear();
   }
 }
 

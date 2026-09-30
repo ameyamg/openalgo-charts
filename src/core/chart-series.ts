@@ -75,7 +75,7 @@ export interface SeriesHost {
   _updateAccessibleSummary: Chart['_updateAccessibleSummary'];
   seriesType: Chart['seriesType'];
   invalidate: Chart['invalidate'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
 }
 
 /** A transformed series: the choice as set, and the run holding its source bars. */
@@ -128,7 +128,7 @@ export class ChartSeries {
       if (record.style.precision === undefined) this._applySeriesPriceFormat(scale, owner.priceFormat);
     }
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
-    if (notify) this._host.emit('objects:change', {});
+    if (notify) this._host._emit('objects:change', {});
     return true;
   }
 
@@ -151,7 +151,7 @@ export class ChartSeries {
     // The elements are a new index space, so the view is fitted as for a fresh load.
     this._host._hasFitContent = false;
     this._setData(dataId, next?.run.elements() ?? source, confirmation === undefined ? undefined : { confirmation }, owner);
-    if (notify) this._host.emit('objects:change', {});
+    if (notify) this._host._emit('objects:change', {});
     return true;
   }
 
@@ -260,7 +260,7 @@ export class ChartSeries {
         // "Default", which is the key present and undefined).
         if ('precision' in patch) this._applyPrecision(owner.pane.scaleOf(record), patch.precision);
         this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
-        if (this._host._primary?.record === record) this._host.emit('objects:change', {});
+        if (this._host._primary?.record === record) this._host._emit('objects:change', {});
       },
       remove: (): void => {
         const primary = this._host._primary?.record === record;
@@ -275,8 +275,8 @@ export class ChartSeries {
         this._host._layout._recomputeAxisColumns();
         this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
         if (primary) {
-          this._host.emit('data:update', { kind: 'reset' });
-          this._host.emit('objects:change', {});
+          this._host._emit('data:update', { kind: 'reset' });
+          this._host._emit('objects:change', {});
         }
       },
       priceScale: (): PriceScale => owner.pane.scaleOf(record),
@@ -297,7 +297,7 @@ export class ChartSeries {
       this._host._panes[paneIndex].setSourceSeries(record);
       // A source added after a layout placed it goes where the layout says.
       if (this._host._sourceAbove !== undefined) this._host._primitives._placeSource();
-      this._host.emit('objects:change', {});
+      this._host._emit('objects:change', {});
     }
     return api;
   }
@@ -412,7 +412,7 @@ export class ChartSeries {
     if (dataId === this._host._firstDataId.value) this._host._studies._invalidateIndicators();
     this._invalidateWrite([owner.pane], before);
     this._host._updateAccessibleSummary();
-    if (dataId === this._host._firstDataId.value) this._host.emit('data:update', { kind: 'update', time: bar.time });
+    if (dataId === this._host._firstDataId.value) this._host._emit('data:update', { kind: 'update', time: bar.time });
   }
 
   /**
@@ -444,7 +444,7 @@ export class ChartSeries {
     if (primary) this._host._studies._invalidateIndicators();
     this._invalidateWrite([owner.pane], before);
     this._host._updateAccessibleSummary();
-    if (primary) this._host.emit('data:update', { kind: 'update', time: tail ?? bar.time });
+    if (primary) this._host._emit('data:update', { kind: 'update', time: tail ?? bar.time });
   }
 
   private _setData(dataId: number, bars: readonly Bar[], options: BarConfirmationOptions | undefined,
@@ -485,7 +485,7 @@ export class ChartSeries {
     if (owner.indicatorOwned) this._invalidateWrite([owner.pane], before);
     else this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
     this._host._updateAccessibleSummary();
-    if (dataId === this._host._firstDataId.value) this._host.emit('data:update', { kind: 'reset' });
+    if (dataId === this._host._firstDataId.value) this._host._emit('data:update', { kind: 'reset' });
   }
 
   /** History paging: merge older bars, preserving the viewport (§4.2). */
@@ -502,6 +502,6 @@ export class ChartSeries {
     if (dataId === this._host._firstDataId.value) this._host._studies._invalidateIndicators();
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
     this._host._updateAccessibleSummary();
-    if (dataId === this._host._firstDataId.value) this._host.emit('data:update', { kind: 'prepend' });
+    if (dataId === this._host._firstDataId.value) this._host._emit('data:update', { kind: 'prepend' });
   }
 }

@@ -1,9 +1,11 @@
-import type { AlertEventPayload } from '../alerts/types';
 import type { Bar } from './bar';
 import type {
-  IndicatorAlertContext, IndicatorAlertFrequency, IndicatorAlertSpec,
+  IndicatorAlertContext, IndicatorAlertFrequency, IndicatorAlertPayload, IndicatorAlertSpec,
   IndicatorCalcContext, IndicatorSettings, IndicatorValues,
 } from './indicator-registry';
+
+/** What a declared alert delivers before the instance adds whose it is. */
+type PolicyAlert = Omit<IndicatorAlertPayload, 'indicatorId' | 'instanceId'>;
 
 /** Original calculation inputs and an ownership fence supplied by the instance. */
 export interface IndicatorAlertPolicyPass {
@@ -66,7 +68,7 @@ export class IndicatorAlertPolicy {
   }
 
   /** Evaluate one observed calculation. There is no timer or notification transport. */
-  public evaluate(pass: IndicatorAlertPolicyPass, emit: (payload: AlertEventPayload) => void): void {
+  public evaluate(pass: IndicatorAlertPolicyPass, emit: (payload: PolicyAlert) => void): void {
     if (this._entries.length === 0 || !pass.current()) return;
     const execution = pass.calculation.execution;
     const native = execution !== undefined;
@@ -135,7 +137,7 @@ export class IndicatorAlertPolicy {
           const message = typeof entry.spec.message === 'function'
             ? entry.spec.message(context) : entry.spec.message ?? entry.spec.title;
           if (!current()) return;
-          const payload: AlertEventPayload = { alertId: entry.spec.id, title: entry.spec.title, message, time, index };
+          const payload: PolicyAlert = { alertId: entry.spec.id, title: entry.spec.title, message, time, index };
           // Native event dispatch is the commitment boundary. A subscriber
           // exception cannot make a spent alert available for another delivery.
           if (entry.spec.frequency === 'once') entry.onceSpent = true;

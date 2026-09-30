@@ -198,6 +198,36 @@ export interface AlertTriggeredPayload extends AlertEventPayload {
   alert: Alert;
 }
 
+/** Payload of `alert:created`, `alert:updated` and `alert:expired`: a copy of the alert as it now stands. */
+export interface AlertChangeEvent {
+  alert: Alert;
+}
+
+/**
+ * Payload of `alert:removed`. `reason` is `'removed'` for `remove`, `'drawing-removed'`
+ * when its drawing was deleted, and `'drawing-missing'`, `'indicator-missing'` or
+ * `'plot-missing'` when a restore could not find what the alert watches.
+ */
+export interface AlertRemovedEvent extends AlertChangeEvent {
+  reason: string;
+}
+
+/** Payload of `alert:error`: a bar condition threw while the alert was evaluated. */
+export interface AlertErrorEvent extends AlertChangeEvent {
+  error: unknown;
+}
+
+/** Payload of `alerts:changed`: a drag on the chart committed a new level. */
+export interface AlertsChangedEvent {
+  id: string;
+  reason: 'dragged';
+}
+
+/** Payload of `alerts:restored`: every alert after a validated replacement. */
+export interface AlertsRestoredEvent {
+  alerts: Alert[];
+}
+
 export interface AlertControllerOptions {
   /** Delivery and expiry clock in UTC seconds. Defaults to Date.now() / 1000. */
   now?: () => number;

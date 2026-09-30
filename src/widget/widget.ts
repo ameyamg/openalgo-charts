@@ -1300,7 +1300,7 @@ class WidgetImpl implements Widget {
 
   /** Every change that lands in `getState` schedules a save and a layout notice. */
   private _followChart(): void {
-    const chartEvents = ['paneAdded', 'paneResized', 'paneMoved', 'paneMaximized', 'paneCollapsed', 'paneRemoved', 'indicatorRemoved', 'indicatorSettings', 'priceAxisMoved', 'objects:change'];
+    const chartEvents = ['paneAdded', 'paneResized', 'paneMoved', 'paneMaximized', 'paneCollapsed', 'paneRemoved', 'indicatorRemoved', 'indicatorSettings', 'priceAxisMoved', 'objects:change'] as const;
     for (const ev of chartEvents) {
       this._cleanups.push(this.chart.on(ev, () => {
         if (ev === 'objects:change' && this.chartType() !== this._chartType) {
@@ -1314,7 +1314,7 @@ class WidgetImpl implements Widget {
       }));
     }
     for (const ev of ['draw:add', 'draw:remove', 'draw:update', 'draw:paste', 'draw:cut',
-      'alert:created', 'alert:updated', 'alert:removed', 'alert:triggered', 'alert:expired', 'alerts:restored', 'alerts:checkpoint']) {
+      'alert:created', 'alert:updated', 'alert:removed', 'alert:triggered', 'alert:expired', 'alerts:restored', 'alerts:checkpoint'] as const) {
       this._cleanups.push(this.chart.on(ev, () => this._scheduleSave()));
     }
     // An undo can set what the chart does not announce, a pane height or a

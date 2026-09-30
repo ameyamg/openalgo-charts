@@ -808,7 +808,7 @@ export function mountRail(ctx: WidgetContext, host: HTMLElement, opts: RailOptio
   // ── follow the controller ────────────────────────────────────────────
   const offs: Array<() => void> = [];
   offs.push(chart.on('draw:tool', (p) => { sync((p as { tool: string | null }).tool); }));
-  for (const ev of ['draw:select', 'drawing:select', 'drawing:change', 'draw:add', 'draw:remove', 'draw:update', 'draw:paste', 'draw:cut']) {
+  for (const ev of ['draw:select', 'drawing:select', 'drawing:change', 'draw:add', 'draw:remove', 'draw:update', 'draw:paste', 'draw:cut'] as const) {
     offs.push(chart.on(ev, refreshControls));
   }
   // A study, a pane or a setting is a step too, and none of them is a drawing event.

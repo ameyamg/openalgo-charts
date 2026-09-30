@@ -144,7 +144,7 @@ export function mountDataWindow(ctx: WidgetContext, host: HTMLElement): DataWind
     }),
     ctx.chart.on('data:context', () => { readTime = undefined; awaitingData = true; dataDirty = true; refresh(); }),
     ctx.chart.on('data:range', () => { awaitingData = false; dataDirty = true; refresh(); }),
-    ...['objects:change', 'indicatorSettings', 'indicatorRemoved', 'indicator:data-status', 'paneMoved', 'resize', 'timezone:changed'].map(event => ctx.chart.on(event, refresh)),
+    ...(['objects:change', 'indicatorSettings', 'indicatorRemoved', 'indicator:data-status', 'paneMoved', 'resize', 'timezone:changed'] as const).map(event => ctx.chart.on(event, refresh)),
   ];
   const destroy = (): void => {
     if (destroyed) return;

@@ -37,7 +37,7 @@
  *   its own keeps its page as it was, and each chart keeps its own Go to and
  *   market status until a bar under the grid takes them over.
  */
-import type { ChartTheme, DataFeed, DataVariant, LinkChart, LinkOptions, ResolvedLinkOptions } from 'openalgo-charts';
+import type { ChartEventMap, ChartTheme, DataFeed, DataVariant, LinkChart, LinkOptions, ResolvedLinkOptions } from 'openalgo-charts';
 import type { WorkspaceChartState, WorkspacePane, WorkspacePayload, WorkspaceStore } from 'openalgo-charts/workspace';
 import type { DrawingsDocument } from 'openalgo-charts/draw';
 import {
@@ -826,7 +826,9 @@ export function createChartGrid(container: HTMLElement | string, options: ChartG
       if (cell === cell.group?.keeper) keep(cell);
     }));
     cell.member = {
-      on: (event, cb) => chart.on(event, event === 'pan' || event === 'zoom'
+      // The link group asks only for names the chart's map declares, so the
+      // forward stays on the typed overload rather than the string form 3.0.0 drops.
+      on: (event, cb) => chart.on(event as keyof ChartEventMap, event === 'pan' || event === 'zoom'
         ? payload => { if (!own()) cb(payload); }
         : event === 'symbol'
           ? payload => { const p = payload as { symbol: string; exchange: string }; cb({ symbol: instrument(p.symbol, p.exchange) }); }
@@ -897,9 +899,9 @@ export function createChartGrid(container: HTMLElement | string, options: ChartG
         },
       }),
     );
-    for (const event of ['draw:add', 'draw:remove', 'alert:created', 'alert:removed']) cell.offs.push(chart.on(event, saveSoon));
+    for (const event of ['draw:add', 'draw:remove', 'alert:created', 'alert:removed'] as const) cell.offs.push(chart.on(event, saveSoon));
     // These arrive once per frame while something is dragged.
-    for (const event of ['draw:update', 'alert:updated', 'objects:change']) cell.offs.push(chart.on(event, scheduleSave));
+    for (const event of ['draw:update', 'alert:updated', 'objects:change'] as const) cell.offs.push(chart.on(event, scheduleSave));
   };
 
   const drop = (cell: Cell): void => {

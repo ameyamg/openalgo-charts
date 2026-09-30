@@ -89,7 +89,7 @@ export interface PanesHost {
   applySize: Chart['applySize'];
   movePane: Chart['movePane'];
   invalidate: Chart['invalidate'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
 }
 
 export class ChartPanes {
@@ -129,7 +129,7 @@ export class ChartPanes {
     // the bottom of the chart had no way to learn the bottom had moved. Emitted
     // after the relayout so a listener reads settled geometry.
     this._host._primitives._rehomeAnchored();
-    for (const paneIndex of added) this._host.emit('paneAdded', { paneIndex });
+    for (const paneIndex of added) this._host._emit('paneAdded', { paneIndex });
   }
 
   public _addPane(weight = 1): Pane {
@@ -354,7 +354,7 @@ export class ChartPanes {
       if (this._host._eventMarkers !== null) {
         this._host.removePrimitive(this._host._eventMarkers);
         this._host._primitives._addPrimitive(home, this._host._eventMarkers);
-        this._host.emit('events:change', undefined);
+        this._host._emit('events:change', undefined);
       }
       this._host._eventPane = home;
     }
@@ -395,7 +395,7 @@ export class ChartPanes {
     this._host._primitives._rehomeAnchored();
     this._host._legendStack._syncLegendPanes();
     this._remapSavedDrawings(slot => slot === index ? null : slot > index ? slot - 1 : slot);
-    this._host.emit('paneRemoved', { paneIndex: index });
+    this._host._emit('paneRemoved', { paneIndex: index });
     return true;
   }
 
@@ -434,7 +434,7 @@ export class ChartPanes {
     [panes[index], panes[target]] = [panes[target], panes[index]];
     if (this._host._eventPane === index) this._host._eventPane = target;
     else if (this._host._eventPane === target) this._host._eventPane = index;
-    if (this._host._eventMarkers !== null) this._host.emit('events:change', undefined);
+    if (this._host._eventMarkers !== null) this._host._emit('events:change', undefined);
     // The target names a slot, and the two panes just swapped slots.
     if (this._maximizedPane === index) this._maximizedPane = target;
     else if (this._maximizedPane === target) this._maximizedPane = index;
@@ -448,7 +448,7 @@ export class ChartPanes {
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
     this._host._primitives._rehomeAnchored();
     this._host._legendStack._syncLegendPanes();
-    this._host.emit('paneMoved', { from: index, to: target });
+    this._host._emit('paneMoved', { from: index, to: target });
     return true;
   }
 
@@ -482,7 +482,7 @@ export class ChartPanes {
     // Maximize is the case a host cannot work around: it HIDES the other panes,
     // so chrome pinned to the price pane disappears rather than merely sitting wrong.
     this._host._primitives._rehomeAnchored();
-    this._host.emit('paneMaximized', { paneIndex: this._maximizedPane });
+    this._host._emit('paneMaximized', { paneIndex: this._maximizedPane });
     return true;
   }
 
@@ -499,8 +499,8 @@ export class ChartPanes {
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
     // The lowest open pane may have changed, and the brand mark lives there.
     this._host._primitives._rehomeAnchored();
-    if (ended) this._host.emit('paneMaximized', { paneIndex: null });
-    this._host.emit('paneCollapsed', { paneIndex: index, collapsed });
+    if (ended) this._host._emit('paneMaximized', { paneIndex: null });
+    this._host._emit('paneCollapsed', { paneIndex: index, collapsed });
     return true;
   }
 

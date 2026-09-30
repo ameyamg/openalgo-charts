@@ -47,10 +47,10 @@ state do not belong in portable layout files.
 ## Deprecated APIs
 
 Each entry keeps working until the release in the "Removed in" column. The
-`depth_level` wire key, the widget message keys and the `priceAxisMoved` event
-have no declaration a tag can sit on (a key the feed sends on the wire, members
-of a string union, and a name `chart.on` takes as a string), so this table is
-where they are recorded.
+`depth_level` wire key and the widget message keys have no declaration a tag can
+sit on (a key the feed sends on the wire, and members of a string union), and an
+event name reaches a host as a string, which an editor never strikes through, so
+this table is where they are recorded.
 
 | Deprecated | Declared in | Replacement since | Removed in | Use instead |
 | --- | --- | --- | --- | --- |
@@ -75,9 +75,11 @@ where they are recorded.
 | `Chart.renderer` | `src/core/chart.ts` | 2.0.0 | 3.0.0 | `Chart.rendererKind`, the same value under its settled name |
 | `Chart.movePriceAxis` | `src/core/chart.ts` | 2.5.4 | 3.0.0 | `Chart.setPriceAxisPlacement`, which moves the column and keeps the scale's id |
 | `PriceAxisState.movable` | `src/core/chart.ts` | 2.5.4 | 3.0.0 | Nothing: `setPriceAxisPlacement` needs no such check |
-| `priceAxisMoved` event | `src/core/chart.ts` (emitted by `movePriceAxis` alone), an event name | 2.5.4 | 3.0.0 | `priceAxisPlacementChanged`, which `setPriceAxisPlacement` emits with the pane, the scale id and its new side |
+| `priceAxisMoved` event | `src/core/chart-events.ts` (its `ChartEventMap` key; `movePriceAxis` in `src/core/chart.ts` alone emits it), an event name | 2.5.4 | 3.0.0 | `priceAxisPlacementChanged`, which `setPriceAxisPlacement` emits with the pane, the scale id and its new side |
+| `Chart.on`, `Chart.once` and `Chart.off` given a name outside `ChartEventMap` (the `string` overload) | `src/core/chart.ts` | 2.6.0 | 3.0.0 | The same calls with a `ChartEventMap` name, which types the listener's payload; declare an event of your own by merging it into `ChartEventMap` |
+| `Chart.emit` | `src/core/chart.ts` | 2.5.10 | 3.0.0 | `setDataContext` to announce an instrument, `LinkGroup.setSymbol`, `setInterval` and `setChartType` to drive a link group, and an emitter of your own for events of your own |
 
-Migration, for the four a host is most likely to hold:
+Migration, for the five a host is most likely to hold:
 
 ```ts
 // before
@@ -100,7 +102,19 @@ chart.on('click', (e) => { if (e.modifiers.shift || e.modifiers.ctrl) addToSelec
 if (chart.priceAxisState(0, 'right')?.movable) chart.movePriceAxis(0, 'right', 'left');
 // after: the scale keeps the id 'right' and draws in the left column
 chart.setPriceAxisPlacement(0, 'right', 'left');
+
+// an event of the host's own, before: any string, an unknown payload
+chart.on('myapp:signal', (p) => mark((p as { price: number }).price));
+// after: declared once, then typed everywhere
+declare module 'openalgo-charts' {
+  interface ChartEventMap { 'myapp:signal': { price: number } }
+}
+chart.on('myapp:signal', ({ price }) => mark(price));
 ```
+
+The host-emitted names a link group follows (`symbol`, `interval`,
+`chartType`) are in `ChartEventMap` already. Until 3.0.0, `chart.emit` still
+puts any of these on the bus.
 
 ### Kept on purpose
 
@@ -128,6 +142,19 @@ remove them:
   the symbol and exchange from the frame first and falls back to `topic`, the
   form an older proxy sends. A reader of a wire format stays while a server can
   still send it.
+- **The `draw:*` events beside `drawing:*`.** They are two granularities of one
+  model, not an old and a new form. `draw:add`, `draw:update` and `draw:remove`
+  fire once per drawing and carry it; `drawing:change` fires once per mutation,
+  after them, and lists the ids. `draw:select` names the primary selection and
+  `drawing:select` the whole of it; both fire together, only when the selection
+  changed. A host showing one drawing's properties listens to the first family,
+  one refreshing a list or an undo control to the second.
+- **The event names that predate the naming rule.** New names are
+  `namespace:action`, lower case, hyphen-joined, in the present tense. The
+  camelCase pane and indicator events, the single words, the snake case of
+  `trading:*` and the past tense of `branding:changed`, `timezone:changed`,
+  `alerts:changed` and `alerts:restored` keep their spelling: a rename breaks
+  every listener on the old name, and the names cost nothing as they are.
 - **Readers of older saved documents**: a 1.9.x drawings array given to
   `fromJSON` or `migrateDrawings`, a version 1 clipboard body, an unversioned
   alert list, a cache entry without a version and a partial pane state. A
@@ -136,12 +163,13 @@ remove them:
 
 ### Not decided yet
 
-- **The `draw:*` events beside `drawing:select` and `drawing:change`.** The
-  draw tier emits both. `draw:select` carries one id where `drawing:select`
-  carries the whole selection, and `draw:add`, `draw:update` and `draw:remove`
-  carry one drawing each where `drawing:change` lists every id. Whether the
-  one-id names are deprecated is decided with the typed event map planned later
-  in this release series; until then both are emitted and both are supported.
+- **What the tiers' structural hosts require once `Chart.emit` goes.**
+  `AlertChartHost`, `ReplayChartHost`, `DrawingChartHost`, `PickHost`,
+  `TradingHost` and `IndicatorHost` each name `emit(event: string, payload:
+  unknown)`, which a `Chart` satisfies with the deprecated method. They keep that
+  member through 2.x. 3.0.0 changes it, to a member typed by `ChartEventMap` or
+  to a dispatch the base exports for its tiers, and a host that implements one
+  of them for an object that is not a `Chart` will change with it.
 
 ## Runtime boundary
 

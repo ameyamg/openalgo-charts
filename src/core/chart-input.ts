@@ -101,7 +101,7 @@ export interface InputHost {
   readonly _branding: Chart['_branding'];
   readonly _indicators: Chart['_indicators'];
   readonly _seriesRecords: Chart['_seriesRecords'];
-  readonly _listeners: Chart['_listeners'];
+  readonly _bus: Chart['_bus'];
   readonly _shortcuts: Chart['_shortcuts'];
   readonly _firstDataId: Chart['_firstDataId'];
   readonly _timeNavPane: Chart['_timeNavPane'];
@@ -154,7 +154,7 @@ export interface InputHost {
   setGridOptions: Chart['setGridOptions'];
   maximizePane: Chart['maximizePane'];
   invalidate: Chart['invalidate'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
 }
 
 export class ChartInput {
@@ -271,12 +271,11 @@ export class ChartInput {
     const p = this._localPoint(e);
     const pane = this._host._panes[p.pane];
     if (pane === undefined) return;
-    // Size, not presence: `off` leaves an empty set behind, and treating that
-    // as "an app is handling it" would silently retire the snapshot fallback
-    // for the rest of the chart's life.
-    const listeners = this._host._listeners.get('contextmenu');
-    if (listeners !== undefined && listeners.size > 0) {
-      this._host.emit('contextmenu', this._contextMenuEvent(e, p));
+    // A live listener, not a name someone once subscribed to: treating that as
+    // "an app is handling it" would silently retire the snapshot fallback for
+    // the rest of the chart's life.
+    if (this._host._bus.has('contextmenu')) {
+      this._host._emit('contextmenu', this._contextMenuEvent(e, p));
       return;
     }
     // Null the crosshair without invalidating: a pointerleave fired while the
@@ -592,7 +591,7 @@ export class ChartInput {
         id: hit.externalId, ...this._dragFrom, paneIndex: this._downPane,
         point: { x: p.x, y: p.localY }, ...pointerInfo(e),
       };
-      this._host.emit('drag:start', start);
+      this._host._emit('drag:start', start);
       return;
     }
 
@@ -706,7 +705,7 @@ export class ChartInput {
         samples: this._dragSamples(e),
         ...pointerInfo(e),
       };
-      this._host.emit('drag', drag);
+      this._host._emit('drag', drag);
       return;
     }
     if (this._dragging) {
@@ -800,7 +799,7 @@ export class ChartInput {
     }
     if (this._paneResize !== null) {
       this._paneResize = null;
-      this._host.emit('paneResized', { paneIndex: this._downPane });
+      this._host._emit('paneResized', { paneIndex: this._downPane });
       return;
     }
     if (this._axisDrag !== null) {
@@ -819,7 +818,7 @@ export class ChartInput {
         point: { x: p.x, y: localY },
         ...pointerInfo(e),
       };
-      this._host.emit('drag:end', end);
+      this._host._emit('drag:end', end);
       // A press on a draggable primitive arms a drag, so this branch used to
       // swallow the release, and a plain click on a drawing never reached the
       // click path, leaving it unselectable. A gesture that never moved is a
@@ -833,7 +832,7 @@ export class ChartInput {
           point: { x: this._downX, y: this._downLocalY },
           ...this._clickInfo(e),
         };
-        this._host.emit('click', click);
+        this._host._emit('click', click);
       }
       this._dragId = null;
       this._dragPriceScale = null;
@@ -864,7 +863,7 @@ export class ChartInput {
         point: { x: this._downX, y: this._downLocalY },
         ...info,
       };
-      this._host.emit('click', press);
+      this._host._emit('click', press);
       const release: ChartClickEvent = {
         id: null,
         price: this._priceAt(this._downPane, p.localY),
@@ -874,7 +873,7 @@ export class ChartInput {
         viaDrag: true,
         ...info,
       };
-      this._host.emit('click', release);
+      this._host._emit('click', release);
       return;
     }
     // Always hit-test a clean click: the chart's own chrome (pane-legend
@@ -900,7 +899,7 @@ export class ChartInput {
         // ctrl click additive to the selection; the payload carries no event.
         ...this._clickInfo(e),
       };
-      this._host.emit('click', click);
+      this._host._emit('click', click);
       return;
     }
     if (wasPanning) this._setHover(null);
@@ -995,8 +994,8 @@ export class ChartInput {
       for (const indicator of this._host._indicators) indicator.updateLegendValues();
       const cleared = { time: null, index: null, price: null, bar: null, point: null, paneIndex: null };
       this._crosshairCb?.(cleared);
-      this._host.emit('crosshair:readout', cleared);
-      this._host.emit('crosshair:move', cleared);
+      this._host._emit('crosshair:readout', cleared);
+      this._host._emit('crosshair:move', cleared);
     }
   }
 
@@ -1066,7 +1065,7 @@ export class ChartInput {
     if (this._brandingHit(p.pane, p.x, p.localY)
       && !this._host._panes[p.pane]?.hitTestPrimitives(p.x - this._host._leftAxisWidth, p.localY, this._host._renderContext(p.pane), this._host._branding)) return;
     const ev: DoubleClickEvent = { paneIndex: p.pane, x: p.x, y: p.y, handled: false };
-    this._host.emit('dblclick', ev);
+    this._host._emit('dblclick', ev);
     // While a tool is armed a double-click means "finish this shape" (a
     // variable-anchor tool has no other way to end), so it must not also throw
     // the view back to its default mid-placement. A listener that took the
@@ -1114,7 +1113,7 @@ export class ChartInput {
   private _cancelPrimitiveDrag(reason: 'pointercancel' | 'pinch' | 'escape'): void {
     if (this._dragId === null) return;
     this._dragMoved = true;
-    this._host.emit('drag:cancel', { id: this._dragId, paneIndex: this._downPane, reason });
+    this._host._emit('drag:cancel', { id: this._dragId, paneIndex: this._downPane, reason });
   }
 
   public _onKeyDown(e: KeyboardEvent): void {
@@ -1240,7 +1239,7 @@ export class ChartInput {
     this._hoverKey = key;
     this._hoverOnBase = onBase;
     this._host.invalidate((m) => m.invalidateGlobal(level));
-    if (changedId) this._host.emit('hover', { id });
+    if (changedId) this._host._emit('hover', { id });
   }
 
   private _updateCursor(paneIndex: number, x: number, localY: number, containerY: number, source: PointerEvent): void {
@@ -1289,7 +1288,7 @@ export class ChartInput {
     for (const indicator of this._host._indicators) indicator.updateLegendValues(index);
     // global crosshair → repaint every pane's overlay (cheap; base untouched)
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Cursor));
-    if (this._crosshairCb !== null || this._host._listeners.get('crosshair:move') !== undefined || this._host._listeners.get('crosshair:readout') !== undefined) {
+    if (this._crosshairCb !== null || this._host._bus.has('crosshair:move') || this._host._bus.has('crosshair:readout')) {
       const time = this._host._dataLayer.indexToTime(index);
       const move: CrosshairMoveEvent = {
         time: time ?? null,
@@ -1308,8 +1307,8 @@ export class ChartInput {
         ...(this._pointers.size > 0 ? { samples: this._dragSamples(source) } : {}),
       };
       this._crosshairCb?.(move);
-      this._host.emit('crosshair:readout', move);
-      this._host.emit('crosshair:move', move);
+      this._host._emit('crosshair:readout', move);
+      this._host._emit('crosshair:move', move);
     }
   }
 
