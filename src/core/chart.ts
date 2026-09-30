@@ -64,7 +64,7 @@ import { beginPickResolved, cancelPick, type PickKind, type PickOptions, type Pi
 import type { IPrimitive, PrimitiveAnchor, PrimitivePlacement } from '../primitives/primitive';
 import { PriceLine, type PriceLineOptions } from '../primitives/price-line';
 import { EventMarkers, type ChartEvent, type EventGroup, type EventMarkersOptions } from '../primitives/event-markers';
-import { type PaneLegend, type PaneLegendAction, type LegendStatusLineOptions } from '../primitives/pane-legend';
+import { type PaneLegend, type PaneLegendAction, type PaneLegendOptions, type LegendStatusLineOptions } from '../primitives/pane-legend';
 import { TimeNavigator, type TimeNavigatorOptions } from '../primitives/time-navigator';
 import type { ChartSettingsState } from '../model/chart-settings';
 import { type LogoWatermark, type LogoWatermarkOptions } from '../primitives/watermark';
@@ -82,6 +82,7 @@ import { ChartScales, type ScalesHost } from './chart-scales';
 import { ChartPrimitives, type PrimitivesHost } from './chart-primitives';
 import { ChartAppearance, type AppearanceHost } from './chart-appearance';
 import { ChartEventBus, type ChartEventMap } from './chart-events';
+import type { LooseOptional } from '../helpers/types';
 
 /** A zone name the runtime recognises, or a readable failure at the call site. */
 function checkedTimezone(zone: string): string {
@@ -976,7 +977,8 @@ export class Chart {
       this._events = [];
       this._primitives._syncEvents();
     }
-    for (const entry of this._legends) entry.legend.setOptions({ hasOpenInterest: this.hasOpenInterest });
+    // Undefined is "not known": the legend then shows open interest when asked to.
+    for (const entry of this._legends) entry.legend.setOptions({ hasOpenInterest: this.hasOpenInterest } satisfies LooseOptional<Partial<PaneLegendOptions>> as Partial<PaneLegendOptions>);
     this._appearance._syncWatermark();
     this._emit('data:context', this._dataContext);
   }
@@ -1228,7 +1230,7 @@ export class Chart {
    */
   public priceToCoordinate(price: number, paneIndex = this._primaryIndex()): number | null {
     const pane = this._layout._mappedPane(paneIndex);
-    return pane && this._paneLayout()[paneIndex].top + pane.priceToY(price);
+    return pane && this._paneLayout()[paneIndex]!.top + pane.priceToY(price); // a pane there has a box
   }
 
   /**
@@ -1238,7 +1240,7 @@ export class Chart {
    */
   public coordinateToPrice(y: number, paneIndex = this._primaryIndex()): number | null {
     const pane = this._layout._mappedPane(paneIndex);
-    return pane && pane.yToPrice(y - this._paneLayout()[paneIndex].top);
+    return pane && pane.yToPrice(y - this._paneLayout()[paneIndex]!.top);
   }
 
   /**
@@ -1491,7 +1493,7 @@ export class Chart {
    * studies.
    */
   public movePriceAxis(paneIndex: number, from: 'right' | 'left', to: 'right' | 'left'): boolean {
-    const pane = this._panes[paneIndex];
+    const pane = this._panes[paneIndex]!; // `_canMovePriceAxis` refuses an index with no pane before any use
     if (!this._scales._canMovePriceAxis(paneIndex, from, to) || !pane.moveSeriesScale(from, to)) return false;
     for (const claim of this._indicatorRanges.values()) if (claim.pane === pane && claim.scaleId === from) claim.scaleId = to;
     for (const instance of this._indicators) {
@@ -2119,7 +2121,7 @@ export class Chart {
 
   /** Whether a pane is collapsed to its header strip. The primary price pane never is. */
   public paneCollapsed(index: number): boolean {
-    return this._collapsed.has(this._panes[index]);
+    return (this._collapsed as { has(value: Pane | undefined): boolean }).has(this._panes[index]); // no pane: not collapsed
   }
 
   /** Stays on the chart by name: the pointer release and tests route a legend press through it. */
@@ -2298,7 +2300,7 @@ export class Chart {
       }
     }
     for (let i = 0; i < this._panes.length; i++) {
-      const pane = this._panes[i];
+      const pane = this._panes[i]!;
       const perPane = mask.paneInvalidation(i);
       const level = Math.max(global, perPane?.level ?? InvalidationLevel.None);
       const ctx = this._renderContext(i);

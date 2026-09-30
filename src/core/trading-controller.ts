@@ -12,6 +12,7 @@ import type { TickSchedule } from '../feed/tick-schedule';
 import { contrastText, roundRectPath } from '../render/pill';
 import { dispatch } from '../helpers/dispatch';
 import type { ChartEventMap } from './chart-events';
+import type { LooseOptional } from '../helpers/types';
 
 export type PositionSide = 'long' | 'short';
 export type TradingOrderSide = 'buy' | 'sell';
@@ -424,7 +425,7 @@ export class TradingController {
       leftLabel: lineOnly ? undefined : this._positionPill(p),
       closeButton: !lineOnly && p.readOnly !== true,
       extentFromRight: 0.3,
-    };
+    } satisfies LooseOptional<PriceLineOptions> as PriceLineOptions; // a line-only position leaves its badge, size and pill undefined, which the line reads as absent
   }
 
   private _orderOpts(o: TradingOrder): PriceLineOptions {
@@ -445,7 +446,7 @@ export class TradingController {
       closeButton: !lineOnly && o.readOnly !== true,
       extentFromRight: 0.3,
       cursor: draggable ? 'ns-resize' : undefined,
-    };
+    } satisfies LooseOptional<PriceLineOptions> as PriceLineOptions; // undefined parts read as absent, as for a position
   }
 
   // ── interaction ─────────────────────────────────────────────────────────────

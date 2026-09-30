@@ -208,7 +208,7 @@ export class ChartPanes {
     const layout = this._paneLayout();
     const bottomPane = this._bottomPaneIndex();
     this._host._panes.forEach((pane, paneIndex) => {
-      const h = layout[paneIndex].height;
+      const h = layout[paneIndex]!.height; // the layout has a box for each pane
       if (geometryOnly) pane.setLayoutSize(this._host._width, h);
       else {
         // No share means gone, not merely short: a zero-height box still paints
@@ -320,7 +320,8 @@ export class ChartPanes {
 
   /** Drawn as a strip right now: a maximized pane shows whole whatever it is set to. */
   public _collapsedShown(index: number): boolean {
-    return this._maximizedPane === null && this._host._collapsed.has(this._host._panes[index]);
+    // Asked of any index: one with no pane is not a strip.
+    return this._maximizedPane === null && (this._host._collapsed as { has(value: Pane | undefined): boolean }).has(this._host._panes[index]);
   }
 
   /** Grab tolerance around a pane boundary, in media px. */
@@ -338,7 +339,7 @@ export class ChartPanes {
     const layout = this._paneLayout();
     const sizable = (i: number): boolean => this._layoutWeight(i) > 0 && !this._collapsedShown(i);
     for (let i = 0; i < layout.length - 1; i++) {
-      if (Math.abs(y - layout[i].top - layout[i].height) > ChartPanes.DIVIDER_GRAB) continue;
+      if (Math.abs(y - layout[i]!.top - layout[i]!.height) > ChartPanes.DIVIDER_GRAB) continue;
       let a = i, b = i + 1;
       while (a >= 0 && !sizable(a)) a--;
       while (b < layout.length && !sizable(b)) b++;
@@ -364,12 +365,13 @@ export class ChartPanes {
     if (this._host._eventPane > index) this._host._eventPane -= 1;
     // Indicators own their series, so let them tear themselves down first,
     // otherwise their series rows would outlive the pane holding them.
+    // Walked from the end, and each pass takes out only the study it removes.
     for (let i = this._host._indicators.length - 1; i >= 0; i--) {
-      if (this._host._indicators[i].paneIndex !== index) continue;
+      if (this._host._indicators[i]!.paneIndex !== index) continue;
       const [instance] = this._host._indicators.splice(i, 1);
-      instance.remove({ force: true });
+      instance!.remove({ force: true });
     }
-    const pane = this._host._panes[index];
+    const pane = this._host._panes[index]!; // an index in range, checked on entry
     for (const record of [...pane.series()]) {
       pane.removeSeries(record);
       this._host._dataLayer.removeSeries(record.dataId);
@@ -434,7 +436,7 @@ export class ChartPanes {
     if (!this._host._movablePrimaryPane && (panes[index] === this._host._primaryPane || panes[target] === this._host._primaryPane)) return false;
     // Before the event, so a drawing tier listening to it writes over this with its own.
     this._remapSavedDrawings(slot => slot === index ? target : slot === target ? index : slot);
-    [panes[index], panes[target]] = [panes[target], panes[index]];
+    [panes[index], panes[target]] = [panes[target]!, panes[index]!]; // both in range, checked on entry
     if (this._host._eventPane === index) this._host._eventPane = target;
     else if (this._host._eventPane === target) this._host._eventPane = index;
     if (this._host._eventMarkers !== null) this._host._emit('events:change', undefined);

@@ -206,8 +206,9 @@ export class ComparisonController {
     const existing = before === undefined ? undefined : this._panes.get(before);
     const scaleId = this._scaleIdFor(paneIndex);
     const series = this._chart.addSeries(options.type ?? 'line', { paneIndex, style, priceScaleId: scaleId });
-    // `addSeries` makes a pane that did not exist yet, so the pane is read after it.
-    const entry = existing ?? this._openPane(this._chart.panes()[paneIndex], paneIndex);
+    // `addSeries` makes a pane that did not exist yet, and throws for an index
+    // it cannot make one at, so the pane is read after it.
+    const entry = existing ?? this._openPane(this._chart.panes()[paneIndex]!, paneIndex);
     entry.count++;
     const chart = this._chart;
     let slot = paneIndex;
@@ -578,14 +579,15 @@ export class ComparisonController {
     const from = this._chart.dataLayer.indexToTime?.(lo) ?? bars[lo]?.time;
     const to = this._chart.dataLayer.indexToTime?.(hi) ?? bars[hi]?.time;
     if (from === undefined || to === undefined) return [];
+    // Both searches read only below `bars.length`.
     let left = 0, right = bars.length;
     while (left < right) {
       const mid = (left + right) >>> 1;
-      if (bars[mid].time < from) left = mid + 1;
+      if (bars[mid]!.time < from) left = mid + 1;
       else right = mid;
     }
     let end = left;
-    while (end < bars.length && bars[end].time <= to) end++;
+    while (end < bars.length && bars[end]!.time <= to) end++;
     return bars.slice(left, end);
   }
 

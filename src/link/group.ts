@@ -361,7 +361,7 @@ export class LinkGroup {
     // Out of the list before any host callback runs, so an adapter's `leave`
     // that removes this chart again finds nothing left to splice.
     const [member] = this._members.splice(i, 1);
-    this._release(member);
+    this._release(member!); // `i` was found in the list
   }
 
   /**

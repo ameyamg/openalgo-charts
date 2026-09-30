@@ -373,13 +373,13 @@ export interface AddSeriesOptions {
    */
   paneIndex?: number;
   /** Style overrides merged onto the chart type's defaults. */
-  style?: SeriesStyle;
+  style?: SeriesStyle | undefined;
   /**
    * Which price axis this series maps to. 'right' (default) and 'left' each draw
    * an axis and autoscale independently; '' is a hidden overlay scale (no axis)
    * for a volume histogram inside the price pane.
    */
-  priceScaleId?: PriceScaleId;
+  priceScaleId?: PriceScaleId | undefined;
   /**
    * Value formatting applied to this series' price scale (axis + crosshair tag):
    * `price` (tick-size precision), `volume` (compact 1.2K / 3.4M / 5.6B),
@@ -390,7 +390,7 @@ export interface AddSeriesOptions {
    * fraction reads `0.62%`. Multiplying here would put the axis and the plotted
    * value into disagreement, which is the one thing a formatter must never do.
    */
-  priceFormat?: PriceFormat;
+  priceFormat?: PriceFormat | undefined;
   /**
    * Have the chart apply a price-driven transform to the bars this series is
    * given, as `Chart.setSeriesTransform` does. The series draws with `type`,

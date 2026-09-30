@@ -116,8 +116,9 @@ export class ChartLegends {
         this._indicatorLegendRow = row++;
         reserved = true;
       }
+      // A host row left behind on a removed pane is at -1 and has no pane, which the set never holds.
       const pane = this._host._panes[entry.paneIndex];
-      const collapsed = this._host._collapsed.has(pane);
+      const collapsed = (this._host._collapsed as { has(value: typeof pane): boolean }).has(pane);
       if (owned) {
         // A host that rewrote the row since (`legend().setOptions({ actions })`) keeps what it wrote.
         const kept = this._host._legendActions.get(entry.legend), shown = entry.legend.options().actions;
