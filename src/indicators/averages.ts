@@ -73,9 +73,10 @@ const volumes = (bars: readonly Bar[]): number[] =>
 function shift(values: readonly number[], k: number): number[] {
   const n = values.length;
   const out = new Array<number>(n).fill(NaN);
+  // Callers shift by whole bars, so a `j` inside [0, n) is an index.
   for (let i = 0; i < n; i++) {
     const j = i - k;
-    if (j >= 0 && j < n) out[i] = values[j];
+    if (j >= 0 && j < n) out[i] = values[j]!;
   }
   return out;
 }
@@ -88,11 +89,12 @@ function shift(values: readonly number[], k: number): number[] {
 function crossings(a: readonly number[], b: readonly number[]): boolean[] {
   const n = a.length;
   const out = new Array<boolean>(n).fill(false);
+  // The one caller passes two averages of the same bars, so `b` is as long as `a`.
   for (let i = 1; i < n; i++) {
-    const prevA = a[i - 1];
-    const prevB = b[i - 1];
-    const curA = a[i];
-    const curB = b[i];
+    const prevA = a[i - 1]!;
+    const prevB = b[i - 1]!;
+    const curA = a[i]!;
+    const curB = b[i]!;
     if (!Number.isFinite(prevA) || !Number.isFinite(prevB)) continue;
     if (!Number.isFinite(curA) || !Number.isFinite(curB)) continue;
     out[i] = (curA > curB && prevA <= prevB) || (curA < curB && prevA >= prevB);
@@ -173,18 +175,19 @@ export const MCGINLEY_DYNAMIC: IndicatorDescriptor = withTimeframe({
     const seed = smaSeededEma(values, length);
     const out = new Array<number>(values.length).fill(NaN);
     let prev = NaN;
+    // `seed` and `out` hold one value per bar.
     for (let i = 0; i < values.length; i++) {
       if (!Number.isFinite(prev) || prev === 0) {
         // the reference `na(mg[1]) ? ema(...)` branch, which also covers the
         // degenerate zero: the ratio `source / mg[1]` has no value there, so the
         // line re-seeds from the EMA rather than propagating a non-finite state.
-        out[i] = seed[i];
+        out[i] = seed[i]!;
       } else {
-        const step = length * Math.pow(values[i] / prev, 4);
-        const next = prev + (values[i] - prev) / step;
-        out[i] = Number.isFinite(next) ? next : seed[i];
+        const step = length * Math.pow(values[i]! / prev, 4);
+        const next = prev + (values[i]! - prev) / step;
+        out[i] = Number.isFinite(next) ? next : seed[i]!;
       }
-      prev = out[i];
+      prev = out[i]!;
     }
     return { mg: nulls(out) };
   },
@@ -242,8 +245,9 @@ export const MEDIAN: IndicatorDescriptor = {
     );
     return {
       median: nulls(median),
-      upper: nulls(median.map((v, i) => v + mult * range[i])),
-      lower: nulls(median.map((v, i) => v - mult * range[i])),
+      // Both series hold one value per bar, as every calc helper returns.
+      upper: nulls(median.map((v, i) => v + mult * range[i]!)),
+      lower: nulls(median.map((v, i) => v - mult * range[i]!)),
       medianEma: nulls(emaOfGapped(median, length)),
     };
   },
@@ -355,7 +359,7 @@ export const TEMA: IndicatorDescriptor = withTimeframe({
     const e1 = smaSeededEma(values, length);
     const e2 = emaOfGapped(e1, length);
     const e3 = emaOfGapped(e2, length);
-    return { tema: nulls(e1.map((v, i) => 3 * v - 3 * e2[i] + e3[i])) };
+    return { tema: nulls(e1.map((v, i) => 3 * v - 3 * e2[i]! + e3[i]!)) };
   },
 });
 
@@ -406,7 +410,7 @@ export const TWAP: IndicatorDescriptor = {
       if (restarts !== null && restarts[i]) { sum = 0; count = 0; }
       // A bar with no price is a gap: it neither joins the sum nor counts as a
       // bar, so it costs only its own reading instead of the rest of the session.
-      const value = values[i];
+      const value = values[i]!;
       if (!Number.isFinite(value)) continue;
       sum += value;
       count += 1;
@@ -537,7 +541,7 @@ function generalizedDouble(values: readonly number[], length: number, factor: nu
   const e1 = emaOfGapped(values, length);
   if (factor === 0) return e1;
   const e2 = emaOfGapped(e1, length);
-  return e1.map((v, i) => v * (1 + factor) - e2[i] * factor);
+  return e1.map((v, i) => v * (1 + factor) - e2[i]! * factor);
 }
 
 /**

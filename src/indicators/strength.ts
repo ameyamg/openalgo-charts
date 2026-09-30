@@ -56,7 +56,8 @@ function tsiSeries(values: readonly number[], shortLength: number, longLength: n
     emaOfGapped(emaOfGapped(v, longLength), shortLength);
   const smoothed = doubleSmooth(pc);
   const smoothedAbs = doubleSmooth(pc.map((v) => Math.abs(v)));
-  return smoothed.map((v, i) => (100 * v) / smoothedAbs[i]);
+  // The smoothers return one value per input, here and in every study below.
+  return smoothed.map((v, i) => (100 * v) / smoothedAbs[i]!);
 }
 
 /**
@@ -177,10 +178,10 @@ export const PPO: IndicatorDescriptor = {
     const slow = ppoMa(values, len(s, 'slowLength', 26), oscType);
     // A zero slow average makes the percentage undefined, which is a gap
     // upstream, not a division blowing up to Infinity.
-    const ppo = fast.map((f, i) => (slow[i] === 0 ? NaN : (100 * (f - slow[i])) / slow[i]));
+    const ppo = fast.map((f, i) => (slow[i] === 0 ? NaN : (100 * (f - slow[i]!)) / slow[i]!));
     const signal = ppoMa(ppo, len(s, 'signalLength', 9), text(s, 'sigType', 'EMA'));
     return {
-      hist: nulls(ppo.map((v, i) => v - signal[i])),
+      hist: nulls(ppo.map((v, i) => v - signal[i]!)),
       ppo: nulls(ppo),
       signal: nulls(signal),
     };
@@ -311,7 +312,7 @@ export const SMI_ERGODIC_OSCILLATOR: IndicatorDescriptor = {
   calc: (bars, s) => {
     const erg = tsiSeries(bars.map((b) => b.close), len(s, 'shortlen', 5), len(s, 'longlen', 20));
     const sig = emaOfGapped(erg, len(s, 'siglen', 5));
-    return { osc: nulls(erg.map((v, i) => v - sig[i])) };
+    return { osc: nulls(erg.map((v, i) => v - sig[i]!)) };
   },
 };
 
@@ -360,8 +361,8 @@ export const SMI: IndicatorDescriptor = {
     const lengthD = len(s, 'lengthD', 3);
     const highestHigh = highest(bars.map((b) => b.high), lengthK);
     const lowestLow = lowest(bars.map((b) => b.low), lengthK);
-    const span = highestHigh.map((h, i) => h - lowestLow[i]);
-    const relative = bars.map((b, i) => b.close - (highestHigh[i] + lowestLow[i]) / 2);
+    const span = highestHigh.map((h, i) => h - lowestLow[i]!);
+    const relative = bars.map((b, i) => b.close - (highestHigh[i]! + lowestLow[i]!) / 2);
     const emaEma = (v: readonly number[]): number[] =>
       emaOfGapped(emaOfGapped(v, lengthD), lengthD);
     const numerator = emaEma(relative);
@@ -369,7 +370,7 @@ export const SMI: IndicatorDescriptor = {
     // A window with no range at all (a halted or synthetic flat series) divides
     // by zero. That prints as a gap upstream; without the guard it would be
     // +/-Infinity and would drag the pane's autoscale with it.
-    const value = numerator.map((v, i) => (denominator[i] === 0 ? NaN : 200 * (v / denominator[i])));
+    const value = numerator.map((v, i) => (denominator[i] === 0 ? NaN : 200 * (v / denominator[i]!)));
     // The band edges are never null: the background covers the whole pane, so
     // they have to exist on bars where neither line prints yet.
     return {

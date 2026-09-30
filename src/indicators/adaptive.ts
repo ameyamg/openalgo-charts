@@ -79,24 +79,25 @@ export const KAMA: IndicatorDescriptor = withTimeframe({
 
     // This path calculation treats nonfinite steps, including bar 0's missing
     // predecessor, as zero contribution. By the first path read, the initial
-    // placeholder has left the rolling window.
+    // placeholder has left the rolling window. Every series here holds one
+    // value per bar, and there are more than `erLength` of them.
     const steps = change(values, 1);
-    for (let i = 0; i < n; i++) steps[i] = Number.isFinite(steps[i]) ? Math.abs(steps[i]) : 0;
+    for (let i = 0; i < n; i++) steps[i] = Number.isFinite(steps[i]) ? Math.abs(steps[i]!) : 0;
     const path = rollingSum(steps, erLength);
     const travel = change(values, erLength);
 
     const fastAlpha = 2 / (int(s, 'fastLength', 2) + 1);
     const slowAlpha = 2 / (int(s, 'slowLength', 30) + 1);
 
-    let prev = values[erLength];
+    let prev = values[erLength]!;
     out[erLength] = prev;
     for (let i = erLength + 1; i < n; i++) {
-      const walked = path[i];
+      const walked = path[i]!;
       // A window that never moved has no direction to measure; Kaufman's rule is
       // to treat that as maximally inefficient rather than as a division by zero.
-      const er = Number.isFinite(walked) && walked !== 0 ? Math.abs(travel[i]) / walked : 0;
+      const er = Number.isFinite(walked) && walked !== 0 ? Math.abs(travel[i]!) / walked : 0;
       const alpha = er * (fastAlpha - slowAlpha) + slowAlpha;
-      prev += alpha * alpha * (values[i] - prev);
+      prev += alpha * alpha * (values[i]! - prev);
       out[i] = prev;
     }
     return { kama: nulls(out) };
@@ -175,17 +176,18 @@ export const KELTNER_CHANNEL: IndicatorDescriptor = withTimeframe(withTail({
       // going `na`, which is exactly what the shared `trueRange` already does.
       rail = trueRange(high, low, close);
     } else if (style === 'Range') {
-      rail = rma(high.map((h, i) => h - low[i]), length);
+      rail = rma(high.map((h, i) => h - low[i]!), length);
     } else {
       rail = atr(high, low, close, int(s, 'atrlength', 10));
     }
 
     const upper = new Array<number>(n).fill(NaN);
     const lower = new Array<number>(n).fill(NaN);
+    // Every rail and the basis hold one value per bar.
     for (let i = 0; i < n; i++) {
-      const offset = rail[i] * mult;
-      upper[i] = basis[i] + offset;
-      lower[i] = basis[i] - offset;
+      const offset = rail[i]! * mult;
+      upper[i] = basis[i]! + offset;
+      lower[i] = basis[i]! - offset;
     }
     return { upper: nulls(upper), basis: nulls(basis), lower: nulls(lower) };
   },
@@ -197,12 +199,13 @@ export const KELTNER_CHANNEL: IndicatorDescriptor = withTimeframe(withTail({
   const source = src(s);
   const exp = flag(s, 'exp', true);
   const style = str(s, 'bandsStyle', 'Average True Range');
-  const at = (j: number): number => sourceValue(bars[j], source);
+  // Read at `i` and, once `i` has warmed up, over the whole window before it.
+  const at = (j: number): number => sourceValue(bars[j]!, source);
   return machineTail(calc, `${length}|${atrLength}|${mult}|${source}|${exp}|${style}`, {
     keys: ['upper', 'basis', 'lower'],
     start: () => ({ basis: seeded(), range: seeded(), atr: wilder() }),
     step: (st, i, row) => {
-      const bar = bars[i];
+      const bar = bars[i]!;
       const basis = exp ? smooth(st.basis, at(i), length, true) : meanAt(at, i, length);
       const rail = style === 'True Range' ? trueRangeAt(bars, i)
         : style === 'Range' ? smooth(st.range, bar.high - bar.low, length, false)
@@ -288,17 +291,18 @@ export const KLINGER_OSCILLATOR: IndicatorDescriptor = {
     const n = bars.length;
     const step = change(sourceValues(bars, 'hlc3'), 1);
     const signed = new Array<number>(n);
+    // `step`, `fast` and `slow` hold one value per bar.
     for (let i = 0; i < n; i++) {
-      const volume = bars[i].volume ?? 0;
+      const volume = bars[i]!.volume ?? 0;
       // Bar 0 has no change to test. the reference compares `na >= 0` and gets false, so
       // the first bar's volume is signed negative; `NaN >= 0` is false here too,
       // which reproduces that without a special case.
-      signed[i] = step[i] >= 0 ? volume : -volume;
+      signed[i] = step[i]! >= 0 ? volume : -volume;
     }
     const fast = smaSeededEma(signed, KLINGER_FAST);
     const slow = smaSeededEma(signed, KLINGER_SLOW);
     const kvo = new Array<number>(n).fill(NaN);
-    for (let i = 0; i < n; i++) kvo[i] = fast[i] - slow[i];
+    for (let i = 0; i < n; i++) kvo[i] = fast[i]! - slow[i]!;
     return { kvo: nulls(kvo), signal: nulls(emaOfGapped(kvo, KLINGER_SIGNAL)) };
   },
   // The reference plots no explicit hline, but the oscillator carries no scale of
@@ -356,8 +360,9 @@ export const KNOW_SURE_THING: IndicatorDescriptor = {
     const fourth = term('roclen4', 30, 'smalen4', 15);
 
     const kst = new Array<number>(n).fill(NaN);
+    // Each term holds one value per bar.
     for (let i = 0; i < n; i++) {
-      kst[i] = first[i] + 2 * second[i] + 3 * third[i] + 4 * fourth[i];
+      kst[i] = first[i]! + 2 * second[i]! + 3 * third[i]! + 4 * fourth[i]!;
     }
     return { kst: nulls(kst), signal: nulls(sma(kst, int(s, 'siglen', 9))) };
   },
@@ -407,7 +412,7 @@ export const LINREG_SLOPE: IndicatorDescriptor = {
       let sumY = 0;
       let sumXY = 0;
       for (let k = 0; k < period; k++) {
-        const y = values[i - k];
+        const y = values[i - k]!;
         sumY += y;
         sumXY += y * (period - k);
       }
