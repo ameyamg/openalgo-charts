@@ -347,6 +347,16 @@ export class MarketProfile implements IPrimitive {
     return o.color;
   }
 
+  /**
+   * One session's paint. The layers go down in this order, and the order is
+   * what decides what covers what: the value-area wash, the volume bars
+   * (`_drawVolume`), the TPO blocks and their letters, the counts, the single
+   * prints, tails and initial balance along the left edge, the value-area,
+   * POC and poor high or low lines, the developing track (`_drawDeveloping`),
+   * the open and last price markers (`_drawPriceMarker`), and the header.
+   * Kept as one method on purpose: per-layer methods cost bytes in the tier,
+   * since method names and the fields they would share survive minification.
+   */
   private _drawSession(
     ctx: CanvasRenderingContext2D,
     rc: PrimitiveRenderContext,
