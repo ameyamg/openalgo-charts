@@ -32,12 +32,15 @@ describe('workspace documents with in-chart transforms', () => {
 
   it('refuses a malformed transform or bar source rather than guessing', () => {
     const desk = renkoDesk();
-    const withTransform = (transform: unknown) => ({ ...desk, panes: [{ ...desk.panes[0], chart: { ...desk.panes[0].chart,
-      series: [{ ...desk.panes[0].chart.series[0], transform }] } }, desk.panes[1]] });
+    const withTransform = (transform: unknown) => {
+      const copy = JSON.parse(JSON.stringify(desk));
+      copy.panes[0].chart.series[0].transform = transform;
+      return copy;
+    };
     expect(() => parseWorkspaceDocument(withTransform('renko'))).toThrow(WorkspaceDocumentError);
     expect(() => parseWorkspaceDocument(withTransform({ type: 'renko', options: { boxSize: 'big', x: null } }))).toThrow(/transform options/);
-    const study = { ...desk, panes: [{ ...desk.panes[0], chart: { ...desk.panes[0].chart,
-      indicators: [{ ...desk.panes[0].chart.indicators[0], barSource: 'raw' }] } }, desk.panes[1]] };
+    const study = JSON.parse(JSON.stringify(desk));
+    study.panes[0].chart.indicators[0].barSource = 'raw';
     expect(() => parseWorkspaceDocument(study)).toThrow(/bar source/);
   });
 

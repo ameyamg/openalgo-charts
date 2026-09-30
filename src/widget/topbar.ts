@@ -394,9 +394,12 @@ export function mountTopbar(ctx: WidgetContext, host: HTMLElement, opts: TopbarO
   typeBtn.setAttribute('aria-haspopup', 'menu');
   typeBtn.addEventListener('click', () => {
     const cur = opts.state().chartType;
-    openMenu(ctx, typeBtn, chartTypeChoices().map((id) => ({
-      label: widgetText(ctx, `schema.chartType.${id}`, {}, chartTypeLabel(id)), icon: `chart-${id}`, on: id === cur, onSelect: () => opts.onChartType(id),
-    })), { ariaLabel: widgetText(ctx, 'Chart type') });
+    // The types the chart forms from price rather than the clock follow under a heading of their own.
+    const first = registeredSeriesTransforms()[0];
+    openMenu(ctx, typeBtn, chartTypeChoices().flatMap((id) => [
+      ...(id === first ? [widgetText(ctx, 'schema.chartType.group.transforms', {}, 'Transforms')] : []),
+      { label: widgetText(ctx, `schema.chartType.${id}`, {}, chartTypeLabel(id)), icon: `chart-${id}`, on: id === cur, onSelect: () => opts.onChartType(id) },
+    ]), { ariaLabel: widgetText(ctx, 'Chart type') });
   });
   host.appendChild(typeBtn);
 

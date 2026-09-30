@@ -100,4 +100,38 @@ test.describe('in-chart transforms', () => {
       await page.screenshot({ path: testInfo.outputPath(`${type}.png`) });
     });
   }
+
+  test('picks Renko from the widget chart type menu and ticks it live', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1200, height: 700 });
+    await page.goto('/tests/e2e/widget-transform-fixture.html');
+    await page.waitForFunction(() => (window as any).fixture?.widget.chart.primaryBars().length === 300);
+    await page.click('.oac-topbar__type');
+    const menu = page.locator('.oac-menu[role="menu"]');
+    for (const name of ['Heikin Ashi', 'Renko', 'Range bars', 'Line break', 'Point and figure', 'Kagi']) {
+      await expect(menu.getByRole('menuitemradio', { name, exact: true })).toBeVisible();
+    }
+    await page.screenshot({ path: testInfo.outputPath('widget-type-menu.png') });
+    await menu.getByRole('menuitemradio', { name: 'Kagi', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath('widget-type-menu-end.png') });
+    await menu.getByRole('menuitemradio', { name: 'Renko', exact: true }).click();
+    const state = () => page.evaluate(async () => {
+      const { widget } = (window as any).fixture;
+      await (window as any).__frame();
+      const bricks = widget.chart.primaryBars();
+      return { type: widget.chartType(), transform: widget.chart.seriesTransform(widget.series), count: bricks.length,
+        last: bricks[bricks.length - 1], box: Math.abs(bricks[0].close - bricks[0].open), label: document.querySelector('.oac-topbar__type')?.textContent };
+    });
+    const renko = await state();
+    expect(renko).toMatchObject({ type: 'renko', transform: { type: 'renko' } });
+    expect(renko.label).toContain('Renko');
+    expect(renko.count).toBeGreaterThan(20);
+    // A live bar through three and a half boxes: three bricks form on it.
+    await page.evaluate(({ price }) => (window as any).fixture.live(price, true), { price: renko.last.close + renko.box * 3.5 });
+    const ticked = await state();
+    expect(ticked.count).toBe(renko.count + 3);
+    await page.screenshot({ path: testInfo.outputPath('widget-renko.png') });
+    // Back inside the box it opened in: the provisional bricks go.
+    await page.evaluate(({ price }) => (window as any).fixture.live(price), { price: renko.last.close + renko.box * 0.2 });
+    expect((await state()).count).toBe(renko.count);
+  });
 });
