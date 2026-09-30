@@ -143,7 +143,7 @@ Market time uses the first valid positive value in `last_trade_time`, `ltt`, `ex
 
 Symbol and exchange resolve independently from non-empty `data` fields, then top-level envelope fields, then the legacy `topic`. Empty nested identity fields do not hide usable top-level identity. This applies to LTP, Quote and Depth frames.
 
-Callbacks, each returning its own unsubscribe: `onLtp`, `onDepth((symbol, exchange, depth) => {})`, `onState((s: WsState) => {})` with `'connecting' | 'open' | 'closed' | 'error' | 'reconnecting'`, `onControl` for auth/subscribe acks and server errors, `onOrderUpdate` for the account-level order stream.
+Callbacks, each returning its own unsubscribe: `onLtp`, `onDepth((symbol, exchange, depth) => {})`, `onState((s: WsState) => {})` with `'connecting' | 'open' | 'closed' | 'error' | 'reconnecting'`, `onControl` for auth/subscribe acks and server errors, `onOrderUpdate` for the account-level order stream. A callback that throws stops neither the other callbacks nor the feed's own state change (since 2.6.0): its error goes to `reportError` where the platform has one, as on the chart bus. Before, a throw during an auth refusal left the socket open, and a throwing tick listener starved the ones after it.
 
 Reconnect and resubscribe:
 
