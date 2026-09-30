@@ -216,7 +216,14 @@ export interface WidgetOptions extends Omit<ChartOptions, 'theme'>, WidgetBottom
   symbolSearch?: SymbolSearch;
   /** How many bars a load asks the feed for. Default `DEFAULT_LOOKBACK_BARS`. */
   lookbackBars?: number;
-  /** Clock for the load window and the capture filename. Default `Date.now`. */
+  /**
+   * The widget's wall clock, in epoch milliseconds: the history load window,
+   * the loading controller's clock (unless `loading.now` gives it one, in UTC
+   * seconds), the status line and the bottom bar's clock and ranges. Default
+   * `Date.now`. It shadows `ChartOptions.now`, the chart's animation clock
+   * (monotonic, `performance.now` by default), which the widget does not pass
+   * to its chart: its kinetic animation runs on the real clock.
+   */
   now?: () => number;
   /** Order entry from the right-click menu. Without it the menu draws no trade rows. */
   onOrder?: (order: OrderRequest) => void;
