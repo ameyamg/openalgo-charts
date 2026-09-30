@@ -483,7 +483,7 @@ Two families of keys live in one flat `IndicatorSettings` bag:
 
 **A descriptor that declares `colorKey` owns the colour key.** `plotStyleKeys` returns `plot.colorKey` in the `color` slot rather than `<plotKey>:color`, so a generated key would shadow the declared one and setting the declared key would silently stop working. Always read the key from `plotStyleKeys(plot).color`, never hand-build `` `${plot.key}:color` ``.
 
-Opacity folds into the colour as alpha (a canvas stroke has no opacity channel). Changing `:type` **rebuilds the series**: a chart type belongs to the series, not the style bag.
+Opacity folds into the colour as alpha (a canvas stroke has no opacity channel). Since 2.6.0 it also fades the per-bar colours of a `colorBy` or `colorParts` plot (body, wick and border), multiplying each colour's own alpha, so a descriptor must not apply `<plotKey>:opacity` itself or the plot fades twice. Changing `:type` **rebuilds the series**: a chart type belongs to the series, not the style bag.
 
 Generating a dialog from a descriptor:
 
