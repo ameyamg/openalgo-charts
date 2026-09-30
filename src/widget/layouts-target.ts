@@ -29,11 +29,11 @@ import { isKnownInterval, isReplaying, registeredIndicators } from 'openalgo-cha
 import { isChartTypeChoice } from './topbar';
 import type { WorkspaceChartState, WorkspacePane, WorkspacePayload } from 'openalgo-charts/workspace';
 import type { LayoutApplyReport, LayoutTarget } from './layouts';
-import type { Widget, WidgetChartState } from './widget';
+import type { Widget, WidgetChartState, WidgetRestoreReport, WidgetState } from './widget';
 import { stripView } from './widget-persist';
 
-/** Where a one-chart layout keeps the widget's theme, as the chart grid does. */
-const THEME_SETTING = 'widget.theme';
+/** Where a layout keeps a chart's theme: one widget's layout and the chart grid's desk alike. Internal. */
+export const THEME_SETTING = 'widget.theme';
 const PANE = 'p0';
 const WIDGET_EVENTS = ['symbol', 'interval', 'variant', 'theme', 'layout'] as const;
 /**
@@ -68,6 +68,35 @@ export function layoutChartState(chart: WidgetChartState): WorkspaceChartState {
   };
 }
 
+/**
+ * A widget's state as a workspace pane, with `chart` as the caller keeps it:
+ * a layout without the view, the chart grid's own desk with it. The widget
+ * draws no separate volume series and no comparisons, so it saves neither
+ * rather than claim a preference it cannot show. Internal, shared with the
+ * chart grid.
+ */
+export function widgetPane(id: string, state: WidgetState, chart: WorkspaceChartState): WorkspacePane {
+  return { id, symbol: state.symbol, exchange: state.exchange, interval: state.interval, ...(state.variant ? { variant: state.variant } : {}),
+    chartType: state.chartType, chart, settings: { [THEME_SETTING]: state.theme }, volume: false,
+    magnet: state.rail?.magnet ?? 'off', stay: state.rail?.stay ?? false, comparisons: [], comparisonMode: 'percent' };
+}
+
+/**
+ * Put a workspace pane on a widget, with the pane's theme when `withTheme`
+ * (the chart grid gives every chart one theme itself). The pane carries the
+ * rail's magnet and stay; the rest of the rail (pins, last tools) stays the
+ * user's. Internal, shared with the chart grid.
+ */
+export function restorePane(widget: Widget, pane: WorkspacePane, withTheme: boolean): WidgetRestoreReport {
+  const theme = withTheme ? pane.settings[THEME_SETTING] : undefined;
+  const rail = widget.getState().rail;
+  return widget.restoreState({
+    version: 1, symbol: pane.symbol, exchange: pane.exchange, interval: pane.interval, chartType: pane.chartType, chart: pane.chart,
+    ...(theme === 'dark' || theme === 'light' ? { theme } : {}), ...(pane.variant ? { variant: pane.variant } : {}),
+    ...(rail === null ? {} : { rail: { ...rail, magnet: pane.magnet, stay: pane.stay } }),
+  });
+}
+
 /** Why a saved layout cannot show on one widget, checked before anything changes; empty when it can. */
 function refusal(payload: WorkspacePayload): string {
   if (payload.panes.length !== 1) return `a layout of ${payload.panes.length} charts needs a chart grid`;
@@ -90,13 +119,7 @@ export function widgetLayoutTarget(widget: Widget): LayoutTarget {
     capture(): WorkspacePayload {
       // A chart state carries absent optional fields; the portable form is plain JSON.
       const state = JSON.parse(JSON.stringify(widget.getState())) as ReturnType<Widget['getState']>;
-      const pane: WorkspacePane = {
-        id: PANE, symbol: state.symbol, exchange: state.exchange, interval: state.interval, chartType: state.chartType,
-        ...(state.variant ? { variant: state.variant } : {}),
-        chart: layoutChartState(state.chart),
-        settings: { [THEME_SETTING]: state.theme }, volume: false,
-        magnet: state.rail?.magnet ?? 'off', stay: state.rail?.stay ?? false, comparisons: [], comparisonMode: 'percent',
-      };
+      const pane = widgetPane(PANE, state, layoutChartState(state.chart));
       return {
         layout: { rows: 1, columns: 1, slots: [{ paneId: PANE, row: 0, column: 0, rowSpan: 1, columnSpan: 1 }] },
         panes: [pane], activePaneId: PANE, sync: { crosshair: true, viewport: true, symbol: false, interval: false },
@@ -108,14 +131,7 @@ export function widgetLayoutTarget(widget: Widget): LayoutTarget {
       const reason = refusal(payload);
       if (reason !== '') return { applied: false, reason };
       const [pane] = payload.panes as [WorkspacePane]; // refusal() lets only a single pane through
-      const theme = pane.settings[THEME_SETTING];
-      // The pane carries the rail's magnet and stay; the rest of the rail (pins, last tools) stays the user's.
-      const rail = widget.getState().rail;
-      const report = widget.restoreState({
-        version: 1, symbol: pane.symbol, exchange: pane.exchange, interval: pane.interval, chartType: pane.chartType, chart: pane.chart,
-        ...(theme === 'dark' || theme === 'light' ? { theme } : {}), ...(pane.variant ? { variant: pane.variant } : {}),
-        ...(rail === null ? {} : { rail: { ...rail, magnet: pane.magnet, stay: pane.stay } }),
-      });
+      const report = restorePane(widget, pane, true);
       return report.applied ? { applied: true } : { applied: false, reason: report.reason ?? 'the chart state could not be restored' };
     },
     subscribe(listener) {

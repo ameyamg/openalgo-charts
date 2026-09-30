@@ -55,6 +55,7 @@ import { applyTokens, widgetTokens, type WidgetThemeName } from './tokens';
 import { GRID_BAR_CHARTS, createWidget, resolveTheme, type Widget, type WidgetOptions } from './widget';
 import type { GridSaved } from './grid-saved';
 import { canCopyImage } from './capture';
+import { restorePane, THEME_SETTING, widgetPane } from './layouts-target';
 import { cellDrawingStore, checkWorkspace, type ChartDrawings } from './grid-payload';
 import { CHART_GRID_LAYOUTS, focusSlot, isChartGridLayout, type ChartGridLayoutId } from './grid-layouts';
 import {
@@ -384,7 +385,6 @@ export interface GridState {
   ready: Promise<void>;
 }
 
-const THEME_SETTING = 'widget.theme';
 // `drawingStore` too: each cell gets a store of its own from the grid.
 const GRID_ONLY_KEYS = ['preset', 'links', 'compactWidth', 'persist', 'storage', 'drawingStore', 'toolbar', 'presets'];
 
@@ -1082,11 +1082,7 @@ function getWorkspace(s: GridState): WorkspacePayload {
     },
     panes: s.cells.map((c): WorkspacePane => {
       const w = c.widget.getState();
-      // The widget draws no separate volume series and no comparisons, so
-      // it saves neither rather than claim a preference it cannot show.
-      return { id: c.id, symbol: w.symbol, exchange: w.exchange, interval: w.interval, ...(w.variant ? { variant: w.variant } : {}), chartType: w.chartType,
-        chart: w.chart as WorkspaceChartState, settings: { [THEME_SETTING]: w.theme }, volume: false,
-        magnet: w.rail?.magnet ?? 'off', stay: w.rail?.stay ?? false, comparisons: [], comparisonMode: 'percent', historyPeriod: c.historyPeriod,
+      return { ...widgetPane(c.id, w, w.chart as WorkspaceChartState), historyPeriod: c.historyPeriod,
         ...(plain || c.group === null ? {} : { linkGroup: c.group.id }) };
     }),
     activePaneId: (s.active as Cell).id,
@@ -1137,9 +1133,8 @@ function apply(s: GridState, payload: WorkspacePayload, docs: ChartDrawings): Ch
       const cell = makeCell(s, pane.id, pane, staging, nextTheme, docs);
       made.push(cell);
       Object.assign(cell, { row: slot.row, column: slot.column, rowSpan: slot.rowSpan ?? 1, columnSpan: slot.columnSpan ?? 1 });
-      const rail = cell.widget.getState().rail;
-      const report = cell.widget.restoreState({ version: 1, symbol: pane.symbol, exchange: pane.exchange, interval: pane.interval,
-        ...(pane.variant ? { variant: pane.variant } : {}), chartType: pane.chartType, chart: pane.chart, ...(rail === null ? {} : { rail: { ...rail, magnet: pane.magnet, stay: pane.stay } }) });
+      // The grid gives every chart the one theme it applies below.
+      const report = restorePane(cell.widget, pane, false);
       if (!report.applied) throw new Error(`${pane.id}: ${report.reason ?? 'the chart state could not be restored'}`);
       cell.type = cell.widget.chartType();
     }
