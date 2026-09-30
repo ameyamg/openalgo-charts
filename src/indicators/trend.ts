@@ -307,7 +307,7 @@ function vwapTail(calc: Calc): Tail {
   return (bars, s, from, previous, store) => {
     const n = bars.length;
     if (offsetOf(s, 'offset', 0) !== 0 || n - from > 2) return null;
-    const source = src(s);
+    const source = src(s, 'source', 'hlc3');
     const anchor = str(s, 'anchor', 'session') as VwapAnchor;
     const zone = zoneOf(s);
     const percent = s.calcMode === 'percent';
@@ -426,7 +426,7 @@ export const VWAP: IndicatorDescriptor = withTail({
   ],
   calc: (bars, s) => {
     const n = bars.length;
-    const values = sourceValues(bars, src(s));
+    const values = sourceValues(bars, src(s, 'source', 'hlc3'));
     const anchor = str(s, 'anchor', 'session') as VwapAnchor;
     const percentMode = s.calcMode === 'percent';
     const offset = offsetOf(s, 'offset', 0);

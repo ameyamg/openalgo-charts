@@ -95,7 +95,7 @@ export const MA_CROSS: IndicatorDescriptor = {
   calc: (bars, s) => {
     const closes = sourceValues(bars, 'close');
     const short = sma(closes, int(s, 'shortLength', 9));
-    const long = sma(closes, int(s, 'longLength', 21));
+    const long = sma(closes, int(s, 'longLength', 26));
     const hit = crossings(short, long);
     return {
       short: nulls(short),
@@ -193,7 +193,7 @@ export const MEDIAN: IndicatorDescriptor = {
     opacity: 0.9,
   }],
   calc: (bars, s) => {
-    const values = sourceValues(bars, src(s));
+    const values = sourceValues(bars, src(s, 'source', 'hl2'));
     const length = int(s, 'length', 3);
     const mult = num(s, 'atrMult', 2);
     const median = percentileNearestRank(values, length, 50);
@@ -355,7 +355,7 @@ export const TWAP: IndicatorDescriptor = {
     style: { color: '#dd7a28', lineWidth: 1.5 },
   }],
   calc: (bars, s) => {
-    const values = sourceValues(bars, src(s));
+    const values = sourceValues(bars, src(s, 'source', 'ohlc4'));
     const perSession = s.anchor !== 'continuous';
     // Read from the bar gaps rather than a fixed midnight, so the average
     // restarts when the exchange opens and not partway through its afternoon.
@@ -452,9 +452,9 @@ export const ALLIGATOR: IndicatorDescriptor = {
     // `hl2` is hard-coded in the reference, so there is no source setting.
     const values = sourceValues(bars, 'hl2');
     return {
-      jaw: nulls(shift(rma(values, int(s, 'jawLength', 13)), offsetOf(s, 'jawOffset', 8))),
-      teeth: nulls(shift(rma(values, int(s, 'teethLength', 8)), offsetOf(s, 'teethOffset', 5))),
-      lips: nulls(shift(rma(values, int(s, 'lipsLength', 5)), offsetOf(s, 'lipsOffset', 3))),
+      jaw: nulls(shift(rma(values, int(s, 'jawLength', 21)), offsetOf(s, 'jawOffset', 8))),
+      teeth: nulls(shift(rma(values, int(s, 'teethLength', 13)), offsetOf(s, 'teethOffset', 5))),
+      lips: nulls(shift(rma(values, int(s, 'lipsLength', 8)), offsetOf(s, 'lipsOffset', 3))),
     };
   },
 };

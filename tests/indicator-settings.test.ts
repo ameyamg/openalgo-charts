@@ -83,6 +83,15 @@ describe('built-in settings', () => {
     expect(differ).toEqual([]);
   });
 
+  // A host may call a built-in's calc directly with a partial blob; the chart
+  // merges the declared defaults first. Both must compute the same thing.
+  it('falls back to the declared default for a setting it is not given', () => {
+    const differ = BUILTIN_INDICATORS
+      .filter((d) => JSON.stringify(output(d, {})) !== JSON.stringify(output(d, indicatorDefaults(d))))
+      .map((d) => d.id);
+    expect(differ).toEqual([]);
+  });
+
   it('reads an empty colour or choice as its declared default', () => {
     const differ: string[] = [];
     for (const { d, key } of cases((input) => input.type === 'color' || input.type === 'select')) {
