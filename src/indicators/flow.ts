@@ -14,7 +14,7 @@ import { change, cumulative, nulls, rollingSum, sma } from './calc';
 // A `change` series has no value on bar 0, so its smoothing starts later too:
 // the shared gapped EMA aligns it with the first finite input.
 import { emaOfGapped } from './smoothing';
-import { num } from './settings';
+import { num, int } from './settings';
 
 /** the reference `nz(volume)`: a bar the feed gave no volume for traded nothing. */
 const vol = (b: Bar): number =>
@@ -54,7 +54,7 @@ export const CHAIKIN_MONEY_FLOW: IndicatorDescriptor = {
   ],
   plots: [{ key: 'cmf', type: 'line', title: 'CMF', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
-    const length = num(s, 'length', 20);
+    const length = int(s, 'length', 20);
     const flow = rollingSum(moneyFlow(bars), length);
     const traded = rollingSum(bars.map(vol), length);
     const out = new Array<number>(bars.length).fill(NaN);
@@ -89,8 +89,8 @@ export const CHAIKIN_OSCILLATOR: IndicatorDescriptor = {
   plots: [{ key: 'osc', type: 'line', title: 'Chaikin Oscillator', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
     const accdist = cumulative(moneyFlow(bars));
-    const fast = emaOfGapped(accdist, num(s, 'short', 3));
-    const slow = emaOfGapped(accdist, num(s, 'long', 10));
+    const fast = emaOfGapped(accdist, int(s, 'short', 3));
+    const slow = emaOfGapped(accdist, int(s, 'long', 10));
     const out = new Array<number>(bars.length);
     for (let i = 0; i < bars.length; i++) out[i] = fast[i]! - slow[i]!;
     return { osc: nulls(out) };
@@ -127,7 +127,7 @@ export const EASE_OF_MOVEMENT: IndicatorDescriptor = {
       // average a window holding one, which is exactly the reference platform's gap.
       term[i] = v === 0 ? NaN : (divisor * move[i]! * (b.high - b.low)) / v;
     }
-    return { eom: nulls(sma(term, num(s, 'length', 14))) };
+    return { eom: nulls(sma(term, int(s, 'length', 14))) };
   },
 };
 
@@ -150,7 +150,7 @@ export const ELDER_FORCE_INDEX: IndicatorDescriptor = {
     const moved = change(bars.map((b) => b.close));
     const force = new Array<number>(bars.length);
     for (let i = 0; i < bars.length; i++) force[i] = moved[i]! * vol(bars[i]!);
-    return { efi: nulls(emaOfGapped(force, num(s, 'length', 13))) };
+    return { efi: nulls(emaOfGapped(force, int(s, 'length', 13))) };
   },
   levels: () => [{ price: 0, color: '#787b86', title: 'Zero', dashed: true }],
 };

@@ -20,7 +20,7 @@ import { sourceValues } from 'openalgo-charts';
 import type { IndicatorDescriptor } from 'openalgo-charts';
 import { sma, nulls, change, roc, highest, lowest } from './calc';
 import { emaOfGapped } from './smoothing';
-import { len, str, src } from './settings';
+import { int, str, src } from './settings';
 
 /**
  * The upstream `tsi(source, shortLength, longLength)`.
@@ -67,7 +67,7 @@ export const MOMENTUM: IndicatorDescriptor = {
   ],
   plots: [{ key: 'mom', type: 'line', title: 'MOM', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => ({
-    mom: nulls(change(sourceValues(bars, src(s)), len(s, 'len', 10))),
+    mom: nulls(change(sourceValues(bars, src(s)), int(s, 'len', 10))),
   }),
 };
 
@@ -90,7 +90,7 @@ export const ROC: IndicatorDescriptor = {
   ],
   plots: [{ key: 'roc', type: 'line', title: 'ROC', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => ({
-    roc: nulls(roc(sourceValues(bars, src(s)), len(s, 'length', 9))),
+    roc: nulls(roc(sourceValues(bars, src(s)), int(s, 'length', 9))),
   }),
   levels: () => [{ price: 0, color: '#787b86', title: 'Zero Line', dashed: true }],
 };
@@ -162,12 +162,12 @@ export const PPO: IndicatorDescriptor = {
   calc: (bars, s) => {
     const values = sourceValues(bars, src(s));
     const oscType = str(s, 'oscType', 'EMA');
-    const fast = ppoMa(values, len(s, 'fastLength', 12), oscType);
-    const slow = ppoMa(values, len(s, 'slowLength', 26), oscType);
+    const fast = ppoMa(values, int(s, 'fastLength', 12), oscType);
+    const slow = ppoMa(values, int(s, 'slowLength', 26), oscType);
     // A zero slow average makes the percentage undefined, which is a gap
     // upstream, not a division blowing up to Infinity.
     const ppo = fast.map((f, i) => (slow[i] === 0 ? NaN : (100 * (f - slow[i]!)) / slow[i]!));
-    const signal = ppoMa(ppo, len(s, 'signalLength', 9), str(s, 'sigType', 'EMA'));
+    const signal = ppoMa(ppo, int(s, 'signalLength', 9), str(s, 'sigType', 'EMA'));
     return {
       hist: nulls(ppo.map((v, i) => v - signal[i]!)),
       ppo: nulls(ppo),
@@ -200,7 +200,7 @@ export const TRIX: IndicatorDescriptor = {
   ],
   plots: [{ key: 'trix', type: 'line', title: 'TRIX', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
-    const length = len(s, 'length', 18);
+    const length = int(s, 'length', 18);
     // `log` of a non-positive price is undefined, and a synthetic or adjusted
     // series can reach zero; that prints as a gap upstream.
     const logs = bars.map((b) => (b.close > 0 ? Math.log(b.close) : NaN));
@@ -236,10 +236,10 @@ export const TSI: IndicatorDescriptor = {
     { key: 'signal', type: 'line', title: 'Signal', colorKey: 'signalColor', style: { lineWidth: 1.5 } },
   ],
   calc: (bars, s) => {
-    const value = tsiSeries(bars.map((b) => b.close), len(s, 'short', 13), len(s, 'long', 25));
+    const value = tsiSeries(bars.map((b) => b.close), int(s, 'short', 13), int(s, 'long', 25));
     return {
       tsi: nulls(value),
-      signal: nulls(emaOfGapped(value, len(s, 'signal', 13))),
+      signal: nulls(emaOfGapped(value, int(s, 'signal', 13))),
     };
   },
   levels: () => [{ price: 0, color: '#787b86', title: 'Zero', dashed: true }],
@@ -270,8 +270,8 @@ export const SMI_ERGODIC_INDICATOR: IndicatorDescriptor = {
     { key: 'sig', type: 'line', title: 'Signal', colorKey: 'signalColor', style: { lineWidth: 1.5 } },
   ],
   calc: (bars, s) => {
-    const erg = tsiSeries(bars.map((b) => b.close), len(s, 'shortlen', 5), len(s, 'longlen', 20));
-    return { erg: nulls(erg), sig: nulls(emaOfGapped(erg, len(s, 'siglen', 5))) };
+    const erg = tsiSeries(bars.map((b) => b.close), int(s, 'shortlen', 5), int(s, 'longlen', 20));
+    return { erg: nulls(erg), sig: nulls(emaOfGapped(erg, int(s, 'siglen', 5))) };
   },
 };
 
@@ -298,8 +298,8 @@ export const SMI_ERGODIC_OSCILLATOR: IndicatorDescriptor = {
     },
   ],
   calc: (bars, s) => {
-    const erg = tsiSeries(bars.map((b) => b.close), len(s, 'shortlen', 5), len(s, 'longlen', 20));
-    const sig = emaOfGapped(erg, len(s, 'siglen', 5));
+    const erg = tsiSeries(bars.map((b) => b.close), int(s, 'shortlen', 5), int(s, 'longlen', 20));
+    const sig = emaOfGapped(erg, int(s, 'siglen', 5));
     return { osc: nulls(erg.map((v, i) => v - sig[i]!)) };
   },
 };
@@ -345,8 +345,8 @@ export const SMI: IndicatorDescriptor = {
   // and the overbought and oversold levels carry that reading instead.
   fills: [{ between: ['bandHigh', 'bandLow'], colorUpKey: 'fillColor', colorDownKey: 'fillColor', opacity: 0.1 }],
   calc: (bars, s) => {
-    const lengthK = len(s, 'lengthK', 10);
-    const lengthD = len(s, 'lengthD', 3);
+    const lengthK = int(s, 'lengthK', 10);
+    const lengthD = int(s, 'lengthD', 3);
     const highestHigh = highest(bars.map((b) => b.high), lengthK);
     const lowestLow = lowest(bars.map((b) => b.low), lengthK);
     const span = highestHigh.map((h, i) => h - lowestLow[i]!);
@@ -363,7 +363,7 @@ export const SMI: IndicatorDescriptor = {
     // they have to exist on bars where neither line prints yet.
     return {
       smi: nulls(value),
-      ema: nulls(emaOfGapped(value, len(s, 'lengthEMA', 3))),
+      ema: nulls(emaOfGapped(value, int(s, 'lengthEMA', 3))),
       bandHigh: new Array<number>(bars.length).fill(40),
       bandLow: new Array<number>(bars.length).fill(-40),
     };

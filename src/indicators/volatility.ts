@@ -86,7 +86,7 @@ export const BOLLINGER_PERCENT_B: IndicatorDescriptor = {
   fills: [{ between: ['bandHigh', 'bandLow'], colorUpKey: 'fillColor', colorDownKey: 'fillColor', opacity: 0.1 }],
   calc: (bars, s) => {
     const values = sourceValues(bars, src(s));
-    const { upper, lower } = bands(values, num(s, 'length', 20), num(s, 'mult', 2));
+    const { upper, lower } = bands(values, int(s, 'length', 20), num(s, 'mult', 2));
     const out = new Array<number>(values.length);
     for (let i = 0; i < values.length; i++) {
       const span = upper[i]! - lower[i]!;
@@ -149,7 +149,7 @@ export const BOLLINGER_BANDWIDTH: IndicatorDescriptor = {
   ],
   calc: (bars, s) => {
     const values = sourceValues(bars, src(s));
-    const { middle, upper, lower } = bands(values, num(s, 'length', 20), num(s, 'mult', 2));
+    const { middle, upper, lower } = bands(values, int(s, 'length', 20), num(s, 'mult', 2));
     const bbw = new Array<number>(values.length);
     for (let i = 0; i < values.length; i++) {
       bbw[i] = middle[i] === 0 ? NaN : ((upper[i]! - lower[i]!) / middle[i]!) * 100;
@@ -161,8 +161,8 @@ export const BOLLINGER_BANDWIDTH: IndicatorDescriptor = {
     // A window holding nothing finite yields +/-Infinity, which `nulls` gaps.
     return {
       bandwidth: nulls(bbw),
-      expansion: nulls(highest(bbw, num(s, 'expansionLength', 125))),
-      contraction: nulls(lowest(bbw, num(s, 'contractionLength', 125))),
+      expansion: nulls(highest(bbw, int(s, 'expansionLength', 125))),
+      contraction: nulls(lowest(bbw, int(s, 'contractionLength', 125))),
     };
   },
 };
@@ -215,8 +215,8 @@ export const BB_TREND: IndicatorDescriptor = {
   calc: (bars, s) => {
     const closes = bars.map((b) => b.close);
     const mult = num(s, 'stdDevMult', 2);
-    const short = bands(closes, num(s, 'shortLength', 20), mult);
-    const long = bands(closes, num(s, 'longLength', 50), mult);
+    const short = bands(closes, int(s, 'shortLength', 20), mult);
+    const long = bands(closes, int(s, 'longLength', 50), mult);
     const out = new Array<number>(closes.length);
     for (let i = 0; i < closes.length; i++) {
       const spread = Math.abs(short.lower[i]! - long.lower[i]!) - Math.abs(short.upper[i]! - long.upper[i]!);
@@ -254,7 +254,7 @@ export const CHOPPINESS_INDEX: IndicatorDescriptor = {
   // band has no up or down side to distinguish.
   fills: [{ between: ['bandHigh', 'bandLow'], colorUpKey: 'fillColor', colorDownKey: 'fillColor', opacity: 0.1 }],
   calc: (bars, s) => {
-    const length = num(s, 'length', 14);
+    const length = int(s, 'length', 14);
     const high = bars.map((b) => b.high);
     const low = bars.map((b) => b.low);
     const travel = rollingSum(trueRange(high, low, bars.map((b) => b.close)), length);
@@ -333,7 +333,7 @@ export const HISTORICAL_VOLATILITY: IndicatorDescriptor = {
     // holding one, so the first reading lands at `length`, not `length - 1`:
     // one bar later than a naive rolling window would put it, and where
     // the reference platform puts it.
-    const dev = stdev(returns, num(s, 'length', 10));
+    const dev = stdev(returns, int(s, 'length', 10));
     const factor = per > 0 ? Math.sqrt(annual / per) : NaN;
     return { hv: nulls(dev.map((v) => 100 * v * factor)) };
   },
@@ -355,7 +355,7 @@ export const AVERAGE_DAILY_RANGE: IndicatorDescriptor = {
   ],
   plots: [{ key: 'adr', type: 'line', title: 'ADR', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => ({
-    adr: nulls(sma(bars.map((b) => b.high - b.low), num(s, 'length', 14))),
+    adr: nulls(sma(bars.map((b) => b.high - b.low), int(s, 'length', 14))),
   }),
 };
 
@@ -471,7 +471,7 @@ export const CHAIKIN_VOLATILITY: IndicatorDescriptor = {
   plots: [{ key: 'chaikinVolatility', type: 'line', title: 'Chaikin Volatility', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => ({
     chaikinVolatility: nulls(
-      roc(smaSeededEma(bars.map((b) => b.high - b.low), num(s, 'periods', 10)), num(s, 'rocLookback', 10)),
+      roc(smaSeededEma(bars.map((b) => b.high - b.low), int(s, 'periods', 10)), int(s, 'rocLookback', 10)),
     ),
   }),
   levels: () => [{ price: 0, color: '#787b86', title: 'Zero', dashed: true }],
@@ -495,7 +495,7 @@ export const STANDARD_DEVIATION: IndicatorDescriptor = {
   plots: [{ key: 'stdDev', type: 'line', title: 'Standard Deviation', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
     const mult = num(s, 'deviations', 1);
-    return { stdDev: nulls(stdev(bars.map((b) => b.close), num(s, 'periods', 5)).map((v) => v * mult)) };
+    return { stdDev: nulls(stdev(bars.map((b) => b.close), int(s, 'periods', 5)).map((v) => v * mult)) };
   },
 };
 
@@ -516,7 +516,7 @@ export const STANDARD_ERROR: IndicatorDescriptor = {
   ],
   plots: [{ key: 'stdErr', type: 'line', title: 'Standard Error', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
-    const len = Math.max(3, Math.trunc(num(s, 'length', 14)));
+    const len = int(s, 'length', 14, 3);
     const closes = bars.map((b) => b.close);
     // x is the same 1..len ladder on every bar, so its spread is a constant and
     // only the close side has to be re-summed.

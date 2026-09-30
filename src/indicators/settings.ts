@@ -20,16 +20,15 @@ export const num = (s: Settings, k: string, d: number): number => {
 };
 
 /**
- * A whole number of at least `min` (1 unless given), rounded to the nearest.
- * The reference `input.int` is whole by construction; a settings blob carries
- * whatever a UI wrote.
+ * A count of bars, such as a window length: a whole number of at least `min`
+ * (1 unless given), rounded to the nearest. The reference `input.int` is whole
+ * by construction, but a settings blob carries whatever a UI wrote, and every
+ * built-in reads 14.5 as 15 so that one blob means one window across the
+ * catalogue. The kernels refuse a fractional length outright, which a study
+ * would show as an empty pane.
  */
 export const int = (s: Settings, k: string, d: number, min = 1): number =>
   Math.max(min, Math.round(num(s, k, d)));
-
-/** A whole number rounded down, for the studies not yet on `int`. */
-export const len = (s: Settings, k: string, d: number): number =>
-  Math.max(1, Math.floor(num(s, k, d)));
 
 /** A plot offset: whole bars, and the one whole-number setting that may be negative. */
 export const offsetOf = (s: Settings, k: string, d: number): number => Math.round(num(s, k, d));

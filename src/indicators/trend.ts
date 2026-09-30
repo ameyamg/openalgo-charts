@@ -31,7 +31,7 @@ function movingAverage(id: string, name: string, color: string, kernel: Kernel, 
     const source = src(s) as IndicatorSource | IndicatorStudySource;
     const values = typeof source === 'string' ? sourceValues(bars, source)
       : sourceValues(bars, source, context).map(value => value ?? NaN);
-    return { ma: nulls(kernel(values, num(s, 'length', 9),
+    return { ma: nulls(kernel(values, int(s, 'length', 9),
       typeof source === 'string' ? undefined : { missing: 'propagate' })) };
   };
   return withTail({
@@ -56,13 +56,13 @@ function movingAverage(id: string, name: string, color: string, kernel: Kernel, 
  */
 function windowAverageTail(calc: Calc, kernel: Kernel): Tail {
   const byBars = windowTail(calc, (s) => {
-    const length = num(s, 'length', 9);
+    const length = int(s, 'length', 9);
     return whole(length) ? length - 1 : null;
   });
   return (bars, s, from, previous, store, ctx) => {
     const source = src(s) as IndicatorSource | IndicatorStudySource;
     if (typeof source === 'string') return byBars(bars, s, from, previous, store, ctx);
-    const length = num(s, 'length', 9);
+    const length = int(s, 'length', 9);
     const claim = claimOf(store, calc, bars, from);
     const column = claim === undefined ? undefined : ctx?.resolveSource?.(source);
     if (claim === undefined || !whole(length) || !Array.isArray(column) || column.length !== bars.length) return null;
@@ -75,7 +75,7 @@ function windowAverageTail(calc: Calc, kernel: Kernel): Tail {
 /** The exponential average resumes its running value, over a price or over a study output. */
 function emaTail(calc: Calc): Tail {
   return (bars, s, from, previous, store, ctx) => {
-    const length = num(s, 'length', 9);
+    const length = int(s, 'length', 9);
     if (!whole(length)) return null;
     const source = src(s) as IndicatorSource | IndicatorStudySource;
     if (typeof source === 'string') {
@@ -107,7 +107,7 @@ export const EMA: IndicatorDescriptor = withTimeframe(movingAverage('ema', 'EMA'
 
 function bollinger(bars: readonly Bar[], s: Readonly<Record<string, unknown>>): Record<string, (number | null)[]> {
   const values = sourceValues(bars, src(s));
-  const length = num(s, 'length', 20);
+  const length = int(s, 'length', 20);
   const mult = num(s, 'stdDev', 2);
   const basis = sma(values, length);
   const dev = stdev(values, length);
@@ -137,7 +137,7 @@ export const BOLLINGER: IndicatorDescriptor = withTimeframe(withTail({
   calc: bollinger,
 }, (calc) => windowTail(calc, (s) => {
   // The basis and the deviation both read one window of the source.
-  const length = num(s, 'length', 20);
+  const length = int(s, 'length', 20);
   return whole(length) ? length - 1 : null;
 })));
 
@@ -530,7 +530,7 @@ export const SUPERTREND: IndicatorDescriptor = withTimeframe(withTail({
     { between: ['bodyMid', 'down'], colorUpKey: 'downColor', colorDownKey: 'downColor', opacity: 0.1 },
   ],
   calc: (bars, s) => {
-    const st = supertrend(bars, num(s, 'period', 10), num(s, 'multiplier', 3));
+    const st = supertrend(bars, int(s, 'period', 10), num(s, 'multiplier', 3));
     const up: (number | null)[] = [];
     const down: (number | null)[] = [];
     const bodyMid: (number | null)[] = [];
@@ -547,7 +547,7 @@ export const SUPERTREND: IndicatorDescriptor = withTimeframe(withTail({
     return { up, down, bodyMid };
   },
 }, (calc) => (bars, s, from, previous, store) => {
-  const period = num(s, 'period', 10);
+  const period = int(s, 'period', 10);
   const multiplier = num(s, 'multiplier', 3);
   if (!whole(period)) return null;
   const turn: { direction: -1 | 1 } = { direction: 1 };
@@ -703,7 +703,7 @@ export const ICHIMOKU: IndicatorDescriptor = {
   }],
   calc: (bars, s) => {
     const n = bars.length;
-    // Whole bars, the way the other built-ins read a length: `mid` indexes
+    // Whole bars, the way every built-in reads a length (./settings): `mid` indexes
     // bars with the period, so a fractional one read a bar that does not exist
     // and threw, and a fractional displacement found nothing to copy.
     const conv = int(s, 'conversionPeriod', 9);

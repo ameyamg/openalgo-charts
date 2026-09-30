@@ -38,7 +38,7 @@ import {
 } from './calc';
 import { windowMean } from './window-mean';
 import { fromFirstValue } from './smoothing';
-import { num, len, str, src } from './settings';
+import { num, int, str, src } from './settings';
 
 /**
  * A column holding one value on every bar, warmup included. The two shaded
@@ -147,9 +147,9 @@ export const WAVETREND: IndicatorDescriptor = {
   ],
   calc: (bars, s) => {
     const n = bars.length;
-    const n1 = len(s, 'n1', 10);
-    const n2 = len(s, 'n2', 21);
-    const sigLen = len(s, 'sigLen', 4);
+    const n1 = int(s, 'n1', 10);
+    const n2 = int(s, 'n2', 21);
+    const sigLen = int(s, 'sigLen', 4);
     const obLevel1 = num(s, 'obLevel1', 60);
     const obLevel2 = num(s, 'obLevel2', 53);
     const osLevel1 = num(s, 'osLevel1', -60);
@@ -225,10 +225,10 @@ export const WAVETREND: IndicatorDescriptor = {
     // the bars since that predecessor. The gate counts from the found flag
     // delayed one bar, so the pivot being confirmed now is not its own
     // predecessor.
-    const lbL = len(s, 'lbL', 3);
-    const lbR = len(s, 'lbR', 3);
-    const lower = num(s, 'rangeLower', 5);
-    const upper = num(s, 'rangeUpper', 60);
+    const lbL = int(s, 'lbL', 3);
+    const lbR = int(s, 'lbR', 3);
+    const lower = int(s, 'rangeLower', 5);
+    const upper = int(s, 'rangeUpper', 60);
     const wantRegular = s.showRegDiv !== false;
     const wantHidden = s.showHidDiv === true;
 

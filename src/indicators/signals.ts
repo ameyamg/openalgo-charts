@@ -24,7 +24,7 @@ import type { IndicatorDescriptor, SeriesMarker } from 'openalgo-charts';
 import {
   nulls, rollingSum, correlation, pivotHigh, pivotLow, barsSince, valueWhen,
 } from './calc';
-import { num, len, str, flag, src } from './settings';
+import { num, int, str, flag, src } from './settings';
 
 /** The reading `k` bars back, with no value before the series starts. */
 function shift(values: readonly number[], k: number): number[] {
@@ -68,7 +68,7 @@ export const VORTEX: IndicatorDescriptor = {
   ],
   calc: (bars, s) => {
     const n = bars.length;
-    const length = len(s, 'length', 14);
+    const length = int(s, 'length', 14);
     const vip = new Array<number>(n).fill(NaN);
     const vim = new Array<number>(n).fill(NaN);
     if (n === 0) return { vip: nulls(vip), vim: nulls(vim) };
@@ -153,7 +153,7 @@ export const VOLATILITY_STOP: IndicatorDescriptor = {
     const high = bars.map((b) => b.high);
     const low = bars.map((b) => b.low);
     const close = bars.map((b) => b.close);
-    const band = atr(high, low, close, len(s, 'length', 20));
+    const band = atr(high, low, close, int(s, 'length', 20));
     const tr = trueRange(high, low, close);
 
     // The running state is seeded on the first bar: both extremes start at the
@@ -231,7 +231,7 @@ export const TREND_STRENGTH_INDEX: IndicatorDescriptor = {
   calc: (bars, s) => {
     const index = bars.map((_, i) => i);
     const close = bars.map((b) => b.close);
-    return { tsi: nulls(correlation(close, index, len(s, 'length', 14))) };
+    return { tsi: nulls(correlation(close, index, int(s, 'length', 14))) };
   },
   levels: (s) => [
     { price: 1, color: str(s, 'bullishColor', '#089981'), title: 'TSI Bullish Band' },
@@ -313,7 +313,7 @@ export const WILLIAMS_FRACTALS: IndicatorDescriptor = {
     const out = { fractals, upFractal, downFractal };
     if (n === 0) return out;
 
-    const periods = Math.max(2, len(s, 'periods', 2));
+    const periods = Math.max(2, int(s, 'periods', 2));
     const high = bars.map((b) => b.high);
     const low = bars.map((b) => b.low);
     const showUp = flag(s, 'showUp', true);
@@ -407,14 +407,14 @@ export const RSI_DIVERGENCE: IndicatorDescriptor = {
     const hiddenBull: (number | null)[] = new Array(n).fill(null);
     const bear: (number | null)[] = new Array(n).fill(null);
     const hiddenBear: (number | null)[] = new Array(n).fill(null);
-    const osc = rsi(sourceValues(bars, src(s)), len(s, 'length', 14));
+    const osc = rsi(sourceValues(bars, src(s)), int(s, 'length', 14));
     const out = { rsi: nulls(osc), bull, hiddenBull, bear, hiddenBear };
     if (n === 0) return out;
 
-    const lbR = len(s, 'lbR', 5);
-    const lbL = len(s, 'lbL', 5);
-    const lower = num(s, 'rangeLower', 5);
-    const upper = num(s, 'rangeUpper', 60);
+    const lbR = int(s, 'lbR', 5);
+    const lbL = int(s, 'lbL', 5);
+    const lower = int(s, 'rangeLower', 5);
+    const upper = int(s, 'rangeUpper', 60);
     // Each class is gated on its own input, so an unwanted one produces no signal
     // at all rather than an invisible one.
     const wantBull = s.plotBull !== false;

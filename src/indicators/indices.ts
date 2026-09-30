@@ -25,7 +25,7 @@
 import { sourceValues } from 'openalgo-charts';
 import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
 import { cumulative, highest, nulls, smaSeededEma, rollingSum, sma } from './calc';
-import { len, str, src } from './settings';
+import { int, str, src } from './settings';
 
 /** the reference `nz(volume)`: a bar the feed gave no volume for traded nothing. */
 const vol = (b: Bar): number =>
@@ -130,7 +130,7 @@ function volumeIndexDescriptor(
       const index = volumeIndex(bars, on);
       return {
         [id]: nulls(index),
-        ema: nulls(smoothRuns(index, len(s, 'maLength', 255), smaSeededEma)),
+        ema: nulls(smoothRuns(index, int(s, 'maLength', 255), smaSeededEma)),
       };
     },
   };
@@ -244,8 +244,8 @@ export const PVO: IndicatorDescriptor = {
     const n = bars.length;
     const volumes = bars.map(vol);
     const osc = smootherFor(str(s, 'oscType', 'EMA'));
-    const fast = osc(volumes, len(s, 'fastLength', 12));
-    const slow = osc(volumes, len(s, 'slowLength', 26));
+    const fast = osc(volumes, int(s, 'fastLength', 12));
+    const slow = osc(volumes, int(s, 'slowLength', 26));
 
     const pvo = new Array<number>(n).fill(NaN);
     // Every series here holds one value per bar.
@@ -260,7 +260,7 @@ export const PVO: IndicatorDescriptor = {
     // exactly 0: a slow window that traded nothing, which complete data has as
     // often as a feed with missing volume. Holding the signal across it would
     // move readings on complete series, so the restart stays (K13).
-    const signal = smoothRuns(pvo, len(s, 'signalLength', 9), smootherFor(str(s, 'sigType', 'EMA')));
+    const signal = smoothRuns(pvo, int(s, 'signalLength', 9), smootherFor(str(s, 'sigType', 'EMA')));
     const hist = new Array<number>(n);
     for (let i = 0; i < n; i++) hist[i] = pvo[i]! - signal[i]!;
     return { hist: nulls(hist), pvo: nulls(pvo), signal: nulls(signal) };
@@ -310,7 +310,7 @@ export const MASS_INDEX: IndicatorDescriptor = {
     // `rollingSum` accumulates every term it is handed, non-finite ones
     // included, so it has to run inside `smoothRuns` rather than over the
     // ratio's leading gap.
-    return { mi: nulls(smoothRuns(ratio, len(s, 'length', 10), rollingSum)) };
+    return { mi: nulls(smoothRuns(ratio, int(s, 'length', 10), rollingSum)) };
   },
 };
 
@@ -342,7 +342,7 @@ export const ULCER_INDEX: IndicatorDescriptor = {
   fills: [{ between: ['ui', 'zero'], colorUpKey: 'fillColor', colorDownKey: 'fillColor', opacity: 0.1 }],
   calc: (bars, s) => {
     const n = bars.length;
-    const length = len(s, 'length', 14);
+    const length = int(s, 'length', 14);
     const values = sourceValues(bars, src(s));
     const peak = highest(values, length);
 

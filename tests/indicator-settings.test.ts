@@ -40,7 +40,36 @@ function cases(pick: (input: IndicatorDescriptor['inputs'][number]) => boolean) 
   return BUILTIN_INDICATORS.flatMap((d) => d.inputs.filter(pick).map((input) => ({ d, key: input.key })));
 }
 
+/**
+ * Whole-stepped number inputs whose fraction means something: price levels, a
+ * volume scale, an annualising factor, a year, a percent and a table's size.
+ * Every other whole-stepped input counts bars.
+ */
+const NOT_BARS: Readonly<Record<string, readonly string[]>> = {
+  rsi: ['overbought', 'oversold'],
+  wavetrend: ['obLevel1', 'obLevel2', 'osLevel1', 'osLevel2'],
+  'ease-of-movement': ['divisor'],
+  'historical-volatility': ['per'],
+  seasonality: ['startYear', 'cutoffPercent', 'tableWidth', 'tableHeight'],
+};
+
+const wholeStepped = (input: IndicatorDescriptor['inputs'][number]): boolean =>
+  input.type === 'number' && input.step === 1 && Number.isInteger(input.default);
+
 describe('built-in settings', () => {
+  it('reads a fractional count of bars as the nearest whole number', () => {
+    const differ: string[] = [];
+    for (const { d, key } of cases((input) => wholeStepped(input) && !/offset|displacement/i.test(input.key))) {
+      if (NOT_BARS[d.id]?.includes(key)) continue;
+      const defaults = indicatorDefaults(d);
+      const x = defaults[key] as number;
+      const at = (v: number): string => JSON.stringify(output(d, { ...defaults, [key]: v }));
+      // 14.5 reads as 15 and 14.4 as 14: rounded, neither floored nor refused.
+      if (at(x + 0.5) !== at(x + 1) || at(x + 0.4) !== at(x)) differ.push(`${d.id}:${key}`);
+    }
+    expect(differ).toEqual([]);
+  });
+
   it('reads an empty colour or choice as its declared default', () => {
     const differ: string[] = [];
     for (const { d, key } of cases((input) => input.type === 'color' || input.type === 'select')) {
