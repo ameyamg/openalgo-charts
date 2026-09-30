@@ -25,10 +25,10 @@ import { checkTradingCapability, getIndicator, isReplaying, PRICE_SCALE_MODES } 
 import type { Chart, ContextMenuEvent, ContextMenuTarget, IndicatorApi, PriceScaleId, PriceScaleMode, TradingCapabilityRequest, TradingCapabilitySource } from 'openalgo-charts';
 import { drawingSettingsSchema } from 'openalgo-charts/draw';
 import type { Drawing } from 'openalgo-charts/draw';
-import { historyStep, type WidgetContext } from '../context';
+import { boxIn, historyStep, type WidgetContext } from '../context';
 import { drawingActionState, runDrawingAction } from '../drawing-actions';
 import { ariaKeys, commandChord } from '../keymap';
-import { boxInRoot, chromeGlyph, el, openPanel, placePanel, stopOwnKeys, type PanelHandle } from '../form';
+import { chromeGlyph, el, openPanel, placePanel, stopOwnKeys, type PanelHandle } from '../form';
 import { mountDrawingProperties } from './drawing-properties';
 import { mountIndicatorPicker } from './indicator-picker';
 import { mountIndicatorSettings } from './indicator-settings';
@@ -523,7 +523,7 @@ export function mountContextMenu(ctx: WidgetContext, anchor?: HTMLElement, opts:
   );
   if (anchor === undefined || opts.event !== undefined) {
     const container = chartContainer(ctx.chart);
-    const off = container === null ? { left: 0, top: 0 } : boxInRoot(ctx.root, container);
+    const off = container === null ? { left: 0, top: 0 } : boxIn(ctx.root, container);
     placePanel(ctx.root, menu, { point: { x: e.point.x + off.left, y: e.point.y + off.top } });
   }
   OPEN.set(ctx.root, handle);

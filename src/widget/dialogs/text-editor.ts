@@ -14,8 +14,8 @@ import { widgetText } from '../localization';
 import { drawingSettingsSchema } from 'openalgo-charts/draw';
 import type { Drawing, DrawingText } from 'openalgo-charts/draw';
 import type { Chart } from 'openalgo-charts';
-import { drawingToolOf, type WidgetContext } from '../context';
-import { boxInRoot, el, openPanel, type PanelHandle } from '../form';
+import { boxIn, drawingToolOf, type WidgetContext } from '../context';
+import { el, openPanel, type PanelHandle } from '../form';
 
 export interface TextEditorOptions {
   /** The drawing to edit. Default: the one selected drawing. */
@@ -197,7 +197,7 @@ export function mountTextEditor(ctx: WidgetContext, _anchor?: HTMLElement, opts:
   // Chart coordinates are relative to the chart container; the box lives in
   // the overlay layer, which spans the widget root, and the chart starts
   // further right when the rail is up.
-  const off = boxInRoot(ctx.root, container);
+  const off = boxIn(ctx.root, container);
 
   const box = el(doc, 'div', 'oac-textedit');
   box.setAttribute('contenteditable', 'plaintext-only');

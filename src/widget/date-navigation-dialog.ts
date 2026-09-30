@@ -16,6 +16,7 @@ import type { WidgetContext } from './context';
 import { timeBuckets, type DateNavigationResult, type DateNavigationTarget } from './date-navigator';
 import { button, dialogFrame, el, openPanel, type PanelHandle } from './form';
 import { widgetText } from './localization';
+import { token as v } from './tokens';
 
 export interface DateNavigationDialogOptions {
   /** Run one request. The panel reports the result and closes once it is placed. */
@@ -210,7 +211,6 @@ export function openDateNavigation(ctx: WidgetContext, anchor: HTMLElement | und
   return { el: frame.el, close, isOpen: () => !closed && panel!.isOpen() };
 }
 
-const v = (name: string): string => `var(--oac-${name})`;
 
 /** Styles for the go-to panel; part of the widget component sheet. */
 export const DATE_NAVIGATION_CSS = `

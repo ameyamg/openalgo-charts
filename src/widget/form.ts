@@ -25,7 +25,7 @@ import { INDICATOR_SOURCES, registeredIntervals, parseSessionSpec } from 'openal
 import type { ChartSettingsInput, IndicatorInputPresentation } from 'openalgo-charts';
 import { chromeIconSvg, CHROME_ICON_STROKE } from 'openalgo-charts/draw';
 import type { SettingsField } from 'openalgo-charts/draw';
-import { glyph, type OverlayOptions } from './context';
+import { boxIn, glyph, h, type OverlayOptions } from './context';
 import { widgetText, type WidgetTranslationOptions } from './localization';
 import { createColorPicker, type ColorPickerOptions } from './color-picker';
 import { inputStates } from './input-conditions';
@@ -292,12 +292,11 @@ export function formatNumber(n: number): string {
 
 // ── small DOM kit shared by the dialogs ───────────────────────────────────
 
-/** `doc.createElement` with the class and text most calls want. */
+/** `h` with the text most dialog calls want in place of attributes: one element factory, two call shapes. */
 export function el<K extends keyof HTMLElementTagNameMap>(
   doc: Document, tag: K, className?: string, text?: string,
 ): HTMLElementTagNameMap[K] {
-  const node = doc.createElement(tag);
-  if (className !== undefined && className !== '') node.className = className;
+  const node = h(doc, tag, className);
   if (text !== undefined) node.textContent = text;
   return node;
 }
@@ -514,12 +513,6 @@ export function openPanel(host: PanelHost, panel: HTMLElement, opts: OverlayOpti
   return { el: panel, close: finish, isOpen: () => !closed };
 }
 
-/** An element's box in root coordinates, for placing a panel by hand. */
-export function boxInRoot(root: HTMLElement, node: Element): { left: number; top: number; right: number; bottom: number } {
-  const r = root.getBoundingClientRect();
-  const b = node.getBoundingClientRect();
-  return { left: b.left - r.left, top: b.top - r.top, right: b.right - r.left, bottom: b.bottom - r.top };
-}
 
 /** The slice of a chart a popover needs to sit beside a drawing. */
 export interface AnchorChart {
@@ -542,7 +535,7 @@ export function selectionPoint(
   screenOf?: (id: string) => ReadonlyArray<{ x: number; y: number }> | null,
 ): { x: number; y: number } {
   const container = chart.panes()[0]?.element.parentElement ?? null;
-  const off = container === null ? { left: 0, top: 0 } : boxInRoot(root, container);
+  const off = container === null ? { left: 0, top: 0 } : boxIn(root, container);
   let x0 = Infinity;
   let y1 = -Infinity;
   for (const d of drawings) {

@@ -19,11 +19,11 @@
  */
 import { applyDrawingSettings, chromeIconSvg, drawingSettingsSchema, LINE_STYLE_OPTIONS } from 'openalgo-charts/draw';
 import type { Drawing, SettingsField } from 'openalgo-charts/draw';
-import { drawingToolOf, editableIds, historyStep, type WidgetContext } from './context';
+import { boxIn, drawingToolOf, editableIds, historyStep, type WidgetContext } from './context';
 import { drawingActionState, runDrawingAction, type DrawingAction } from './drawing-actions';
 import { commandChord } from './keymap';
 import { createColorPicker } from './color-picker';
-import { boxInRoot, button, chromeGlyph, el } from './form';
+import { button, chromeGlyph, el } from './form';
 import { widgetText } from './localization';
 import { openMenu, type MenuRow } from './menu';
 import { commonSchema, mountDrawingProperties, resolvedDrawingValues } from './dialogs/drawing-properties';
@@ -307,7 +307,7 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
   function place(): void {
     const box = container();
     if (box === null || bar.hidden) return;
-    const frame = boxInRoot(host, box);
+    const frame = boxIn(host, box);
     let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
     for (const target of ids) {
       for (const p of draw.screenPoints(target) ?? []) {

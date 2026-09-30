@@ -20,6 +20,7 @@ import { mountLevelEditor } from './level-editor';
 import { mountSettingsDialog } from './settings';
 import { mountTextEditor } from './text-editor';
 import { mountAlertEditor, mountAlertsPanel } from './alerts';
+import { token as v } from '../tokens';
 export { mountAlertEditor, mountAlertsPanel, type AlertEditorOptions, type AlertsPanelOptions } from './alerts';
 
 // The door for the shell and the tier entry: the mounts and their options.
@@ -51,8 +52,6 @@ export const WIDGET_DIALOGS = {
 } satisfies Record<string, DialogMount>;
 
 registerWidgetDialogs(WIDGET_DIALOGS);
-
-const v = (name: string): string => `var(--oac-${name})`;
 
 /**
  * The rules the dialogs add to the widget stylesheet. Scoped under

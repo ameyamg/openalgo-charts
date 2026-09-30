@@ -38,6 +38,7 @@ import {
 } from './bottombar-status';
 import { DEFAULT_RANGES, type WidgetRange } from './ranges';
 import { openMenu, type MenuRow } from './menu';
+import { token as v } from './tokens';
 
 /** The bar's height in CSS px. */
 export const BOTTOMBAR_HEIGHT = 28;
@@ -605,7 +606,6 @@ export function mountBottombar(ctx: BottombarContext, host: HTMLElement, opts: B
  * the scale toggles are never cut. The narrowest bar shows the status by its
  * glyph, its reading kept as the status region's name.
  */
-const v = (name: string): string => `var(--oac-${name})`;
 export const BOTTOMBAR_CSS = `
 .oac-widget.has-bottombar { grid-template-rows: auto minmax(0, 1fr) auto auto; }
 .oac-widget.has-bottombar > .oac-bottombar { grid-row: 3; }
