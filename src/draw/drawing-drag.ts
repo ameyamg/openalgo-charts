@@ -13,8 +13,7 @@
 import type { Drawing, DrawingPoint, ScreenPoint, ViewportPoint } from './types';
 import type { DrawingController, DragPayload } from './controller';
 import type { DrawingHistoryEntry } from './drawing-history';
-import { pinned } from './drawing-history';
-import { placeViewportAnchors } from './layer';
+import { placeViewportAnchors, readOnly } from './layer';
 import { getDrawingTool, hasDrawingTool } from './registry';
 import { cloneDrawing } from './clipboard';
 import { within } from './screen';
@@ -118,7 +117,7 @@ export class DrawingDrag {
     if (!p.id.startsWith('draw:')) return;
     const [rawId, handleStr] = p.id.slice('draw:'.length).split('#') as [string, ...string[]]; // a split has a first part
     const d = this._host.get(rawId);
-    if (d === undefined || d.locked === true || pinned(d) || !this._host._selectable(rawId)) return;
+    if (d === undefined || d.locked === true || readOnly(d) || !this._host._selectable(rawId)) return;
     const handle = handleStr === undefined ? null : Number(handleStr);
 
     this._host._notePointer(p);
@@ -129,7 +128,7 @@ export class DrawingDrag {
       // what it grabbed would be a surprise.
       if (handle === null && !this._host._selection.includes(rawId)) this._host.select(rawId);
       let moving = handle === null
-        ? this._host._targets(this._host._selection).filter((m) => m.locked !== true && !pinned(m))
+        ? this._host._targets(this._host._selection).filter((m) => m.locked !== true && !readOnly(m))
         : [d];
       // Alt on a body moves copies instead, and only once the pointer has
       // really travelled: a copy dropped by a jitter would sit unseen under

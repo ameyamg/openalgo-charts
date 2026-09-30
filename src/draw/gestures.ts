@@ -25,6 +25,7 @@ import { getDrawingTool, hasDrawingTool } from './registry';
 import type { DrawingGestureOptions } from './controller-types';
 import type { GestureLayer } from './gesture-layer';
 import { boxSamples, normalizeBox, touchesBox, touchesPath } from './hit-geometry';
+import { readOnly } from './layer';
 
 /** The modifier keys a pointer report carried. `mod` is Ctrl or Cmd. */
 export interface GestureKeys {
@@ -127,7 +128,7 @@ const within = (v: number, size: number): number => Math.min(Math.max(v, 0), siz
  * picked, and a read-only one cannot be deleted by the user at all.
  */
 const erasable = (d: Drawing): boolean =>
-  d.visible !== false && d.locked !== true && d.policy?.selectable !== false && d.policy?.editable !== false;
+  d.visible !== false && d.locked !== true && d.policy?.selectable !== false && !readOnly(d);
 
 /** The id of the ruler's preview. It is never a drawing, so it never collides with one. */
 const RULER_ID = '__measure';

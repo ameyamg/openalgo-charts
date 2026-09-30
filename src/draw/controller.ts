@@ -27,7 +27,7 @@ import type {
   DrawingChartHost, DrawingControllerOptions, DrawingGestureOptions, DrawingPlacementOptions,
   DrawingChangeKind, DrawingChangeEvent, DrawingEditOptions, DrawingToolEvent,
 } from './controller-types';
-import { placeViewportAnchors, sortByZIndex, type DrawingPointerKind } from './layer';
+import { placeViewportAnchors, readOnly, sortByZIndex, type DrawingPointerKind } from './layer';
 import { getDrawingTool, hasDrawingTool, viewportDrawingTool } from './registry';
 import { readViewportPoints } from './viewport';
 import { DrawingClipboard, cloneDrawing } from './clipboard';
@@ -38,7 +38,7 @@ import { magnetModeOf, magnetPoint, type SnapBar } from './snap';
 import { DrawingGestures, type GestureKeys } from './gestures';
 import { contextInterval, drawingsDocumentVersion, intervalFilter, passingContext, readIntervalRange } from './intervals';
 import { changedAnchor } from './patches';
-import { DrawingHistory, pinned, type DrawingHistoryEntry, type HistoryHost } from './drawing-history';
+import { DrawingHistory, type DrawingHistoryEntry, type HistoryHost } from './drawing-history';
 import { DrawingDrag, type DragHost } from './drawing-drag';
 import { PaneLayerSet, slotOf, type LayerSetHost } from './pane-layers';
 
@@ -409,7 +409,7 @@ export class DrawingController {
    * unless `options.force` is set.
    */
   public createGroup(name: string, ids: readonly string[], options: DrawingEditOptions = {}): DrawingGroup | null {
-    const members = [...new Set(ids)].filter(id => this.get(id) !== undefined && (options.force || !pinned(this.get(id))));
+    const members = [...new Set(ids)].filter(id => this.get(id) !== undefined && (options.force || !readOnly(this.get(id))));
     if (this._destroyed || !name.trim() || !members.length) return null;
     let id: string;
     // An id that only a recorded step still holds is taken as well: that
@@ -462,7 +462,7 @@ export class DrawingController {
   /** The live group `id`, unless it holds a read-only drawing and the call is not forced. */
   private _group(id: string, options: DrawingEditOptions): DrawingGroup | undefined {
     const group = this._groups.find(item => item.id === id);
-    return this._destroyed || (!options.force && group?.members.some(member => pinned(this.get(member)))) ? undefined : group;
+    return this._destroyed || (!options.force && group?.members.some(member => readOnly(this.get(member)))) ? undefined : group;
   }
 
   /**
@@ -832,7 +832,7 @@ export class DrawingController {
    */
   public update(id: string, patch: DrawingPatch, options: DrawingEditOptions = {}): boolean {
     const d = this.get(id);
-    if (d === undefined || (pinned(d) && options.force !== true)) return false;
+    if (d === undefined || (readOnly(d) && options.force !== true)) return false;
     this.updateMany([{ id, patch }], options);
     return patch.space === undefined || (d.space === 'viewport') === (patch.space === 'viewport');
   }
@@ -847,7 +847,7 @@ export class DrawingController {
   public updateMany(patches: ReadonlyArray<{ id: string; patch: DrawingPatch }>, options: DrawingEditOptions = {}): void {
     const live = patches
       .map((p) => ({ d: this.get(p.id), patch: p.patch }))
-      .filter((p): p is { d: Drawing; patch: DrawingPatch } => p.d !== undefined && (options.force === true || !pinned(p.d)))
+      .filter((p): p is { d: Drawing; patch: DrawingPatch } => p.d !== undefined && (options.force === true || !readOnly(p.d)))
       // A change of space the controller cannot make leaves nothing for that
       // drawing to do, and it is not an edit to record.
       .map(({ d, patch }) => ({ d, patch: this._spacePatch(d, patch), asked: Object.keys(patch).length }))
@@ -874,7 +874,7 @@ export class DrawingController {
       // changes, and that change is a rewrite which takes this patch first,
       // so moving one (a trailing level, every tick) costs no rewrite. Its
       // place in the stack is within history's reach.
-      rewrite ||= !pinned(d) || !!rest.policy || rest.zIndex !== undefined || rest.stackAbove !== undefined;
+      rewrite ||= !readOnly(d) || !!rest.policy || rest.zIndex !== undefined || rest.stackAbove !== undefined;
     }
     if (rewrite) this._history._rebase();
     this._sync();
@@ -955,7 +955,7 @@ export class DrawingController {
    */
   private _removeIds(ids: readonly string[], pushUndo: boolean, force = false): Drawing[] {
     const wanted = new Set(ids);
-    const removed = this._drawings.filter((d) => wanted.has(d.id) && (force || !pinned(d)));
+    const removed = this._drawings.filter((d) => wanted.has(d.id) && (force || !readOnly(d)));
     if (removed.length === 0) return [];
     if (pushUndo) this._history._begin(!force);
     const set = new Set(removed.map((d) => d.id));
@@ -1134,7 +1134,7 @@ export class DrawingController {
    */
   public nudge(ids: readonly string[], dxPx: number, dyPx: number): void {
     if (dxPx === 0 && dyPx === 0) return;
-    const list = this._targets(ids).filter((d) => d.locked !== true && !pinned(d));
+    const list = this._targets(ids).filter((d) => d.locked !== true && !readOnly(d));
     if (list.length === 0) return;
     this._history._pushUndo();
     for (const d of list) {
@@ -1200,7 +1200,7 @@ export class DrawingController {
    * drawing cannot be deleted, so it is not cut either: it stays, uncopied.
    */
   public async cut(target?: string | readonly string[] | null): Promise<boolean> {
-    const list = this._targets(target).filter((d) => !pinned(d));
+    const list = this._targets(target).filter((d) => !readOnly(d));
     if (list.length === 0) return false;
     const ok = await this._clipboard.write(this._portable(list));
     if (!ok) return false;
@@ -1571,12 +1571,12 @@ export class DrawingController {
     // exactly where each anchor was clicked (the magnet does not pull for
     // it). Its box is measured with the text the drawing will be given.
     const text = tool.defaultText === undefined ? {} : { text: { ...tool.defaultText } };
-    const pinned = this._toolSpace === 'viewport'
+    const viewportAnchors = this._toolSpace === 'viewport'
       ? this._screen.toViewport(pts, pane, { id: '', tool: tool.id, points: [], style: {}, paneIndex: pane, zIndex: 0, ...text })
       : null;
-    const created = this.add(pinned === null
+    const created = this.add(viewportAnchors === null
       ? { tool: tool.id, points: pts, style: {}, paneIndex: pane }
-      : { tool: tool.id, points: [], space: 'viewport', viewportPoints: pinned, style: {}, paneIndex: pane });
+      : { tool: tool.id, points: [], space: 'viewport', viewportPoints: viewportAnchors, style: {}, paneIndex: pane });
     this._pending = [];
     if (!this._opts.stayInDrawingMode) {
       this._tool = null;

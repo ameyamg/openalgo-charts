@@ -17,6 +17,7 @@ import type { DrawingController } from './controller';
 import type { InputAnchorStep } from './input-anchors';
 import { migrateDrawings } from './migrate';
 import { historyPatch } from './patches';
+import { readOnly } from './layer';
 
 // Shared by every controller on the page, so a chart rebuilt with a new
 // controller never hands out a step a history still holds for the old one.
@@ -27,9 +28,6 @@ let nextStep = 1;
 // `step` is the chart-wide history's number for the entry, so drawing edits
 // interleave with the chart's own steps in one timeline.
 export interface DrawingHistoryEntry { before: string; after: string; step: number; external?: InputAnchorStep }
-
-/** Read-only to the user: `DrawingPolicy.editable` set to false. */
-export const pinned = (d: Drawing | undefined): boolean => d?.policy?.editable === false;
 
 /**
  * The slice of the controller the history reads and drives. The controller
@@ -111,7 +109,7 @@ export class DrawingHistory {
       // History is what the user did, and a read-only drawing is not theirs
       // to change: its content stays whatever a step says. Its place in the
       // stack is outside the policy, so a step that only restacked it runs.
-      if ((pinned(a) || pinned(b) || pinned(this._host.get(id)))
+      if ((readOnly(a) || readOnly(b) || readOnly(this._host.get(id)))
         && !(a && b && JSON.stringify({ ...a, zIndex: 0 }) === JSON.stringify({ ...b, zIndex: 0 }))) { held = true; return false; }
       return true;
     });
@@ -119,7 +117,7 @@ export class DrawingHistory {
     const previous = new Map(this._host._drawings.map(d => [d.id, d]));
     const beforeGroups = new Map((beforeDocument.groups ?? []).map(group => [group.id, group]));
     const afterGroups = new Map((afterDocument.groups ?? []).map(group => [group.id, group]));
-    const fixed = (member: string): boolean => pinned(this._host.get(member));
+    const fixed = (member: string): boolean => readOnly(this._host.get(member));
     // Where a step leaves group `id`, the policy allowing: a read-only drawing
     // stays in the group it is in now, and that group keeps its name. The
     // `order` form is what is applied; the other puts the read-only members

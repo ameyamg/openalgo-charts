@@ -69,7 +69,7 @@ export type DrawingPointerKind = 'mouse' | 'touch' | 'pen';
 const zOf = (d: Drawing): number => (Number.isFinite(d.zIndex) ? d.zIndex : 0);
 
 /** Read-only to the user (`policy.editable` false): selectable, never grabbed. */
-const readOnly = (d: Drawing): boolean => d.policy?.editable === false;
+export const readOnly = (d: Drawing | undefined): boolean => d?.policy?.editable === false;
 
 /**
  * Whether the layer can run this drawing's tool at all. A viewport drawing
