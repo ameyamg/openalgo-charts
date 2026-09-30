@@ -221,6 +221,14 @@ application deployment available for rollback; never replace an immutable packag
 version with different files. Downgrading does not guarantee that newer saved
 documents can be read by an older host.
 
+Every release is checked against the previous release and the version OpenAlgo
+pins, before it is tagged: `npm run check:compat` fails a public name removed or a
+type narrowed in any tier unless the table under [Deprecated APIs](#deprecated-apis)
+lists it for the next major, and `tests/saved-documents.test.ts` loads the chart
+states, drawings, widget layouts, workspaces and alert lists those releases saved and
+saves them again, naming every field that changes. [CONTRIBUTING.md](CONTRIBUTING.md)
+describes both.
+
 Release evidence separates unit tests, deterministic adapter/browser fixtures,
 endurance workloads and connected-provider observations. A synthetic feed passing
 conformance is not a broker certification. Report the workload and machine for
