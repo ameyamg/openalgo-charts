@@ -230,9 +230,9 @@ export interface NewsFeed {
   getNews(request: NewsRequest): Promise<NewsPage>;
 }
 
-/** The side of an order. The trade tier's `OrderSide` is this type. */
+/** The side of an order, one declaration for the base and the trade tier. */
 export type OrderSide = 'BUY' | 'SELL';
-/** How an order is priced. The trade tier's `OrderType` is this type. */
+/** How an order is priced, one declaration for the base and the trade tier. */
 export type OrderType = 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
 
 /**

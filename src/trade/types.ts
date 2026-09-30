@@ -2,9 +2,12 @@
  * Trade-layer data model (ARCHITECTURE.md §9). Broker-agnostic shapes a broker
  * adapter produces; the chart depends only on these, not on OpenAlgo's REST.
  */
-import type { OrderSide, OrderType } from 'openalgo-charts';
+// Declared once, in the base's feed types, and named here too so the tier
+// exports them. Imported by path, not from 'openalgo-charts': the base's
+// OpenAlgo adapter imports this module, and going through the entry would
+// close an import loop.
+import type { OrderSide, OrderType } from '../feed/types';
 
-// The base's definitions, under the same names in this tier, so the two cannot drift.
 export type { OrderSide, OrderType };
 
 /** Lifecycle states (§9.5): the trade controller reconciles them from book snapshots, and the order engine moves them as it writes. */

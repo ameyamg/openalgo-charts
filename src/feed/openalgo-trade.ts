@@ -18,7 +18,8 @@
  * - **The analyzer/live mode is checked, not claimed.** See `getServerMode`.
  */
 import type { OrderFeed, PlaceRequest, PreflightFailure, TradeMode } from '../trade/order-engine';
-import type { Order, OrderSide, OrderStatus, OrderType, Position } from '../trade/types';
+import type { Order, OrderStatus, Position } from '../trade/types';
+import type { OrderSide, OrderType } from './types';
 import { validateQuantity, type OrderConstraints } from '../trade/validation';
 import { assertTradingCapability, type TradingCapabilityRequest, type TradingCapabilitySource } from './trading-capabilities';
 import type { LooseOptional } from '../helpers/types';

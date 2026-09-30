@@ -8,7 +8,20 @@
  * price runs near an edge. A context that gives no placement keeps the
  * right-edge tag every primitive has always drawn.
  */
-import type { PrimitiveRenderContext } from './primitive';
+
+/**
+ * The slice of a primitive's render context a tag reads, which
+ * `PrimitiveRenderContext` has. Declared here rather than imported so this
+ * module stays out of the import loop the primitive types sit in.
+ */
+export interface AxisTagContext {
+  dpr: number;
+  plotWidth: number;
+  plotHeight: number;
+  priceAxisWidth: number;
+  priceAxisSide?: 'left' | 'right' | 'hidden';
+  priceAxisOffset?: number;
+}
 
 /**
  * Draw `text` on a tag of `fill` at device-pixel `y`, `height` device pixels
@@ -20,7 +33,7 @@ import type { PrimitiveRenderContext } from './primitive';
  * is measured from the axis width and not clipped. Price levels clip always
  * and price lines do not, which is how each has always drawn.
  */
-export function drawAxisTag(ctx: CanvasRenderingContext2D, rc: PrimitiveRenderContext, y: number, text: string,
+export function drawAxisTag(ctx: CanvasRenderingContext2D, rc: AxisTagContext, y: number, text: string,
   fill: string, ink: string, height: number, clipAlways: boolean): void {
   if (rc.priceAxisSide === 'hidden' || !(rc.priceAxisWidth > 0)) return;
   const dpr = rc.dpr;
