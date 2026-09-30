@@ -245,6 +245,10 @@ the host loader cannot cancel its work. A failed lookup keeps supplied details
 visible. The host owns its feed, request authentication and cancellation support;
 the engine and widget make no calendar requests themselves.
 
+The popup the widget mounts speaks the widget's language: its title, its Close
+button and its loading and error lines go through `translate` like the rest of the
+chrome (since 2.6.0), and any `eventDetails.labels` you pass still win.
+
 Set `eventDetails: false` to provide your own detail view. A custom host can also
 create `new EventDetailsPopup(container, options)` from the widget tier, call
 `open(details, { x, y })` with container-relative CSS coordinates, and call

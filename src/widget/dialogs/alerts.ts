@@ -1,9 +1,10 @@
 import { widgetText } from '../localization';
-import { alertSettingsSchema, dataVariantKey, getBarCondition, utcSecondsToZonedParts, zoneOffsetSeconds, zonedWallClockToUtcSeconds, type Alert, type AlertCondition, type AlertInput, type AlertPatch, type AlertPolicy, type AlertRepeat, type AlertSource, type DataVariant } from 'openalgo-charts';
+import { alertSettingsSchema, dataVariantKey, getBarCondition, utcSecondsToZonedParts, zoneOffsetSeconds, type Alert, type AlertCondition, type AlertInput, type AlertPatch, type AlertPolicy, type AlertRepeat, type AlertSource, type DataVariant } from 'openalgo-charts';
 import { dataVariantLabel } from '../data-status';
 import type { WidgetContext } from '../context';
 import { button, controlsFromInputs, dialogFrame, el, openPanel, renderForm, type FormControl, type FormHandle, type PanelHandle } from '../form';
 import { alertSourceFields } from './alert-source';
+import { formatWallClock, parseWallClock } from '../wall-clock';
 
 export interface AlertEditorOptions {
   /** Edit this record; omit to create a new alert. */
@@ -33,30 +34,26 @@ const EXPIRY_SHAPE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
  */
 function expiryText(value: number | undefined, zone: string): string {
   if (value === undefined) return '';
-  const p = utcSecondsToZonedParts(value, zone);
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+  const wall = formatWallClock(value, zone, false);
+  return `${wall.date}T${wall.time}`;
 }
 
 /**
  * The instant a wall-clock reading names in that zone.
  *
- * `zonedWallClockToUtcSeconds` already owns this, including what to do with a
- * wall time a spring-forward skipped, so this parses the field into its parts
- * and hands them over rather than doing the offset arithmetic a second time.
- * The round-trip check rejects skipped readings. Unchanged existing readings
- * skip parsing, preserving either occurrence of an overlap and its seconds.
+ * The shared wall-clock reader (wall-clock.ts) owns this, and an expiry
+ * refuses a reading a spring-forward skipped rather than move it. Unchanged
+ * existing readings skip parsing, preserving either occurrence of an overlap
+ * and its seconds.
  */
 function expiryValue(ctx: WidgetContext, value: unknown, zone: string): number | undefined {
   if (value === '') return undefined;
   const wrong = widgetText(ctx, 'Enter an expiry date and time');
   if (typeof value !== 'string' || !EXPIRY_SHAPE.test(value)) throw new Error(wrong);
-  // EXPIRY_SHAPE has matched, so every part below is there.
+  // EXPIRY_SHAPE has matched, so both parts are there.
   const [date, time] = value.split('T');
-  const [year, month, day] = date!.split('-').map(Number);
-  const [hour, minute] = time!.split(':').map(Number);
-  const seconds = zonedWallClockToUtcSeconds(year!, month!, day!, hour!, minute!, 0, zone);
-  if (!Number.isFinite(seconds) || expiryText(seconds, zone) !== value) throw new Error(wrong);
+  const seconds = parseWallClock(date!, time!, zone, { rejectSkipped: true });
+  if (seconds === null) throw new Error(wrong);
   return seconds;
 }
 
@@ -83,7 +80,7 @@ function defaultExpiry(existing: Alert | undefined, zone: string): string {
   const first = wall - zoneOffsetSeconds(wall, zone);
   const second = wall - zoneOffsetSeconds(first, zone);
   // A default inside a spring gap advances across it so it can be saved.
-  // Manually entered skipped times still fail expiryValue's round-trip check.
+  // Manually entered skipped times are still refused by expiryValue.
   const seconds = second + zoneOffsetSeconds(second, zone) === wall ? second : Math.max(first, second);
   return expiryText(seconds, zone);
 }
@@ -125,8 +122,6 @@ export function mountAlertEditor(ctx: WidgetContext, anchor?: HTMLElement, opts:
     opts.onClose?.();
   }
   const frame = dialogFrame(ctx.document, { translate: ctx.translate, title: existing ? widgetText(ctx, 'Edit alert') : widgetText(ctx, 'Create alert'), className: 'oac-alert-editor', onClose: close });
-  frame.closeButton.textContent = widgetText(ctx, 'Close');
-  frame.closeButton.classList.remove('oac-btn--icon');
   const context = el(ctx.document, 'p', 'oac-alert-context', [initialContext?.symbol, initialContext?.exchange, initialContext?.interval].filter(Boolean).join(' / '));
   const fields = el(ctx.document, 'div');
   const availability = el(ctx.document, 'p', 'oac-alert-help');
@@ -238,9 +233,7 @@ export function mountAlertsPanel(ctx: WidgetContext, anchor?: HTMLElement, opts:
     panel?.close();
     opts.onClose?.();
   }
-  const frame = dialogFrame(ctx.document, { translate: ctx.translate, title: widgetText(ctx, 'Alerts'), className: 'oac-alerts', onClose: close });
-  frame.closeButton.textContent = widgetText(ctx, 'Close');
-  frame.closeButton.classList.remove('oac-btn--icon');
+  const frame = dialogFrame(ctx.document, { translate: ctx.translate, title: widgetText(ctx, 'Alerts'), className: 'oac-alerts', onClose: close, closeText: true });
   const list = el(ctx.document, 'div', 'oac-alerts__list');
   list.setAttribute('role', 'list');
   list.setAttribute('aria-label', widgetText(ctx, 'Chart alerts'));

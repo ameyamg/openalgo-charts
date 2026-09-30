@@ -225,7 +225,11 @@ Report exceptions through the host's normal error UI.
 
 The packaged widget and reference demo provide these choices in their CSV
 download dialogs. They retain the offered study instances and visible bounds,
-and validate the captured chart again before starting the download.
+and validate the captured chart again before starting the download. Their From
+and To bounds are a date and a time on the chart's clock, in the chart's
+timezone, which the dialog names (since 2.6.0); a To written to the minute takes
+in every bar that opens inside that minute. The dialog turns them into the UTC
+seconds `range` takes.
 
 CSV is a numeric snapshot, not a restorable chart layout. Use
 [chart state](/docs/state) or [workspaces](/docs/workspaces) for configuration,

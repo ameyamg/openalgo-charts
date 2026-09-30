@@ -1330,7 +1330,7 @@ withAlpha('#26a69a', 0.12);                        // 'rgba(38,166,154,0.12)'
 fromGradient(v, 30, 70, '#ef5350', '#26a69a');     // sRGB blend, alpha included, clamped
 ```
 
-Use these in a `colorBy`, `background` or `barColors` rather than hand-rolling a hex parser. They read `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()` and `rgba()`; **CSS colour names are not parsed**. Neither throws: an unparseable input comes back untouched from `withAlpha`, and `fromGradient` falls back to `low`. A not-available value, and a zero-width range, both resolve to `low` rather than to `rgba(NaN,...)`, which matters because canvas ignores an unparseable `fillStyle` and silently repaints the previous colour. `min > max` is a legitimate way to flip the scale.
+Use these in a `colorBy`, `background` or `barColors` rather than hand-rolling a hex parser. (The widget tier's own `withAlpha` writes CSS token values, `#rrggbb` when opaque and a clamped alpha otherwise; use this one for anything the chart paints.) They read `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()` and `rgba()`; **CSS colour names are not parsed**. Neither throws: an unparseable input comes back untouched from `withAlpha`, and `fromGradient` falls back to `low`. A not-available value, and a zero-width range, both resolve to `low` rather than to `rgba(NaN,...)`, which matters because canvas ignores an unparseable `fillStyle` and silently repaints the previous colour. `min > max` is a legitimate way to flip the scale.
 
 ## Tier 2: indicators with their own data
 
@@ -2096,7 +2096,7 @@ above. Style-only updates retain fetched data. Removal aborts pending work.
 `IndicatorApi.dataStatus()` returns null for ordinary indicators or a status with
 loading/ready/empty/unsupported/error. Subscribe with `subscribeDataStatus`, release
 the returned cleanup, and use `retryData()` for explicit retry. The chart bus emits
-`indicator:data-status` with id, indicatorId and status. The widget displays it.
+`indicator:data-status` with id, indicatorId and status. The widget displays it. (unreleased) An `error` whose detail is an `IndicatorInputError` (inputs this chart refuses, such as a timeframe on transformed bars) shows its message, naming the study once, and no Retry.
 
 Custom attach hooks can use optional `dataContext()`, `subscribeDataChanges()`,
 `setDataStatus()` and `setDataRetry()` from `IndicatorAttachContext`; the lifetime

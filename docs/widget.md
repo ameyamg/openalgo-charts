@@ -352,7 +352,8 @@ a phone too), and the theme button, a sun on the dark theme and a moon on the li
 whose tip and accessible name say the theme a click switches to. Since 2.5.10 no widget
 file draws a picture of its own, so the registry's grid, overlap and crispness checks cover
 all of them. A row of `openMenu` takes an optional `icon`, a chrome icon id, for a host that
-builds its own menu the same way.
+builds its own menu the same way, and `placement: 'beside'` opens the menu beside its
+button, as the rail's right-click menus do, with the same arrow keys as every other menu.
 
 ## Extending the rail with your own tools
 

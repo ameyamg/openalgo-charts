@@ -21,10 +21,12 @@
  */
 import type { PlotRect } from 'openalgo-charts';
 import type { Drawing, DrawingPoint, DrawingStyle } from './types';
-import { getDrawingTool, hasDrawingTool } from './tools';
+import { getDrawingTool, hasDrawingTool } from './registry';
 import type { DrawingGestureOptions } from './controller-types';
 import type { GestureLayer } from './gesture-layer';
 import { boxSamples, normalizeBox, touchesBox, touchesPath } from './hit-geometry';
+import { readOnly } from './layer';
+import { clamp } from '../helpers/math';
 
 /** The modifier keys a pointer report carried. `mod` is Ctrl or Cmd. */
 export interface GestureKeys {
@@ -119,15 +121,13 @@ interface Box {
   moved: boolean;
 }
 
-const within = (v: number, size: number): number => Math.min(Math.max(v, 0), size);
-
 /**
  * What the eraser may take: what the user could select and delete. A hidden
  * drawing is not under the pointer, a locked or unselectable one cannot be
  * picked, and a read-only one cannot be deleted by the user at all.
  */
 const erasable = (d: Drawing): boolean =>
-  d.visible !== false && d.locked !== true && d.policy?.selectable !== false && d.policy?.editable !== false;
+  d.visible !== false && d.locked !== true && d.policy?.selectable !== false && !readOnly(d);
 
 /** The id of the ruler's preview. It is never a drawing, so it never collides with one. */
 const RULER_ID = '__measure';
@@ -363,8 +363,8 @@ export class DrawingGestures {
     const rect = this._host.plotRect(pane);
     if (rect === null) return;
     const from = this._over?.pane === pane ? this._over : at;
-    const x0 = within(from.x - rect.left, rect.width);
-    const y0 = within(from.y - rect.top, rect.height);
+    const x0 = clamp(from.x - rect.left, 0, rect.width);
+    const y0 = clamp(from.y - rect.top, 0, rect.height);
     this._box = { pane, x0, y0, x1: x0, y1: y0, base: this._keys.shift ? [...this._host.selection()] : [], moved: false };
     this._growBox(at);
   }
@@ -373,8 +373,8 @@ export class DrawingGestures {
     const box = this._box as Box;
     const rect = this._host.plotRect(box.pane);
     if (rect === null) return;
-    box.x1 = within(at.x - rect.left, rect.width);
-    box.y1 = within(at.y - rect.top, rect.height);
+    box.x1 = clamp(at.x - rect.left, 0, rect.width);
+    box.y1 = clamp(at.y - rect.top, 0, rect.height);
     box.moved ||= Math.abs(box.x1 - box.x0) > SLOP || Math.abs(box.y1 - box.y0) > SLOP;
     if (!box.moved) return;
     this._host.layer(box.pane)?.setBox(box);
@@ -393,7 +393,7 @@ export class DrawingGestures {
     if (p.viaDrag !== true && p.point !== undefined) {
       const rect = this._host.plotRect(box.pane);
       // The click's y is pane-local already, which is plot-local.
-      if (rect !== null) { box.x0 = within(p.point.x - rect.left, rect.width); box.y0 = within(p.point.y, rect.height); }
+      if (rect !== null) { box.x0 = clamp(p.point.x - rect.left, 0, rect.width); box.y0 = clamp(p.point.y, 0, rect.height); }
     }
     this._finishBox();
     this._swallow = p.viaDrag !== true;

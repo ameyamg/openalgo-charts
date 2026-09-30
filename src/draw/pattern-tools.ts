@@ -1,6 +1,7 @@
 /** Labeled price patterns with shared paint and hit geometry. */
 import type { AtLeast, DrawingPoint, DrawingTool, HitContext, ScreenPoint } from './types';
 import { composeSettings, FILL_FIELDS, FONT_FIELDS, LINE_FIELDS, SHOW_LABELS_FIELD } from './schema';
+import { VALID_COLOR, INVALID_COLOR } from './tool-paint';
 import {
   clippedLine, clipPolygon, finitePoint, geometryTool, midpoint,
   type DrawingGeometry, type GeometryLabel, type GeometryPath,
@@ -24,8 +25,6 @@ interface RatioRule {
   anchor: number;
 }
 
-const VALID_COLOR = '#16a34a';
-const INVALID_COLOR = '#dc2626';
 const CYPHER_XC: RatioBand = { min: 1.272, max: 1.414 };
 const CYPHER_CD: RatioBand = { min: 0.74, max: 0.83 };
 const NAMED = {

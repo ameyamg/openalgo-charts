@@ -29,6 +29,7 @@
  */
 import { tryResolveInterval } from 'openalgo-charts';
 import type { Drawing, DrawingIntervalRange } from './types';
+import { isRecord } from './drawing-fields';
 
 /** A mean Gregorian month, in seconds: 365.2425 days over 12. Only ever compared, never counted. */
 const MONTH_SECONDS = 2629746;
@@ -36,9 +37,6 @@ const CALENDAR_MONTHS = { month: 1, quarter: 3, year: 12 } as const;
 
 /** Longest code a range keeps. Interval codes are a few characters; this only stops a runaway string. */
 const MAX_CODE = 64;
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
 
 const readCode = (v: unknown): string | undefined =>
   typeof v === 'string' && v.trim() !== '' && v.length <= MAX_CODE ? v.trim() : undefined;

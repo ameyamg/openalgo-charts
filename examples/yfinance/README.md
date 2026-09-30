@@ -738,8 +738,9 @@ identifies the source, interval and chart type, with a replay marker for a chart
 participating in active replay.
 
 The dialog starts with all installed bars and studies. Select individual study
-instances, enter inclusive UTC-second bounds, or use the visible bounds captured
-when the dialog opened. Hidden studies remain selectable; adding another study
+instances, enter inclusive bounds as a date and a time on the chart's clock (the
+zone is named under the fields; a To written to the minute takes in the whole
+minute), or use the visible bounds captured when the dialog opened. Hidden studies remain selectable; adding another study
 later does not silently include it. Removed selected studies report an error.
 Comparison closes can be omitted separately.
 

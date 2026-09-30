@@ -30,7 +30,7 @@ import {
 import { tickScheduleFor, axisMinMove, sessionCalendarFor } from './ticks.js';
 import { initBracket, attachBracketLines, setBracketPrice, updateBracket, removeBracket } from './bracket.js';
 import { initAccount } from './account.js';
-import { initIndicators, fillIndicatorPicker, renderIndicatorChips, openSettings, rememberIndicators } from './indicators.js';
+import { initIndicators, fillIndicatorPicker, renderIndicatorChips, openSettings, rememberIndicators, watchStudyStatus } from './indicators.js';
 import { afterChartSettingsWrite, chartDecorationsForRebuild, initChartSettings, normalizeLegendIconSize, restorePrimaryStyle } from './chart-settings.js';
 import { initHistory, attachHistory, historyFor, recordChartType } from './history.js';
 import { bindIndicatorSource, initIndicatorSource } from './indicator-source.js';
@@ -383,6 +383,9 @@ function render({ keepView = true, state } = {}) {
     rememberIndicators();
     renderIndicatorChips();
   });
+  // A study that stops drawing (a failed calculation, a timeframe the chart
+  // refuses) says why; the listener goes with the chart.
+  watchStudyStatus(app.chart);
   // Any change to the pane stack moves which pane is the bottom one.
 
   // Replay is headless: the controller emits, the transport bar and the

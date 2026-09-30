@@ -1,4 +1,3 @@
-import { widgetText } from '../localization';
 /**
  * Settings for one indicator instance: the descriptor's own `inputs` on one
  * tab and the generated per-plot appearance (`indicatorStyleInputs`) on the
@@ -14,13 +13,14 @@ import { widgetText } from '../localization';
  * inputs lead with the bars the study computes on, which is not a setting of
  * the descriptor but of the study (`IndicatorApi.setBarSource`).
  */
+import { widgetText } from '../localization';
 import { getIndicator, indicatorDefaults, indicatorStyleInputs } from 'openalgo-charts';
 import type { Chart, IndicatorApi, IndicatorBarSource, IndicatorDescriptor, IndicatorInput, IndicatorSettings, IndicatorStudySource } from 'openalgo-charts';
 import type { WidgetContext } from '../context';
 import { mountIndicatorInputControls, type IndicatorInputControlsHandle } from '../indicator-input-controls';
 import { studyNames } from '../objects-panel';
 import {
-  button, controlsFromInputs, dialogFrame, el, openPanel, renderForm, tabList,
+  button, controlsFromInputs, declinedPanel as declined, dialogFrame, el, openPanel, renderForm, tabList,
   type FormHandle, type PanelHandle,
 } from '../form';
 
@@ -79,11 +79,6 @@ export function resolveInstance(
 }
 
 /** A handle for a dialog that never opened, so a caller can `close()` it regardless. */
-function declined(ctx: WidgetContext, why: string): PanelHandle {
-  ctx.toast(why, 'info');
-  return { el: ctx.document.createElement('div'), close: () => {}, isOpen: () => false };
-}
-
 export function mountIndicatorSettings(
   ctx: WidgetContext, anchor?: HTMLElement, opts: IndicatorSettingsOptions = {},
 ): PanelHandle {
@@ -92,7 +87,7 @@ export function mountIndicatorSettings(
   if (resolved.inst === null) return declined(ctx, resolved.why ?? widgetText(ctx, 'No indicator to configure'));
   const inst: IndicatorApi = resolved.inst;
   // Every write would be refused, so the dialog says why instead of opening.
-  if ((inst as Partial<IndicatorApi>).policy?.().configurable === false) return declined(ctx, widgetText(ctx, '{name} settings are protected', { name: inst.name }));
+  if (inst.policy().configurable === false) return declined(ctx, widgetText(ctx, '{name} settings are protected', { name: inst.name }));
   const descriptor: IndicatorDescriptor = getIndicator(inst.indicatorId);
 
   const tabs: Array<{ id: IndicatorSettingsTab; label: string; icon: string; inputs: readonly IndicatorInput[] }> = [];

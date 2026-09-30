@@ -15,10 +15,10 @@
  * into the placement's own undo step (the controller's `untracked`), so
  * placing a drawing stays one step and its redo brings the default back too.
  */
-import { applyDrawingSettings, drawingSettingsSchema, getDrawingTool, hasDrawingTool, readDrawingSettings } from 'openalgo-charts/draw';
+import { applyDrawingSettings, drawingSettingsSchema, readDrawingSettings } from 'openalgo-charts/draw';
 import type { Drawing, DrawingChangeEvent } from 'openalgo-charts/draw';
 import type { DrawingTemplate, DrawingTemplateCatalog, DrawingTemplateStore, DrawingTemplateValues } from 'openalgo-charts/workspace';
-import { editableIds, type WidgetContext } from './context';
+import { drawingToolOf, editableIds, historyStep, type WidgetContext } from './context';
 import { button, dialogFrame, el, openPanel, type PanelHandle } from './form';
 import { errorText, widgetText } from './localization';
 
@@ -152,7 +152,7 @@ export function createDrawingTemplates(ctx: WidgetContext, store: DrawingTemplat
     if (d === undefined) throw new Error(widgetText(ctx, 'Select a drawing first'));
     return d;
   };
-  const toolLabel = (tool: string): string => widgetText(ctx, `schema.drawing.${tool}.name`, {}, hasDrawingTool(tool) ? getDrawingTool(tool).name : tool);
+  const toolLabel = (tool: string): string => widgetText(ctx, `schema.drawing.${tool}.name`, {}, drawingToolOf(tool)?.name ?? tool);
 
   return {
     store,
@@ -238,10 +238,7 @@ export function templateMenuRows(
       label: widgetText(ctx, 'Apply {name}', { name: item.name }),
       disabled: !editable,
       sub: editable ? undefined : widgetText(ctx, 'read-only'),
-      onSelect: () => {
-        const run = (): number => templates.apply(ids, item.values);
-        if (ctx.history !== undefined) ctx.history.transact(run, 'template'); else run();
-      },
+      onSelect: () => { historyStep(ctx, 'template', () => templates.apply(ids, item.values)); },
     });
   }
   return rows;

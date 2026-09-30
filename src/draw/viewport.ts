@@ -9,11 +9,7 @@
  * size, and keeping a drawing's box inside the plot, which needs the box.
  */
 import type { Drawing, ScreenPoint, ViewportPoint } from './types';
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
-
-const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+import { isNum, isRecord } from './drawing-fields';
 
 /** The anchors a drawing carries in its own space: what decides whether it is complete. */
 export const anchorCount = (d: Drawing): number =>

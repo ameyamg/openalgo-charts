@@ -403,6 +403,13 @@ describe('widget go-to panel', () => {
     await flush();
     expect(message.textContent).toBe('The end must not be before the start');
 
+    // A date the calendar does not have is refused, not rolled into March.
+    fields[0].value = '2024-02-30';
+    fields[2].value = '2024-06-09';
+    panel.querySelector('[data-action="go-to"]')!.click();
+    await flush();
+    expect(message.textContent).toBe('Enter a valid date');
+
     fields[0].value = '2024-06-08';
     fields[2].value = '2024-06-09';
     panel.querySelector('[data-action="go-to"]')!.click();

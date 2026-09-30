@@ -13,6 +13,16 @@
 import type { FibLevel } from './types';
 
 /**
+ * The levels a ladder strokes: the drawing's own, else the tool's default,
+ * minus the ones switched off and any with a ratio that is not a number
+ * (a hand-edited state file is the usual source). Every family that draws,
+ * hit-tests or alerts on a ladder reads its levels through this.
+ */
+export function activeLevels(own: readonly FibLevel[] | undefined, fallback: readonly FibLevel[]): FibLevel[] {
+  return (own ?? fallback).filter((l) => l.enabled !== false && Number.isFinite(l.ratio));
+}
+
+/**
  * The colour of a ratio that is an anchor rather than a level (0, 1, 2, 3 are
  * where the measured leg starts and ends, or whole multiples of it) and of any
  * ratio the convention does not name. Neutral on purpose: it is the reference

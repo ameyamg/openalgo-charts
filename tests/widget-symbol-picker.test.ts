@@ -202,6 +202,33 @@ describe('widget search controls', () => {
   });
 });
 
+describe('Enter while a search is pending', () => {
+  it.each(['desktop', 'mobile'])('waits for the lookup on %s instead of charting the typed text', async kind => {
+    vi.useFakeTimers();
+    let answer!: (hits: readonly { symbol: string; exchange: string }[]) => void;
+    const doc = fakeWidgetDocument();
+    const widget = createWidget(fakeContainer(doc) as unknown as HTMLElement, {
+      document: doc as unknown as Document, pixelRatio: () => 1,
+      raf: { schedule: cb => { cb(); return 1; }, cancel: () => {} },
+      mobile: kind === 'mobile' ? 'always' : 'never', symbol: 'RELIANCE', exchange: 'NSE',
+      symbolSearch: () => new Promise(resolve => { answer = resolve; }),
+    });
+    live.push(widget);
+    const root = widget.root as unknown as FakeElement;
+    const input = root.querySelector(kind === 'mobile' ? '.oac-mobile__symbol' : '.oac-sym__input') as FakeElement;
+    input.focus(); input.value = 'rel'; fire(input, 'input');
+    fireKey(input, 'Enter');
+    expect(widget.symbol()).toBe('RELIANCE');
+    await vi.advanceTimersByTimeAsync(150);
+    fireKey(input, 'Enter');
+    expect(widget.symbol()).toBe('RELIANCE');
+    answer([{ symbol: 'RELINFRA', exchange: 'BSE' }]); await vi.advanceTimersByTimeAsync(0);
+    fireKey(input, 'Enter');
+    expect(widget.symbol()).toBe('RELINFRA');
+    expect(widget.exchange()).toBe('BSE');
+  });
+});
+
 describe('search through the feed', () => {
   function feedWidget(options: Partial<WidgetOptions>) {
     const doc = fakeWidgetDocument();
