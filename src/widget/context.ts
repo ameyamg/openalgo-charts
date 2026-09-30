@@ -1031,5 +1031,5 @@ export interface WidgetContext {
    * The intervals the host serves, when it named them (`WidgetOptions.intervals`):
    * a study's timeframe select offers these.
    */
-  readonly intervals?: readonly string[];
+  readonly intervals?: readonly string[] | undefined;
 }
