@@ -57,9 +57,9 @@ export type DateNavigationStatus = 'placed' | 'partial' | 'no-data' | 'unsupport
 export interface DateNavigationResult {
   status: DateNavigationStatus;
   /** Open time of the first bar the placement shows. */
-  from?: number;
+  from?: number | undefined;
   /** Open time of the last bar the placement shows. */
-  to?: number;
+  to?: number | undefined;
   /** Why loaded history stops after the requested start. */
   history?: Exclude<HistoryReach, 'loaded'>;
   /** The range held more bars than the chart can show at its narrowest spacing; its start is in view. */
@@ -140,12 +140,14 @@ function firstWhere(n: number, after: (i: number) => boolean): number {
 function place(chart: Chart, frame: Frame, from: number, to: number | undefined, reach: HistoryReach | undefined): DateNavigationResult {
   const bars = chart.primaryBars();
   const n = bars.length;
+  // Every index read below is inside the bars: firstWhere probes [0, n), and
+  // start, stop, last and n - 1 are in [0, n) once the no-data return has passed.
   // History only falls short when its first bar still counts from after the request.
-  const history = reach !== undefined && reach !== 'loaded' && n > 0 && frame.open(bars[0].time) > from ? reach : undefined;
-  const start = firstWhere(n, i => frame.close(bars[i].time) > from);
-  const stop = to === undefined ? start : firstWhere(n, i => frame.open(bars[i].time) > to) - 1;
+  const history = reach !== undefined && reach !== 'loaded' && n > 0 && frame.open(bars[0]!.time) > from ? reach : undefined;
+  const start = firstWhere(n, i => frame.close(bars[i]!.time) > from);
+  const stop = to === undefined ? start : firstWhere(n, i => frame.open(bars[i]!.time) > to) - 1;
   if (start >= n || stop < start) return history === undefined ? { status: 'no-data' } : { status: 'no-data', history };
-  const index = (i: number): number => chart.dataLayer.timeToIndex(bars[i].time) ?? i;
+  const index = (i: number): number => chart.dataLayer.timeToIndex(bars[i]!.time) ?? i;
   let a: number;
   let z: number;
   let last = stop;
@@ -174,7 +176,7 @@ function place(chart: Chart, frame: Frame, from: number, to: number | undefined,
     }
   }
   chart.setVisibleLogicalRange({ from: a, to: z });
-  const result: DateNavigationResult = { status: history !== undefined || clipped ? 'partial' : 'placed', from: bars[start].time, to: bars[last].time };
+  const result: DateNavigationResult = { status: history !== undefined || clipped ? 'partial' : 'placed', from: bars[start]!.time, to: bars[last]!.time };
   if (history !== undefined) result.history = history;
   if (clipped) result.clipped = true;
   return result;
@@ -233,12 +235,12 @@ export class DateNavigator {
     if (buckets === null) return { status: 'unsupported' };
     const frame = frameOf(buckets, chart.timezone());
     const bars = chart.primaryBars();
-    if (bars.length === 0 || frame.close(bars[bars.length - 1].time) <= from) return { status: 'no-data' };
+    if (bars.length === 0 || frame.close(bars[bars.length - 1]!.time) <= from) return { status: 'no-data' }; // length checked first
     // A date is centred, so aim far enough back that the left half of the view has bars too.
     const view = chart.getVisibleLogicalRange();
     const lead = to === undefined ? Math.ceil(Math.max(0, view.to - view.from) / 2) : 0;
     const aim = from - lead * (frame.close(from) - frame.open(from));
-    let first = bars[0].time;
+    let first = bars[0]!.time; // not empty: the no-data return above
     let reach: HistoryReach | undefined;
     while (frame.open(first) > aim) {
       const load = this._options.loadHistory;

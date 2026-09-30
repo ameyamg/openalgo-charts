@@ -9,7 +9,7 @@ export interface QuickEntryOptions {
   enabled(): boolean;
   onSymbol(symbol: string, exchange?: string): void;
   onInterval(code: string): void;
-  search?: SymbolSearch;
+  search?: SymbolSearch | undefined;
 }
 
 export interface QuickEntryHandle { close(): void; destroy(): void }

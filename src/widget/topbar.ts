@@ -84,7 +84,7 @@ export function intervalLabel(code: string): string {
   const m = /^(\d*)\s*([smhdwSMHDW])$/.exec(code.trim());
   if (m === null) return code.toUpperCase();
   const n = m[1] === '' || m[1] === '1' ? '' : m[1];
-  const unit = m[2];
+  const unit = m[2]!; // the unit group is not optional, so a match fills it
   if (unit === 'm') return `${m[1] === '' ? '1' : m[1]}m`;
   if (unit === 's') return `${m[1] === '' ? '1' : m[1]}s`;
   if (unit === 'h' || unit === 'H') return `${m[1] === '' ? '1' : m[1]}h`;
@@ -98,10 +98,10 @@ export interface MenuRow {
    * every row keeps the column, so the labels share a left edge; an id the
    * registry does not carry leaves its slot empty. Since 2.5.10.
    */
-  icon?: string;
-  sub?: string;
+  icon?: string | undefined;
+  sub?: string | undefined;
   /** Shown at the right edge, for a chord. */
-  key?: string;
+  key?: string | undefined;
   /** Makes the row one of a set of choices, true for the current one; a row without it is an action. */
   on?: boolean;
   disabled?: boolean;
@@ -228,8 +228,8 @@ export interface TopbarState {
 export interface TopbarOptions {
   intervals: readonly string[];
   /** Show the indicators button. Default true. */
-  indicators?: boolean;
-  search?: SymbolSearch;
+  indicators?: boolean | undefined;
+  search?: SymbolSearch | undefined;
   /** The current facts, read on every refresh. */
   state: () => TopbarState;
   onSymbol(symbol: string, exchange?: string): void;
@@ -241,20 +241,22 @@ export interface TopbarOptions {
   onIndicators(anchor: HTMLElement): boolean;
   /** A text control for the host's object inventory, omitted without a handler. */
   onObjects?(anchor: HTMLElement): boolean;
+  // A handler the widget may pass as undefined is a property typed from a
+  // method signature, so it takes the same host functions a method does.
   /** Open the docked data window, omitted without a handler. */
-  onDataWindow?(anchor: HTMLElement): void | boolean;
+  onDataWindow?: { onDataWindow(anchor: HTMLElement): void | boolean }['onDataWindow'] | undefined;
   onAlerts?(anchor: HTMLElement): boolean;
   /** Open the docked watchlist, omitted without a handler (the host supplied no lists). */
-  onWatchlist?(anchor: HTMLElement): void | boolean;
+  onWatchlist?: { onWatchlist(anchor: HTMLElement): void | boolean }['onWatchlist'] | undefined;
   /** Open the docked news reader, omitted without a handler (the host supplied no news source). */
-  onNews?(anchor: HTMLElement): void | boolean;
+  onNews?: { onNews(anchor: HTMLElement): void | boolean }['onNews'] | undefined;
   /** Open the date and range navigation panel, omitted without a handler. */
-  onGoTo?(anchor: HTMLElement): void | boolean;
+  onGoTo?: { onGoTo(anchor: HTMLElement): void | boolean }['onGoTo'] | undefined;
   /**
    * The saved layouts the Layouts button names: it shows the held layout and
    * marks one with unsaved changes. Omitted, with `onLayouts`, without a store.
    */
-  layouts?: LayoutsController;
+  layouts?: LayoutsController | undefined;
   /** Open the Layouts menu from `anchor`. */
   onLayouts?(anchor: HTMLElement): void | boolean;
   settingsAvailable(): boolean;
@@ -262,7 +264,7 @@ export interface TopbarOptions {
   /** Refuse CSV export while the host is replacing or recovering its data. */
   dataAvailable?(): boolean;
   /** Hook (chart grid, 2.5.10): more capture menu rows, read on every open; a string starts a group. */
-  captureRows?: () => ReadonlyArray<MenuRow | string>;
+  captureRows?: (() => ReadonlyArray<MenuRow | string>) | undefined;
 }
 
 export interface TopbarHandle {

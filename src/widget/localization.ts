@@ -533,7 +533,7 @@ export type WidgetTranslator = (key: WidgetMessageKey, fallback: string, values:
 
 export interface WidgetTranslationOptions {
   /** Translates widget-owned text. Omit to preserve English rendering. */
-  translate?: WidgetTranslator;
+  translate?: WidgetTranslator | undefined;
 }
 
 /** Required interpolation names are inferred from the English source message. */

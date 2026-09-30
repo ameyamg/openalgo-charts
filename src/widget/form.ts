@@ -49,22 +49,22 @@ export interface FormControl extends IndicatorInputPresentation {
   kind: FormKind;
   label: string;
   /** Sub-heading the row sits under; consecutive rows with one group share a header. */
-  group?: string;
+  group?: string | undefined;
   /** Help text; rendered as a hover affordance beside the label. */
-  tooltip?: string;
-  min?: number;
-  max?: number;
-  step?: number;
+  tooltip?: string | undefined;
+  min?: number | undefined;
+  max?: number | undefined;
+  step?: number | undefined;
   /** `select` only. Absent means free-form: the control becomes a text box. */
-  options?: readonly { label: string; value: string }[];
+  options?: readonly { label: string; value: string }[] | undefined;
   /** `colorPair` only: the switch (optional) and the two swatches. */
   pair?: {
-    enabled?: { key: string };
+    enabled?: { key: string } | undefined;
     up: { key: string; label: string };
     down: { key: string; label: string };
-  };
+  } | undefined;
   /** `custom` only: what the dialog renders in the control column. */
-  custom?: string;
+  custom?: string | undefined;
 }
 
 export type FormValues = Readonly<Record<string, unknown>>;
@@ -207,7 +207,7 @@ export function controlsFromInputs(
     // Set once here rather than in seven branches: every variant carries the
     // field, and a branch that forgot it would drop the help text silently.
     if (out.length > before) {
-      const control = out[before];
+      const control = out[before]!; // the length test just above says this branch pushed it
       if (input.tooltip !== undefined) control.tooltip = input.tooltip;
       if (input.activeWhen !== undefined) control.activeWhen = input.activeWhen;
       if (input.visibleWhen !== undefined) control.visibleWhen = input.visibleWhen;
@@ -296,7 +296,7 @@ export function toHexColor(input: unknown): string | null {
   const s = input.trim();
   const hex = /^#([0-9a-f]{3,8})$/i.exec(s);
   if (hex !== null) {
-    const h = hex[1];
+    const h = hex[1]!; // the group is not optional, so any match fills it
     if (h.length === 3 || h.length === 4) return '#' + h.slice(0, 3).split('').map((c) => c + c).join('').toLowerCase();
     if (h.length === 6 || h.length === 8) return '#' + h.slice(0, 6).toLowerCase();
     return null;
@@ -305,7 +305,7 @@ export function toHexColor(input: unknown): string | null {
   const fn = /^rgba?\(\s*([\d.]+)(?:\s*,\s*|\s+)([\d.]+)(?:\s*,\s*|\s+)([\d.]+)/i.exec(s);
   if (fn === null) return null;
   const part = (v: string): string => Math.round(Math.max(0, Math.min(255, Number(v)))).toString(16).padStart(2, '0');
-  return `#${part(fn[1])}${part(fn[2])}${part(fn[3])}`;
+  return `#${part(fn[1]!)}${part(fn[2]!)}${part(fn[3]!)}`; // three required groups, as above
 }
 
 /** Print a number without float noise: 1.5 stays 1.5, 2.0000000000000004 prints 2. */
@@ -350,10 +350,10 @@ export interface ButtonSpec {
   /** Chrome icon id. With `iconOnly` the label becomes the accessible name. */
   icon?: string;
   iconOnly?: boolean;
-  variant?: ButtonVariant;
+  variant?: ButtonVariant | undefined;
   onClick?: (e: MouseEvent) => void;
   /** Chord hint for the title, as `Ctrl+D`. */
-  chord?: string;
+  chord?: string | undefined;
 }
 
 /** A flat `.oac-btn`. Icon-only buttons carry their label as `aria-label` and `title`. */
@@ -607,10 +607,11 @@ export function tabList(
   nav.setAttribute('aria-orientation', layout === 'rail' ? 'vertical' : 'horizontal');
   const buttons: HTMLButtonElement[] = [];
   const setActive = (id: string): void => {
+    // One button per tab, every one built before anything can call this.
     tabs.forEach((t, i) => {
       const on = t.id === id;
-      buttons[i].setAttribute('aria-selected', on ? 'true' : 'false');
-      buttons[i].tabIndex = on ? 0 : -1;
+      buttons[i]!.setAttribute('aria-selected', on ? 'true' : 'false');
+      buttons[i]!.tabIndex = on ? 0 : -1;
     });
   };
   const pick = (id: string): void => { setActive(id); onPick(id); };
@@ -634,9 +635,10 @@ export function tabList(
       else if (k === 'End') next = tabs.length - 1;
       if (next < 0) return;
       e.preventDefault();
-      buttons[next].focus();
-      buttons[next].scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-      pick(tabs[next].id);
+      // Every branch above leaves next inside the tab list, and a key needs a built button.
+      buttons[next]!.focus();
+      buttons[next]!.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      pick(tabs[next]!.id);
     });
     buttons.push(b);
     nav.appendChild(b);
@@ -1181,7 +1183,7 @@ export function renderForm(host: HTMLElement, controls: readonly FormControl[], 
       const off = m.fields.length > 0 && m.offKeys.every(key => why.get(key) !== null);
       if (m.offEl !== null) {
         m.offEl.classList.toggle(m.offClass, off);
-        const lead = why.get(m.offKeys[0]) ?? null;
+        const lead = why.get(m.offKeys[0]!) ?? null; // only a custom row has no keys, and its offEl is null
         for (const node of m.titles) node.title = off ? lead ?? '' : '';
       }
       const name = m.control.label;

@@ -629,6 +629,18 @@ describe('overlays', () => {
     w.context.overlays.closeAll();
     expect(root.querySelector('.oac-scrim')).toBeNull();
   });
+
+  it('keeps closing popovers on an outside press when one onClose closes an older one', () => {
+    const { w, doc } = make();
+    const panel = (): HTMLElement => doc.createElement('div') as unknown as HTMLElement;
+    const closeFirst = w.context.openOverlay(panel(), { placement: 'below' });
+    w.context.openOverlay(panel(), { placement: 'below' });
+    // The newest takes the oldest with it, the way a submenu can close the chain it opened from.
+    w.context.openOverlay(panel(), { placement: 'below', onClose: closeFirst });
+    expect(w.context.overlays.size()).toBe(3);
+    expect(() => fire(doc.body, 'pointerdown')).not.toThrow();
+    expect(w.context.overlays.size()).toBe(0);
+  });
 });
 
 describe('dialogs and the toolbar', () => {

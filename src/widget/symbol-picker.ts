@@ -22,7 +22,7 @@ export function feedSymbolSearch(feed: DataFeed | undefined, exchange: () => str
     const hits = await feed.searchSymbols!({ query, signal: context?.signal });
     const typed = query.trim().toUpperCase();
     const at = hits.findIndex(hit => !hit.contractGroup && hit.exchange === exchange() && hit.symbol.toUpperCase() === typed);
-    return at > 0 ? [hits[at], ...hits.slice(0, at), ...hits.slice(at + 1)] : hits;
+    return at > 0 ? [hits[at]!, ...hits.slice(0, at), ...hits.slice(at + 1)] : hits; // at is a found index
   };
 }
 
@@ -237,7 +237,7 @@ export function mountSymbolPicker(ctx: WidgetContext, input: HTMLInputElement, o
     } else if (event.key === 'Enter' && visible[active] !== undefined) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      const hit = visible[active];
+      const hit = visible[active]!; // checked in the condition above
       if (hit.contractGroup) { expanded = hit; active = 0; paint(); } else select(hit);
     }
   };

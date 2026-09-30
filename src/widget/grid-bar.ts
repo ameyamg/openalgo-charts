@@ -64,7 +64,7 @@ export interface GridBarHost {
     canCopy(): boolean;
   };
   /** The desk's saved layouts, when the grid keeps them: the bar then has a Layouts control. */
-  readonly saved?: Pick<GridSaved, 'controller' | 'open' | 'status'>;
+  readonly saved?: Pick<GridSaved, 'controller' | 'open' | 'status'> | undefined;
   /** Open one of the bar's menus under `anchor` (grid-menus.ts, loaded on first use). */
   openMenu(which: 'layouts' | 'link' | 'capture', anchor: HTMLElement): void;
 }
@@ -190,7 +190,7 @@ export function mountGridBar(host: GridBarHost, el: HTMLElement): GridBarHandle 
     if (to < 0) return;
     e.preventDefault();
     e.stopPropagation();
-    controls[to].focus();
+    controls[to]!.focus(); // the focus is on a control, so to is one of them
   });
 
   const refresh = (): void => {

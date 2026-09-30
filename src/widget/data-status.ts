@@ -1,5 +1,5 @@
 import { widgetText, type WidgetTranslationOptions } from './localization';
-import type { DataLoadingController, DataLoadingSnapshot, DataVariant, DataVariantDimension } from 'openalgo-charts';
+import type { DataAdjustment, DataLoadingController, DataLoadingSnapshot, DataSession, DataVariant, DataVariantDimension } from 'openalgo-charts';
 import { h, type WidgetContext } from './context';
 
 /**
@@ -10,7 +10,7 @@ import { h, type WidgetContext } from './context';
  */
 export function dataVariantLabel(ctx: WidgetTranslationOptions, variant: Readonly<DataVariant> | undefined, only?: DataVariantDimension): string {
   if (variant === undefined) return '';
-  const words: Record<string, string> = {
+  const words: Record<DataSession | DataAdjustment, string> = {
     regular: widgetText(ctx, 'Regular hours'), extended: widgetText(ctx, 'Extended hours'),
     adjusted: widgetText(ctx, 'Adjusted prices'), raw: widgetText(ctx, 'Raw prices'),
   };
@@ -18,7 +18,7 @@ export function dataVariantLabel(ctx: WidgetTranslationOptions, variant: Readonl
   for (const key of ['session', 'adjustment', 'currency', 'unit'] as const) {
     const value = variant[key];
     if (value === undefined || (only !== undefined && only !== key)) continue;
-    parts.push(key === 'session' || key === 'adjustment' ? words[value] : value);
+    parts.push(key === 'session' || key === 'adjustment' ? words[value as DataSession | DataAdjustment] : value);
   }
   return parts.join(' ');
 }
@@ -46,7 +46,7 @@ export function mountDataStatus(
   for (const event of ['pointerdown', 'wheel', 'keydown']) el.addEventListener(event, stop);
   const render = (): void => {
     if (destroyed) return;
-    const rows: { text: string; label?: string; retry?: () => void }[] = [];
+    const rows: { text: string; label?: string; retry?: (() => void) | undefined }[] = [];
     if (state !== null) {
       const symbol = state.request?.symbol ?? '';
       const interval = state.request?.interval ?? '';

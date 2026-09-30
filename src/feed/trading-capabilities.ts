@@ -19,7 +19,7 @@ export interface TradingCapabilityRequest {
   readonly exchange?: string | undefined;
   readonly orderId?: string | undefined;
   readonly type?: OrderType | undefined;
-  readonly mode?: 'live' | 'analyzer';
+  readonly mode?: 'live' | 'analyzer' | undefined;
 }
 
 /** A configured provider returning undefined declares that support is unavailable. */

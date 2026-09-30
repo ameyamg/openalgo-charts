@@ -21,8 +21,8 @@ interface ObjectRow {
   actions: HTMLElement;
   selectable: boolean;
   buttons: Map<string, HTMLButtonElement>;
-  move?: HTMLSelectElement;
-  members?: HTMLElement;
+  move?: HTMLSelectElement | undefined;
+  members?: HTMLElement | undefined;
 }
 
 const KINDS = { source: 'Source', indicator: 'Indicator', drawing: 'Drawing', profile: 'Profile', group: 'Group' };
@@ -195,17 +195,18 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
       return next ? { target: next.id, where: direction === 1 ? 'above' : 'below' } : null;
     }
     const entry = (row: ChartObjectSnapshot | undefined): boolean => row !== undefined && row.kind !== 'drawing';
+    // Each `!` below reads an index the loop bounds or `entry` has just found a row at.
     if (direction === -1) {
       let i = at - 1;
-      while (i >= 0 && !entry(stack[i]) && stack[i].band === 'series') i--;
-      return entry(stack[i]) ? { target: stack[i].id, where: 'below' } : null;
+      while (i >= 0 && !entry(stack[i]) && stack[i]!.band === 'series') i--;
+      return entry(stack[i]) ? { target: stack[i]!.id, where: 'below' } : null;
     }
     let i = at + 1;
-    while (i < stack.length && stack[i].band === 'series' && !entry(stack[i])) i++;
+    while (i < stack.length && stack[i]!.band === 'series' && !entry(stack[i])) i++;
     if (!entry(stack[i])) return null;
     let top = i;
     while (stack[top + 1]?.band === 'series' && !entry(stack[top + 1])) top++;
-    return { target: stack[top].id, where: 'above' };
+    return { target: stack[top]!.id, where: 'above' };
   }
 
   function act(action: Action, id: string, event?: MouseEvent): void {

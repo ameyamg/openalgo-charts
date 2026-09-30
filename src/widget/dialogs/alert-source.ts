@@ -19,7 +19,7 @@ const plots = (ctx: WidgetContext, instance: IndicatorApi | undefined, pane?: nu
 
 /** Resolve stable identities without replacing a removed selection with another object. */
 export function alertSourceFields(ctx: WidgetContext, draft: Record<string, unknown>): {
-  source: AlertSource; controls: FormControl[]; reason?: string; hint?: string;
+  source: AlertSource; controls: FormControl[]; reason?: string | undefined; hint?: string | undefined;
 } {
   const controls = [select('kind', widgetText(ctx, 'Source'), kinds.map(item => ({ ...item, label: widgetText(ctx, `schema.alert.kind.${item.value}`, {}, item.label) })))];
   // A host's unlisted studies stay out of these lists, unless the alert being

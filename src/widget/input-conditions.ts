@@ -68,7 +68,7 @@ export function inputStates(
   inputs: readonly (IndicatorInputPresentation & {
     key: string;
     enabled?: { key: string }; up?: { key: string }; down?: { key: string };
-    pair?: { enabled?: { key: string }; up?: { key: string }; down?: { key: string } };
+    pair?: { enabled?: { key: string } | undefined; up?: { key: string }; down?: { key: string } } | undefined;
   })[],
   values: Values,
 ): Map<string, InputState> {

@@ -18,7 +18,7 @@ export function openChartDataExportDialog(
     const index = chart.dataLayer.timeToIndex(bar.time);
     return Number.isFinite(bar.time) && index !== undefined && index >= viewport.from && index <= viewport.to;
   });
-  const visibleRange = visible.length ? { from: visible[0].time, to: visible[visible.length - 1].time } : null;
+  const visibleRange = visible.length ? { from: visible[0]!.time, to: visible[visible.length - 1]!.time } : null; // not empty here
   let closed = false;
   let panel: PanelHandle | null = null;
   let offDestroy = (): void => {};

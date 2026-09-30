@@ -34,7 +34,7 @@ export interface EventDetailsPopupOptions {
   actions?: (event: ChartEvent) => readonly EventDetailAction[];
   /** Pass the widget context's stack to share focus, Escape and shortcut handling. */
   overlays?: OverlayStack;
-  styleNonce?: string;
+  styleNonce?: string | undefined;
   /** Set false when the host already includes EVENT_DETAILS_CSS. */
   injectStyles?: boolean;
 }
@@ -197,7 +197,8 @@ export class EventDetailsPopup {
 
   private _select(index: number): void {
     this._cancel();
-    const event = this._events[index];
+    // 0 of a non-empty list, or the index of a member button built from this list.
+    const event = this._events[index]!;
     this._members.forEach((button, at) => button.setAttribute('aria-pressed', String(at === index)));
     this._render(event, event.details);
     this._actions.replaceChildren(...(this._options.actions?.(copyEvent(event)) ?? []).map(action => {

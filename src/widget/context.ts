@@ -244,7 +244,7 @@ export interface AsyncStorageLike {
    * write started as a page closes may never land. Without one, those writes
    * are lost with the page.
    */
-  readonly journal?: StorageLike | null;
+  readonly journal?: StorageLike | null | undefined;
   /**
    * Hear each change other users of the store make once it has landed:
    * another tab on the same database, or another widget on the page. The
@@ -483,7 +483,7 @@ export class WidgetStorage {
         const results = await Promise.allSettled(batch.map(([key, text]) =>
           Promise.resolve().then(() => (text === null ? store.removeItem(key) : store.setItem(key, text)))));
         results.forEach((result, i) => {
-          const [key, text] = batch[i];
+          const [key, text] = batch[i]!; // one settled result per batch entry, in order
           this._sending.delete(key);
           if (result.status === 'fulfilled') return;
           if (!this._pending.has(key)) this._refused.set(key, text);
@@ -617,7 +617,7 @@ export function registeredWidgetDialogs(): WidgetDialogName[] {
 
 export interface OverlayOptions {
   /** The control the panel opens from; positions the panel and keeps a click on it from counting as outside. */
-  anchor?: HTMLElement;
+  anchor?: HTMLElement | undefined;
   /** Where the panel goes relative to the anchor. Default `below`; `center` ignores the anchor. */
   placement?: 'below' | 'beside' | 'center';
   /** A second element the panel should clear when placed beside (the rail, not just the button in it). */
@@ -625,7 +625,7 @@ export interface OverlayOptions {
   /** Draw a scrim and refuse outside dismissal. Default false; `center` placement implies it. */
   modal?: boolean;
   /** Where focus lands: an element, `null` to leave focus where it is, or the first control (default). */
-  initialFocus?: HTMLElement | null;
+  initialFocus?: HTMLElement | null | undefined;
   /** Close on a press outside the panel and its anchor. Default: not modal. */
   dismissOnOutside?: boolean;
   /** Close on Escape. Default true. */
@@ -642,7 +642,7 @@ interface OverlayEntry {
   restore: HTMLElement | null;
   closed: boolean;
   suspended: number;
-  suspension?: { hidden: boolean; scrimHidden: boolean; focus: HTMLElement | null };
+  suspension?: { hidden: boolean; scrimHidden: boolean; focus: HTMLElement | null } | undefined;
 }
 
 export interface OverlayStack {
@@ -709,16 +709,17 @@ export function createOverlayStack(root: HTMLElement, doc: Document): OverlaySta
     // the browser's own move stays inside and is left alone.
     let next: number | null = null;
     if (e.shiftKey) { if (at <= 0) next = f.length - 1; } else if (at === -1 || at >= f.length - 1) next = 0;
-    if (next !== null) { e.preventDefault(); f[next].focus(); }
+    if (next !== null) { e.preventDefault(); f[next]!.focus(); } // f is not empty, and next is its first or last
   };
 
   const onPointerDown = (e: Event): void => {
     const target = e.target as Node | null;
     // Newest first: an outside press closes every popover above the one it
-    // landed in, and stops at a modal.
+    // landed in, and stops at a modal. An onClose may close older overlays
+    // too, which leaves i past the end of the stack.
     for (let i = stack.length - 1; i >= 0; i--) {
       const o = stack[i];
-      if (o.suspended > 0) continue;
+      if (o === undefined || o.suspended > 0) continue;
       if (target !== null && (o.el.contains(target) || o.opts.anchor?.contains(target) === true)) break;
       if (o.opts.dismissOnOutside === false || (o.opts.modal === true && o.opts.dismissOnOutside !== true)) break;
       close(o);
@@ -848,11 +849,11 @@ function firstControl(node: HTMLElement): HTMLElement | null {
 export interface TipSpec {
   title: string;
   /** The accessible name, when it must say more than the title. Default: the title. Since 2.5.10. */
-  label?: string;
+  label?: string | undefined;
   /** The chord, shown in monospace after the title. */
-  chord?: string;
+  chord?: string | undefined;
   /** A second, muted line. */
-  sub?: string;
+  sub?: string | undefined;
   side?: TipSide;
 }
 
@@ -965,7 +966,7 @@ export interface WidgetBusEvents {
   symbol: { symbol: string; exchange: string };
   interval: { interval: string };
   /** The data variant changed; undefined is the feed's default series. */
-  variant: { variant?: Readonly<DataVariant> };
+  variant: { variant?: Readonly<DataVariant> | undefined };
   theme: { theme: WidgetThemeName; chartTheme: ChartTheme };
   /** Something about the workspace changed: the chart type, a restored layout, a pane. */
   layout: { reason: string; chartType?: string };
@@ -974,7 +975,7 @@ export interface WidgetBusEvents {
   /** A keymap registration collided with another binding. */
   'keymap:conflict': { combo: string; kept: string; shadowed: string };
   /** Bars finished loading, or failed to. */
-  data: { symbol: string; interval: string; bars: number; error?: string };
+  data: { symbol: string; interval: string; bars: number; error?: string | undefined };
   [key: string]: unknown;
 }
 
@@ -982,20 +983,20 @@ export interface WidgetContext {
   readonly chart: Chart;
   readonly draw: DrawingController;
   /** Live inventory owned by the widget, optional for custom contexts. */
-  readonly objects?: ChartObjects;
+  readonly objects?: ChartObjects | undefined;
   /** Trader alerts owned by the widget, optional for custom contexts. */
-  readonly alerts?: AlertController;
+  readonly alerts?: AlertController | undefined;
   /**
    * The chart-wide undo timeline. Every undo and redo control goes through it
    * when it is there; a custom context without one falls back to the drawing
    * controller's own history.
    */
-  readonly history?: ChartHistory;
+  readonly history?: ChartHistory | undefined;
   /**
    * Saved drawing looks, when the host gave the widget a template store:
    * the properties dialog and the floating toolbar offer them.
    */
-  readonly drawingTemplates?: DrawingTemplates;
+  readonly drawingTemplates?: DrawingTemplates | undefined;
   /** The `.oac-widget` element every piece of chrome lives in. */
   readonly root: HTMLElement;
   readonly document: Document;
@@ -1008,9 +1009,9 @@ export interface WidgetContext {
   /** Per-widget persisted preferences; `enabled` is false when `persist` is off. */
   readonly storage: WidgetStorage;
   readonly locale: string | undefined;
-  readonly translate?: WidgetTranslator;
+  readonly translate?: WidgetTranslator | undefined;
   /** Configured instrument lookup, shared by the header and indicator inputs. */
-  readonly symbolSearch?: SymbolSearch;
+  readonly symbolSearch?: SymbolSearch | undefined;
   toast(message: string, kind?: ToastKind): ToastHandle;
   /**
    * Show `el` over the widget: positioned from `opts.anchor` (or centred as a
