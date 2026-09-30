@@ -462,6 +462,19 @@ test('one PNG of the whole grid puts each chart own pixels at its place, from th
   const second = page.waitForEvent('download');
   await page.locator('.oac-grid__cell').nth(1).getByRole('menuitem', { name: 'Download PNG of every chart' }).click();
   expect((await second).suggestedFilename()).toMatch(/^charts-1x2-/);
+  // And the chart's own picture, which the menu calls saved once the browser has taken it.
+  await page.evaluate(() => {
+    const w = window as any;
+    w.statuses = [];
+    w.fixture.grid.cells()[1].widget.on('status', (e: { kind: string; text: string }) => w.statuses.push(`${e.kind} ${e.text}`));
+  });
+  await page.locator('.oac-grid__cell').nth(1).locator('.oac-topbar button[aria-label="Capture chart"]').click();
+  const own = page.waitForEvent('download');
+  // The menu opens on this row; Enter takes it, while the button's tip still shows over it.
+  await expect(page.locator('.oac-grid__cell').nth(1).getByRole('menuitem', { name: 'Download PNG', exact: true })).toBeFocused();
+  await page.keyboard.press('Enter');
+  expect((await own).suggestedFilename()).toMatch(/-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}\.png$/);
+  await expect.poll(() => page.evaluate(() => (window as any).statuses)).toEqual(['info Saved a PNG of the chart']);
   await page.screenshot({ path: info.outputPath('grid-capture.png') });
   expect(errors).toEqual([]);
 });
