@@ -27,7 +27,7 @@ import { filterIndicators, groupIndicators } from '../src/widget/dialogs/indicat
 import { resolveInstance } from '../src/widget/dialogs/indicator-settings';
 import { commonSchema, resolvedDrawingValues } from '../src/widget/dialogs/drawing-properties';
 import { nextRatio, FIB_SEQUENCE } from '../src/widget/dialogs/level-editor';
-import { fontOf, wrapLines, textFrame, readEditable, DEFAULT_FONT, TEXT_PAD, LINE_GAP, TEXT_SIZE } from '../src/widget/dialogs/text-editor';
+import { readEditable } from '../src/widget/dialogs/text-editor';
 import { drawingIdOf } from '../src/widget/dialogs/context-menu';
 import { registeredWidgetDialogs } from '../src/widget/context';
 import { installDom, asDoc, asEl, type FakeElement, type Dom } from './widget-form.test';
@@ -680,23 +680,7 @@ describe('mountLevelEditor', () => {
 // ── text editor ───────────────────────────────────────────────────────────
 
 describe('mountTextEditor', () => {
-  const measure7 = (s: string): number => s.length * 7;
-
-  it('typesets the frame the way the tier does', () => {
-    expect(fontOf({}, 14)).toBe(`14px ${DEFAULT_FONT}`);
-    expect(fontOf({ bold: true, italic: true, fontFamily: 'serif' }, 12)).toBe('italic 700 12px serif');
-    expect(wrapLines(measure7, {}, 'one two\nthree', 20)).toEqual(['one two', 'three']);
-    expect(wrapLines(measure7, { wrap: true }, 'aa bb cc\n\ndd', 6 * 7)).toEqual(['aa bb', 'cc', '', 'dd']);
-    const chart = { timeToCoordinate: (t: number) => t, priceToCoordinate: (p: number) => p };
-    const d = { id: 'd', tool: 'text', points: [{ time: 100, price: 200 }], paneIndex: 0, zIndex: 0, style: {}, text: { value: 'ab\ncdef', fontSize: 10 } };
-    const f = textFrame(chart, d, measure7);
-    expect(f).toMatchObject({ x: 100, y: 200, width: 4 * 7 + TEXT_PAD * 2, height: 2 * 10 * LINE_GAP + TEXT_PAD * 2, lineHeight: 13.5 });
-    const empty = textFrame(chart, { ...d, text: { value: '' } }, measure7, 'Note');
-    expect(empty?.lines).toEqual(['Note']);
-    expect(empty?.size).toBe(TEXT_SIZE);
-    expect(textFrame(chart, { ...d, points: [] }, measure7)).toBeNull();
-  });
-
+  // Where the frame sits against what the draw tier paints: widget-draw-parity.test.ts.
   it('reads a contentEditable back with its line structure folded to newlines', () => {
     const { doc } = installDom();
     const box = doc.createElement('div');
