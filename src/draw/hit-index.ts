@@ -26,9 +26,9 @@
  * drawings in place and hands the list over again.
  */
 import type { PrimitiveRenderContext } from 'openalgo-charts';
-import type { AtLeast, Drawing, DrawingTool, FibLevel, ScreenPoint } from './types';
+import type { AtLeast, Drawing, DrawingTool, ScreenPoint } from './types';
 import { extendSegment } from './geometry';
-import { DEFAULT_FIB, DEFAULT_FIB_FAN, DEFAULT_FIB_TIME_ZONE, DEFAULT_GANN_FAN } from './levels';
+import { activeLevels, DEFAULT_FIB, DEFAULT_FIB_FAN, DEFAULT_FIB_TIME_ZONE, DEFAULT_GANN_FAN } from './levels';
 import { getDrawingTool, hasDrawingTool } from './registry';
 import {
   TREND_LINE, RAY, EXTENDED_LINE, ARROW, HORIZONTAL_LINE, HORIZONTAL_RAY, VERTICAL_LINE,
@@ -85,10 +85,6 @@ const join = (a: HitBox, b: HitBox): HitBox => ({
 type BoxOf<N extends number = 1> = { of(pts: Pts<N>, d: Drawing, rc: PrimitiveRenderContext, grab: number): HitBox }['of'];
 type Pts<N extends number> = AtLeast<ScreenPoint, N>;
 
-/** The levels a ladder tool hit-tests: the same filter its `distance` runs. */
-const levelsOf = (own: readonly FibLevel[] | undefined, fallback: readonly FibLevel[]): FibLevel[] =>
-  (own ?? fallback).filter((l) => l.enabled !== false && Number.isFinite(l.ratio));
-
 /** Segments, polylines, closed shapes and curves inside the hull of their anchors. */
 const around: BoxOf = (pts, _d, _rc, grab) => spanOf(pts, grab);
 
@@ -118,7 +114,7 @@ const fib = (anchors: 2 | 3): BoxOf<2> => (pts, d, rc, grab) => {
   const x0 = d.style.extendLeft === true ? 0 : Math.min(xa, xb);
   const x1 = d.style.extendRight === true ? rc.plotWidth : Math.max(xa, xb);
   let y0 = Infinity, y1 = -Infinity;
-  for (const lv of levelsOf(d.style.levels, DEFAULT_FIB)) {
+  for (const lv of activeLevels(d.style.levels, DEFAULT_FIB)) {
     const y = rc.priceScale.priceToY(from + span * lv.ratio);
     y0 = Math.min(y0, y); y1 = Math.max(y1, y);
   }
@@ -220,24 +216,24 @@ const BOXES = new Map<DrawingTool, BoxOf>([
   }],
   [FIB_TIME_ZONE, (pts: Pts<2>, d, _rc, g) => {
     const [a, b] = pts;
-    const xs = levelsOf(d.style.levels, DEFAULT_FIB_TIME_ZONE).map((lv) => ({ x: a.x + (b.x - a.x) * lv.ratio, y: 0 }));
+    const xs = activeLevels(d.style.levels, DEFAULT_FIB_TIME_ZONE).map((lv) => ({ x: a.x + (b.x - a.x) * lv.ratio, y: 0 }));
     const r = spanOf(xs, g);
     return { x0: r.x0, y0: xs.length === 0 ? Infinity : -Infinity, x1: r.x1, y1: xs.length === 0 ? -Infinity : Infinity };
   }],
   [FIB_FAN, (pts: Pts<2>, d, rc, g) => {
     const [a, b] = pts;
-    return spanOf([a, ...levelsOf(d.style.levels, DEFAULT_FIB_FAN).map((lv) =>
+    return spanOf([a, ...activeLevels(d.style.levels, DEFAULT_FIB_FAN).map((lv) =>
       extendSegment(a, { x: b.x, y: a.y + (b.y - a.y) * lv.ratio }, rc.plotWidth, false, true)[1])], g);
   }],
   [GANN_FAN, (pts: Pts<2>, d, rc, g) => {
     const [a, b] = pts;
-    return spanOf([a, ...levelsOf(d.style.levels, DEFAULT_GANN_FAN).map((lv) =>
+    return spanOf([a, ...activeLevels(d.style.levels, DEFAULT_GANN_FAN).map((lv) =>
       extendSegment(a, { x: b.x, y: a.y + (b.y - a.y) * lv.ratio }, rc.plotWidth, false, true)[1])], g);
   }],
   [FIB_CHANNEL, (pts: Pts<3>, d, rc, g) => {
     const [a, b, w] = pts, ox = w.x - b.x, oy = w.y - b.y;
     let box = NOWHERE;
-    for (const lv of levelsOf(d.style.levels, DEFAULT_FIB)) {
+    for (const lv of activeLevels(d.style.levels, DEFAULT_FIB)) {
       box = join(box, spanOf(extendSegment(
         { x: a.x + ox * lv.ratio, y: a.y + oy * lv.ratio }, { x: b.x + ox * lv.ratio, y: b.y + oy * lv.ratio },
         rc.plotWidth, d.style.extendLeft === true, d.style.extendRight === true,

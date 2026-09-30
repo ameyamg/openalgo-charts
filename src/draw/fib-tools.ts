@@ -13,20 +13,11 @@ import {
 } from './schema';
 import {
   DEFAULT_FIB, DEFAULT_FIB_FAN, DEFAULT_GANN_FAN, DEFAULT_GANN_BOX, DEFAULT_FIB_TIME_ZONE,
-  cloneLevels, cycleColor, levelColor, formatRatio, gannLabel,
+  activeLevels, cloneLevels, cycleColor, levelColor, formatRatio, gannLabel,
 } from './levels';
 import { applyStroke, withFill, label } from './tool-paint';
 
 // ── levels ────────────────────────────────────────────────────────────────
-
-/**
- * The levels a ladder strokes: the drawing's own, else the tool's default,
- * minus the ones switched off and any with a ratio that is not a number
- * (a hand-edited state file is the usual source).
- */
-function activeLevels(own: readonly FibLevel[] | undefined, fallback: readonly FibLevel[]): FibLevel[] {
-  return (own ?? fallback).filter((l) => l.enabled !== false && Number.isFinite(l.ratio));
-}
 
 /** A fib level's colour: its own, else the convention for its ratio. */
 function fibColor(lv: FibLevel): string {

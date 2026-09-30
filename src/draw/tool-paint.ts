@@ -3,7 +3,8 @@
  * readout plates and chips, number formats, the direction tints, and the text
  * layout a shape label and the text tool share. Internal to the tier.
  */
-import type { AnchoredTool, DrawContext, Drawing, DrawingText, ScreenPoint } from './types';
+import type { PrimitiveRenderContext } from 'openalgo-charts';
+import type { AnchoredTool, DrawContext, Drawing, DrawingStyle, DrawingText, ScreenPoint } from './types';
 import { rectOf } from './geometry';
 import { roundRectPath, contrastText } from '../render/pill';
 import type { SettingsField } from './schema';
@@ -16,18 +17,30 @@ export const OPACITY_FIELD: SettingsField = {
 
 // ── shared drawing helpers ────────────────────────────────────────────────
 
+/**
+ * The dash of a line style at ratio `d`: one vocabulary for every tool family,
+ * which the base's drawn indicators share (primitives/indicator-draws.ts).
+ */
+export function dashFor(lineStyle: DrawingStyle['lineStyle'], d: number): number[] {
+  return lineStyle === 'dashed' ? [6 * d, 4 * d] : lineStyle === 'dotted' ? [1 * d, 3 * d] : [];
+}
+
+/** A stroke's width in device px: whole pixels, and never under one. */
+export const strokeWidth = (width: number, d: number): number => Math.max(1, Math.round(width * d));
+
+/** A point in data space on the pane's plot, in media px. */
+export function projectPoint(rc: PrimitiveRenderContext, p: { time: number; price: number }): ScreenPoint {
+  return { x: rc.timeScale.indexToX(rc.dataLayer.timeToIndexFloat(p.time)), y: rc.priceScale.priceToY(p.price) };
+}
+
 export function applyStroke(c: DrawContext): void {
   const { ctx, rc, style } = c;
   const d = rc.dpr;
   ctx.strokeStyle = style.color;
-  ctx.lineWidth = Math.max(1, Math.round(style.lineWidth * d));
+  ctx.lineWidth = strokeWidth(style.lineWidth, d);
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  ctx.setLineDash(
-    style.lineStyle === 'dashed' ? [6 * d, 4 * d]
-      : style.lineStyle === 'dotted' ? [1 * d, 3 * d]
-      : [],
-  );
+  ctx.setLineDash(dashFor(style.lineStyle, d));
 }
 
 export function fillStyleOf(c: DrawContext): string {

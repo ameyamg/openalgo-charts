@@ -1,9 +1,9 @@
 /** Screen-space curves and price/time constructions for advanced drawings. */
 import type { DrawingTool, FibLevel, HitContext, ScreenPoint, ToolAnchors } from './types';
 import { composeSettings, FILL_FIELDS, FONT_FIELDS, LEVEL_FIELDS, LINE_FIELDS } from './schema';
-import { cloneLevels } from './levels';
+import { activeLevels, cloneLevels } from './levels';
 import {
-  activeLevels, clippedLine, finitePoint, geometryTool, midpoint, numericProp,
+  clippedLine, finitePoint, geometryTool, midpoint, numericProp,
   type DrawingGeometry, type GeometryLabel, type GeometryPath,
 } from './advanced-shared';
 
@@ -37,7 +37,7 @@ const trendTime = geometryTool({
   const index = (time: number): number => c.rc.dataLayer.timeToIndexFloat(time);
   const span = index(b.time) - index(a.time), start = index(origin.time);
   const paths: GeometryPath[] = [], labels: GeometryLabel[] = [];
-  for (const l of activeLevels(c.drawing, TIME_LEVELS)) {
+  for (const l of activeLevels(c.drawing.style.levels, TIME_LEVELS)) {
     const x = c.rc.timeScale.indexToX(start + span * l.ratio);
     if (!Number.isFinite(x) || x < 0 || x > c.rc.plotWidth) continue;
     paths.push(segment({ x, y: 0 }, { x, y: c.rc.plotHeight }, l.color));
@@ -67,7 +67,7 @@ function radial(id: string, name: string, kind: 'circle' | 'arc' | 'wedge'): Dra
       }
     }
     let outer = 0;
-    for (const l of activeLevels(c.drawing, defaults)) {
+    for (const l of activeLevels(c.drawing.style.levels, defaults)) {
       const r = radius * l.ratio;
       if (!(r > 0) || !Number.isFinite(r)) continue;
       outer = Math.max(outer, r);
@@ -118,7 +118,7 @@ const gannSquare = geometryTool({
   const paths: GeometryPath[] = [], labels: GeometryLabel[] = [];
   if (c.drawing.style.fill === true) paths.push({ points: [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }], closed: true, fill: true, stroke: false });
   const ia = c.rc.dataLayer.timeToIndexFloat(pa.time), ib = c.rc.dataLayer.timeToIndexFloat(pb.time);
-  for (const l of activeLevels(c.drawing, GRID_LEVELS)) {
+  for (const l of activeLevels(c.drawing.style.levels, GRID_LEVELS)) {
     const x = c.rc.timeScale.indexToX(ia + (ib - ia) * l.ratio);
     const y = c.rc.priceScale.priceToY(pa.price + (pb.price - pa.price) * l.ratio);
     paths.push(segment({ x: left, y }, { x: right, y }, l.color), segment({ x, y: top }, { x, y: bottom }, l.color));
@@ -212,7 +212,7 @@ function wavefront(id: string, name: string, golden: boolean, supersonic: boolea
     const direction = { x: (b.x - a.x) / (2 * radius), y: (b.y - a.y) / (2 * radius) };
     const mach = supersonic ? numericProp(c.drawing, 'mach', 2, 1.01, 20) : 1;
     const nose = { x: center.x - mach * radius * direction.x, y: center.y - mach * radius * direction.y };
-    const active = activeLevels(c.drawing, defaults).filter(l => l.ratio > 0).slice().sort((a, b) => a.ratio - b.ratio);
+    const active = activeLevels(c.drawing.style.levels, defaults).filter(l => l.ratio > 0).slice().sort((a, b) => a.ratio - b.ratio);
     if (!golden) active.splice(Math.round(numericProp(c.drawing, 'waveCount', 6, 1, 12)));
     const paths: GeometryPath[] = [], labels: GeometryLabel[] = [];
     let maxRadius = 0;

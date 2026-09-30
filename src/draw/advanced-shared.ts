@@ -1,11 +1,12 @@
 /** Internal drawing geometry in media pixels, shared by paint and hit testing. */
 import type { PrimitiveRenderContext } from 'openalgo-charts';
 import type {
-  AnchoredTool, DrawContext, Drawing, DrawingPoint, DrawingTool, FibLevel, HitContext, ScreenPoint, ToolAnchors,
+  AnchoredTool, DrawContext, Drawing, DrawingTool, HitContext, ScreenPoint, ToolAnchors,
 } from './types';
 import { distToSegment } from './geometry';
 import { drawingTextWidth } from './text-metrics';
 import { analysisNumber } from './analysis';
+import { dashFor, fontOf, strokeWidth, textOf } from './tool-paint';
 
 export interface GeometryPath {
   points: ScreenPoint[];
@@ -35,15 +36,9 @@ export type GeometryBuilder<N extends number = number> = (c: HitContext & ToolAn
 export const midpoint = (a: ScreenPoint, b: ScreenPoint): ScreenPoint => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 export const interpolate = (a: ScreenPoint, b: ScreenPoint, t: number): ScreenPoint => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 export const finitePoint = (p: ScreenPoint): boolean => Number.isFinite(p.x) && Number.isFinite(p.y);
-export function projectPoint(p: DrawingPoint, rc: PrimitiveRenderContext): ScreenPoint {
-  return { x: rc.timeScale.indexToX(rc.dataLayer.timeToIndexFloat(p.time)), y: rc.priceScale.priceToY(p.price) };
-}
 /** A numeric `props` entry held to `min..max`, or `fallback` when it is not a finite number. */
 export function numericProp(d: Drawing, key: string, fallback: number, min: number, max: number): number {
   return analysisNumber(d.props?.[key], fallback, min, max);
-}
-export function activeLevels(d: Drawing, fallback: readonly FibLevel[]): readonly FibLevel[] {
-  return (d.style.levels ?? fallback).filter(l => l.enabled !== false && Number.isFinite(l.ratio));
 }
 
 /** Clip a parametric segment, ray or line to the plot, including vertical rays. */
@@ -203,10 +198,10 @@ export function paintGeometry(c: DrawContext, geometry: DrawingGeometry): void {
   const { ctx, rc, style } = c, dpr = rc.dpr;
   ctx.save();
   ctx.strokeStyle = style.color;
-  ctx.lineWidth = Math.max(1, style.lineWidth * dpr);
+  ctx.lineWidth = strokeWidth(style.lineWidth, dpr);
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  ctx.setLineDash(style.lineStyle === 'dashed' ? [6 * dpr, 4 * dpr] : style.lineStyle === 'dotted' ? [dpr, 3 * dpr] : []);
+  ctx.setLineDash(dashFor(style.lineStyle, dpr));
   for (const path of geometry.paths) {
     if (!renderablePath(path, dpr)) continue;
     ctx.beginPath();
@@ -232,7 +227,7 @@ export function paintGeometry(c: DrawContext, geometry: DrawingGeometry): void {
   }
   const text = c.drawing.text;
   const size = (text?.fontSize ?? 11) * dpr;
-  ctx.font = `${text?.italic === true ? 'italic ' : ''}${text?.bold === true ? '700 ' : ''}${size}px ${text?.fontFamily || 'ui-sans-serif, system-ui, sans-serif'}`;
+  ctx.font = fontOf(textOf(c.drawing), size);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'bottom';
   const occupied: { x: number; y: number; width: number }[] = [];
