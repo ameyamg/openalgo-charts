@@ -76,7 +76,8 @@ function intraday(data: DataLayer, lo: number, hi: number): boolean {
     gaps.push(data.indexToTime(i)! - data.indexToTime(i - 1)!);
   }
   gaps.sort((a, b) => a - b);
-  return gaps[(gaps.length - 1) >> 1] < INTRADAY;
+  // The loop runs at least once: its end is never below its start.
+  return gaps[(gaps.length - 1) >> 1]! < INTRADAY;
 }
 
 export class SessionShade implements IPrimitive {

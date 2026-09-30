@@ -10,6 +10,7 @@
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from './primitive';
 import { contrastText, withAlpha, shade, drawPillGroup, type PillSegment } from '../render/pill';
 import { dashPattern, type CanvasLineStyle } from '../render/grid';
+import type { LooseOptional } from '../helpers/types';
 
 export interface PriceLineOptions {
   price: number;
@@ -272,6 +273,7 @@ export class PriceLine implements IPrimitive {
     if (x < 0 || x > rc.plotWidth) return null;
     const lineY = rc.priceScale.priceToY(this._opts.price);
     const distance = Math.abs(y - lineY);
+    // An unset cursor goes out as undefined below, which the pane reads as no cursor.
     // Inside the pill group (segment boxes are taller than the 4px line zone):
     // the ✕ segment routes as a click, the rest of the group drags the line.
     const g = this._group;
@@ -279,9 +281,9 @@ export class PriceLine implements IPrimitive {
       if (this._opts.closeButton && x >= g.closeX0) {
         return { externalId: `${this._opts.id}::close`, zOrder: 'normal', distance, cursor: 'pointer' };
       }
-      return { externalId: this._opts.id, zOrder: 'normal', distance, cursor: this._opts.cursor };
+      return { externalId: this._opts.id, zOrder: 'normal', distance, cursor: this._opts.cursor } satisfies LooseOptional<PrimitiveHit> as PrimitiveHit;
     }
     if (distance > 4) return null;
-    return { externalId: this._opts.id, zOrder: 'normal', distance, cursor: this._opts.cursor };
+    return { externalId: this._opts.id, zOrder: 'normal', distance, cursor: this._opts.cursor } satisfies LooseOptional<PrimitiveHit> as PrimitiveHit;
   }
 }

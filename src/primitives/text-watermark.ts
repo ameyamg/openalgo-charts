@@ -39,8 +39,9 @@ const DEFAULT_FONT = '600 {size}px system-ui, -apple-system, "Segoe UI", sans-se
 
 export class TextWatermark implements IPrimitive {
   private _host: PrimitiveHost | null = null;
+  // The constructor copies an absent color or font as undefined, read as unset.
   private _opts: Required<Omit<TextWatermarkOptions, 'color' | 'font'>>
-    & Pick<TextWatermarkOptions, 'color' | 'font'>;
+    & { [K in 'color' | 'font']?: TextWatermarkOptions[K] | undefined };
 
   public constructor(opts: TextWatermarkOptions) {
     this._opts = {

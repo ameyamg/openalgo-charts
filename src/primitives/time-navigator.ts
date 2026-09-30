@@ -181,7 +181,7 @@ export class TimeNavigator implements IPrimitive {
     this._boxes = [];
     let x = startX;
     for (let i = 0; i < o.buttons.length; i++) {
-      const action = o.buttons[i];
+      const action = o.buttons[i] as TimeNavigatorAction | null; // i is inside the list
       if (action === null) { x += o.groupGap; continue; }
       this._boxes.push({ action, x, y, w: size, h: size });
       x += size;
@@ -354,8 +354,10 @@ function rgb(color: string): [number, number, number] | null {
   }
   const m = /^rgba?\(([^)]+)\)$/.exec(color);
   if (m === null) return null;
-  const p = m[1].split(',').map((s2) => parseFloat(s2));
-  return [p[0], p[1], p[2]];
+  // The group takes part in every match. A part a malformed colour lacks reads
+  // undefined and mixes as NaN, the same as a part that does not parse.
+  const p = m[1]!.split(',').map((s2) => parseFloat(s2));
+  return [p[0]!, p[1]!, p[2]!];
 }
 
 /** Apply an alpha to a hex or rgb() colour. */
@@ -369,6 +371,6 @@ function withAlpha(color: string, alpha: number): string {
   }
   const m = /^rgba?\(([^)]+)\)$/.exec(color);
   if (m === null) return color;
-  const parts = m[1].split(',').map((s) => s.trim());
+  const parts = m[1]!.split(',').map((s) => s.trim()); // the group takes part in every match
   return `rgba(${parts[0]},${parts[1]},${parts[2]},${alpha})`;
 }

@@ -165,14 +165,14 @@ const boundaryCache = new WeakMap<readonly Bar[], {
 function sessionStarts(bars: readonly Bar[], zone: string): number[] {
   const n = bars.length;
   if (n === 0) return [];
-  const first = bars[0].time;
-  const last = bars[n - 1].time;
+  const first = bars[0]!.time;
+  const last = bars[n - 1]!.time;
   const hit = boundaryCache.get(bars);
   if (hit !== undefined && hit.len === n && hit.first === first && hit.last === last && hit.zone === zone) {
     return hit.starts;
   }
   const times = new Array<number>(n);
-  for (let i = 0; i < n; i++) times[i] = bars[i].time;
+  for (let i = 0; i < n; i++) times[i] = bars[i]!.time;
   const flags = sessionStartFlags(times, zone);
   // Bar 0 opens the first session in view even though it carries no flag: the
   // flag marks a break, and there is no bar before it to break from.
@@ -182,17 +182,17 @@ function sessionStarts(bars: readonly Bar[], zone: string): number[] {
   return starts;
 }
 
-/** Last bar at or before `time`; -1 when the whole series is later than it. */
+/** Last bar at or before `time`; -1 when the whole series is later than it. Needs one bar at least. */
 function anchorIndex(bars: readonly Bar[], time: number | undefined): number {
   const n = bars.length;
   if (time === undefined || !Number.isFinite(time)) return n - 1;
-  if (time >= bars[n - 1].time) return n - 1;
-  if (time < bars[0].time) return -1;
+  if (time >= bars[n - 1]!.time) return n - 1;
+  if (time < bars[0]!.time) return -1;
   let lo = 0;
   let hi = n - 1;
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;
-    if (bars[mid].time <= time) lo = mid;
+    if (bars[mid]!.time <= time) lo = mid; // mid stays inside [lo, hi]
     else hi = mid - 1;
   }
   return lo;
@@ -204,7 +204,7 @@ function sessionOf(starts: readonly number[], bar: number): number {
   let hi = starts.length - 1;
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;
-    if (starts[mid] <= bar) lo = mid;
+    if (starts[mid]! <= bar) lo = mid; // mid stays inside [lo, hi]
     else hi = mid - 1;
   }
   return lo;
@@ -246,20 +246,22 @@ export function computePriceLevels(input: PriceLevelInput): PriceLevelValues {
 
   // The last trade is not a function of the viewport: scrolling back through
   // history does not change what the instrument last traded at.
-  out.lastPrice = finite(bars[n - 1].close);
+  out.lastPrice = finite(bars[n - 1]!.close);
 
   const anchor = anchorIndex(bars, input.anchorTime);
   if (anchor < 0) return out; // viewport entirely to the left of the data
 
   const starts = sessionStarts(bars, input.timezone ?? DEFAULT_TIMEZONE);
+  // `starts` holds bar 0 at least, and `si` indexes it; the loops below stay inside
+  // [from, to], which lies inside the bars.
   const si = sessionOf(starts, anchor);
-  const from = starts[si];
-  const to = si + 1 < starts.length ? starts[si + 1] - 1 : n - 1;
+  const from = starts[si]!;
+  const to = si + 1 < starts.length ? starts[si + 1]! - 1 : n - 1;
 
   let high = -Infinity;
   let low = Infinity;
   for (let i = from; i <= to; i++) {
-    const bar = bars[i];
+    const bar = bars[i]!;
     // Whitespace normalises to a NaN bar, and NaN loses every comparison
     // silently, so extremes are taken over finite values only.
     if (Number.isFinite(bar.high) && bar.high > high) high = bar.high;
@@ -272,9 +274,9 @@ export function computePriceLevels(input: PriceLevelInput): PriceLevelValues {
   // a whitespace tail (a halted or untraded closing minute) does not blank the
   // level. The walk stops at that session's open and never crosses further back.
   if (si > 0) {
-    const prevFrom = starts[si - 1];
+    const prevFrom = starts[si - 1]!;
     for (let i = from - 1; i >= prevFrom; i--) {
-      const close = finite(bars[i].close);
+      const close = finite(bars[i]!.close);
       if (close !== null) {
         out.previousClose = close;
         break;
@@ -285,7 +287,7 @@ export function computePriceLevels(input: PriceLevelInput): PriceLevelValues {
   const phase = input.marketPhase;
   if (phase !== null && phase !== undefined) {
     for (let i = from; i <= to; i++) {
-      const bar = bars[i];
+      const bar = bars[i]!;
       const p = phase(bar);
       if (p === 'pre') {
         if (out.preMarketOpen === null) out.preMarketOpen = finite(bar.open);
@@ -436,7 +438,7 @@ export class PriceLevels implements IPrimitive {
     const dpr = rc.dpr;
     const xEnd = Math.round(rc.plotWidth * dpr);
     const maxY = rc.plotHeight * dpr;
-    const last = bars.length > 0 ? bars[bars.length - 1] : null;
+    const last = bars.length > 0 ? bars[bars.length - 1]! : null;
     const up = last !== null && last.close >= last.open;
 
     ctx.save();

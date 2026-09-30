@@ -22,6 +22,7 @@
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from './primitive';
 import { withAlpha } from '../render/pill';
+import type { LooseOptional } from '../helpers/types';
 
 export type PaneLegendAction = 'hide' | 'settings' | 'source' | 'up' | 'down' | 'collapse' | 'maximize' | 'close';
 
@@ -221,7 +222,7 @@ const NO_SWITCHES: LegendStatusLineOptions = {};
 const NO_STATUS: LegendStatusData = {};
 
 /** One button's side in media px, held inside the range the row can carry. */
-function buttonSize(o: Pick<PaneLegendOptions, 'iconSize'>): number {
+function buttonSize(o: { iconSize?: number | undefined }): number {
   const wanted = o.iconSize;
   if (typeof wanted !== 'number' || !Number.isFinite(wanted)) return BTN;
   return Math.max(BTN_MIN, Math.min(BTN_MAX, wanted));
@@ -233,7 +234,7 @@ function buttonSize(o: Pick<PaneLegendOptions, 'iconSize'>): number {
  * Both the stacking offset and the hit box are measured from this, so a taller
  * row moves the rows below it instead of drawing through them.
  */
-export function paneLegendRowHeight(o: Pick<PaneLegendOptions, 'iconSize'>): number {
+export function paneLegendRowHeight(o: { iconSize?: number | undefined }): number {
   return Math.max(ROW_H, buttonSize(o) + BTN_MARGIN * 2);
 }
 
@@ -450,15 +451,17 @@ export class PaneLegend implements IPrimitive {
 
   /** A single live reading after the params (typically crosshair-driven). */
   public setValue(text: string, color?: string): void {
-    this.setValues(text === '' ? [] : [{ text, color }]);
+    // An omitted color arrives as undefined, which every reader treats as absent.
+    this.setValues(text === '' ? [] : [{ text, color } satisfies LooseOptional<LegendValue> as LegendValue]);
   }
 
   /** One reading per plot, each in its own color. */
   public setValues(values: readonly LegendValue[]): void {
+    // The lengths match before `every` reads the old list at the new one's indices.
     const same = values.length === this._values.length
-      && values.every((v, i) => v.text === this._values[i].text
-        && v.label === this._values[i].label && v.color === this._values[i].color
-        && v.field === this._values[i].field && v.priority === this._values[i].priority);
+      && values.every((v, i) => v.text === this._values[i]!.text
+        && v.label === this._values[i]!.label && v.color === this._values[i]!.color
+        && v.field === this._values[i]!.field && v.priority === this._values[i]!.priority);
     if (same) return;
     this._values = values.map((v) => ({ ...v }));
     this._host?.requestUpdate();

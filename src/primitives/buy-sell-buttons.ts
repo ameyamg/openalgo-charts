@@ -63,8 +63,8 @@ export class BuySellButtons implements IPrimitive {
   private readonly _sellLabel: string;
   private readonly _showPrices: boolean;
   private _qty: string;
-  private _buyColor?: string;
-  private _sellColor?: string;
+  private _buyColor?: string | undefined;
+  private _sellColor?: string | undefined;
   private _bid = NaN;
   private _ask = NaN;
   private _host: PrimitiveHost | null = null;

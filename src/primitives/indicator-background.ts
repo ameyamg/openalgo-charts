@@ -31,7 +31,7 @@ export class IndicatorBackground implements IPrimitive {
 
   public setColors(colors: readonly (string | null)[], bars: readonly Bar[]): void {
     this._colors = colors;
-    this._anchor = bars.length > 0 ? bars[0].time : NaN;
+    this._anchor = bars.length > 0 ? bars[0]!.time : NaN;
     this._host?.requestUpdate();
   }
 
