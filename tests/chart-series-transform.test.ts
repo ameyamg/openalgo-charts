@@ -4,6 +4,7 @@ import {
   registerTransformChartTypes, runTransform, HeikinAshiTransform, RenkoTransform, PointFigureTransform, KagiTransform,
 } from '../src/transform/index';
 import { fakeDocument } from './helpers/fake-dom';
+import type { RecordingContext } from './helpers/fake-ctx';
 
 registerTransformChartTypes();
 
@@ -247,5 +248,26 @@ describe('transform settings', () => {
     applyChartSettings(chart, { 'symbol.thinColor': '#123456' });
     expect(chart.primarySeriesInfo()?.style.thinColor).toBe('#123456');
     expect(priceInputs(chart).some(input => input.key === 'symbol.color')).toBe(false);
+  });
+});
+
+describe('the countdown on a transformed chart', () => {
+  it('counts the forming source bar down, not the elements drawn from it', () => {
+    const doc = fakeDocument();
+    const bars = walk(120, 1_700_000_000).map(bar => ({ ...bar, time: bar.time * 5 - 1_700_000_000 * 4 })); // five-minute bars
+    const last = bars[bars.length - 1].time;
+    const chart = new Chart(doc.createElement('div'), {
+      document: doc, pixelRatio: () => 1, shortcuts: false, timeNavigator: false,
+      raf: { schedule: (cb: () => void) => { cb(); return 1; }, cancel: () => {} },
+      axisChrome: { barCountdown: true, clock: () => last + 100 },
+    });
+    chart.applySize(800, 600);
+    // Bricks three points tall form a few bars apart, so their spacing is not the bars' own.
+    chart.addSeries('candlestick', { transform: { type: 'renko', options: { boxSize: 3 } } }).setData(bars);
+    expect(chart.primaryBars()[chart.primaryBars().length - 1].time).toBeLessThan(last);
+    chart.invalidate(mask => mask.invalidateGlobal(3));
+    const drawn = (chart.panes()[0].base.ctx as unknown as RecordingContext).ops.filter(op => op.type === 'fillText').map(op => op.text);
+    // 100 seconds into the five-minute bar still forming: 200 left.
+    expect(drawn).toContain('00:03:20');
   });
 });

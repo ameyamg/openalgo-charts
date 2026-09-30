@@ -33,7 +33,7 @@ import { type ChartTheme, DEFAULT_THEME } from '../theme';
 import { TimeScale } from '../scale/time-scale';
 import type { LogicalRange } from '../scale/time-scale';
 import type { PriceScaleOptions, PriceScaleMode, PriceScale } from '../scale/price-scale';
-import { medianBarInterval, type TickMarkType, type SessionClockOptions, type BarCountdownOptions } from '../render/axis';
+import { medianBarInterval, type BarTimeSource, type TickMarkType, type SessionClockOptions, type BarCountdownOptions } from '../render/axis';
 import { resolvePlotMargins, type CanvasOptions, type GridOptions } from '../render/grid';
 import {
   resolveRenderBackend, type IRenderBackend, type RenderBackendFactory, type RenderBackendKind, type RendererChoice,
@@ -2260,13 +2260,16 @@ export class Chart {
    */
   private _barCountdownOptions(): BarCountdownOptions | undefined {
     if (this._axisChrome.barCountdown !== true) return undefined;
-    const last = this._dataLayer.indexToTime(this._dataLayer.baseIndex);
+    // A transformed series counts down its forming source bar, not the elements drawn from it.
+    const source = this._series._underlying(this._firstDataId.value)?.bars;
+    const bars: BarTimeSource = source === undefined ? this._dataLayer : { baseIndex: source.length - 1, indexToTime: i => source[i]?.time };
+    const last = bars.indexToTime(bars.baseIndex);
     if (last === undefined) return undefined;
     return {
       visible: true,
       now: this._wallClock,
       lastBarTime: last,
-      intervalSec: medianBarInterval(this._dataLayer),
+      intervalSec: medianBarInterval(bars),
     };
   }
 
