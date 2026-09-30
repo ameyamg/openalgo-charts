@@ -353,9 +353,10 @@ applyChartSettings(chartA, { 'canvas.grid.vertColor': '#303744' });
 `LinkAppearanceAdapter` has synchronous `read()` and `apply(values)` methods.
 `LinkAppearanceValues` is a flat record of string, number and boolean settings.
 `filterLinkAppearance(values)` returns a fresh record containing supported visual
-keys: series styling, readout visibility, scale presentation, grid, crosshair,
-watermark styling and axis chrome. It excludes watermark text, instrument identity,
-interval, timezone, navigation, studies, event feeds, alerts and trading settings.
+keys: series styling, readout visibility, scale presentation (mode, auto-fit, the
+primary-prices-only fit since 2.6.0, and inversion), grid, crosshair, watermark styling
+and axis chrome. It excludes watermark text, instrument identity, interval, timezone,
+navigation, the study legend fold, studies, event feeds, alerts and trading settings.
 It does not transfer chart data or the primary series type (the chart type channel does).
 Enabling the channel waits for the next edit or an explicit `syncAppearance`; it does not
 choose a leader.

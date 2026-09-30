@@ -245,9 +245,11 @@ Other host setters can call `group.syncAppearance(chart)` explicitly. The adapte
 reads supported chart-settings fields, so calling it after `setTheme` transfers
 those visual fields, not an entire theme object. `filterLinkAppearance(values)`
 returns a fresh allowlisted record: known series styling, readout visibility,
-scale presentation, grid, crosshair, watermark styling and axis chrome. It omits
-watermark text, instrument identity, interval, timezone, navigation, studies,
-event feeds, alerts and trading. No chart data or series type crosses. Each peer
+scale presentation (mode, auto-fit, the primary-prices-only fit since 2.6.0, and
+inversion), grid, crosshair, watermark styling and axis chrome. It omits
+watermark text, instrument identity, interval, timezone, navigation, the study
+legend fold (`statusLine.indicatorsCollapsed`), studies, event feeds, alerts and
+trading. No chart data or series type crosses. Each peer
 receives a separate record; callbacks cannot echo back through the group guard.
 Enabling appearance waits for the next edit or explicit notification.
 
