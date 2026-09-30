@@ -480,7 +480,8 @@ export class ChartPanes {
 
   /** The work of `Chart.maximizePane`, which carries the documented contract. */
   public maximizePane(index: number): boolean {
-    if (index < 0 || index >= this._host._panes.length) return false;
+    // A fractional index matches no pane in the layout, which would then hide them all.
+    if (!Number.isInteger(index) || index < 0 || index >= this._host._panes.length) return false;
     this._maximizedPane = this._maximizedPane === index ? null : index;
     this._relayout();
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));

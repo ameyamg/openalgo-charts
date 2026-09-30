@@ -68,6 +68,17 @@ describe('pane weights', () => {
     chart.setPaneWeight(0, 0);
     expect(chart.paneWeight(0)).toBeGreaterThan(0);
   });
+
+  it('ignores a weight that is not a finite number, which would poison the layout', () => {
+    const { chart } = makeChart();
+    chart.addSeries('candlestick').setData(bars(50));
+    chart.addSeries('histogram', { paneIndex: 1 }).setData(bars(50));
+    chart.setPaneWeight(1, 0.5);
+    const flex = chart.panes().map((p) => p.element.style.flex);
+    for (const weight of [NaN, Infinity, -Infinity]) chart.setPaneWeight(1, weight);
+    expect(chart.paneWeight(1)).toBe(0.5);
+    expect(chart.panes().map((p) => p.element.style.flex)).toEqual(flex);
+  });
 });
 
 describe('pane divider drag', () => {
@@ -349,6 +360,15 @@ describe('pane removal, ordering, and maximize', () => {
     // Restored, the study pane sits under the price pane again and wears the rule.
     expect(chart.panes()[1].element.style.borderTopWidth).toBe('1px');
     expect(chart.panes()[0].element.style.borderTopWidth).toBe('0px');
+  });
+
+  it('refuses to maximize an index that names no pane, which would hide every pane', () => {
+    const { chart } = makeChart();
+    chart.addSeries('candlestick').setData(bars(60));
+    chart.addIndicator('rsi');
+    for (const index of [0.5, 1.5, NaN, -1, 2]) expect(chart.maximizePane(index)).toBe(false);
+    expect(chart.maximizedPane()).toBeNull();
+    expect(chart.panes().map((p) => p.element.style.display)).toEqual(['', '']);
   });
 
   it('hands the time axis to the maximized pane', () => {

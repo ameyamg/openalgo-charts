@@ -2008,7 +2008,8 @@ export class Chart {
    */
   public setPaneWeight(index: number, weight: number): void {
     const pane = this._panes[index];
-    if (pane === undefined) return;
+    // NaN or an infinity would size every pane from it; a weight is a finite share.
+    if (pane === undefined || !Number.isFinite(weight)) return;
     pane.weight = Math.max(0.05, weight);
     this._layout._relayout();
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));

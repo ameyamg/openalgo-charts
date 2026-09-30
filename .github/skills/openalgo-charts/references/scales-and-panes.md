@@ -512,14 +512,14 @@ Heights are **relative weights**, not pixels: pane height is `chartHeight * weig
 
 | Method | Returns | Notes |
 |---|---|---|
-| `chart.setPaneWeight(index, weight)` | `void` | Clamped to a minimum of `0.05`. Unknown index is a silent no-op. |
+| `chart.setPaneWeight(index, weight)` | `void` | Clamped to a minimum of `0.05`. Unknown index, or a weight that is not a finite number (since 2.6.0), is a silent no-op. |
 | `chart.paneWeight(index)` | `number` | `0` for an unknown index. |
 | `chart.removePane(index)` | `boolean` | Removes its series, data rows and indicators. `false` for the price pane, in any slot. |
 | `chart.movePane(index, -1 \| 1)` | `boolean` | Swaps with the neighbour and re-appends the DOM in order. By default the price pane is pinned: a move that takes it off slot 0 or displaces it is refused. With `movablePrimaryPane` any pane moves, the price pane included. |
 | `chart.primaryPaneIndex()` | `number` | The slot the price pane holds now: always `0` without `movablePrimaryPane`, and `0` until something moves it with it. |
 | `chart.setPrimaryPaneIndex(index)` | `boolean` | Move the price pane to a slot, one `movePane` step at a time (one `paneMoved` per step). `false` for an unknown slot or the one it holds, and always `false` without `movablePrimaryPane`. |
 | `chart.movablePrimaryPane()` | `boolean` | Whether the chart was built with `movablePrimaryPane`. |
-| `chart.maximizePane(index)` | `boolean` | Toggle: one pane takes the whole chart and the rest are **hidden**, not shrunk. Stored weights are untouched, so un-maximizing restores the stack exactly. |
+| `chart.maximizePane(index)` | `boolean` | Toggle: one pane takes the whole chart and the rest are **hidden**, not shrunk. False for an index that names no pane, a fractional one included (since 2.6.0). Stored weights are untouched, so un-maximizing restores the stack exactly. |
 | `chart.maximizedPane()` | `number \| null` | |
 | `chart.setPaneCollapsed(index, collapsed)` | `boolean` | Fold a study pane to its header strip, or open it again. `false` for the price pane in any slot, an unknown index, a non-boolean, or no change. |
 | `chart.paneCollapsed(index)` | `boolean` | The pane's own setting, kept while it is maximized. Always `false` for the price pane. |
