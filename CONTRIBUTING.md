@@ -213,6 +213,28 @@ After building, run `npm run skills:coverage`. Also validate Markdown links and 
 frontmatter, then try realistic task prompts using only the affected skill references.
 Export-name coverage alone cannot establish correct lifecycle advice or working examples.
 
+## Errors a host can tell apart
+
+A host needs to tell its own bug from a refusal by the library, and it can only go
+by the error's class and text. New code, and code a change already touches, follows
+one convention:
+
+- `TypeError` for an argument of the wrong type or shape (a string where a schedule
+  was expected, an options object with an accessor property).
+- `RangeError` for a number or index outside what the call accepts (a pane index
+  that names no slot, `dpr` other than 1 for a vector export).
+- `Error` for a state the library refuses (a pick on a destroyed chart, a second
+  alert controller on one chart). A family a host must catch by kind gets its own
+  class with a `name` (`IndicatorInputError`, `WorkspaceDocumentError`,
+  `DataVariantUnsupportedError`), never a new message format.
+- The message starts `openalgo-charts: `, then names the subject and the problem:
+  `openalgo-charts: unknown IANA time zone "Asia/Calcuta"`.
+
+Existing classes and messages stay as they are within a major release, however
+they are spelled: hosts check `instanceof` and match on text (the instrument
+parser's errors say so), so changing either is a breaking change for 3.0.0, not a
+tidy-up.
+
 ## Issues and pull requests
 
 For a bug, include the package version, browser or host, a minimal reproduction, and
