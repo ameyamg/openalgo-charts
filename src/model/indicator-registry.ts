@@ -804,7 +804,7 @@ export interface IndicatorAttachContext {
   signal?: AbortSignal;
   /** Current settings (live — read at call time, not captured). */
   settings(): Readonly<IndicatorSettings>;
-  /** The chart's current source bars. */
+  /** The bars the study computes on now: the chart's, or the underlying bars for a study set to them (`IndicatorApi.setBarSource`). */
   bars(): readonly Bar[];
   /** Re-run `calc` and repaint — call when external data arrives. */
   requestRecompute(): void;

@@ -25,7 +25,8 @@
  *   moment in the past; autosave waits for the replay to end, and a layout is
  *   not opened under it.
  */
-import { isKnownInterval, isReplaying, registeredChartTypes, registeredIndicators } from 'openalgo-charts';
+import { isKnownInterval, isReplaying, registeredIndicators } from 'openalgo-charts';
+import { isChartTypeChoice } from './topbar';
 import type { WorkspaceChartState, WorkspacePane, WorkspacePayload } from 'openalgo-charts/workspace';
 import type { LayoutApplyReport, LayoutTarget } from './layouts';
 import type { Widget, WidgetChartState } from './widget';
@@ -72,7 +73,7 @@ function refusal(payload: WorkspacePayload): string {
   if (payload.panes.length !== 1) return `a layout of ${payload.panes.length} charts needs a chart grid`;
   const [pane] = payload.panes;
   if (!isKnownInterval(pane.interval)) return `unknown interval ${pane.interval}`;
-  if (!registeredChartTypes().includes(pane.chartType)) return `unknown chart type ${pane.chartType}`;
+  if (!isChartTypeChoice(pane.chartType)) return `unknown chart type ${pane.chartType}`;
   if (pane.comparisons.length > 0) return 'comparison symbols are not supported in a widget chart';
   const studies = new Set(registeredIndicators().map(descriptor => descriptor.id));
   const missing = (pane.chart.indicators ?? []).find(study => !studies.has(study.indicatorId));

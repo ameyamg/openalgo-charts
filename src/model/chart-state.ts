@@ -16,6 +16,8 @@ import type { PriceScaleMode } from '../scale/price-scale';
 import type { AlertsDocument } from '../alerts/types';
 import type { PriceAxisPlacement } from './price-axis-layout';
 import type { IndicatorPolicy } from './indicator-policy';
+import type { SeriesTransformSpec } from './series-transform';
+import type { IndicatorBarSource } from './indicator-bar-source';
 
 /**
  * The newest state version this build reads and writes. Bumped when the shape
@@ -154,6 +156,12 @@ export interface SeriesState {
   style: SeriesStyle;
   paneIndex: number;
   priceScaleId: PriceScaleId;
+  /**
+   * The transform the chart applies to the series (`Chart.setSeriesTransform`),
+   * written only for a series that has one, so every other series saves what it
+   * always did. Like the rest of this descriptor it is the host's to reapply.
+   */
+  transform?: SeriesTransformSpec;
 }
 
 export interface IndicatorState {
@@ -176,6 +184,12 @@ export interface IndicatorState {
    * unrestricted.
    */
   policy?: IndicatorPolicy;
+  /**
+   * `'underlying'` for a study computing on the bars under a transformed chart,
+   * written only then, so a study on the chart's bars saves what it always did.
+   * Omission restores it on the chart's bars.
+   */
+  barSource?: IndicatorBarSource;
 }
 
 export interface ChartState {

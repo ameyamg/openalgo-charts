@@ -26,7 +26,7 @@ Tabs, in display order: `price` (Price), `readout` (Readout), `axes` (Axes), `ap
 
 | Tab | Covers | Key namespaces |
 |---|---|---|
-| Price | The primary series' own paint: candle body / borders / wick, bar and column colours, line and fill colours, thickness and dash, colour from previous close, label precision, the last-price line and its axis tag | `symbol.*` |
+| Price | The primary series' own paint: candle body / borders / wick, bar and column colours, line and fill colours, thickness and dash, colour from previous close, label precision, the last-price line and its axis tag. (unreleased) On a transformed chart it leads with the transform's options, and point and figure and Kagi get their own colour rows (X and O, thick and thin) | `symbol.*`, `transform.*` |
 | Readout | What the pane legend says: logo, title and title mode, session state, O/H/L/C, bar change, volume, change since previous close, indicator values, and the plate behind the row | `statusLine.*` |
 | Axes | Price-scale mode, auto-fit, invert, chart timezone, mouse panning, and default visible bars | `scales.*`, `time.timezone`, `navigation.*` |
 | Appearance | Grid, crosshair, scale text and lines, plot margins | `canvas.*` |

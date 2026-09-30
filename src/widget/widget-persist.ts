@@ -26,7 +26,7 @@
  * writes the last one, and the timer's callback here calls back through them.
  */
 import {
-  dataVariantKey, isKnownInterval, normalizeDataVariant, registeredChartTypes,
+  dataVariantKey, isKnownInterval, normalizeDataVariant,
   type DataVariant, type RestoreReport,
 } from 'openalgo-charts';
 import {
@@ -34,6 +34,7 @@ import {
   type DrawingDocumentStore, type DrawingInstrument,
 } from 'openalgo-charts/draw';
 import { WidgetBus, type WidgetBusEvents, type WidgetStorage, type WidgetStorageError } from './context';
+import { isChartTypeChoice } from './topbar';
 import { errorText, widgetText } from './localization';
 import { sanitizePanelDockState } from './panel-dock';
 import { RAIL_PREFS_KEY, type RailPrefs } from './rail';
@@ -83,6 +84,7 @@ export interface PersistHost {
   readonly chartType: WidgetImpl['chartType'];
   readonly setTheme: WidgetImpl['setTheme'];
   readonly setChartType: WidgetImpl['setChartType'];
+  readonly _selectChartType: WidgetImpl['_selectChartType'];
   readonly reload: WidgetImpl['reload'];
   readonly _cancelNavigation: WidgetImpl['_cancelNavigation'];
   readonly _publishDataContext: WidgetImpl['_publishDataContext'];
@@ -254,7 +256,7 @@ export function restoreWidgetState(this: PersistHost, state: unknown): WidgetRes
   try { variant = normalizeDataVariant(state.variant); }
   catch (error) { return { applied: false, reason: error instanceof Error ? error.message : 'invalid data variant' }; }
   if (state.theme === 'dark' || state.theme === 'light') this.setTheme(state.theme);
-  if (typeof state.chartType === 'string' && registeredChartTypes().includes(state.chartType)) this.setChartType(state.chartType);
+  if (isChartTypeChoice(state.chartType)) this._selectChartType(state.chartType, isRecord(state.chart) ? state.chart : undefined);
   if (state.rail !== undefined && this._rail !== null) this._rail.restorePrefs(state.rail);
   if (state.panels !== undefined) this._dock?.restore(state.panels);
   const symbol = typeof state.symbol === 'string' ? state.symbol.toUpperCase() : this._symbol;
@@ -494,7 +496,7 @@ function applyLoaded(this: PersistHost, start: StartFacts): void {
     restoreKeymap.call(this as unknown as KeysHost);
     if (saved === null) return;
     const type = saved.chartType;
-    if (o.chartType === undefined && this.chartType() === start.chartType && type !== start.chartType && registeredChartTypes().includes(type)) this.setChartType(type);
+    if (o.chartType === undefined && this.chartType() === start.chartType && type !== start.chartType && isChartTypeChoice(type)) this._selectChartType(type, saved.chart);
     if (o.theme === undefined && this._themeName === start.theme && saved.theme !== start.theme) this.setTheme(saved.theme);
     applySavedLayout.call(this, saved);
   });

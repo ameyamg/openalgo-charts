@@ -51,10 +51,10 @@
 import { applyChartSettings, DEFAULT_PRICE_SCALE_OPTIONS, filterLinkAppearance, readChartSettings } from 'openalgo-charts';
 import type {
   Chart, ChartSettingsValues, IndicatorApi, IndicatorPolicy, IndicatorSettings, IPrimitive, Pane, PriceAxisSide, PriceScaleId, PriceScaleMode,
-  PriceScaleOptions, SeriesApi, SeriesType,
+  PriceScaleOptions, SeriesApi,
 } from 'openalgo-charts';
 import { DRAWING_STATE_VERSION, type Drawing, type DrawingChangeEvent, type DrawingController, type DrawingsDocument } from 'openalgo-charts/draw';
-import { isSource, renameSources, same } from './history-values';
+import { chartTypeOf, isSource, renameSources, same, setChartTypeOf } from './history-values';
 
 /** What a step changes, for a label or a test. */
 export type ChartHistoryChange =
@@ -94,7 +94,7 @@ export interface ChartHistoryOptions {
   limit?: number;
   /** The series whose type and scale are history. Default: the chart's primary series. */
   series?: () => SeriesApi | null;
-  /** How the chart type is set, so a host's own bookkeeping runs. Default: `setSeriesType` on that series. */
+  /** How the chart type is set, so a host's own bookkeeping runs; given a transform's id for a transformed series. Default: on the series. */
   setChartType?: (type: string) => unknown;
   /** Called when an undo or redo fails. */
   onError?: (error: ChartHistoryError) => void;
@@ -1025,7 +1025,7 @@ export class ChartHistory {
     const keys = panes.map(pane => this._keyOf(pane));
     const series = this._series();
     const scale = series?.priceScale();
-    if (series) shot.type = chart.seriesType(series);
+    if (series) shot.type = chartTypeOf(chart, series);
     panes.forEach((pane, slot) => {
       const axes: Record<string, AxisShot> = {};
       for (const [id, state] of Object.entries(pane.scaleStates())) {
@@ -1408,10 +1408,9 @@ export class ChartHistory {
     // to the row it held.
     if (d.order || added) this._stack(to);
     const series = this._series();
-    if (d.type && to.type !== null && series !== null && chart.seriesType(series) !== to.type) {
-      if (this._opts.setChartType) this._opts.setChartType(to.type);
-      else chart.setSeriesType(series, to.type as SeriesType);
-      if (chart.seriesType(series) !== to.type) fail('chart type');
+    if (d.type && to.type !== null && series !== null && chartTypeOf(chart, series) !== to.type) {
+      setChartTypeOf(chart, series, to.type, this._opts.setChartType);
+      if (chartTypeOf(chart, series) !== to.type) fail('chart type');
     }
     if (d.scale && to.scale !== null && series !== null) chart.setSeriesPriceScale(series, to.scale);
     if (d.settings.length && to.settings) {

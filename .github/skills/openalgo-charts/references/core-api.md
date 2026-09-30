@@ -180,8 +180,17 @@ series to a line removes the stepping while an explicit step style survives.
 It repaints and emits `objects:change` without replacing data or recalculating
 indicators. It returns false for the same type, foreign or removed handles, and
 destroyed charts. An unknown type on a live owned series throws without mutation.
-Transform renderers still require host-prepared bars; changing type performs no
-data transformation.
+It never transforms data: `point-figure` and `kagi` draw the bars they are
+given, which keeps a host that prepares its own elements working.
+
+(unreleased) `chart.setSeriesTransform(series, spec | null): boolean` has the
+chart apply a transform itself (Heikin Ashi, Renko, range bars, line break, point
+and figure, Kagi, once `openalgo-charts/transform` is imported): the series
+keeps taking the host's bars through `setData`, `update` and `prependData`,
+`getData` returns them, and the chart draws the elements, formed again on every
+tick. A new transform type selects its renderer. `chart.seriesTransform(series)`
+reads the spec; `AddSeriesOptions.transform` sets one at creation. See
+[transforms](transforms.md#in-chart-transforms-unreleased).
 
 `chart.seriesType(series): SeriesType | null` reads the current renderer for a
 live owned series, including one that is not primary. It returns null for foreign

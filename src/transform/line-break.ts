@@ -4,7 +4,7 @@
  * candlestick renderer (each line = a body). Incremental.
  */
 import type { Bar } from '../model/bar';
-import type { ISeriesTransform } from './transform';
+import { copyState, type ISeriesTransform } from './transform';
 
 export interface LineBreakOptions {
   lines: number;
@@ -27,6 +27,12 @@ export class LineBreakTransform implements ISeriesTransform {
     this._lines = [];
   }
 
+  public clone(): LineBreakTransform {
+    const copy = copyState(this);
+    copy._lines = this._lines.slice(); // at most the lines a break is judged against
+    return copy;
+  }
+
   public push(bar: Bar): Bar[] {
     const p = bar.close;
     if (this._lines.length === 0) {
@@ -46,6 +52,9 @@ export class LineBreakTransform implements ISeriesTransform {
     else if (p < minLow) box = { open: last.close, close: p };
     if (box === null) return [];
     this._lines.push(box);
+    // Only the last N lines decide a break, so the rest are dropped: a copy per
+    // live tick then costs N lines, not every line since the history began.
+    if (this._lines.length > this._n) this._lines.splice(0, this._lines.length - this._n);
     return [{ time: bar.time, open: box.open, high: Math.max(box.open, box.close), low: Math.min(box.open, box.close), close: box.close }];
   }
 }

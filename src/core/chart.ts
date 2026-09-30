@@ -33,7 +33,7 @@ import { type ChartTheme, DEFAULT_THEME } from '../theme';
 import { TimeScale } from '../scale/time-scale';
 import type { LogicalRange } from '../scale/time-scale';
 import type { PriceScaleOptions, PriceScaleMode, PriceScale } from '../scale/price-scale';
-import { medianBarInterval, type TickMarkType, type SessionClockOptions, type BarCountdownOptions } from '../render/axis';
+import { medianBarInterval, type BarTimeSource, type TickMarkType, type SessionClockOptions, type BarCountdownOptions } from '../render/axis';
 import { resolvePlotMargins, type CanvasOptions, type GridOptions } from '../render/grid';
 import {
   resolveRenderBackend, type IRenderBackend, type RenderBackendFactory, type RenderBackendKind, type RendererChoice,
@@ -43,12 +43,14 @@ import { DataLayer, type SessionCalendarSource } from '../model/data-layer';
 import { type SeriesApi, type SeriesRecord, type PriceScaleId } from '../model/series';
 import { type SeriesProvenance } from '../model/series-provenance';
 import { type SeriesType } from '../model/chart-type-registry';
+import type { SeriesTransformSpec } from '../model/series-transform';
 import {
   type IndicatorBarsProvider, type IndicatorBarsProviderAccess, type IndicatorSettings,
 } from '../model/indicator-registry';
 
 import { type IndicatorInstance, type IndicatorApi, type IndicatorHost } from '../model/indicator-instance';
 import { type IndicatorEditOptions, type IndicatorPolicy } from '../model/indicator-policy';
+import type { IndicatorBarSource } from '../model/indicator-bar-source';
 import type { AlertsDocument } from '../alerts/types';
 import { copyAlert, parseAlertsDocument, validateAlert } from '../alerts/document';
 import type { ChartDataContext } from '../model/indicator-registry';
@@ -369,7 +371,6 @@ export class Chart {
   private _axisColumnWidth = 0;
   private _emptyPriceAxis = true;
   private _timeNav: TimeNavigator | null = null;
-  private _timeNavButtons: TimeNavigatorOptions['buttons'] = [];
   private _schedulingTimeNav = false;
   /** Pane the navigator is currently attached to, so it can follow the bottom. */
   private _timeNavPane = -1;
@@ -449,13 +450,13 @@ export class Chart {
     if (margins.marginTop !== undefined || margins.marginBottom !== undefined) {
       this._priceScaleOptions = { ...this._priceScaleOptions, ...margins };
     }
-    this._patchNavigation(options.navigation ?? {});
+    this._input._patchNavigation(options.navigation ?? {});
     const nav = options.timeNavigator ?? true;
     if (nav !== false) {
       const own = nav === true ? undefined : nav;
       this._timeNav = new TimeNavigator({ ...own, hints: this._navHints(own) }, this._now);
-      this._timeNavButtons = [...this._timeNav.options().buttons];
-      this._syncNavigatorPolicy();
+      this._input._timeNavButtons = [...this._timeNav.options().buttons];
+      this._input._syncNavigatorPolicy();
       // Hints read from the keymap follow a rebind; hints the host passed stay. A shared manager is let go on destroy.
       if (own?.hints === undefined && this._shortcuts !== null) this.on('destroy', this._shortcuts.onChange(() => this._timeNav?.setOptions({ hints: this._navHints() })));
     }
@@ -549,7 +550,10 @@ export class Chart {
     this.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
   }
 
-  /** Readonly source bars, without allocating a history copy on each live update. */
+  /**
+   * The primary series' bars as drawn, without allocating a history copy on each live
+   * update: a transformed series' elements, which its handle's `getData` does not return.
+   */
   public primaryBars(): readonly Bar[] {
     const id = this._firstDataId.value;
     return id === null ? [] : this._dataLayer.seriesBars(id);
@@ -587,77 +591,9 @@ export class Chart {
     const before = this._navigation.defaultVisibleBars;
     const spacing = this._navigation.defaultBarSpacing;
     const pan = this._navigation.panEnabled, zoom = this._navigation.zoomEnabled;
-    this._patchNavigation(patch);
+    this._input._patchNavigation(patch);
     if (before !== this._navigation.defaultVisibleBars || spacing !== this._navigation.defaultBarSpacing) this.resetScale();
     if (pan !== this._navigation.panEnabled || zoom !== this._navigation.zoomEnabled) this.emit('objects:change', undefined);
-  }
-
-  private _patchNavigation(patch: Partial<ChartNavigationOptions>): void {
-    const wasPan = this._navigation.panEnabled, wasZoom = this._navigation.zoomEnabled;
-    for (const key of ['panEnabled', 'zoomEnabled'] as const) {
-      const field = Object.getOwnPropertyDescriptor(patch, key);
-      if (field && 'value' in field && typeof field.value === 'boolean') this._navigation[key] = field.value;
-    }
-    const stopPan = wasPan !== false && this._navigation.panEnabled === false;
-    const stopZoom = wasZoom !== false && this._navigation.zoomEnabled === false;
-    if (stopPan || stopZoom) {
-      this._motion._stopDisabled(stopPan, stopZoom);
-      if (this._input._pinch !== null || (stopPan && this._input._dragging)
-        || (stopZoom && (this._input._axisDrag === 'price' || this._input._axisDrag === 'time'))) {
-        this._input._navigationCancelled = true;
-        this._input._dragging = false;
-        this._input._axisDrag = null;
-        this._input._axisDragScale = null;
-        this._input._pinch = null;
-        this._input._pointerMoved = true;
-        this._dragVelocity = 0;
-        this._input._setHover(null);
-      }
-    }
-    if (wasPan !== this._navigation.panEnabled || wasZoom !== this._navigation.zoomEnabled) this._syncNavigatorPolicy();
-    if (patch.mousePan === 'horizontal' || patch.mousePan === 'both') this._navigation.mousePan = patch.mousePan;
-    const count = patch.defaultVisibleBars;
-    // Saved layouts are untrusted input. Invalid values must not poison spacing.
-    if (typeof count === 'number' && Number.isFinite(count) && count >= 0) {
-      this._navigation.defaultVisibleBars = Math.min(100000, Math.floor(count));
-      // An explicit count edit selects count mode. A complete saved preference
-      // can carry both fields, in which case its spacing still takes precedence.
-      if (patch.defaultBarSpacing === undefined) delete this._navigation.defaultBarSpacing;
-    }
-    const spacing = patch.defaultBarSpacing;
-    if (typeof spacing === 'number' && Number.isFinite(spacing) && spacing >= 0) {
-      if (spacing === 0) delete this._navigation.defaultBarSpacing;
-      else this._navigation.defaultBarSpacing = spacing;
-    }
-  }
-
-  private _navigationAllowed(command: string): boolean {
-    switch (command) {
-      case 'panLeftBar': case 'panRightBar': case 'panLeft': case 'panRight':
-      case 'panLeftFast': case 'panRightFast': case 'panUp': case 'panDown':
-        return this._navigation.panEnabled !== false;
-      case 'zoomIn': case 'zoomOut': case 'resetScale': case 'fitContent':
-        return this._navigation.zoomEnabled !== false;
-      default: return true;
-    }
-  }
-
-  private _syncNavigatorPolicy(): void {
-    if (this._timeNav === null) return;
-    if (this._timeNavButtons.every(action => action === null || this._navigationAllowed(action))) {
-      this._timeNav.setOptions({ buttons: [...this._timeNavButtons] });
-      return;
-    }
-    const buttons: (TimeNavigatorOptions['buttons'][number])[] = [];
-    let gap = false;
-    for (const action of this._timeNavButtons) {
-      if (action === null) { gap = true; continue; }
-      if (!this._navigationAllowed(action)) continue;
-      if (gap && buttons.length > 0) buttons.push(null);
-      buttons.push(action);
-      gap = false;
-    }
-    this._timeNav.setOptions({ buttons });
   }
 
   private _fitDefaultView(): boolean {
@@ -788,12 +724,35 @@ export class Chart {
   /**
    * Change a live series' renderer without replacing its handle, data or attachments.
    * Explicit styles survive; inherited renderer defaults give way to the new type.
-   * Transform renderers expect host-prepared bars and never transform data here.
+   * It never transforms data: a `point-figure` or `kagi` renderer draws the bars
+   * it is given, which is how a host that prepares its own elements keeps
+   * working, and `setSeriesTransform` is how the chart applies one itself.
    * Returns false for an unchanged type or a foreign, removed or destroyed handle.
    * An unregistered type throws before any state changes.
    */
   public setSeriesType(series: SeriesApi, type: SeriesType): boolean {
     return this._series._setSeriesType(series, type, true);
+  }
+
+  /**
+   * Have the chart apply a price-driven transform (Heikin Ashi, Renko, range
+   * bars, line break, point and figure or Kagi, once `openalgo-charts/transform`
+   * is imported) to a series, or draw its bars as given again with null. The
+   * series keeps taking the host's own bars through `setData`, `update` and
+   * `prependData`, and `getData` hands those back; the chart draws the elements
+   * and forms them again on every tick. Studies read the elements unless one is
+   * set to the underlying bars (`IndicatorApi.setBarSource`). A new transform
+   * type selects its renderer; `setSeriesType` afterwards keeps the transform.
+   * Returns false for an unchanged choice or an unavailable handle. An unknown
+   * type or an invalid option throws before anything changes.
+   */
+  public setSeriesTransform(series: SeriesApi, spec: SeriesTransformSpec | null): boolean {
+    return this._series._setSeriesTransform(series, spec, true);
+  }
+
+  /** The transform a series was given, or null for none and for a handle not live on this chart. */
+  public seriesTransform(series: SeriesApi): SeriesTransformSpec | null {
+    return this._series._seriesTransform(series);
   }
 
   /**
@@ -895,13 +854,17 @@ export class Chart {
    * the studies that read its output and the alerts that name it find it
    * again. An id a study on this chart holds now throws, since two studies
    * cannot answer to one id; the id of a removed study is free to take back.
+   *
+   * `options.barSource` `'underlying'` has a study on a transformed chart
+   * compute on the host's bars rather than the elements drawn (see
+   * `IndicatorApi.setBarSource`).
    */
   public addIndicator(
     indicatorId: string,
     settings: Readonly<IndicatorSettings> = {},
     options: {
       paneIndex?: number; priceScaleId?: PriceScaleId; plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>;
-      policy?: IndicatorPolicy; instanceId?: string;
+      policy?: IndicatorPolicy; instanceId?: string; barSource?: IndicatorBarSource;
     } = {},
   ): IndicatorApi {
     return this._studies.addIndicator(indicatorId, settings, options);
@@ -2297,13 +2260,16 @@ export class Chart {
    */
   private _barCountdownOptions(): BarCountdownOptions | undefined {
     if (this._axisChrome.barCountdown !== true) return undefined;
-    const last = this._dataLayer.indexToTime(this._dataLayer.baseIndex);
+    // A transformed series counts down its forming source bar, not the elements drawn from it.
+    const source = this._series._underlying(this._firstDataId.value)?.bars;
+    const bars: BarTimeSource = source === undefined ? this._dataLayer : { baseIndex: source.length - 1, indexToTime: i => source[i]?.time };
+    const last = bars.indexToTime(bars.baseIndex);
     if (last === undefined) return undefined;
     return {
       visible: true,
       now: this._wallClock,
       lastBarTime: last,
-      intervalSec: medianBarInterval(this._dataLayer),
+      intervalSec: medianBarInterval(bars),
     };
   }
 

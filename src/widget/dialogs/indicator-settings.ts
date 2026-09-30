@@ -9,9 +9,13 @@ import { widgetText } from '../localization';
  * Edits apply live through `setSettings` (a colour change restyles without
  * a recompute, a period change recomputes), and Cancel puts back the keys
  * this session touched.
+ *
+ * On a chart that transforms its bars (Renko, Heikin Ashi and the rest) the
+ * inputs lead with the bars the study computes on, which is not a setting of
+ * the descriptor but of the study (`IndicatorApi.setBarSource`).
  */
 import { getIndicator, indicatorDefaults, indicatorStyleInputs } from 'openalgo-charts';
-import type { IndicatorApi, IndicatorDescriptor, IndicatorInput, IndicatorSettings, IndicatorStudySource } from 'openalgo-charts';
+import type { Chart, IndicatorApi, IndicatorBarSource, IndicatorDescriptor, IndicatorInput, IndicatorSettings, IndicatorStudySource } from 'openalgo-charts';
 import type { WidgetContext } from '../context';
 import { mountIndicatorInputControls, type IndicatorInputControlsHandle } from '../indicator-input-controls';
 import { studyNames } from '../objects-panel';
@@ -21,6 +25,9 @@ import {
 } from '../form';
 
 export type IndicatorSettingsTab = 'inputs' | 'style';
+
+/** The row for the study's bar source. Not a descriptor key: no descriptor names one with an at sign. */
+const BAR_SOURCE = '@bars';
 
 export interface IndicatorSettingsOptions {
   /**
@@ -89,12 +96,21 @@ export function mountIndicatorSettings(
   const descriptor: IndicatorDescriptor = getIndicator(inst.indicatorId);
 
   const tabs: Array<{ id: IndicatorSettingsTab; label: string; icon: string; inputs: readonly IndicatorInput[] }> = [];
-  if (descriptor.inputs.length > 0) tabs.push({ id: 'inputs', label: widgetText(ctx, 'Inputs'), icon: 'settings', inputs: descriptor.inputs });
+  // Offered only while the chart transforms its bars: on any other chart the two are the same bars.
+  const chart: Partial<Chart> = ctx.chart;
+  const primary = chart.primarySeries?.() ?? null;
+  const bars: IndicatorInput[] = primary === null || (chart.seriesTransform?.(primary) ?? null) === null ? [] : [{
+    key: BAR_SOURCE, type: 'select', label: 'Compute on', default: 'chart',
+    options: [{ label: 'Chart bars', value: 'chart' }, { label: 'Underlying bars', value: 'underlying' }],
+  }];
+  const inputs = [...bars, ...descriptor.inputs];
+  if (inputs.length > 0) tabs.push({ id: 'inputs', label: widgetText(ctx, 'Inputs'), icon: 'settings', inputs });
   const style = indicatorStyleInputs(descriptor);
   if (style.length > 0) tabs.push({ id: 'style', label: widgetText(ctx, 'Style'), icon: 'brush', inputs: style });
   if (tabs.length === 0) return declined(ctx, widgetText(ctx, '{name} has nothing to configure', { name: inst.name }));
 
   const before = detached(inst.settings());
+  const barsBefore = bars.length > 0 ? inst.barSource() : 'chart';
   const dirty = new Set<string>();
   // Edits preview live, one write per keystroke or colour drag; the session
   // is one step, and a Cancel that restores every key leaves none.
@@ -110,6 +126,7 @@ export function mountIndicatorSettings(
   /** What the form shows: the instance's settings over every declared default. */
   const values = (): IndicatorSettings => ({
     ...indicatorDefaults(descriptor), ...inputDefaults(style), ...inst.settings(),
+    ...(bars.length > 0 ? { [BAR_SOURCE]: inst.barSource() } : {}),
   });
   const current = (): boolean => !ctx.chart.isDestroyed && ctx.chart.indicators().includes(inst);
   const report = (error: unknown): void => {
@@ -122,7 +139,9 @@ export function mountIndicatorSettings(
     writeError = null;
     if (!current()) { cancel(); return false; }
     try {
-      if (inst.setSettings(detached(patch)) === false) {
+      const { [BAR_SOURCE]: source, ...settings } = patch;
+      if ((source !== undefined && source !== inst.barSource() && !inst.setBarSource(source as IndicatorBarSource))
+        || (Object.keys(settings).length > 0 && inst.setSettings(detached(settings)) === false)) {
         writeError = locked(); ctx.toast(writeError, 'error'); return false;
       }
     } catch (error) {
@@ -265,11 +284,12 @@ export function mountIndicatorSettings(
       return true;
     }
     if (committed || dirty.size === 0) return true;
-    const back: IndicatorSettings = Object.fromEntries([...dirty].map(key => [key, before[key]]));
+    const back: IndicatorSettings = Object.fromEntries([...dirty].filter(key => key !== BAR_SOURCE).map(key => [key, before[key]]));
     try {
       // Locked since the edits: nothing this dialog does can take them back,
       // so it says so and closes rather than holding the user in it.
-      if (inst.setSettings(detached(back)) === false) ctx.toast(locked(), 'error');
+      if ((dirty.has(BAR_SOURCE) && inst.barSource() !== barsBefore && !inst.setBarSource(barsBefore))
+        || (Object.keys(back).length > 0 && inst.setSettings(detached(back)) === false)) ctx.toast(locked(), 'error');
     } catch (error) { report(error); renderPane(); return false; }
     dirty.clear();
     opts.onChange?.(inst);

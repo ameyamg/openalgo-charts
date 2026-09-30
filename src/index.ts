@@ -131,6 +131,8 @@ export type {
   DrawAnchor,
 } from './model/indicator-registry';
 export type { IndicatorApi, IndicatorHost } from './model/indicator-instance';
+// Which bars a study computes on under a transformed chart.
+export type { IndicatorBarSource } from './model/indicator-bar-source';
 // What a user may do with a study, and the host's way past it.
 export { parseIndicatorPolicy } from './model/indicator-policy';
 export type { IndicatorPolicy, IndicatorEditOptions } from './model/indicator-policy';
@@ -249,7 +251,11 @@ export { conflationGroupSize, conflateBars, conflateItems, mergeBars } from './m
 
 // Family-B transforms live in the lazy 'openalgo-charts/transform' entry point
 // (importing it also registers the 'point-figure' and 'kagi' renderers), so they
-// are intentionally NOT re-exported from the base bundle.
+// are intentionally NOT re-exported from the base bundle. The registry they
+// fill for in-chart transforms (`chart.setSeriesTransform`) is here, so a chart
+// that never draws one never loads one.
+export { registerSeriesTransform, getSeriesTransform, registeredSeriesTransforms } from './model/series-transform';
+export type { SeriesTransformSpec, SeriesTransformRun, SeriesTransformDefinition } from './model/series-transform';
 export type { Bar, LinePoint, Whitespace, SeriesDataItem, UTCSeconds, OriginalTime } from './model/bar';
 export { isWhitespace, toBar } from './model/bar';
 

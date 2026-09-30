@@ -12,6 +12,46 @@ Importing the tier registers the `'point-figure'` and `'kagi'` chart types as a 
 
 The tier imports `registerChartType` from `'openalgo-charts'`, never a deep path: a deep import inlines a second copy of the chart-type registry and `createChart` never sees the renderers. Same rule as the indicator tier, see [bundling-and-tiers](./bundling-and-tiers.md).
 
+## In-chart transforms (unreleased)
+
+The chart can apply a transform itself. The series is fed the host's own bars and draws the elements, formed again on every tick:
+
+```ts
+import 'openalgo-charts/transform'; // registers the six transforms and the P&F and Kagi renderers
+
+const series = chart.addSeries('candlestick', { transform: { type: 'renko' } });
+series.setData(bars);                        // the raw bars, as for any series
+feed.onBar((bar) => series.update(bar));     // the forming brick moves; a closed bar keeps its bricks
+
+chart.setSeriesTransform(series, { type: 'point-figure', options: { mode: 'atr' } }); // also selects 'point-figure'
+chart.seriesTransform(series);               // { type: 'point-figure', options: { mode: 'atr' } }
+chart.setSeriesTransform(series, null);      // the bars as given again
+```
+
+- **Ids.** `registeredSeriesTransforms()` lists `heikin-ashi`, `renko`, `range-bars`, `line-break`, `point-figure`, `kagi` once the tier is imported. `getSeriesTransform(type)` returns its `SeriesTransformDefinition`: `name`, `renderer`, `inputs` (its options, in the `IndicatorInput` vocabulary) and `create(options)`, which builds the `SeriesTransformRun` the chart drives. `registerSeriesTransform` is how the tier fills the base registry, so the base never loads a transform. `create` checks the options against those inputs and throws a `TypeError` naming the problem, which is also how to check a `SeriesTransformSpec` from outside (a saved layout) before applying it.
+- **The handle speaks the host's bars.** `setData`, `update` and `prependData` take them and `getData` hands them back, so replay, a feed's live path and host tail math are unchanged. `chart.primaryBars()`, the data layer, the crosshair and the readouts hold the elements, with strictly increasing times.
+- **Live.** The newest source bar is the forming one. Each tick is pushed through a copy of the state as of the last closed bar (`ISeriesTransform.clone`, which every built-in has), so the elements it forms are provisional: a tick back takes them off, a newer bar commits them. A run's elements always equal `runTransform` over its source bars. A tail that shrinks is written as a correction, so no study tails over an element that is gone.
+- **Nothing transforms unless asked.** `addSeries('point-figure')` and `setSeriesType` stay renderer only, so a host that prepares its own elements (the 2.5.x path, still valid) is never transformed twice.
+- **Renderer.** A new transform type selects its renderer (candlestick for the first four). `setSeriesType` afterwards picks another and keeps the transform, and a later change of options keeps that renderer.
+- **Errors.** An unknown type, an option the transform does not declare, or a value out of range throws before anything changes.
+
+| Type | Options (0 or omitted = from history) |
+|---|---|
+| `heikin-ashi` | none; one candle per bar at the bar's time |
+| `renko` | `boxSize` |
+| `range-bars` | `range` (twice the history box) |
+| `line-break` | `lines`, default 3 |
+| `point-figure` | `mode` `'fixed'` (default), `'percent'` or `'atr'`; `boxSize` (fixed); `percent` (default 1); `atrPeriod` (14); `atrMultiplier` (1); `reversal` (3); `method` `'hl'` or `'close'` |
+| `kagi` | `reversal` (twice the history box) |
+
+The history box is a fortieth of the loaded range and at least a tenth of a percent of the last close, to two significant figures. It is resolved on each `setData` (a new load or symbol), never per tick, and kept through `prependData`, so paging history in never resizes every brick. An option left out stays out of the spec and of saved state, and keeps following the history.
+
+**Studies on a transformed chart.** A study computes on the elements drawn by default (`barSource` `'chart'`), which is what it read when a host fed it the elements. `study.setBarSource('underlying')`, or `addIndicator(id, settings, { barSource: 'underlying' })`, computes on the host's bars instead, and each value is read at the bar the element was completed on (the value a trader could have read as it formed); a mark the study dates at one of those bars moves to the element it completed into. Heikin Ashi keeps one candle per bar at the same time, so there nothing is read across. On a chart with no transform the two are the same bars. A study that reads another study's output needs the same bars as that study.
+
+**State and settings.** `SeriesState.transform` records the choice beside the series, written only for a series that has one; like the rest of `series`, the host reapplies it. `IndicatorState.barSource` is written only as `'underlying'`. The settings schema's Price tab leads with the transform's options, keyed `transform.<option>`.
+
+**The axis and the clock.** Elements that form on one bar sit a second apart, which the time axis reads as nothing about resolution: it labels a five-minute Renko chart by the minute. The bar countdown counts the forming source bar.
+
 ## The pipeline
 
 ```ts
@@ -37,7 +77,7 @@ Every transform is incremental: `push` is streaming, so live ticks extend the se
 | `RangeBarsTransform` | `{ range: number }` required, must be `> 0` | a bar per `high - low >= range`, built from the close sequence; the partial bar comes out of `flush()` | `'candlestick'` |
 | `LineBreakTransform` | `{ lines: number }`, constructor defaults to `{ lines: 3 }`, clamped to `>= 1` | a line only when the close breaks the extreme of the prior N lines; no `flush` | `'candlestick'` |
 | `PointFigureTransform` | see below | `PointFigureColumn` (a `Bar` plus `boxSize` and `boxes`) | `'point-figure'` |
-| `KagiTransform` | `{ reversal: number }` required, must be `> 0` | one vertex `Bar` per turning point; `volume` encodes thickness (`1` thick/yang, `0` thin/yin); `flush()` emits the live vertex with `time: 0` | `'kagi'` |
+| `KagiTransform` | `{ reversal: number }` required, must be `> 0` | one vertex `Bar` per turning point; `volume` encodes thickness (`1` thick/yang, `0` thin/yin); `flush()` emits the live vertex dated at the newest bar (unreleased; before, `time: 0`) | `'kagi'` |
 
 ```ts
 const bricks = runTransform(new RenkoTransform({ boxSize: 5 }), bars);
@@ -57,7 +97,7 @@ chart.addSeries('candlestick').setData(bricks);
 
 ## Live updates
 
-Keep one transform instance alive across the stream rather than re-running `runTransform` over the whole history per tick:
+(unreleased) Prefer the in-chart transform above: it handles the forming bar, history paging and studies. A host that runs a transform itself keeps one instance alive across the stream rather than re-running `runTransform` over the whole history per tick:
 
 ```ts
 const t = new RenkoTransform({ boxSize: 5 });
@@ -98,7 +138,7 @@ feed.onBar((bar) => {
 A transformed series is indexed by **element**, not by clock. Every element carries its source formation time as a label only, and `ensureIncreasingTimes` may have shifted that time by seconds. Consequences:
 
 - **Every series on a chart shares one time axis.** A transform emits fewer elements than the raw bars, so feeding a companion series (typically a volume pane) the *raw* bars puts all the raw timestamps back onto the shared axis and the bricks render scattered with gaps. Re-bucket companion series onto the transformed times, sum the raw volume behind each element, keyed by `element.time`.
-- **Indicators on a transformed series measure elements, not bars.** `chart.addIndicator('rsi')` computes over whatever the primary price series holds, so on Renko an "RSI(14)" is 14 *bricks*, an interval that varies in wall-clock length. Renko, Line Break, and P&F drop `volume` entirely, so `volume`, `obv`, `adl`, `mfi`, and `vwap` read zero or produce nothing. VWAP's session anchor is also meaningless once times are synthetic, whatever zone the chart is on.
+- **Indicators on a transformed series measure elements, not bars.** `chart.addIndicator('rsi')` computes over whatever the primary price series holds, so on Renko an "RSI(14)" is 14 *bricks*, an interval that varies in wall-clock length. (unreleased) With the chart applying the transform, `setBarSource('underlying')` computes a study on the bars instead. Renko, Line Break, and P&F drop `volume` entirely, so `volume`, `obv`, `adl`, `mfi`, and `vwap` read zero or produce nothing. VWAP's session anchor is also meaningless once times are synthetic, whatever zone the chart is on.
 - **Drawings anchored in time drift.** A trendline placed on a transformed series is pinned to element positions on the shared axis; the same coordinates over the raw bars land somewhere else. Do not switch a chart between raw and transformed data while keeping drawings and expect them to hold.
 - `flush()` output is provisional. `RangeBarsTransform` and `PointFigureTransform` emit an in-progress element and `KagiTransform` emits a live vertex, those change as more data arrives, unlike completed elements, which are stable (an incremental run's prefix equals a batch run's prefix).
 

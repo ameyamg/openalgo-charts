@@ -26,12 +26,13 @@
  *   another's instrument.
  */
 import {
-  applyChartSettings, createLinkGroup, isKnownInterval, readChartSettings, registeredChartTypes,
+  applyChartSettings, createLinkGroup, isKnownInterval, readChartSettings,
   type LinkChart, type LinkGroup, type LinkMemberOptions, type LinkOptions, type ResolvedLinkOptions,
 } from 'openalgo-charts';
 import { DrawingLinkGroup } from 'openalgo-charts/draw';
 import type { WorkspaceLinkChannels, WorkspaceLinkGroup, WorkspacePayload, WorkspaceSync } from 'openalgo-charts/workspace';
 import type { Widget } from './widget';
+import { isChartTypeChoice } from './topbar';
 
 /** One link group as the grid reports it. */
 export interface ChartGridLinkGroup {
@@ -154,7 +155,7 @@ function memberOptions(cell: LinkedCell, group: GridGroup): LinkMemberOptions {
       return true;
     },
     onChartType: type => {
-      if (!registeredChartTypes().includes(type)) return false;
+      if (!isChartTypeChoice(type)) return false;
       widget.history.ignore(() => widget.setChartType(type));
       return widget.chartType() === type;
     },

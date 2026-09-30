@@ -310,7 +310,7 @@ examples/yfinance/
     intervals.js      interval registry, the picker's codes, period clamping
     goto.js           Go to a date or range: the shared navigator, loading a longer period
     feed.js           YFinanceDataFeed and its typed errors, the bar cache wrapper, the cache menu
-    transforms.js     Heikin Ashi, Renko, Range, Line Break, P&F, Kagi
+    transforms.js     the chart type select mapped onto the chart's own transforms (Renko, P&F and the rest)
     expression.js     symbol arithmetic: the operator keypad, leg fetching, folding
     status.js         venue, session hours, long names, the status-line readings
     timezone.js       the chart zone the demo carries across a rebuild
@@ -562,7 +562,7 @@ exists to show one engine surface carrying real use, not just being present.
 | `routed-study.js` | Registers the Routed signal sample: a momentum histogram in its own pane whose Buy and Sell plates, range box and momentum shading name the price pane (`overlay: true`), while its crossing dots and "Now" label (`plot: 'momentum'`) stay with the histogram. The Signals on price input sends the plates back to the study's pane; Momentum shading sends the shading there as a column naming no target, or turns it off. |
 | `canvas-tips.js` | Hover labels for the controls the chart paints on its canvas: a legend row's eye, gear and cross and the close box on an order or position line have no element to carry a name, so the chart's `hover` id raises the shared tip at the pointer ("Hide RSI", "Remove TSLA", "Cancel order"). |
 | `chart-settings.js` | The settings dialog is generated from `chartSettingsSchema()`, including the paired up and down colour control on one row, and a control the current context cannot back is drawn disabled with its state visible. |
-| `transforms.js` | Heikin Ashi, Renko, Range Bars, Line Break, Point and Figure and Kagi from the transform tier; P&F reveals its box-sizing mode (ATR, percent, fixed). |
+| `transforms.js` | Heikin Ashi, Renko, Range Bars, Line Break, Point and Figure and Kagi, applied by the chart itself (`setSeriesTransform`, through `addSeries(..., { transform })`): the series is fed the raw bars, the chart forms the elements live, and a replay shows bricks forming bar by bar. A size left out is taken from the loaded history. P&F reveals its box-sizing mode (ATR, percent, fixed). Studies stay on a transformed chart, and each one's settings lead with the bars it computes on: the chart's elements, or the underlying bars read at the bar each element formed on. |
 | `volume.js` | Volume rides an overlay price scale (`priceScaleId: ''`) inside the price pane, pinned to the bottom fifth, so the right-hand axis stays a clean price ladder. It hides and shows from the legend eye and the right-click menu, and the choice survives a reload and a chart-type switch. |
 | `status.js`, `axis-chrome.js`, `timezone.js` | The status line, the clock and the countdown are fed by the host: venue, session hours by IANA zone (never a fixed offset) handed to the library as a `SessionCalendar` whose phases give the market status (`venueCalendar`; a closed date listed in `SESSIONS` reads "Market holiday"; the phase is asked once and held until it changes), and long names. A chart on extended hours reads "Pre-market" or "Post-market" while its extra bars are arriving rather than "Market closed". The chart zone is a runtime setting the demo carries across a rebuild. |
 | `orders.js`, `bracket.js` | Chart trading: right-click for single orders, Buy and Sell brackets with OCO target and stop, drag any line to re-price it, and per-symbol trade state that survives a symbol switch. |
@@ -655,8 +655,8 @@ for daylight changes, and calendar month/quarter ends come from the interval reg
 Every participant has its own history request slot, replay mark, volume and
 readout. A chart with no observation yet stays empty. Finer gaps hold the last
 known prefix until the completed candle; finer-history failure is identified in
-the status line. Derived candles use completed values because raw finer prices
-cannot substitute for transformed OHLC. Histories with overlapping or unordered
+the status line. A transformed chart takes the finer bars too, and forms its
+elements from them as they land. Histories with overlapping or unordered
 bar times cannot enter shared replay. A newly opened or changed chart requires a
 new capture before it can join all-chart replay.
 

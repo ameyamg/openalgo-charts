@@ -24,7 +24,7 @@ export interface DataWindowHandle { el: HTMLElement; refresh(): void; destroy():
 
 /** Read an exact candle, or the latest when time is omitted. Does not change the crosshair. */
 export function readDataWindow(chart: Chart, time?: number, options: DataWindowOptions = {}): DataWindowSnapshot {
-  const bars = chart.primarySeries()?.getData() ?? [];
+  const bars = chart.primaryBars();
   return readSnapshot(chart, bars, time, options, bars.some(item => Number.isFinite(item.oi)));
 }
 
@@ -96,7 +96,7 @@ export function mountDataWindow(ctx: WidgetContext, host: HTMLElement): DataWind
   const paint = (): void => {
     if (destroyed) return;
     if (dataDirty) {
-      bars = ctx.chart.primarySeries()?.getData() ?? [];
+      bars = ctx.chart.primaryBars();
       historyHasOi = bars.some(item => Number.isFinite(item.oi));
       dataDirty = false;
     }

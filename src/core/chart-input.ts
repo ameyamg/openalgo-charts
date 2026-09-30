@@ -18,7 +18,7 @@
 import { InvalidationLevel } from './invalidate-mask';
 import type {
   DoubleClickEvent, CrosshairMoveEvent, PointerSample, PointerInfo, ChartDragEvent, ChartDragEndEvent,
-  ContextMenuTarget, ContextMenuEvent,
+  ContextMenuTarget, ContextMenuEvent, ChartNavigationOptions,
 } from './chart-types';
 import type { Chart, ChartClickEvent } from './chart';
 import type { PriceScale } from '../scale/price-scale';
@@ -36,6 +36,7 @@ import { pinchState, pinchDelta, type PinchState } from '../input/touch';
 import type { PrimitiveHit } from '../primitives/primitive';
 import { INDICATOR_LEGEND_TOGGLE } from '../primitives/indicator-legend-toggle';
 import type { LogoWatermark } from '../primitives/watermark';
+import type { TimeNavigatorOptions } from '../primitives/time-navigator';
 
 /**
  * How fast a drag's remembered velocity fades while the pointer is still down,
@@ -95,6 +96,7 @@ export interface InputHost {
   readonly _timeScale: Chart['_timeScale'];
   readonly _dataLayer: Chart['_dataLayer'];
   readonly _navigation: Chart['_navigation'];
+  readonly _timeNav: Chart['_timeNav'];
   readonly _motion: Chart['_motion'];
   readonly _branding: Chart['_branding'];
   readonly _indicators: Chart['_indicators'];
@@ -144,7 +146,6 @@ export interface InputHost {
   _startKinetic: Chart['_startKinetic'];
   _handleLegendAction: Chart['_handleLegendAction'];
   _feedTimeNav: Chart['_feedTimeNav'];
-  _navigationAllowed: Chart['_navigationAllowed'];
   _updateAccessibleSummary: Chart['_updateAccessibleSummary'];
   priceAxisLayout: Chart['priceAxisLayout'];
   resetScale: Chart['resetScale'];
@@ -198,6 +199,8 @@ export class ChartInput {
   /** Whether that primitive draws below the overlay, so leaving it must repaint the base. */
   private _hoverOnBase = false;
   public _overlayFrozen = false; // native context menu open: keep the save-image snapshot
+  /** The navigator's buttons as configured, before the navigation policy withholds any. */
+  public _timeNavButtons: TimeNavigatorOptions['buttons'] = [];
   public _dragCb: ((externalId: string, price: number, time: number) => void) | null = null;
   public _dragEndCb: ((externalId: string, price: number, time: number) => void) | null = null;
   // axis-drag rescale (price axis = vertical, time axis = horizontal)
@@ -1134,7 +1137,7 @@ export class ChartInput {
     if (sc === null || ShortcutManager.shouldIgnore(e.target) || !this._shortcutsActive()) return;
     const cmd = sc.resolve(e);
     if (cmd === null) return;
-    if (!this._host._navigationAllowed(cmd)) return;
+    if (!this._navigationAllowed(cmd)) return;
     let handled = this._runShortcut(cmd);
     if (!handled) handled = sc.runCustom(cmd);
     if (!handled) return;
@@ -1171,7 +1174,7 @@ export class ChartInput {
 
   /** Execute a built-in command; returns false for unknown (custom) commands. */
   public _runShortcut(command: string): boolean {
-    if (!this._host._navigationAllowed(command)) return false;
+    if (!this._navigationAllowed(command)) return false;
     const ts = this._host._timeScale;
     // Keyboard navigation moves the same viewport a drag or a wheel does, so it
     // announces itself the same way: a chart linked into a grid must follow an
@@ -1308,5 +1311,80 @@ export class ChartInput {
       this._host.emit('crosshair:readout', move);
       this._host.emit('crosshair:move', move);
     }
+  }
+
+  /**
+   * Apply a navigation preference patch. Turning panning or zooming off also
+   * stops the motion and ends the gesture it would have carried on, so a
+   * setting a host applies mid-drag holds from that moment.
+   */
+  public _patchNavigation(patch: Partial<ChartNavigationOptions>): void {
+    const wasPan = this._host._navigation.panEnabled, wasZoom = this._host._navigation.zoomEnabled;
+    for (const key of ['panEnabled', 'zoomEnabled'] as const) {
+      const field = Object.getOwnPropertyDescriptor(patch, key);
+      if (field && 'value' in field && typeof field.value === 'boolean') this._host._navigation[key] = field.value;
+    }
+    const stopPan = wasPan !== false && this._host._navigation.panEnabled === false;
+    const stopZoom = wasZoom !== false && this._host._navigation.zoomEnabled === false;
+    if (stopPan || stopZoom) {
+      this._host._motion._stopDisabled(stopPan, stopZoom);
+      if (this._pinch !== null || (stopPan && this._dragging)
+        || (stopZoom && (this._axisDrag === 'price' || this._axisDrag === 'time'))) {
+        this._navigationCancelled = true;
+        this._dragging = false;
+        this._axisDrag = null;
+        this._axisDragScale = null;
+        this._pinch = null;
+        this._pointerMoved = true;
+        this._host._dragVelocity = 0;
+        this._setHover(null);
+      }
+    }
+    if (wasPan !== this._host._navigation.panEnabled || wasZoom !== this._host._navigation.zoomEnabled) this._syncNavigatorPolicy();
+    if (patch.mousePan === 'horizontal' || patch.mousePan === 'both') this._host._navigation.mousePan = patch.mousePan;
+    const count = patch.defaultVisibleBars;
+    // Saved layouts are untrusted input. Invalid values must not poison spacing.
+    if (typeof count === 'number' && Number.isFinite(count) && count >= 0) {
+      this._host._navigation.defaultVisibleBars = Math.min(100000, Math.floor(count));
+      // An explicit count edit selects count mode. A complete saved preference
+      // can carry both fields, in which case its spacing still takes precedence.
+      if (patch.defaultBarSpacing === undefined) delete this._host._navigation.defaultBarSpacing;
+    }
+    const spacing = patch.defaultBarSpacing;
+    if (typeof spacing === 'number' && Number.isFinite(spacing) && spacing >= 0) {
+      if (spacing === 0) delete this._host._navigation.defaultBarSpacing;
+      else this._host._navigation.defaultBarSpacing = spacing;
+    }
+  }
+
+  /** Whether the navigation policy lets a shortcut or navigator command run. */
+  public _navigationAllowed(command: string): boolean {
+    switch (command) {
+      case 'panLeftBar': case 'panRightBar': case 'panLeft': case 'panRight':
+      case 'panLeftFast': case 'panRightFast': case 'panUp': case 'panDown':
+        return this._host._navigation.panEnabled !== false;
+      case 'zoomIn': case 'zoomOut': case 'resetScale': case 'fitContent':
+        return this._host._navigation.zoomEnabled !== false;
+      default: return true;
+    }
+  }
+
+  /** Show only the navigator buttons the policy allows, closing the gap a withheld group leaves. */
+  public _syncNavigatorPolicy(): void {
+    if (this._host._timeNav === null) return;
+    if (this._timeNavButtons.every(action => action === null || this._navigationAllowed(action))) {
+      this._host._timeNav.setOptions({ buttons: [...this._timeNavButtons] });
+      return;
+    }
+    const buttons: (TimeNavigatorOptions['buttons'][number])[] = [];
+    let gap = false;
+    for (const action of this._timeNavButtons) {
+      if (action === null) { gap = true; continue; }
+      if (!this._navigationAllowed(action)) continue;
+      if (gap && buttons.length > 0) buttons.push(null);
+      buttons.push(action);
+      gap = false;
+    }
+    this._host._timeNav.setOptions({ buttons });
   }
 }

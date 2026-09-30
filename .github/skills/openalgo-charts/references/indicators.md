@@ -254,6 +254,7 @@ const rsi = chart.addIndicator('rsi', {}, { paneIndex: macd.paneIndex }); // sha
 | `settings()` | `IndicatorSettings` | A **copy**. Mutating it does nothing. |
 | `setSettings(patch, options?)` | `boolean` | Merge, restyle, recompute, re-run `attach`. `false` for a study whose policy is not `configurable` unless `options.force`. |
 | `policy()` / `setPolicy(policy \| null)` | `IndicatorPolicy` / `void` | Host restrictions (`removable`, `configurable`, `movable`, `listed`); see [study policies](core-api.md#study-policies). |
+| `barSource()` / `setBarSource(source, options?)` (unreleased) | `IndicatorBarSource` / `boolean` | `'chart'` (default) computes on the bars the chart draws, a transformed chart's elements; `'underlying'` on the host's bars, each value read at the bar its element completed on. The same bars with no transform. Also an `addIndicator` option (`{ barSource }`). `false` when unchanged, or for a study that is not `configurable` unless `options.force`; any other value throws. See [transforms](transforms.md#in-chart-transforms-unreleased). |
 | `series(plotKey)` | `SeriesApi \| undefined` | Backing series, for direct styling. The study must be its only writer: since 2.5.8 a tick updates only the points that moved, so data written into it survives wherever the study did not move a point. |
 | `values()` | `IndicatorValues` | Live **reference** into the last `calc` result. Do not mutate. |
 | `visible()` / `setVisible(on)` | `boolean` / `void` | The legend eye toggle; hides plots and fills without removing. |
