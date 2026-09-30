@@ -2,12 +2,22 @@
  * One picture of a whole chart grid: every chart's own screenshot, put where
  * the chart sits on the grid, over the grid's gutters and each cell's chrome.
  *
- * Pure apart from the canvas it draws into, so the placement can be checked
- * against a recording canvas without a browser. The chrome itself (a top bar,
- * a status line) is DOM, not paint, and a canvas cannot copy it; each cell's
- * chrome is drawn as a plain panel carrying the chart's symbol and interval,
- * so the picture still says which chart is which.
+ * The composition is pure apart from the canvas it draws into, so the
+ * placement can be checked against a recording canvas without a browser. The
+ * chrome itself (a top bar, a status line) is DOM, not paint, and a canvas
+ * cannot copy it; each cell's chrome is drawn as a plain panel carrying the
+ * chart's symbol and interval, so the picture still says which chart is which.
+ *
+ * The grid's capture actions live here too: taking and saving the picture,
+ * copying it, and the rows each chart's own capture menu adds for the whole
+ * grid. Each takes the grid's state (`GridState`, grid.ts).
  */
+import { errorText, widgetText } from './localization';
+import { TOKEN_PREFIX, WIDGET_FONT, widgetTokens } from './tokens';
+import { captureName, type MenuRow } from './topbar';
+import { resolveTheme } from './widget';
+import { solo } from './grid-tracks';
+import type { GridState } from './grid';
 
 /** A rectangle in CSS pixels, relative to the grid's cells area. */
 export interface CaptureBox { left: number; top: number; width: number; height: number }
@@ -85,4 +95,83 @@ export function composeGridCapture(doc: Document, size: { width: number; height:
     g.drawImage(piece.image, px(chart.left), px(chart.top), px(chart.left + chart.width) - px(chart.left), px(chart.top + chart.height) - px(chart.top));
   }
   return out;
+}
+
+/** Why the whole grid cannot be captured now: at a compact width no chart but one can show, so the reason says so. */
+export const captureBlocked = (s: GridState): string | null => (s.cells.length < 2 || !solo(s) ? null
+  : widgetText(s.text, s.compact ? 'The grid shows one chart at a time at this width' : 'Show every chart to capture them together'));
+/** A word on the active chart's toasts, where the grid's own actions are answered. */
+export const report = (s: GridState, message: string, kind: 'info' | 'error' = 'info'): void => { s.active?.widget.context.toast(message, kind); };
+const captureFile = (s: GridState): string => captureName('charts', s.preset ?? `${s.rows}x${s.cols}`) + '.png';
+export const downloadAll = (s: GridState): void => {
+  const { text } = s;
+  if (s.grid.downloadScreenshot()) report(s, widgetText(text, 'Saved a PNG of every chart'));
+  else report(s, widgetText(text, 'The image could not be saved: {error}', { error: captureBlocked(s) ?? widgetText(text, 'This runtime cannot save files') }), 'error');
+};
+export const canCopy = (): boolean => {
+  const g = globalThis as { navigator?: { clipboard?: { write?: unknown } }; ClipboardItem?: unknown };
+  return g.navigator?.clipboard?.write !== undefined && g.ClipboardItem !== undefined;
+};
+export const copyAll = (s: GridState): void => {
+  const { text } = s;
+  const canvas = s.grid.takeScreenshot();
+  if (canvas === null) return;
+  const fail = (error: unknown): void => report(s, widgetText(text, 'Copy failed: {error}', { error: errorText(text, error) }), 'error');
+  try {
+    canvas.toBlob(blob => {
+      if (blob === null) { report(s, widgetText(text, 'The canvas produced no image'), 'error'); return; }
+      const Item = (globalThis as unknown as { ClipboardItem: new (parts: Record<string, Blob>) => unknown }).ClipboardItem;
+      (globalThis.navigator.clipboard as unknown as { write(items: unknown[]): Promise<void> })
+        .write([new Item({ 'image/png': blob })]).then(() => report(s, widgetText(text, 'Every chart copied')), fail);
+    }, 'image/png');
+  } catch (error) { fail(error); }
+};
+/** The rows each chart's own capture menu adds for the whole grid. */
+export function captureRows(s: GridState): Array<MenuRow | string> {
+  if (s.cells.length < 2) return [];
+  const { text } = s;
+  const blocked = captureBlocked(s);
+  return [widgetText(text, 'Every chart'),
+    { label: widgetText(text, 'Download PNG of every chart'), sub: blocked ?? undefined, disabled: blocked !== null, onSelect: () => downloadAll(s) },
+    { label: widgetText(text, 'Copy image of every chart'), sub: blocked ?? undefined, disabled: blocked !== null || !canCopy(), onSelect: () => copyAll(s) }];
+}
+
+/** `ChartGrid.takeScreenshot`. */
+export function takeGridScreenshot(s: GridState): HTMLCanvasElement | null {
+  if (s.destroyed || captureBlocked(s) !== null) return null;
+  const { doc } = s;
+  const base = s.body.getBoundingClientRect();
+  const box = (el: Element | null): CaptureBox => {
+    const r = el?.getBoundingClientRect();
+    return r === undefined ? { left: 0, top: 0, width: 0, height: 0 } : { left: r.left - base.left, top: r.top - base.top, width: r.width, height: r.height };
+  };
+  const pieces: GridCapturePiece[] = s.cells.map(c => ({
+    cell: box(c.element), chart: box(c.widget.root.querySelector('.oac-chart')), image: c.widget.chart.takeScreenshot(),
+    label: `${c.widget.symbol()} ${c.widget.interval()}`.trim(),
+  }));
+  const fallback = (s.options as { pixelRatio?: () => number }).pixelRatio?.() ?? (doc.defaultView?.devicePixelRatio ?? 1);
+  const tokens = widgetTokens(resolveTheme(s.theme).theme, resolveTheme(s.theme).name);
+  const token = (name: string): string => tokens[TOKEN_PREFIX + name]!; // names every theme's table carries
+  return composeGridCapture(doc, { width: base.width, height: base.height }, captureRatio(pieces, fallback), pieces,
+    { gutter: token('bd-soft'), panel: token('panel'), text: token('tx'), font: WIDGET_FONT });
+}
+
+/** `ChartGrid.downloadScreenshot`. */
+export function downloadGridScreenshot(s: GridState, filename?: string): boolean {
+  const { doc } = s;
+  const canvas = s.grid.takeScreenshot();
+  if (canvas === null) return false;
+  try {
+    // A canvas tainted by a cross-origin image refuses here; the caller hears it.
+    const url = canvas.toDataURL('image/png');
+    const a = doc.createElement('a');
+    a.href = url;
+    a.download = filename ?? captureFile(s);
+    (doc.body ?? doc.documentElement).appendChild(a);
+    a.click();
+    a.remove();
+    return true;
+  } catch {
+    return false;
+  }
 }
