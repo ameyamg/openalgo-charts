@@ -144,6 +144,19 @@ remove them:
   one-id names are deprecated is decided with the typed event map planned later
   in this release series; until then both are emitted and both are supported.
 
+### Planned for 3.0.0
+
+- **Visibility option names.** A switch that shows or hides part of the chart
+  is named two ways: `xVisible` in the style bags that mirror a series property
+  (`bodyVisible`, `wickVisible`, `borderVisible`, `priceLineVisible`,
+  `lastValueVisible`, a primitive's `lineVisible`) and `showX` in the profile
+  primitives (`showPoc`, `showValueArea`, `showLastPrice`, the footprint's
+  `showCandle`) and in `PaneOptions` (`showTimeAxis`, `showVertGrid`). Both
+  forms are public and saved in chart settings, so 2.x renames neither. Until
+  3.0.0 settles on one, with the other kept as a deprecated alias, a new option
+  follows its neighbours: `xVisible` in a style bag that mirrors a series
+  property, `showX` on a primitive or profile toggle.
+
 ## Runtime boundary
 
 The published package is ESM, with a script-tag build of every tier for a page
