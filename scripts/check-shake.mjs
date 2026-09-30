@@ -13,8 +13,17 @@
  * stray side effect would keep them and the byte count alone would not say why.
  *
  * Rollup is already a direct devDependency, so this adds nothing to the tree.
+ *
+ * It also holds each built tier to the list of tier files it imports
+ * (TIER_IMPORTS below), which decides whether a tier can be loaded without the
+ * base and is what .github/skills/openalgo-charts/references/bundling-and-tiers.md
+ * tells a host. That page said the draw tier imported nothing from the base for
+ * several releases after it began to; the list is checked here, on dist, so
+ * the page and the build cannot part again unnoticed.
  */
+import { readFileSync } from 'node:fs';
 import { rollup } from 'rollup';
+import { parseAst } from 'rollup/parseAst';
 import { brotliCompressSync } from 'node:zlib';
 
 const BUNDLE = new URL('../dist/openalgo-charts.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
@@ -292,6 +301,45 @@ for (const [what, needle] of MUST_BE_SHAKEN) {
     failed = true;
   }
 }
+
+// The tier files each built tier imports statically, as sibling paths. The
+// widget's first-use parts, which it loads with import(), are not tiers.
+// Update this and the bundling page together.
+const TIER_IMPORTS = {
+  'openalgo-charts.mjs': [],
+  'openalgo-charts.trade.mjs': ['openalgo-charts.mjs'],
+  'openalgo-charts.transform.mjs': ['openalgo-charts.mjs'],
+  // Only types from the base, which erase.
+  'openalgo-charts.profile.mjs': [],
+  'openalgo-charts.indicators.mjs': ['openalgo-charts.mjs'],
+  // The interval resolver and the indicator registry (src/draw/intervals.ts,
+  // snap.ts, input-anchors.ts).
+  'openalgo-charts.draw.mjs': ['openalgo-charts.mjs'],
+  'openalgo-charts.webgl.mjs': ['openalgo-charts.mjs'],
+  'openalgo-charts.workspace.mjs': ['openalgo-charts.mjs'],
+  'openalgo-charts.widget.mjs': ['openalgo-charts.draw.mjs', 'openalgo-charts.mjs'],
+};
+const DIST = new URL('../dist/', import.meta.url);
+const tierFiles = Object.values(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).exports)
+  .map((entry) => entry.import.replace(/^\.\/dist\//, '')).sort();
+const tierImportErrors = [];
+if (tierFiles.join() !== Object.keys(TIER_IMPORTS).sort().join()) {
+  tierImportErrors.push(`TIER_IMPORTS names ${Object.keys(TIER_IMPORTS).sort().join(', ')}; package.json exports ${tierFiles.join(', ')}`);
+}
+for (const file of tierFiles) {
+  const body = parseAst(readFileSync(new URL(file, DIST), 'utf8')).body;
+  const imported = [...new Set(body
+    .filter((n) => n.source && ['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration'].includes(n.type))
+    .map((n) => n.source.value.replace(/^\.\//, '')))].sort();
+  const expected = [...(TIER_IMPORTS[file] ?? [])].sort();
+  if (imported.join() !== expected.join()) {
+    tierImportErrors.push(`dist/${file} imports [${imported.join(', ')}], TIER_IMPORTS says [${expected.join(', ')}]. `
+      + 'Correct the list and .github/skills/openalgo-charts/references/bundling-and-tiers.md, or the import.');
+  }
+}
+for (const e of tierImportErrors) console.error(`FAIL: ${e}`);
+if (tierImportErrors.length > 0) failed = true;
+else console.log(`tier imports: all ${tierFiles.length} tier bundles import the tier files TIER_IMPORTS lists`);
 
 const kb = (n) => (n / 1024).toFixed(2) + ' KiB';
 if (size > LIMIT_BYTES) {
