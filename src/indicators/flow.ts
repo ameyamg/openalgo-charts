@@ -36,7 +36,7 @@ function moneyFlow(bars: readonly Bar[]): number[] {
 }
 
 /**
- * Chaikin Money Flow — the money-flow term summed over the window and
+ * Chaikin Money Flow: the money-flow term summed over the window and
  * normalised by the volume traded in that same window, so the reading is a
  * bounded -1..+1 share of participation rather than a raw quantity.
  */
@@ -67,7 +67,7 @@ export const CHAIKIN_MONEY_FLOW: IndicatorDescriptor = {
 };
 
 /**
- * Chaikin Oscillator — a MACD of the A/D line.
+ * Chaikin Oscillator: a MACD of the A/D line.
  *
  * The two EMAs run over the *running total* of the money-flow term (the reference
  * `accdist`), not the per-bar term, so what the oscillator measures is
@@ -96,7 +96,7 @@ export const CHAIKIN_OSCILLATOR: IndicatorDescriptor = {
 };
 
 /**
- * Ease of Movement — how far the midpoint travelled per unit of volume, scaled
+ * Ease of Movement: how far the midpoint travelled per unit of volume, scaled
  * by the bar's range and by a divisor that only exists to bring the number into
  * a readable magnitude.
  */
@@ -129,7 +129,7 @@ export const EASE_OF_MOVEMENT: IndicatorDescriptor = {
 };
 
 /**
- * Elder Force Index — the bar's price change weighted by the volume behind it,
+ * Elder Force Index: the bar's price change weighted by the volume behind it,
  * smoothed. Direction and conviction in one number: a large move on thin
  * volume scores less than a small move the whole market took part in.
  */

@@ -812,14 +812,14 @@ import { TREND_LINE, FIB_RETRACEMENT, RECTANGLE } from 'openalgo-charts/draw';
 for (const t of [TREND_LINE, FIB_RETRACEMENT, RECTANGLE]) registerDrawingTool(t);
 ```
 
-| Export &rarr; id | Export &rarr; id | Export &rarr; id |
+| Export: id | Export: id | Export: id |
 |---|---|---|
-| `ARROW` &rarr; `arrow` | `CROSS_LINE` &rarr; `cross-line` | `ELLIPSE` &rarr; `ellipse` |
-| `EXTENDED_LINE` &rarr; `extended-line` | `FIB_EXTENSION` &rarr; `fib-extension` | `FIB_RETRACEMENT` &rarr; `fib-retracement` |
-| `HORIZONTAL_LINE` &rarr; `horizontal-line` | `HORIZONTAL_RAY` &rarr; `horizontal-ray` | `LONG_POSITION` &rarr; `long-position` |
-| `MEASURE` &rarr; `measure` | `PARALLEL_CHANNEL` &rarr; `parallel-channel` | `PATH` &rarr; `path` |
-| `RAY` &rarr; `ray` | `RECTANGLE` &rarr; `rectangle` | `SHORT_POSITION` &rarr; `short-position` |
-| `TEXT` &rarr; `text` | `TREND_LINE` &rarr; `trend-line` | `VERTICAL_LINE` &rarr; `vertical-line` |
+| `ARROW`: `arrow` | `CROSS_LINE`: `cross-line` | `ELLIPSE`: `ellipse` |
+| `EXTENDED_LINE`: `extended-line` | `FIB_EXTENSION`: `fib-extension` | `FIB_RETRACEMENT`: `fib-retracement` |
+| `HORIZONTAL_LINE`: `horizontal-line` | `HORIZONTAL_RAY`: `horizontal-ray` | `LONG_POSITION`: `long-position` |
+| `MEASURE`: `measure` | `PARALLEL_CHANNEL`: `parallel-channel` | `PATH`: `path` |
+| `RAY`: `ray` | `RECTANGLE`: `rectangle` | `SHORT_POSITION`: `short-position` |
+| `TEXT`: `text` | `TREND_LINE`: `trend-line` | `VERTICAL_LINE`: `vertical-line` |
 
 The 2.0 entry also names the measurement, shape, freehand, fib and cycle families:
 `FORECAST`, `PRICE_RANGE`, `DATE_RANGE`, `CIRCLE`, `TRIANGLE`, `POLYLINE`, `ARC`,

@@ -35,7 +35,7 @@ export interface PrimitiveRenderContext {
   theme: ChartTheme;
   /**
    * The pane's primary price series, for a primitive that needs what price
-   * actually did rather than just the scales — a forecast scoring itself, say.
+   * actually did rather than just the scales: a forecast scoring itself, say.
    * Lazy, so nothing pays for it unless asked. Absent on synthetic contexts.
    */
   bars?: () => readonly Bar[];

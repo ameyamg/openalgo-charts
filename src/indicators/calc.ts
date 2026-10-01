@@ -1,12 +1,12 @@
 /**
  * Pure calculation helpers shared by the Tier-1 indicator descriptors
  * (`openalgo-charts/indicators`). Every function returns an array the same
- * length as its input, with `NaN` in warmup slots — the line renderer breaks
+ * length as its input, with `NaN` in warmup slots: the line renderer breaks
  * across non-finite points and autoscale skips them, so a warmup gap draws as
  * nothing rather than as a spike to zero.
  *
  * `ema`, `rsi`, `atr`, `trueRange`, and `supertrend` are NOT re-implemented
- * here — they ship in the base bundle and the tier imports them from it.
+ * here: they ship in the base bundle and the tier imports them from it.
  *
  * For helpers accepting missing-value options, omitted options use each
  * helper's documented default. Supplied options treat NaN and infinities as
@@ -468,7 +468,7 @@ export function lowest(values: readonly number[], period: number | readonly numb
   return out;
 }
 
-/** NaN → null, so a warmup slot serialises as an explicit gap. */
+/** NaN to null, so a warmup slot serialises as an explicit gap. */
 export function nulls(values: readonly number[]): (number | null)[] {
   const out = new Array<number | null>(values.length);
   for (let i = 0; i < values.length; i++) {

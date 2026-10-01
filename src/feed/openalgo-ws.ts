@@ -124,7 +124,7 @@ export interface LtpEvent {
   exchange: string;
   ltp: number;
   ltq?: number;
-  /** Cumulative day volume (Quote mode) — feeds the candle builder's day-delta mode. */
+  /** Cumulative day volume (Quote mode): feeds the candle builder's day-delta mode. */
   volume?: number;
   timeSec: number;
 }
@@ -144,7 +144,7 @@ export function formatUnsubscribeOrders(): string {
 }
 
 /**
- * Real-time order lifecycle event from the `subscribe_orders` stream — fills,
+ * Real-time order lifecycle event from the `subscribe_orders` stream: fills,
  * partial fills, rejections, cancellations, pushed by the broker (or by the
  * sandbox engine in analyze mode).
  */
@@ -203,7 +203,7 @@ export function parseOrderUpdate(raw: unknown): OrderUpdateEvent | null {
 }
 
 /**
- * Pure: build a subscribe message — `{ action, symbol, exchange, mode }`, where
+ * Pure: build a subscribe message, `{ action, symbol, exchange, mode }`, where
  * `mode` is the numeric OpenAlgo data mode. Depth subscriptions may request a
  * book depth (broker-dependent: 5/20/30/50).
  *
@@ -295,7 +295,7 @@ export function parseTopic(topic: unknown): { symbol: string; exchange: string }
 }
 
 /**
- * Pure: classify the server's answer to the handshake — 'ok', 'failed', or
+ * Pure: classify the server's answer to the handshake as 'ok', 'failed', or
  * null for a frame that is not about authentication at all.
  *
  * Absence of an error is never an acknowledgement, so 'ok' is only ever
@@ -503,7 +503,7 @@ export class OpenAlgoWsFeed {
     return () => this._stateCbs.delete(cb);
   }
 
-  /** Subscribe to control frames — auth / subscribe acks, server errors, client warnings. */
+  /** Subscribe to control frames: auth / subscribe acks, server errors, client warnings. */
   public onControl(cb: (msg: WsControlMessage) => void): () => void {
     this._controlCbs.add(cb);
     return () => this._controlCbs.delete(cb);
@@ -799,7 +799,7 @@ export class OpenAlgoWsFeed {
     }
     const parsed = parseMessage(raw);
     if (parsed === null) {
-      // Non-market-data frame (auth / subscribe ack, or a server error) → surface it.
+      // Non-market-data frame (auth / subscribe ack, or a server error): surface it.
       if (typeof raw === 'object' && raw !== null) this._emitControl(raw as WsControlMessage);
       return;
     }

@@ -1,13 +1,13 @@
 /**
  * Order state machine (ARCHITECTURE.md §9.5). Explicit client-side states with
- * a guarded transition table — no optimistic guesswork. Pure and fully testable.
+ * a guarded transition table: no optimistic guesswork. Pure and fully testable.
  *
- *   pending_place ─ack→ working ─fill→ filled
- *                 ─reject→ rejected
- *   working/partial ─reject→ rejected     (the broker refusing one it accepted)
- *   working/partial ─submitModify→ modify_pending ─ack→ working / ─reject→ working
- *   working/partial ─submitCancel→ cancel_pending ─cancelled→ cancelled / ─reject→ working
- *   any non-terminal ─reconnectAbsent→ stale
+ *   pending_place -ack-> working -fill-> filled
+ *                 -reject-> rejected
+ *   working/partial -reject-> rejected     (the broker refusing one it accepted)
+ *   working/partial -submitModify-> modify_pending -ack-> working / -reject-> working
+ *   working/partial -submitCancel-> cancel_pending -cancelled-> cancelled / -reject-> working
+ *   any non-terminal -reconnectAbsent-> stale
  */
 export type ClientOrderState =
   | 'pending_place'

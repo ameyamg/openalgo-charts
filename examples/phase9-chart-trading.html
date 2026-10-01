@@ -60,13 +60,13 @@
     document.getElementById('sell').onclick = () => place({ symbol: SYM, side: 'SELL', type: 'MARKET', qty: 10 });
     document.getElementById('limit').onclick = () => place({ symbol: SYM, side: 'BUY', type: 'LIMIT', qty: 5, price: last * 0.985 });
 
-    // Drag a working-order line → throttled modify; release → commit.
+    // Dragging a working-order line sends a throttled modify; releasing commits it.
     chart.subscribeDrag(
       (id, price) => { const c = brokerToClient.get(id); if (c) eng.requestModify(c, price); },
       (id, price) => { const c = brokerToClient.get(id); if (c) { eng.requestModify(c, price); eng.commitModify(c); } },
     );
 
-    // The pill's ✕ segment routes as `order:<id>::close` → cancel via the engine.
+    // The pill's close segment routes as `order:<id>::close`, which cancels via the engine.
     chart.subscribeClick((id) => {
       if (!id.endsWith('::close')) return;
       const c = brokerToClient.get(id.slice(0, -'::close'.length));

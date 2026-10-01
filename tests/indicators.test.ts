@@ -38,7 +38,7 @@ describe('RSI (Wilder)', () => {
     const s = rsiSeries(bars, 14);
     expect(Number.isNaN(s[0].close)).toBe(true);
     expect(Number.isFinite(s[29].close)).toBe(true);
-    expect(s[29].close).toBeCloseTo(100, 0); // sustained uptrend → ~100
+    expect(s[29].close).toBeCloseTo(100, 0); // sustained uptrend: about 100
   });
 });
 
@@ -91,7 +91,7 @@ describe('Supertrend', () => {
       const downActive = Number.isFinite(down[i].close);
       expect(upActive && downActive).toBe(false); // never both
     }
-    // a sustained uptrend → the up line is populated near the end
+    // a sustained uptrend: the up line is populated near the end
     expect(Number.isFinite(up.slice(-1)[0]!.close)).toBe(true);
   });
 });
@@ -103,7 +103,7 @@ describe('sma recovers from a warmup gap', () => {
     const values = [NaN, NaN, 1, 2, 3, 4, 5, 6];
     const out = sma(values, 3);
     expect(Number.isNaN(out[3])).toBe(true);   // window still holds a NaN
-    expect(out[4]).toBeCloseTo(2, 9);          // 1+2+3 — recovered
+    expect(out[4]).toBeCloseTo(2, 9);          // 1+2+3: recovered
     expect(out[7]).toBeCloseTo(5, 9);          // 4+5+6
   });
 

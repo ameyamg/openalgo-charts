@@ -7,8 +7,8 @@
  * from reading as a glitch when the cursor crosses the reveal band.
  *
  * Reveal is driven by an explicit `setPointer` from the chart, **not** by
- * `rc.hoverId`. Hover ids come from `bestHit`, which picks the nearest primitive
- * — so a drawing or an order line near the bottom of the chart would win the
+ * `rc.hoverId`. Hover ids come from `bestHit`, which picks the nearest primitive,
+ * so a drawing or an order line near the bottom of the chart would win the
  * hit and silently hide the controls. Pointer position is the honest input here;
  * hit-testing still owns the buttons themselves.
  */
@@ -142,7 +142,7 @@ export class TimeNavigator implements IPrimitive {
   /** Top of the reveal band, recomputed each paint from the plot height. */
   private _revealTop = Infinity;
 
-  /** Whether the fade is still running — the chart keeps painting while true. */
+  /** Whether the fade is still running: the chart keeps painting while true. */
   public animating(): boolean {
     return Math.abs(this._targetOpacity() - this._opacity) > 0.001;
   }

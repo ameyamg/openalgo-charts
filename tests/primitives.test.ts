@@ -36,7 +36,7 @@ describe('bestHit', () => {
     const a = { externalId: 'a', zOrder: 'normal' as const, distance: 5 };
     const b = { externalId: 'b', zOrder: 'top' as const, distance: 5 };
     const c = { externalId: 'c', zOrder: 'normal' as const, distance: 2 };
-    expect(bestHit([a, b])!.externalId).toBe('b'); // tie → top wins
+    expect(bestHit([a, b])!.externalId).toBe('b'); // tie: top wins
     expect(bestHit([a, b, c])!.externalId).toBe('c'); // nearest wins
   });
 });
@@ -102,12 +102,12 @@ describe('PriceLine primitive', () => {
     expect(partial.rec.count('roundRect')).toBe(2); // group backplate + label segment
   });
 
-  it('closeButton hit-tests as a click on the ✕ segment; the rest of the line drags', () => {
+  it('closeButton hit-tests as a click on the close segment; the rest of the line drags', () => {
     const { rc } = makeRc(); // plotWidth 600
     const pl = new PriceLine({ price: 50, color: '#fff', lineWidth: 1, dashed: false, id: 'order:7', cursor: 'ns-resize', closeButton: true });
     pl.draw(makeCtx().ctx, rc); // draw records the pill-group geometry
     const yAt50 = rc.priceScale.priceToY(50);
-    const close = pl.hitTest(16, yAt50, rc); // inside the ✕ segment (group starts at x=6, ✕ is 20 wide)
+    const close = pl.hitTest(16, yAt50, rc); // inside the close segment (group starts at x=6, the close segment is 20 wide)
     expect(close!.externalId).toBe('order:7::close');
     expect(close!.cursor).toBe('pointer'); // click, not drag
     const drag = pl.hitTest(120, yAt50, rc); // elsewhere on the line
@@ -141,7 +141,7 @@ describe('SeriesMarkers', () => {
     ]);
     const { ctx } = makeCtx();
     m.draw(ctx, rc);
-    // the marker is at index 1 (time 200) → hit-test near its recorded position
+    // the marker is at index 1 (time 200), so hit-test near its recorded position
     const x = rc.timeScale.indexToX(1);
     const yBelow = rc.priceScale.priceToY(rc.dataLayer.indexedBars(seriesId)[1].bar.low);
     const hit = m.hitTest(x, yBelow + 12); // near the below-bar glyph

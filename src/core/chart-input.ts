@@ -522,7 +522,7 @@ export class ChartInput {
     // arm, and the line-drag arm. Capture is an optimisation; never fatal.
     try { this._host._container.setPointerCapture?.(e.pointerId); } catch { /* not capturable */ }
     if (this._navigationCancelled) return;
-    if (this._pointers.size >= 2) { this._beginPinch(); return; } // second finger → pinch, skip single-drag
+    if (this._pointers.size >= 2) { this._beginPinch(); return; } // second finger: pinch, skip single-drag
     this._downPane = p.pane;
     this._downX = p.x;
     this._downLocalY = p.localY;
@@ -640,7 +640,7 @@ export class ChartInput {
       return;
     }
     if (this._axisDrag === 'price') {
-      // drag up (dy<0) → expand (zoom in); drag down → compress (zoom out)
+      // drag up (dy<0) expands (zoom in); drag down compresses (zoom out)
       const dy = p.localY - this._axisStartCoord;
       const factor = Math.exp(dy * 0.005);
       const centre = (this._axisStartMin + this._axisStartMax) / 2;
@@ -979,7 +979,7 @@ export class ChartInput {
    * down state (`_downX`/`_downLocalY`/`_downPane`/`_pointerMoved`) is never
    * refreshed and still holds the *previous* left-click. Letting a non-primary
    * pointerup through would re-run the click branch against that stale position
-   * and replay the last click (e.g. re-firing a Buy/Sell button → a phantom
+   * and replay the last click (e.g. re-firing a Buy/Sell button, a phantom
    * order). Touch and pen tip contact use button 0. The internal
    * recovery call from `_onPointerMove` invokes `_onPointerUp` directly, so it
    * bypasses this filter and still ends a drag when a button release is missed.
@@ -1352,7 +1352,7 @@ export class ChartInput {
     this._readoutTime = hoveredBar?.time ?? null;
     // Legend rows read the bar under the crosshair, like every charting package.
     for (const indicator of this._host._indicators) indicator.updateLegendValues(index);
-    // global crosshair → repaint every pane's overlay (cheap; base untouched)
+    // global crosshair: repaint every pane's overlay (cheap; base untouched)
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Cursor));
     if (this._crosshairCbs.size > 0 || this._host._bus.has('crosshair:move') || this._host._bus.has('crosshair:readout')) {
       const time = this._host._dataLayer.indexToTime(index);

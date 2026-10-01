@@ -271,12 +271,12 @@ function indexOfTime(bars: readonly Bar[], time: number): number {
  *
  * One bar per time is an invariant every reader relies on: `_rebuild` maps times
  * onto logical indices through a Set, so two bars sharing a time both resolve to
- * the same index and get projected to the same x — two candles drawn on top of
+ * the same index and get projected to the same x: two candles drawn on top of
  * each other, each with its own colour. A live feed whose candle builder starts
  * unseeded produces exactly that: it opens a fresh bar for the bucket the
  * fetched history already ends in, and the host appends it alongside.
  *
- * `Array#sort` is stable, so "last" means last in the caller's array — the newer
+ * `Array#sort` is stable, so "last" means last in the caller's array: the newer
  * value when a live bar arrives alongside the historical one it supersedes.
  */
 function sortedUniqueByTime(bars: readonly Bar[]): Bar[] {
@@ -365,11 +365,11 @@ export class DataLayer {
 
   /**
    * Upsert bars into a series by time (used for history paging / backfill /
-   * out-of-order corrections — ARCHITECTURE.md §4.2). Existing times are
+   * out-of-order corrections, ARCHITECTURE.md §4.2). Existing times are
    * replaced; new times are inserted; the result stays time-sorted.
    *
    * Prepending older bars shifts every existing logical index up by the
-   * inserted count — callers preserve the viewport by re-reading `baseIndex`
+   * inserted count: callers preserve the viewport by re-reading `baseIndex`
    * (the invariant `rightEdge − index` is unchanged, so visible bars don't move).
    */
   public addBars(id: SeriesId, bars: readonly Bar[]): void {
@@ -385,9 +385,9 @@ export class DataLayer {
   /**
    * Apply a single live bar (ARCHITECTURE.md §4.2 hot path). Returns the kind of
    * change so the chart auto-scrolls only on a genuine right-edge append:
-   * - `'append'`  → newer than the last bar (advances baseIndex)
-   * - `'replace'` → same time as the last bar (intra-bar tick) or an existing time
-   * - `'insert'`  → an older time inserted into history (late / out-of-order)
+   * - `'append'`: newer than the last bar (advances baseIndex)
+   * - `'replace'`: same time as the last bar (intra-bar tick) or an existing time
+   * - `'insert'`: an older time inserted into history (late / out-of-order)
    */
   public update(id: SeriesId, bar: Bar): 'append' | 'replace' | 'insert' {
     const entry = this._series.get(id);
@@ -452,12 +452,12 @@ export class DataLayer {
   }
 
   /**
-   * Fractional logical index → UTC seconds, interpolating between bars and
+   * Fractional logical index to UTC seconds, interpolating between bars and
    * extrapolating past either edge.
    *
    * `indexToTime` only answers for indices that have a bar. Anything anchored to
-   * an arbitrary x — a drawing endpoint, a cursor readout, a projection to the
-   * right of the last bar — needs a time for positions *between* bars too, which
+   * an arbitrary x (a drawing endpoint, a cursor readout, a projection to the
+   * right of the last bar) needs a time for positions *between* bars too, which
    * the gapless axis (§5.3) makes common: everything a weekend or a session
    * break collapsed away lands there. Returns NaN when there is no data.
    *
@@ -482,7 +482,7 @@ export class DataLayer {
     return t[i]! + (index - i) * (t[i + 1]! - t[i]!);
   }
 
-  /** UTC seconds → fractional logical index. The inverse of `indexToTimeFloat`. */
+  /** UTC seconds to fractional logical index. The inverse of `indexToTimeFloat`. */
   public timeToIndexFloat(time: number): number {
     const t = this._sortedTimes;
     const n = t.length;
@@ -532,7 +532,7 @@ export class DataLayer {
   }
 
   /**
-   * A series' bars, time-sorted, with no per-call allocation — the read path
+   * A series' bars, time-sorted, with no per-call allocation: the read path
    * for anything that recomputes over full history (indicators, transforms).
    * The array is live: treat it as read-only.
    */

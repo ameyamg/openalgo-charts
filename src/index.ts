@@ -208,7 +208,7 @@ export { IndicatorFill } from './primitives/indicator-fill';
 export type { IndicatorFillOptions, FillPoint, FillGradient } from './primitives/indicator-fill';
 export { IndicatorDrawings } from './primitives/indicator-draws';
 export { IndicatorBackground } from './primitives/indicator-background';
-// `chart.dataLayer` is public, so its type has to be nameable by a consumer —
+// `chart.dataLayer` is public, so its type has to be nameable by a consumer,
 // and a tier that takes one in its own public API needs to name *this* one.
 export type { DataLayer, IndexedBar, SeriesId, SessionCalendarSource } from './model/data-layer';
 export { PriceLine } from './primitives/price-line';

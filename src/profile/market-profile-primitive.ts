@@ -5,7 +5,7 @@
  * highs / lows, the developing POC-VA track, naked prior levels, day / open type
  * labels and an optional volume sub-profile.
  *
- * A pane primitive — it overlays the price range rather than driving it (though
+ * A pane primitive: it overlays the price range rather than driving it (though
  * `autoscaleInfo` reports its extent so a profile-only chart still frames).
  *
  * **Letters degrade to bricks automatically.** A TPO row is only as tall as the
@@ -29,14 +29,14 @@ export type MpBlockDisplay = 'auto' | 'compact' | 'blocks+letters' | 'letters' |
 
 /**
  * What drives a block's colour.
- * `period` — one hue per TPO period, so the session's shape over time is visible.
- * `valueArea` — inside vs outside the value area.
- * `count` / `volume` — heat by TPO count or traded volume at that row.
- * `uniform` — a single colour.
+ * `period`: one hue per TPO period, so the session's shape over time is visible.
+ * `valueArea`: inside vs outside the value area.
+ * `count` / `volume`: heat by TPO count or traded volume at that row.
+ * `uniform`: a single colour.
  */
 export type MpColorMode = 'period' | 'valueArea' | 'count' | 'volume' | 'uniform';
 
-/** Default period palette — 12 hues that stay distinct on a dark background. */
+/** Default period palette: 12 hues that stay distinct on a dark background. */
 export const TPO_PERIOD_COLORS: readonly string[] = [
   '#e05555', '#e08a3c', '#d9c341', '#8cc44a', '#3fb96b', '#38b2a3',
   '#3b9fd1', '#5a7fe0', '#8a68d9', '#c05fc4', '#d1508f', '#9b7b5a',
@@ -378,7 +378,7 @@ export class MarketProfile implements IPrimitive {
     this._boxes.push({ index, x0: x0 / dpr, x1: x1 / dpr });
 
     const yOf = (p: number): number => rc.priceScale.priceToY(p) * dpr;
-    // Row height straight off the price scale — this decides letters vs bricks.
+    // Row height straight off the price scale: this decides letters vs bricks.
     const rowH = Math.max(1, Math.abs(rc.priceScale.priceToY(s.poc) - rc.priceScale.priceToY(s.poc + row)) * dpr);
     this._rowH = rowH / dpr;
     const smallText = compact && rowH < 12 * dpr;

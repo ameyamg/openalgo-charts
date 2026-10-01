@@ -16,7 +16,7 @@ import { contrastText, withAlpha, parseColor } from '../render/pill';
 
 export type LadderTier = 'none' | 'compact' | 'deep';
 
-/** Capability tier from the live payload — drives graceful degradation. */
+/** Capability tier from the live payload: drives graceful degradation. */
 export function ladderCapability(depth: MarketDepth): LadderTier {
   const n = Math.max(depth.bids.length, depth.asks.length);
   if (n === 0) return 'none';
@@ -66,7 +66,7 @@ function scheduleBucket(ticks: TickSchedule, n: number): (p: number) => number {
 
 /**
  * Merge bids + asks into price rows, optionally bucketing every `groupBy` ticks
- * (price-step aggregation for deep books). Returns rows sorted high → low price.
+ * (price-step aggregation for deep books). Returns rows sorted high to low price.
  * Pass a `TickSchedule` in place of the tick size for an instrument whose tick
  * changes with price: each row is then a price its band allows, and a group
  * spans `groupBy` ticks of that band, so the step changes at a boundary.
@@ -175,7 +175,7 @@ export class DomLadder implements IPrimitive {
 
   public draw(ctx: CanvasRenderingContext2D, rc: PrimitiveRenderContext): void {
     this._rowHits = [];
-    if (this._depth === null) return; // graceful degradation: no depth → no ladder
+    if (this._depth === null) return; // graceful degradation: no depth, no ladder
     const rows = visibleRows(
       buildRows(this._depth, this._opts.tickSchedule ?? this._opts.tickSize, this._opts.groupBy),
       (p) => rc.priceScale.priceToY(p),

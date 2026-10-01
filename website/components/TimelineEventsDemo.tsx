@@ -102,7 +102,7 @@ function renderDetails() {
     block.appendChild(list);
     article.appendChild(block);
   }
-  const link = node('a', 'oac-timeline-events__link', 'Explore the chart event API ↗');
+  const link = node('a', 'oac-timeline-events__link', 'Explore the chart event API');
   link.href = 'https://github.com/marketcalls/openalgo-charts';
   link.target = '_blank';
   link.rel = 'noopener noreferrer';

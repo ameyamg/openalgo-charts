@@ -67,13 +67,13 @@ export class FakeDataFeed implements DataFeed {
   }
 }
 
-/** Pure, seeded synthetic bar generator (deterministic — no global randomness). */
+/** Pure, seeded synthetic bar generator (deterministic: no global randomness). */
 export function generateBars(startTime: number, count: number, intervalSec: number): Bar[] {
   const bars: Bar[] = [];
   let price = 100;
   let seed = 0x9e3779b9 >>> 0;
   const next = (): number => {
-    // xorshift32 — deterministic pseudo-random in [0, 1)
+    // xorshift32: deterministic pseudo-random in [0, 1)
     seed ^= seed << 13; seed >>>= 0;
     seed ^= seed >> 17;
     seed ^= seed << 5; seed >>>= 0;

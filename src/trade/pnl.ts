@@ -1,5 +1,5 @@
 /**
- * P&L and risk math (ARCHITECTURE.md §9.1). Pure functions — the hot path on
+ * P&L and risk math (ARCHITECTURE.md §9.1). Pure functions: the hot path on
  * every LTP tick, and the part most worth unit-testing.
  */
 import type { Position } from './types';

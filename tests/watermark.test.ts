@@ -110,7 +110,7 @@ describe('hover-revealed label', () => {
 });
 
 describe('plate padding', () => {
-  // A square mark, so `height` sizes both axes — the shape the hosts use.
+  // A square mark, so `height` sizes both axes: the shape the hosts use.
   const square = { width: 128, height: 128, naturalWidth: 128, naturalHeight: 128 } as never;
 
   const ctxFor = (dpr: number): PrimitiveRenderContext => ({

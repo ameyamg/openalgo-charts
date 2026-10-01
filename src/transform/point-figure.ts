@@ -9,9 +9,9 @@
  *  - `'close'`: only the close is considered (the older, coarser variant).
  *
  * Box sizing (`mode`):
- *  - `'fixed'`   — a constant `boxSize` (the classic).
- *  - `'percent'` — `price × percent / 100`, re-resolved when each column opens.
- *  - `'atr'`     — `ATR(period) × multiplier` (Wilder), re-resolved per column.
+ *  - `'fixed'`: a constant `boxSize` (the classic).
+ *  - `'percent'`: `price × percent / 100`, re-resolved when each column opens.
+ *  - `'atr'`: `ATR(period) × multiplier` (Wilder), re-resolved per column.
  *
  * Each emitted column is a Bar spanning the column's price range, with up =
  * close ≥ open (X) and down = close < open (O). A column's `high` is the
@@ -45,7 +45,7 @@ export interface PointFigureOptions {
 
 /** A P&F column. Carries the box size it was built with (modes vary it). */
 export interface PointFigureColumn extends Bar {
-  /** Price height of one box in this column — one X or O glyph. */
+  /** Price height of one box in this column: one X or O glyph. */
   boxSize: number;
   /** Number of boxes (glyphs) stacked in this column. */
   boxes: number;
@@ -150,7 +150,7 @@ export class PointFigureTransform implements ISeriesTransform {
 
   /**
    * Box size for a column opening at `price`. Falls back to the last valid box,
-   * then to 1% of price, then to 1 — so a degenerate ATR/price never throws or
+   * then to 1% of price, then to 1, so a degenerate ATR/price never throws or
    * emits a zero-height column.
    */
   private _resolveBox(price: number): number {
@@ -187,7 +187,7 @@ export class PointFigureTransform implements ISeriesTransform {
     const upPrice = useHl ? bar.high : bar.close;
     const downPrice = useHl ? bar.low : bar.close;
 
-    // First bar: anchor only. No column, no direction — this is what used to
+    // First bar: anchor only. No column, no direction: this is what used to
     // emit a phantom zero-height column when the first move was down.
     if (Number.isNaN(this._top)) {
       this._box = this._resolveBox(bar.close);

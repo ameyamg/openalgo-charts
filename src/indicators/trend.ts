@@ -1,5 +1,5 @@
 /**
- * Tier-1 trend indicators — computed from the chart's own OHLCV, no extra data.
+ * Tier-1 trend indicators: computed from the chart's own OHLCV, no extra data.
  * Part of the lazy `openalgo-charts/indicators` tier.
  *
  * `supertrend`, `atr` and the `sourceValues` helper come from the base bundle
@@ -682,7 +682,7 @@ export const ICHIMOKU: IndicatorDescriptor = {
 };
 
 /**
- * HalfTrend — a trend-following level that only moves against the trend once
+ * HalfTrend: a trend-following level that only moves against the trend once
  * the opposing side of the range genuinely gives way, so it holds flat through
  * noise where a moving average would wobble.
  *
@@ -699,7 +699,7 @@ export const ICHIMOKU: IndicatorDescriptor = {
  * inside the channel.
  *
  * Original implementation written from the algorithm's published behaviour, per
- * ARCHITECTURE.md §0.1 — not ported from any third-party source.
+ * ARCHITECTURE.md §0.1, not ported from any third-party source.
  */
 export const HALFTREND: IndicatorDescriptor = {
   id: 'halftrend',

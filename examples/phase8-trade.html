@@ -43,7 +43,7 @@
     let positions = [{ symbol: 'SIM', netQty: 10, avgPrice: last }];
     broker.setBook(orders, positions);
 
-    // The ✕ segments route as clicks: cancel the order / flatten the position in the sim.
+    // The close segments route as clicks: cancel the order / flatten the position in the sim.
     chart.subscribeClick((id) => {
       if (!id.endsWith('::close')) return;
       const base = id.slice(0, -'::close'.length);

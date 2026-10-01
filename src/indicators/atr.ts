@@ -1,5 +1,5 @@
 /**
- * Average True Range — Wilder's ATR, matching `openalgo.atr(high, low, close, 14)`.
+ * Average True Range: Wilder's ATR, matching `openalgo.atr(high, low, close, 14)`.
  * Shared by the Supertrend indicator. True range of the first bar is high-low.
  */
 

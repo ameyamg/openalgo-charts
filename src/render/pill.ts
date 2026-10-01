@@ -91,7 +91,7 @@ export function isInvisible(color: string): boolean {
   return c !== null && c.a <= 0;
 }
 
-/** Mix a color toward white (t>0) or black (t<0) by |t| (0..1) — hover states. */
+/** Mix a color toward white (t>0) or black (t<0) by |t| (0..1): hover states. */
 export function shade(color: string, t: number): string {
   const c = parseColor(color);
   if (c === null) return color;
@@ -103,7 +103,7 @@ export function shade(color: string, t: number): string {
 
 /**
  * Trace a rounded-rectangle path (uses native roundRect when available, plain
- * rect otherwise — e.g. recording contexts in tests). Caller begins/fills.
+ * rect otherwise, e.g. recording contexts in tests). Caller begins/fills.
  */
 export function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   const rr = (ctx as CanvasRenderingContext2D & { roundRect?: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect;
@@ -153,14 +153,14 @@ export function drawPill(
   return w;
 }
 
-/** Width of a ✕ (close) segment in media px. */
+/** Width of a close segment in media px. */
 export const CLOSE_SEGMENT_W = 20;
 
-/** One segment of a broker-style pill group: text box or ✕ box. */
+/** One segment of a broker-style pill group: text box or close box. */
 export interface PillSegment {
-  /** Text content; omit for a ✕ (close) segment. */
+  /** Text content; omit for a close segment. */
   text?: string;
-  /** Render a ✕ glyph instead of text. */
+  /** Render the close cross instead of text. */
   close?: boolean;
   fill: string;
   textColor: string;
@@ -172,12 +172,12 @@ export interface PillGroupMetrics {
   x0: number;
   /** Group right edge, media px. */
   x1: number;
-  /** Left edge of the ✕ segment (Infinity when none), media px. */
+  /** Left edge of the close segment (Infinity when none), media px. */
   closeX0: number;
 }
 
 /**
- * Draw a segmented pill group — [badge][qty][label][✕] — with an opaque
+ * Draw a segmented pill group ([badge][qty][label][close]) with an opaque
  * backplate behind the whole group (so the chart line doesn't bleed through
  * the segment gaps). Coordinates are device px; the returned metrics are
  * media px, ready for hit-testing. The caller sets the font beforehand.

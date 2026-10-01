@@ -97,8 +97,8 @@ export function crosshairTagWidth(ctx: CanvasRenderingContext2D, text: string, d
  * Draw a filled crosshair value tag (price on the right axis, or time on the
  * bottom axis), in the axis text style so it reads like the labels beside it.
  * All coordinates are device px. `anchor`:
- *  - 'right'  → box starts at (cx) and extends right, vertically centred on cy
- *  - 'bottom' → box centred on cx, top edge at cy
+ *  - 'right': box starts at (cx) and extends right, vertically centred on cy
+ *  - 'bottom': box centred on cx, top edge at cy
  */
 export function drawCrosshairTag(
   ctx: CanvasRenderingContext2D,

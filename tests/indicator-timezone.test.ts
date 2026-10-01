@@ -41,7 +41,7 @@ const run = (
   over: Record<string, unknown> = {},
 ): IndicatorValues => d.calc(bars, settingsFor(d, over), {});
 
-/** A finite reading, or NaN — spares every assertion a null check. */
+/** A finite reading, or NaN: spares every assertion a null check. */
 const at = (values: IndicatorValues, key: string, i: number): number => {
   const v = values[key]?.[i];
   return v === null || v === undefined ? NaN : v;
@@ -134,7 +134,7 @@ const dayIndex = (bars: readonly Bar[], y: number, mo: number, d: number): numbe
 /**
  * Hourly bars round the clock for four days, the shape a 24/7 venue produces.
  * Nothing in them marks a session, so every session-anchored study has to fall
- * back to the calendar day — which is the only case where TWAP consults a zone
+ * back to the calendar day, which is the only case where TWAP consults a zone
  * at all. Each bar carries its own index as its price, so a restart is visible
  * as `twap[i] === i`.
  */
@@ -193,7 +193,7 @@ describe('VWAP anchors', () => {
   it('the default restarts where IST said it did, mid-session on a US symbol', () => {
     // 30 April closes at 20:00 UTC, which IST calls 1 May: the month anchor
     // restarts a day early and prints that bar's own hlc3. Unchanged from 1.2.0,
-    // deliberately — a caller who names no zone gets the old numbers.
+    // deliberately: a caller who names no zone gets the old numbers.
     const v = run(VWAP, bars, { anchor: 'month' });
     expect(at(v, 'vwap', apr30)).toBeCloseTo(APR30_HLC3, 10);
     // 1 May is the second bar of the frame IST opened on 30 April.

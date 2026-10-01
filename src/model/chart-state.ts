@@ -1,10 +1,10 @@
 /**
- * Serialisable chart state — the keystone the persistence-shaped features hang
+ * Serialisable chart state: the keystone the persistence-shaped features hang
  * off (saved layouts, templates, an objects panel, favourites, drawings).
  *
  * The rule that shapes this type: **the chart serialises what the chart owns.**
- * Series *data* is the application's — it knows the symbol, the timeframe, and
- * the feed — so `restoreState` never recreates series. It restores the things
+ * Series *data* is the application's (it knows the symbol, the timeframe, and
+ * the feed), so `restoreState` never recreates series. It restores the things
  * the chart is the source of truth for (viewport, grid, panes, price scales,
  * indicators) and reports the series it saw so an app can rebuild them itself
  * and re-apply their styling.
@@ -149,7 +149,7 @@ export function parsePaneState(input: unknown, allowLegacyPartial = false): Pane
   return result;
 }
 
-/** A series descriptor — enough to rebuild the shell, never the data. */
+/** A series descriptor: enough to rebuild the shell, never the data. */
 export interface SeriesState {
   type: string;
   style: SeriesStyle;
@@ -246,7 +246,7 @@ export interface ChartRestoreOptions {
 export interface RestoreReport {
   /** True when the payload was a recognised, applicable state object. */
   applied: boolean;
-  /** Series descriptors found in the state — the app rebuilds these itself. */
+  /** Series descriptors found in the state: the app rebuilds these itself. */
   series: SeriesState[];
   /** Indicator instances recreated. */
   indicators: number;

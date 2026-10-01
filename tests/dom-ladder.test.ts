@@ -31,7 +31,7 @@ describe('ladder capability (graceful degradation)', () => {
 });
 
 describe('buildRows aggregation', () => {
-  it('merges bid/ask into price rows sorted high→low', () => {
+  it('merges bid/ask into price rows sorted high to low', () => {
     const rows = buildRows(depth(5), 0.05, 1);
     expect(rows.length).toBe(10); // 5 bids + 5 asks, distinct prices
     for (let i = 1; i < rows.length; i++) expect(rows[i].price).toBeLessThan(rows[i - 1].price);
@@ -51,13 +51,13 @@ describe('buildRows aggregation', () => {
 describe('virtualization', () => {
   it('caps rendered rows to maxRows for a deep book', () => {
     const rows = buildRows(depth(200), 0.05, 1);
-    const priceToY = (p: number): number => 400 * (1 - (p - 0) / 200); // wide range → many on screen
+    const priceToY = (p: number): number => 400 * (1 - (p - 0) / 200); // wide range: many on screen
     const vis = visibleRows(rows, priceToY, 400, 14, 60);
     expect(vis.length).toBeLessThanOrEqual(60);
   });
 
   it('culls rows whose price is off-screen', () => {
-    // 200 levels × 0.05 = ±10 (90→110); visible range [95,105] → outer levels cull
+    // 200 levels × 0.05 = ±10 (90 to 110); visible range [95,105]: outer levels cull
     const rows = buildRows(depth(200), 0.05, 1);
     const priceScale = rc().priceScale; // [95,105]
     const vis = visibleRows(rows, (p) => priceScale.priceToY(p), 400, 14, 1000);

@@ -841,7 +841,7 @@ export class Chart {
 
   /**
    * Add a registered indicator. Built-in descriptors live in the lazy
-   * `openalgo-charts/indicators` tier — import it (or register your own with
+   * `openalgo-charts/indicators` tier: import it (or register your own with
    * `registerIndicator`) before calling this.
    *
    * `'onchart'` indicators overlay the price pane; `'pane'` indicators get a new
@@ -1107,7 +1107,7 @@ export class Chart {
    * handles). Fires per move and on release.
    *
    * `time` is the UTC seconds under the cursor, interpolated between bars and
-   * extrapolated past the right edge — so a two-axis drag (a trendline endpoint,
+   * extrapolated past the right edge, so a two-axis drag (a trendline endpoint,
    * a projection) has a usable time even where the gapless axis has no bar.
    * Price-only consumers can simply ignore it.
    *
@@ -1126,9 +1126,9 @@ export class Chart {
   }
 
   /**
-   * Guarantee a pane's price scale has a real range before converting y↔price.
-   * Autoscaling normally happens during paint, so every coordinate API — and
-   * the price carried by click/drag events — used to answer with the default
+   * Guarantee a pane's price scale has a real range before converting between y and price.
+   * Autoscaling normally happens during paint, so every coordinate API (and
+   * the price carried by click/drag events) used to answer with the default
    * 0..1 (or ±Infinity) until the first frame had run. Callers cannot be asked
    * to wait for a paint, so scale on demand.
    */
@@ -1138,17 +1138,17 @@ export class Chart {
     pane.autoscale(this._renderContext(paneIndex));
   }
 
-  /** Container-relative x (media px) → UTC seconds on the (gapless) time axis. */
+  /** Container-relative x (media px) to UTC seconds on the (gapless) time axis. */
   private _xToTime(x: number): number {
     return this._dataLayer.indexToTimeFloat(this._timeScale.xToIndex(x - this._leftAxisWidth));
   }
 
-  /** UTC seconds → container-relative x (media px). The inverse of `_xToTime`. */
+  /** UTC seconds to container-relative x (media px). The inverse of `_xToTime`. */
   public timeToCoordinate(time: number): number {
     return this._timeScale.indexToX(this._dataLayer.timeToIndexFloat(time)) + this._leftAxisWidth;
   }
 
-  /** Container-relative x (media px) → UTC seconds. */
+  /** Container-relative x (media px) to UTC seconds. */
   public coordinateToTime(x: number): number {
     return this._xToTime(x);
   }
@@ -1640,7 +1640,7 @@ export class Chart {
    * Flatten every pane's base + overlay canvas into one opaque canvas (device
    * px). The chart renders as stacked layered canvases, so the browser's native
    * right-click "Save image" only captures the layer under the pointer (usually
-   * the transparent crosshair overlay) — use this to export the full chart.
+   * the transparent crosshair overlay): use this to export the full chart.
    */
   public takeScreenshot(): HTMLCanvasElement {
     return this._appearance.takeScreenshot();
@@ -1866,7 +1866,7 @@ export class Chart {
    * pane weights and price scales, indicator instances, and a `drawings` slot
    * the drawing tier fills. JSON-safe.
    *
-   * Series **data** is not captured — the app owns that (it knows the symbol,
+   * Series **data** is not captured: the app owns that (it knows the symbol,
    * the timeframe, and the feed). Series *descriptors* are, so an app that
    * rebuilds its own series can re-apply their styling and placement.
    */
@@ -1876,7 +1876,7 @@ export class Chart {
 
   /**
    * Re-apply a state captured by `getState`. Restores grid, crosshair mode,
-   * pane weights and price scales, indicators, and the viewport — everything
+   * pane weights and price scales, indicators, and the viewport: everything
    * the chart is the source of truth for.
    *
    * It does **not** recreate series: the chart has no way to know their data.
@@ -1884,7 +1884,7 @@ export class Chart {
    * rebuild them (`addSeries(s.type, { paneIndex: s.paneIndex, style: s.style })`)
    * and then feed them.
    *
-   * Restore the viewport *after* your data lands — logical ranges index bars, so
+   * Restore the viewport *after* your data lands: logical ranges index bars, so
    * a range applied to an empty chart means nothing. Call `restoreState` again
    * (or `setVisibleLogicalRange`) once the series are populated.
    */
@@ -2399,7 +2399,7 @@ export class Chart {
   /**
    * Composite the full chart (all panes + overlays) and trigger a PNG download.
    * This is what the screenshot keyboard shortcut runs; call it from a toolbar
-   * button for a reliable "save image" — the browser's native right-click
+   * button for a reliable "save image": the browser's native right-click
    * "Save image as…" captures only the topmost (transparent overlay) canvas.
    */
   public downloadScreenshot(filename = 'chart.png'): void {

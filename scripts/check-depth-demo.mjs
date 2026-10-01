@@ -55,8 +55,8 @@ try {
 
   const readBook = () => demo.locator('tbody tr').evaluateAll(rows => rows.map(row => ({
     price: Number(row.children[1].textContent),
-    bid: Number(row.children[0].textContent.replaceAll(',', '').replace('—', '0')),
-    ask: Number(row.children[2].textContent.replaceAll(',', '').replace('—', '0')),
+    bid: Number(row.children[0].textContent.replaceAll(',', '')),
+    ask: Number(row.children[2].textContent.replaceAll(',', '')),
   })));
   const totals = rows => rows.reduce((sum, row) => [sum[0] + row.bid, sum[1] + row.ask], [0, 0]);
   const raw = await readBook();

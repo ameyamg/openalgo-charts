@@ -3,7 +3,7 @@
  * distributions: volume-at-price, time-at-price (TPO), and bid/ask footprint.
  */
 export interface VolumeProfileResult {
-  /** Volume per price bucket, sorted high → low price. */
+  /** Volume per price bucket, sorted high to low price. */
   buckets: { price: number; volume: number }[];
   /** Point of control: price bucket with the most volume. */
   poc: number;
@@ -30,7 +30,7 @@ export interface FootprintCell {
 
 export interface FootprintBar {
   time: number;
-  cells: FootprintCell[]; // sorted high → low price
+  cells: FootprintCell[]; // sorted high to low price
   /** Net delta = Σ(askVol − bidVol). */
   delta: number;
   /** Lowest/highest running trade delta within this bar, including initial zero.

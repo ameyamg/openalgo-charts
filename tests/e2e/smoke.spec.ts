@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-// Real-browser smoke: catches the class of bugs unit tests (fake canvas) miss —
+// Real-browser smoke: catches the class of bugs unit tests (fake canvas) miss:
 // blank/collapsed render, fetch "Illegal invocation", a chart type that throws,
 // and broken wheel/keyboard interaction.
 

@@ -173,11 +173,11 @@ export default function DepthLadderDemo() {
                 {rows.map(row => (
                   <tr key={row.price}>
                     <td className="depth-bid" style={{ background: `linear-gradient(to left, ${dark ? '#26a69a30' : '#26a69a22'} ${(row.bidQty / maxQty) * 100}%, transparent 0)` }}>
-                      {row.bidQty ? <button type="button" aria-label={`Inspect bid at ${row.price.toFixed(2)}`} onClick={() => inspect('bid', row.price)}>{qty(row.bidQty)}</button> : '—'}
+                      {row.bidQty ? <button type="button" aria-label={`Inspect bid at ${row.price.toFixed(2)}`} onClick={() => inspect('bid', row.price)}>{qty(row.bidQty)}</button> : null}
                     </td>
                     <th scope="row">{row.price.toFixed(2)}</th>
                     <td className="depth-ask" style={{ background: `linear-gradient(to right, ${dark ? '#ef535030' : '#ef535022'} ${(row.askQty / maxQty) * 100}%, transparent 0)` }}>
-                      {row.askQty ? <button type="button" aria-label={`Inspect ask at ${row.price.toFixed(2)}`} onClick={() => inspect('ask', row.price)}>{qty(row.askQty)}</button> : '—'}
+                      {row.askQty ? <button type="button" aria-label={`Inspect ask at ${row.price.toFixed(2)}`} onClick={() => inspect('ask', row.price)}>{qty(row.askQty)}</button> : null}
                     </td>
                   </tr>
                 ))}

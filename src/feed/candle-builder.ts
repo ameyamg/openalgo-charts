@@ -1,6 +1,6 @@
 /**
  * Live candle aggregation (ARCHITECTURE.md §10.2). The WS feed does not deliver
- * interval candles — LTP mode gives a tick price (+ last-traded-qty), Quote mode
+ * interval candles: LTP mode gives a tick price (+ last-traded-qty), Quote mode
  * gives a *cumulative day* volume. This builder buckets ticks into interval OHLC
  * with explicit volume, session-reset, and late-tick policies. Pure and
  * deterministic (no Date/rAF) so it is fully unit-testable.
@@ -192,7 +192,7 @@ export class CandleBuilder {
       return { bar: { ...bar }, isNew: true, provisional };
     }
 
-    // Same bucket → update the current bar in place.
+    // Same bucket: update the current bar in place.
     this._foldInto(this._current, tick);
     this._streamed = true;
     return { bar: { ...this._current }, isNew: false, provisional: this._provisional };
@@ -215,7 +215,7 @@ export class CandleBuilder {
       // First observation: this bar starts at the current cumulative (volume 0).
       this._cumAtBarStart = cum;
     } else if (cum < this._lastCum) {
-      // Daily reset (cumulative dropped) → new day's bar starts from 0.
+      // Daily reset (cumulative dropped): the new day's bar starts from 0.
       this._cumAtBarStart = 0;
     } else {
       // Carry from the previous bar's closing cumulative.

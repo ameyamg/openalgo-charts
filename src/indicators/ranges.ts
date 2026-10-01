@@ -76,7 +76,7 @@ function seededEma(values: readonly number[], period: number, holdFrom: number):
 }
 
 /**
- * Stochastic RSI — where RSI sits inside its own recent range, which turns a
+ * Stochastic RSI: where RSI sits inside its own recent range, which turns a
  * slow-moving oscillator into a fast one.
  *
  * The reference passes `rsi1` in as all three arguments of `stoch`, so the window
@@ -125,7 +125,7 @@ export const STOCHASTIC_RSI: IndicatorDescriptor = withTimeframe({
   },
   levels: () => [
     { price: 80, color: '#787b86', title: 'Upper Band' },
-    // `color.new(#787B86, 50)` — the middle band is deliberately the quiet one.
+    // `color.new(#787B86, 50)`: the middle band is deliberately the quiet one.
     { price: 50, color: '#5a6b8c', title: 'Middle Band' },
     { price: 20, color: '#787b86', title: 'Lower Band' },
   ],
@@ -133,7 +133,7 @@ export const STOCHASTIC_RSI: IndicatorDescriptor = withTimeframe({
 });
 
 /**
- * Williams Percent Range — the distance from the window's high down to the
+ * Williams Percent Range: the distance from the window's high down to the
  * close, as a percentage of the window. The sign convention is the whole point:
  * a close at a fresh window high is exactly 0 and one at the window low is
  * exactly -100, so the scale runs -100..0 rather than 0..100.
@@ -186,13 +186,13 @@ export const WILLIAMS_PERCENT_R: IndicatorDescriptor = withTimeframe({
 });
 
 /**
- * Ultimate Oscillator — buying pressure over true range, measured across three
+ * Ultimate Oscillator: buying pressure over true range, measured across three
  * horizons at once and weighted 4:2:1 so the fast window leads without the
  * slower two losing their vote.
  *
  * `high_`/`low_` reach back to the previous close, so bar 0 has no value: the reference
  * `max(high, na)` is `na`, and that bar contributes to neither sum. Summing
- * from bar 1 is what keeps it out — `rollingSum` keeps a running total, and one
+ * from bar 1 is what keeps it out: `rollingSum` keeps a running total, and one
  * NaN in a running total never comes back out. With the default 28-bar window
  * the first print is therefore at index 28, not 27.
  */
@@ -239,7 +239,7 @@ export const ULTIMATE_OSCILLATOR: IndicatorDescriptor = {
 };
 
 /**
- * Relative Vigor Index — the bar's body over its range, on the theory that a
+ * Relative Vigor Index: the bar's body over its range, on the theory that a
  * rising market closes near its high. Both halves are smoothed by `swma`
  * (the fixed 4-bar 1/2/2/1 kernel) before being summed, so a single wide bar
  * cannot swing the reading on its own.
@@ -248,7 +248,7 @@ export const ULTIMATE_OSCILLATOR: IndicatorDescriptor = {
  * the defaults), then 3 more for the signal's own `swma`.
  *
  * The reference `offset` input displaces both plots. The library has no per-plot
- * offset, so it is a real shift of the columns instead — see `shifted`.
+ * offset, so it is a real shift of the columns instead: see `shifted`.
  */
 export const RELATIVE_VIGOR_INDEX: IndicatorDescriptor = {
   id: 'relative-vigor-index',
@@ -282,7 +282,7 @@ export const RELATIVE_VIGOR_INDEX: IndicatorDescriptor = {
 };
 
 /**
- * Relative Volatility Index — RSI's arithmetic applied to volatility instead of
+ * Relative Volatility Index: RSI's arithmetic applied to volatility instead of
  * price: how much of the recent standard deviation arrived on up bars.
  *
  * Two details are easy to get wrong. The `length` input is the standard
@@ -330,7 +330,7 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
     for (let i = 0; i < n; i++) {
       const d = delta[i]!;
       // Bar 0 has no change, and in the reference both `na <= 0` and `na > 0` are false,
-      // so it takes the `stddev` branch of both ternaries — where the value is
+      // so it takes the `stddev` branch of both ternaries, where the value is
       // itself `na`.
       upSource[i] = Number.isFinite(d) && d <= 0 ? 0 : sd[i]!;
       downSource[i] = Number.isFinite(d) && d > 0 ? 0 : sd[i]!;
@@ -367,13 +367,13 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
 };
 
 /**
- * Woodies CCI — a 14-bar CCI drawn twice, as a colour-coded histogram and as a
+ * Woodies CCI: a 14-bar CCI drawn twice, as a colour-coded histogram and as a
  * line, with a fast "turbo" CCI over the top. The pair is the method: the turbo
  * line crossing the slow one is the trigger, and the histogram's colour says
  * whether the trend is established enough to take it.
  *
- * The colour is a five-bar state, not a level — `cci14[5] .. cci14[1]` all on
- * one side of zero — so it belongs to `colorBy` rather than to a second plot.
+ * The colour is a five-bar state, not a level (`cci14[5] .. cci14[1]` all on
+ * one side of zero), so it belongs to `colorBy` rather than to a second plot.
  * Note the fallback branch: with no established run, the reference paints a negative
  * reading teal and a positive one red, which is the opposite of the run colours.
  * That is what the built-in ships, and parity beats tidiness here.

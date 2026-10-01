@@ -1,5 +1,5 @@
 /**
- * Market Profile / TPO (Time Price Opportunity) — ARCHITECTURE.md §6A, Family C.
+ * Market Profile / TPO (Time Price Opportunity): ARCHITECTURE.md §6A, Family C.
  *
  * Groups bars into sessions (day / week / month / composite), splits each
  * session into fixed-length time blocks ("periods", one letter each), and counts
@@ -82,7 +82,7 @@ export interface MarketProfileOptions {
   rowTicks: number;
   /** Session grouping. `composite` builds one profile over all bars. */
   session: MarketProfileSession;
-  /** TPO period length in minutes — one letter per period. */
+  /** TPO period length in minutes: one letter per period. */
   blockMinutes: number;
   /** Value-area fraction of total TPOs (0..1). */
   valueAreaPercent: number;
@@ -124,7 +124,7 @@ export const DEFAULT_MARKET_PROFILE_OPTIONS: MarketProfileOptions = {
 };
 
 /**
- * Ticks per row for a desired row height — `rowTicksFor(2, 0.1)` is 20.
+ * Ticks per row for a desired row height: `rowTicksFor(2, 0.1)` is 20.
  * Saves callers from writing the division (and from off-by-one float dust).
  */
 export function rowTicksFor(rowSize: number, tickSize: number): number {
@@ -138,7 +138,7 @@ export interface MarketProfileLevel {
   count: number;
   /** Period letters at this price, in period order (e.g. `"ABF"`). */
   letters: string;
-  /** Period indices at this price — the renderer colours blocks from these. */
+  /** Period indices at this price: the renderer colours blocks from these. */
   periods: number[];
   /** Volume traded at this price (each bar's volume split across its range). */
   volume: number;
@@ -169,20 +169,20 @@ export interface DevelopingValue {
 
 /**
  * Classic market-profile day types.
- * `normal` — a wide initial balance the rest of the day stays inside.
- * `normal-variation` — range extends to roughly 1.5-2x the initial balance.
- * `trend` — one-way extension, small IB relative to the range.
- * `double-distribution` — two separated high-volume nodes with a thin middle.
- * `neutral` — extension on both sides of the initial balance.
+ * `normal`: a wide initial balance the rest of the day stays inside.
+ * `normal-variation`: range extends to roughly 1.5-2x the initial balance.
+ * `trend`: one-way extension, small IB relative to the range.
+ * `double-distribution`: two separated high-volume nodes with a thin middle.
+ * `neutral`: extension on both sides of the initial balance.
  */
 export type DayType = 'normal' | 'normal-variation' | 'trend' | 'double-distribution' | 'neutral';
 
 /**
  * How the session opened.
- * `drive` — opens at an extreme and runs one way without looking back.
- * `test-drive` — probes one side first, then drives the other.
- * `rejection-reverse` — pushes one way, fails, reverses back through the open.
- * `auction` — rotates around the open with no conviction.
+ * `drive`: opens at an extreme and runs one way without looking back.
+ * `test-drive`: probes one side first, then drives the other.
+ * `rejection-reverse`: pushes one way, fails, reverses back through the open.
+ * `auction`: rotates around the open with no conviction.
  */
 export type OpenType = 'drive' | 'test-drive' | 'rejection-reverse' | 'auction';
 
@@ -190,7 +190,7 @@ export interface MarketProfileSessionResult {
   /** UTC seconds of the session's first and last bar. */
   startTime: number;
   endTime: number;
-  /** Window name when one was applied — the renderer's session label. */
+  /** Window name when one was applied: the renderer's session label. */
   label?: string | undefined;
   /** Price levels, sorted high -> low. */
   levels: MarketProfileLevel[];
@@ -209,7 +209,7 @@ export interface MarketProfileSessionResult {
   periods: number;
   /** Per-period detail, in order. */
   periodDetail: MarketProfilePeriod[];
-  /** Initial balance — price range of the opening `initialBalancePeriods`. */
+  /** Initial balance: price range of the opening `initialBalancePeriods`. */
   initialBalance: { high: number; low: number };
   /** How far price extended beyond the initial balance each way (0 when none). */
   rangeExtension: { up: number; down: number };
@@ -221,7 +221,7 @@ export interface MarketProfileSessionResult {
   /** True when the session high / low printed more than one TPO (weak extreme). */
   poorHigh: boolean;
   poorLow: boolean;
-  /** POC / VA after each period closed — the developing track. */
+  /** POC / VA after each period closed: the developing track. */
   developing: DevelopingValue[];
   dayType: DayType;
   openType: OpenType;
@@ -609,7 +609,7 @@ function tailsOf(
 }
 
 /**
- * Prior-session levels no later session has traded back through — the "naked"
+ * Prior-session levels no later session has traded back through: the "naked"
  * POC / VAH / VAL that so often act as magnets. Oldest first, each tagged with
  * the session it came from.
  */
@@ -632,7 +632,7 @@ export function nakedLevels(
   return out;
 }
 
-/** Round a price onto the profile's row grid — handy for hit-testing. */
+/** Round a price onto the profile's row grid: handy for hit-testing. */
 export function rowOf(price: number, options: MarketProfileOptions): number {
   return bucketPrice(price, options.tickSize * Math.max(1, Math.floor(options.rowTicks)));
 }

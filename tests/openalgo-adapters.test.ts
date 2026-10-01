@@ -3,7 +3,7 @@ import { parseMessage, formatSubscribe, OpenAlgoWsFeed, type SocketLike } from '
 import { OpenAlgoTradeFeed, mapOrder } from '../src/feed/openalgo-trade';
 import { PriceScale } from '../src/scale/price-scale';
 
-describe('OpenAlgo WS — pure helpers (documented protocol)', () => {
+describe('OpenAlgo WS: pure helpers (documented protocol)', () => {
   it('formats a subscribe message (action/symbol/exchange/numeric mode)', () => {
     expect(JSON.parse(formatSubscribe('LTP', 'SBIN', 'NSE'))).toEqual({ action: 'subscribe', symbol: 'SBIN', exchange: 'NSE', mode: 1 });
     expect(JSON.parse(formatSubscribe('Depth', 'SBIN', 'NSE', 5))).toMatchObject({ action: 'subscribe', mode: 3, depth_level: 5 });
@@ -30,7 +30,7 @@ describe('OpenAlgo WS — pure helpers (documented protocol)', () => {
   });
 });
 
-describe('OpenAlgo WS — feed with injected socket', () => {
+describe('OpenAlgo WS: feed with injected socket', () => {
   function fakeSocket(): { sock: SocketLike; sent: string[]; emit: (data: string) => void } {
     const sent: string[] = [];
     // readyState OPEN so connect() flushes immediately (queueing is covered elsewhere)
@@ -163,7 +163,7 @@ describe('OpenAlgoTradeFeed (offline, injected fetch)', () => {
   });
 
   it('treats trigger_price 0 as no trigger (so the order line renders at price, not 0)', () => {
-    // a plain LIMIT: orderbook returns trigger_price 0 → triggerPrice must be undefined,
+    // a plain LIMIT: orderbook returns trigger_price 0, so triggerPrice must be undefined,
     // otherwise `triggerPrice ?? price` would draw the line at 0 (?? ignores 0).
     const limit = mapOrder({ orderid: 'L', symbol: 'SBIN', action: 'BUY', pricetype: 'LIMIT', quantity: 1, price: 1200, trigger_price: 0, order_status: 'open' });
     expect(limit.triggerPrice).toBeUndefined();
@@ -178,7 +178,7 @@ describe('PriceScale modes (H9)', () => {
   it('logarithmic mapping places the geometric midpoint at the pane centre', () => {
     const ps = new PriceScale({ mode: 'logarithmic' });
     ps.setHeight(100);
-    ps.setPriceRange({ min: 10, max: 1000 }); // log10: 1..3, mid 2 → price 100
+    ps.setPriceRange({ min: 10, max: 1000 }); // log10: 1..3, mid 2, so price 100
     expect(ps.priceToY(100)).toBeCloseTo(50);
     expect(ps.priceToY(1000)).toBeCloseTo(0);
     expect(ps.priceToY(10)).toBeCloseTo(100);

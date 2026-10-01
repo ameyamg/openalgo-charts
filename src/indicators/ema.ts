@@ -1,5 +1,5 @@
 /**
- * Exponential moving average (ARCHITECTURE.md §8 — an indicator that validates
+ * Exponential moving average (ARCHITECTURE.md §8: an indicator that validates
  * the series/extensibility model). Pure; the result is plotted as a `line`
  * series, demonstrating derived data on the shared time axis.
  */

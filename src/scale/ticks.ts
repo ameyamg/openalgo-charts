@@ -27,7 +27,7 @@ export function niceNum(x: number, round: boolean): number {
 }
 
 /**
- * The next value up the 1 → 2 → 2.5 → 5 → 10 nice ladder. The 2.5 rung matters:
+ * The next value up the 1, 2, 2.5, 5, 10 nice ladder. The 2.5 rung matters:
  * without it a 15-point range clamps from step 2 (8 labels) straight to step 5
  * (3 labels), when 2.5 lands exactly on the six the caller asked for.
  */
@@ -58,8 +58,8 @@ export function niceTicks(min: number, max: number, maxTicks = 6): number[] {
   }
   const slots = Math.max(1, maxTicks - 1);
   // Derive the step from the *raw* span. Rounding the span up to a nice number
-  // first and then dividing rounds twice (10.5 → 20 → step 5), which costs
-  // roughly half the labels the caller asked for — a 10-point range on a 65000
+  // first and then dividing rounds twice (10.5 rounds to 20, then to a step of 5), which costs
+  // roughly half the labels the caller asked for: a 10-point range on a 65000
   // instrument came out with three ticks instead of six.
   let step = niceNum((max - min) / slots, true);
   if (!(step > 0)) return [min];

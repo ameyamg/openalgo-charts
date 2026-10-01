@@ -1,12 +1,12 @@
 /**
- * Tier-2 contract — indicators whose data is **not** derived from the chart's
+ * Tier-2 contract: indicators whose data is **not** derived from the chart's
  * OHLCV: cumulative volume delta, PCR, an external analytics
  * feed. Where a Tier-1 descriptor is a pure `calc(bars, settings)`, a Tier-2
  * descriptor owns a fetch / subscribe / merge lifecycle and its own series.
  *
  * `createTier2Indicator` wraps that lifecycle into an ordinary
  * `IndicatorDescriptor`, so the chart runtime, the settings model, panes,
- * levels, and removal all work identically — there is no second runtime.
+ * levels, and removal all work identically: there is no second runtime.
  *
  * The alignment rule is deliberate and worth knowing: external points carry
  * their own timestamps, which rarely match bar times. Each bar takes the most
@@ -48,7 +48,7 @@ export interface Tier2Context {
   /** Cancelled when this request is obsolete or the instance is removed. */
   signal?: AbortSignal;
   settings: Readonly<IndicatorSettings>;
-  /** The chart's current source bars — use for the requested time window. */
+  /** The chart's current source bars: use for the requested time window. */
   bars: readonly Bar[];
   /** UTC seconds of the first and last source bar (0 when there are none). */
   from: number;

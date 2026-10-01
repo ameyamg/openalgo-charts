@@ -30,7 +30,7 @@ export class TradeController {
     this._host = host;
   }
 
-  /** Reconcile a full book snapshot. Idempotent — safe to call on every update or reconnect. */
+  /** Reconcile a full book snapshot. Idempotent: safe to call on every update or reconnect. */
   public reconcile(orders: readonly Order[], positions: readonly Position[]): void {
     // Brackets are planned before anything is drawn, because the order lines need
     // to know which stops and targets a bracket is going to draw for them. The
