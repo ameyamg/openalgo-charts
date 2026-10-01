@@ -3,7 +3,13 @@
  * bars from its first index on, and the instance lays them over the result it
  * already holds for the bars before it.
  */
-import type { IndicatorValues } from './indicator-registry';
+
+/**
+ * A study's output columns by key, the shape of `IndicatorValues`. Written
+ * out rather than imported, so this module imports nothing and closes no type
+ * cycle through the registry.
+ */
+type Columns = Readonly<Record<string, readonly (number | null)[]>>;
 
 /**
  * Overlay a `calcTail` result (values for `[from, n)`) onto the previous full
@@ -11,11 +17,11 @@ import type { IndicatorValues } from './indicator-registry';
  * forces the caller back to a full recompute by returning `null`.
  */
 export function spliceTail(
-  previous: IndicatorValues,
-  tail: IndicatorValues,
+  previous: Columns,
+  tail: Columns,
   from: number,
   n: number,
-): IndicatorValues | null {
+): Record<string, (number | null)[]> | null {
   const out: Record<string, (number | null)[]> = {};
   for (const key of Object.keys(tail)) {
     const prev = previous[key];
