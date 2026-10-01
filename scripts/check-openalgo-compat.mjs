@@ -11,7 +11,8 @@
  * Add --workspaces true for complete named chart grids.
  * Add --oi true for history capability, readouts, studies and persistence.
  * Add --alerts true for source controls, live delivery, persistence and replay guards.
- * Add --consumer-checks /absolute/checks.mjs for additional checkTradingWorkspace checks.
+ * Add --consumer-checks /absolute/checks.mjs for additional checkTradingWorkspace checks;
+ * they run last, after every pane is put back on 5m.
  * Use --browser chromium|firefox|webkit to select the rendering engine.
  * Use --port <n> to serve on a fixed port; without it a free one is picked at random.
  * A defect in the host's own chrome is printed as HOST FINDING and kept in the
@@ -961,6 +962,14 @@ try {
   if (args.alerts === 'true') await checkAlerts({ page, terminal, check, reload, sendDepth, screenshot: args.screenshot, orderCount: () => orderCounter, hostFinding });
   if (args.workspaces === 'true') await checkWorkspaces({ page, check, reload, screenshot: args.screenshot, orderCount: () => orderCounter, sendDepth });
   if (args['consumer-checks']) {
+    // The consumer's checks start from an intraday grid: they wait for more
+    // than ten bars in every pane, and the core checks end with a daily pane
+    // of three. Leave replay and return every pane to 5m first.
+    await page.evaluate(() => {
+      for (const t of window.__compatTerminals.filter(t => !t.destroyed && t.chart)) { t.stopReplay(); t.setInterval('5m'); }
+    });
+    await page.waitForFunction(() => window.__compatTerminals.filter(t => !t.destroyed && t.chart)
+      .every(t => t.interval === '5m' && !t.dataUnavailable() && t.price?.getData().length > 10));
     const file = resolve(args['consumer-checks']);
     report.consumerChecks = { file, sha256: createHash('sha256').update(await readFile(file)).digest('hex') };
     const { checkTradingWorkspace } = await import(pathToFileURL(file).href);
