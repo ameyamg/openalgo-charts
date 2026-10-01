@@ -52,7 +52,7 @@ node scripts/capture-profile-screenshots.mjs
 The capture script writes five theme PNGs at 800 × 1320, DPR 2, focusing on the
 same newest synthetic session with 18 CSS pixels per row and 16-pixel letters.
 It also captures packed/split views with the same framing and unchanged price
-aggregation. Gallery cards display images at 320–400 CSS pixels wide; narrow
+aggregation. Gallery cards display images at 320 to 400 CSS pixels wide; narrow
 screens scroll within a card instead of shrinking letters further. Screenshots are
 tracked in `public/screenshots/market-profile-v2.1.1/`; generated demo bundles are ignored.
 Pass a full demo URL as the script's first argument to capture another local host.

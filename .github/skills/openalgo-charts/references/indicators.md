@@ -1931,46 +1931,46 @@ the version the user has on the chart, and the plot keys are the built-in's, not
 (`ema` plots `ma`; `bollinger` plots `upper` / `basis` / `lower`). Read
 `getIndicator(id).plots` rather than guessing.
 
-| Export &rarr; id | Export &rarr; id | Export &rarr; id |
+| Export: id | Export: id | Export: id |
 |---|---|---|
-| `ADL` &rarr; `adl` | `ADX` &rarr; `adx` | `ALLIGATOR` &rarr; `alligator` |
-| `ALMA` &rarr; `alma` | `ALPHATREND` &rarr; `alphatrend` | `AROON` &rarr; `aroon` |
-| `AROON_OSCILLATOR` &rarr; `aroon-oscillator` | `ATR` &rarr; `atr` | `AVERAGE_DAILY_RANGE` &rarr; `average-daily-range` |
-| `AWESOME_OSCILLATOR` &rarr; `awesome-oscillator` | `BALANCE_OF_POWER` &rarr; `balance-of-power` | `BB_TREND` &rarr; `bb-trend` |
-| `BOLLINGER` &rarr; `bollinger` | `BOLLINGER_BANDWIDTH` &rarr; `bollinger-bandwidth` | `BOLLINGER_PERCENT_B` &rarr; `bollinger-percent-b` |
-| `CCI` &rarr; `cci` | `CHAIKIN_MONEY_FLOW` &rarr; `chaikin-money-flow` | `CHAIKIN_OSCILLATOR` &rarr; `chaikin-oscillator` |
-| `CHAIKIN_VOLATILITY` &rarr; `chaikin-volatility` | `CHANDELIER_EXIT` &rarr; `chandelier-exit` | `CHANDE_KROLL_STOP` &rarr; `chande-kroll-stop` |
-| `CHANDE_MOMENTUM` &rarr; `chande-momentum` | `CHOPPINESS_INDEX` &rarr; `choppiness-index` | `CHOP_ZONE` &rarr; `chop-zone` |
-| `CONNORS_RSI` &rarr; `connors-rsi` | `CONSOLIDATION_BREAKOUT` &rarr; `consolidation-breakout` | `COPPOCK_CURVE` &rarr; `coppock-curve` |
-| `CPR` &rarr; `cpr` | `DEMA` &rarr; `dema` | `DONCHIAN` &rarr; `donchian` |
-| `DPO` &rarr; `dpo` | `EASE_OF_MOVEMENT` &rarr; `ease-of-movement` | `ELDER_FORCE_INDEX` &rarr; `elder-force-index` |
-| `ELDER_RAY` &rarr; `elder-ray` | `EMA` &rarr; `ema` | `ENVELOPE` &rarr; `envelope` |
-| `FISHER_TRANSFORM` &rarr; `fisher-transform` | `HALFTREND` &rarr; `halftrend` | `HIGH_LOW_52_WEEK` &rarr; `high-low-52-week` |
-| `HISTORICAL_VOLATILITY` &rarr; `historical-volatility` | `HMA` &rarr; `hma` | `HULL_SUITE` &rarr; `hull-suite` |
-| `ICHIMOKU` &rarr; `ichimoku` | `KAMA` &rarr; `kama` | `KELTNER_CHANNEL` &rarr; `keltner-channel` |
-| `KLINGER_OSCILLATOR` &rarr; `klinger-oscillator` | `KNOW_SURE_THING` &rarr; `know-sure-thing` | `LINREG_SLOPE` &rarr; `linreg-slope` |
-| `LSMA` &rarr; `lsma` | `MACD` &rarr; `macd` | `MASS_INDEX` &rarr; `mass-index` |
-| `MA_CHANNEL` &rarr; `ma-channel` | `MA_CROSS` &rarr; `ma-cross` | `MA_RIBBON` &rarr; `ma-ribbon` |
-| `MCGINLEY_DYNAMIC` &rarr; `mcginley-dynamic` | `MEDIAN` &rarr; `median` | `MFI` &rarr; `mfi` |
-| `MOMENTUM` &rarr; `momentum` | `NET_VOLUME` &rarr; `net-volume` | `NVI` &rarr; `nvi` |
-| `OBV` &rarr; `obv` | `OPEN_INTEREST` &rarr; `open-interest` | `OPEN_INTEREST_BUILDUP` &rarr; `open-interest-buildup` |
-| `OPEN_INTEREST_CHANGE` &rarr; `open-interest-change` | `PARABOLIC_SAR` &rarr; `parabolic-sar` | `PPO` &rarr; `ppo` |
-| `PVI` &rarr; `pvi` | `PVO` &rarr; `pvo` | `PVT` &rarr; `pvt` |
-| `RANGE_ANALYSIS` &rarr; `range-analysis` | `RELATIVE_VIGOR_INDEX` &rarr; `relative-vigor-index` | `RELATIVE_VOLATILITY_INDEX` &rarr; `relative-volatility-index` |
-| `ROC` &rarr; `roc` | `RSI` &rarr; `rsi` | `RSI_DIVERGENCE` &rarr; `rsi-divergence` |
-| `SCHAFF_TREND_CYCLE` &rarr; `schaff-trend-cycle` | `SEASONALITY` &rarr; `seasonality` | `SMA` &rarr; `sma` |
-| `SMI` &rarr; `smi` | `SMI_ERGODIC_INDICATOR` &rarr; `smi-ergodic-indicator` | `SMI_ERGODIC_OSCILLATOR` &rarr; `smi-ergodic-oscillator` |
-| `SMMA` &rarr; `smma` | `SPECIAL_K` &rarr; `special-k` | `STANDARD_DEVIATION` &rarr; `standard-deviation` |
-| `STANDARD_ERROR` &rarr; `standard-error` | `STANDARD_ERROR_BANDS` &rarr; `standard-error-bands` | `STOCHASTIC` &rarr; `stochastic` |
-| `STOCHASTIC_RSI` &rarr; `stochastic-rsi` | `SUPERTREND` &rarr; `supertrend` | `T3` &rarr; `t3` |
-| `TEMA` &rarr; `tema` | `TREND_STRENGTH_INDEX` &rarr; `trend-strength-index` | `TRIX` &rarr; `trix` |
-| `TSI` &rarr; `tsi` | `TWAP` &rarr; `twap` | `ULCER_INDEX` &rarr; `ulcer-index` |
-| `ULTIMATE_OSCILLATOR` &rarr; `ultimate-oscillator` | `VIDYA` &rarr; `vidya` | `VOLATILITY_SQUEEZE` &rarr; `volatility-squeeze` |
-| `VOLATILITY_STOP` &rarr; `volatility-stop` | `VOLUME` &rarr; `volume` | `VORTEX` &rarr; `vortex` |
-| `VWAP` &rarr; `vwap` | `VWMA` &rarr; `vwma` | `WAVETREND` &rarr; `wavetrend` |
-| `WILLIAMS_FRACTALS` &rarr; `williams-fractals` | `WILLIAMS_PERCENT_R` &rarr; `williams-percent-r` | `WILLIAMS_VIX_FIX` &rarr; `williams-vix-fix` |
-| `WMA` &rarr; `wma` | `WOODIES_CCI` &rarr; `woodies-cci` | `ZIGZAG` &rarr; `zigzag` |
-| `ZLEMA` &rarr; `zlema` |  |  |
+| `ADL`: `adl` | `ADX`: `adx` | `ALLIGATOR`: `alligator` |
+| `ALMA`: `alma` | `ALPHATREND`: `alphatrend` | `AROON`: `aroon` |
+| `AROON_OSCILLATOR`: `aroon-oscillator` | `ATR`: `atr` | `AVERAGE_DAILY_RANGE`: `average-daily-range` |
+| `AWESOME_OSCILLATOR`: `awesome-oscillator` | `BALANCE_OF_POWER`: `balance-of-power` | `BB_TREND`: `bb-trend` |
+| `BOLLINGER`: `bollinger` | `BOLLINGER_BANDWIDTH`: `bollinger-bandwidth` | `BOLLINGER_PERCENT_B`: `bollinger-percent-b` |
+| `CCI`: `cci` | `CHAIKIN_MONEY_FLOW`: `chaikin-money-flow` | `CHAIKIN_OSCILLATOR`: `chaikin-oscillator` |
+| `CHAIKIN_VOLATILITY`: `chaikin-volatility` | `CHANDELIER_EXIT`: `chandelier-exit` | `CHANDE_KROLL_STOP`: `chande-kroll-stop` |
+| `CHANDE_MOMENTUM`: `chande-momentum` | `CHOPPINESS_INDEX`: `choppiness-index` | `CHOP_ZONE`: `chop-zone` |
+| `CONNORS_RSI`: `connors-rsi` | `CONSOLIDATION_BREAKOUT`: `consolidation-breakout` | `COPPOCK_CURVE`: `coppock-curve` |
+| `CPR`: `cpr` | `DEMA`: `dema` | `DONCHIAN`: `donchian` |
+| `DPO`: `dpo` | `EASE_OF_MOVEMENT`: `ease-of-movement` | `ELDER_FORCE_INDEX`: `elder-force-index` |
+| `ELDER_RAY`: `elder-ray` | `EMA`: `ema` | `ENVELOPE`: `envelope` |
+| `FISHER_TRANSFORM`: `fisher-transform` | `HALFTREND`: `halftrend` | `HIGH_LOW_52_WEEK`: `high-low-52-week` |
+| `HISTORICAL_VOLATILITY`: `historical-volatility` | `HMA`: `hma` | `HULL_SUITE`: `hull-suite` |
+| `ICHIMOKU`: `ichimoku` | `KAMA`: `kama` | `KELTNER_CHANNEL`: `keltner-channel` |
+| `KLINGER_OSCILLATOR`: `klinger-oscillator` | `KNOW_SURE_THING`: `know-sure-thing` | `LINREG_SLOPE`: `linreg-slope` |
+| `LSMA`: `lsma` | `MACD`: `macd` | `MASS_INDEX`: `mass-index` |
+| `MA_CHANNEL`: `ma-channel` | `MA_CROSS`: `ma-cross` | `MA_RIBBON`: `ma-ribbon` |
+| `MCGINLEY_DYNAMIC`: `mcginley-dynamic` | `MEDIAN`: `median` | `MFI`: `mfi` |
+| `MOMENTUM`: `momentum` | `NET_VOLUME`: `net-volume` | `NVI`: `nvi` |
+| `OBV`: `obv` | `OPEN_INTEREST`: `open-interest` | `OPEN_INTEREST_BUILDUP`: `open-interest-buildup` |
+| `OPEN_INTEREST_CHANGE`: `open-interest-change` | `PARABOLIC_SAR`: `parabolic-sar` | `PPO`: `ppo` |
+| `PVI`: `pvi` | `PVO`: `pvo` | `PVT`: `pvt` |
+| `RANGE_ANALYSIS`: `range-analysis` | `RELATIVE_VIGOR_INDEX`: `relative-vigor-index` | `RELATIVE_VOLATILITY_INDEX`: `relative-volatility-index` |
+| `ROC`: `roc` | `RSI`: `rsi` | `RSI_DIVERGENCE`: `rsi-divergence` |
+| `SCHAFF_TREND_CYCLE`: `schaff-trend-cycle` | `SEASONALITY`: `seasonality` | `SMA`: `sma` |
+| `SMI`: `smi` | `SMI_ERGODIC_INDICATOR`: `smi-ergodic-indicator` | `SMI_ERGODIC_OSCILLATOR`: `smi-ergodic-oscillator` |
+| `SMMA`: `smma` | `SPECIAL_K`: `special-k` | `STANDARD_DEVIATION`: `standard-deviation` |
+| `STANDARD_ERROR`: `standard-error` | `STANDARD_ERROR_BANDS`: `standard-error-bands` | `STOCHASTIC`: `stochastic` |
+| `STOCHASTIC_RSI`: `stochastic-rsi` | `SUPERTREND`: `supertrend` | `T3`: `t3` |
+| `TEMA`: `tema` | `TREND_STRENGTH_INDEX`: `trend-strength-index` | `TRIX`: `trix` |
+| `TSI`: `tsi` | `TWAP`: `twap` | `ULCER_INDEX`: `ulcer-index` |
+| `ULTIMATE_OSCILLATOR`: `ultimate-oscillator` | `VIDYA`: `vidya` | `VOLATILITY_SQUEEZE`: `volatility-squeeze` |
+| `VOLATILITY_STOP`: `volatility-stop` | `VOLUME`: `volume` | `VORTEX`: `vortex` |
+| `VWAP`: `vwap` | `VWMA`: `vwma` | `WAVETREND`: `wavetrend` |
+| `WILLIAMS_FRACTALS`: `williams-fractals` | `WILLIAMS_PERCENT_R`: `williams-percent-r` | `WILLIAMS_VIX_FIX`: `williams-vix-fix` |
+| `WMA`: `wma` | `WOODIES_CCI`: `woodies-cci` | `ZIGZAG`: `zigzag` |
+| `ZLEMA`: `zlema` |  |  |
 
 `INDICATORS_TIER` is the tier's identity constant (`'indicators'`), for feature
 detection without a bare string.

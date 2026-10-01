@@ -20,7 +20,7 @@ export default function ArchitectureDiagram() {
         <button type="button" aria-pressed={!actualSize} onClick={() => setActualSize(false)}>Fit</button>
         <button type="button" aria-pressed={actualSize} onClick={() => setActualSize(true)}>Actual size</button>
         {(['light', 'dark'] as const).map(theme => (
-          <a key={theme} className={`oac-architecture__variant--${theme}`} href={diagrams[theme]} target="_blank" rel="noreferrer">Open SVG ↗</a>
+          <a key={theme} className={`oac-architecture__variant--${theme}`} href={diagrams[theme]} target="_blank" rel="noreferrer">Open SVG</a>
         ))}
       </div>
       <div className="oac-architecture__viewport" tabIndex={0} role="region" aria-label="Host boundary, base engine and optional tiers; scroll to explore at actual size">
