@@ -115,6 +115,10 @@ A study on the underlying bars computes on your bars, but its hooks run on the e
 element per bar, which is all of them but Heikin Ashi. Read per-bar values from `ctx.values`, which
 the chart samples onto the elements.
 
+Its alerts count your bars, not the elements. A bar that completes two bricks is judged once, at
+the first brick, and an alert with a frequency treats it as one bar: `oncePerBar` delivers once
+for it and `onBarClose` waits for that bar to close. On the chart's bars each brick is judged.
+
 A Kagi chart dates the vertex still forming at your newest bar, and a range bar that a newer bar
 extends is dated at that bar too. A study reads that as the same element revised, not as a change
 to history: its alerts judge each new vertex or range bar once, `barState.isNew` is true only on a

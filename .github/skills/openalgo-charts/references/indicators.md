@@ -1247,7 +1247,12 @@ order, the omitted-frequency alerts before the explicit ones. On a Kagi or range
 chart a newer source bar dates the forming element again at its index: the same bar
 revised (a live `replace`, or `append` with the elements after it), so it is not
 judged as new, `barState.isNew` stays false for it, and an alert that already
-delivered on it (`oncePerBar`) or closed it stays that way.
+delivered on it (`oncePerBar`) or closed it stays that way. A study on the
+underlying bars (`barSource: 'underlying'`) counts the bars it computes on: the
+elements one underlying bar completed all read it, so its alerts judge that bar once,
+at the first of them, for every frequency. The per-bar and close checkpoints are kept
+in those bars' times, a close waits for the underlying bar to close, and an update is
+judged only when an element reads the bar it moved.
 
 For `onBarClose`, and for any alert judged at a bar before the newest, predicate
 and message contexts contain only bar/output prefixes through the evaluated index. Calculations must still be causal. Native dispatch
