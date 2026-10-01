@@ -10,6 +10,7 @@
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, ZOrder } from 'openalgo-charts';
 import type { VolumeProfileFamilyResult, VolumeProfileSessionResult } from './volume-profile-family';
+import { sessionsPriceRange } from './profile-model';
 
 export type VolumeDisplayMode = 'total' | 'buySell' | 'delta';
 export type VolumeProfileSide = 'left' | 'right';
@@ -81,15 +82,7 @@ export class VolumeProfile implements IPrimitive {
   public zOrder(): ZOrder { return this._opts.zOrder; }
 
   public autoscaleInfo(): { min: number; max: number } | null {
-    if (this._result === null) return null;
-    let min = Infinity;
-    let max = -Infinity;
-    for (const s of this._result.sessions) {
-      if (s.levels.length === 0) continue;
-      max = Math.max(max, s.levels[0]!.price);
-      min = Math.min(min, s.levels[s.levels.length - 1]!.price);
-    }
-    return Number.isFinite(min) ? { min, max } : null;
+    return this._result === null ? null : sessionsPriceRange(this._result.sessions);
   }
 
   public setData(result: VolumeProfileFamilyResult): void {
