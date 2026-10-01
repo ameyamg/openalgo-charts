@@ -9,7 +9,7 @@
  */
 import type { Bar } from './bar';
 import { runAbortable } from './abortable-request';
-import { IndicatorAlertPolicy, alertContext } from './indicator-alert-policy';
+import { IndicatorAlertPolicy, alertContext, studyBarTime } from './indicator-alert-policy';
 import { cloneIndicatorSettings, planIndicatorDependencies, type IndicatorDependencyNode } from './indicator-dependencies';
 import { validateIndicatorInputs } from './indicator-inputs';
 import { parseIndicatorPolicy, type IndicatorEditOptions, type IndicatorPolicy } from './indicator-policy';
@@ -510,6 +510,7 @@ export class IndicatorInstance implements IndicatorApi {
    * settings change, a page of older bars) re-fires nothing.
    */
   private _alertTime = 0;
+  private _alertRead = -Infinity; // the bar the study read at the last element judged or seeded (`studyBarTime`)
   private readonly _alertPolicy: IndicatorAlertPolicy;
   private _calculationEpoch = 0;
   /** Set once a tail-only change lands, which is what a live feed looks like. */
@@ -1302,28 +1303,25 @@ export class IndicatorInstance implements IndicatorApi {
    * the whole chart.
    *
    * Only a tail-only change fires, and each bar it appended is judged in turn,
-   * as the newest. Any other change replaced history, and an indicator dropped
-   * onto a loaded chart (or moved to another symbol) must not announce every
-   * crossover of the last two years at once. Such a pass reseeds silently.
+   * as the newest, once per bar the study read: every element one bar under a
+   * transform completed reads it. Any other change replaced history, and an
+   * indicator dropped onto a loaded chart (or moved to another symbol) must not
+   * announce every crossover of the last two years at once; it reseeds silently.
    */
-  private _syncAlerts(
-    bars: readonly Bar[],
-    settings: Readonly<IndicatorSettings>,
-    tailOnly: boolean,
-    calculation: IndicatorCalcContext,
-    refresh: boolean,
-    current: () => boolean,
-  ): void {
+  private _syncAlerts(bars: readonly Bar[], settings: Readonly<IndicatorSettings>, tailOnly: boolean,
+    calculation: IndicatorCalcContext, refresh: boolean, current: () => boolean): void {
     const specs = this._d.alerts;
     const n = bars.length;
     if (specs === undefined || !current()) return;
-    const seen = this._alertTime;
+    const seen = this._alertTime, read = studyBarTime(bars, this._sampled);
     if (n > 0) this._alertTime = bars[n - 1]!.time;
     let from = n;
     if (tailOnly && !refresh) while (from > 0 && bars[from - 1]!.time > seen) from--;
-    let failed = false;
-    let failure: unknown;
+    else this._alertRead = n > 0 ? read(n - 1) : -Infinity;
+    let failed = false, failure: unknown;
     for (let i = from; i < n; i++) {
+      if (read(i) <= this._alertRead) continue; // judged at an element before this one, in this pass or an earlier one
+      this._alertRead = read(i);
       const ctx = alertContext(bars, this._values, settings, i);
       for (const spec of specs) {
         if (spec.frequency !== undefined) continue;
@@ -1346,7 +1344,7 @@ export class IndicatorInstance implements IndicatorApi {
     }
     if (!current()) return;
     try {
-      this._alertPolicy.evaluate({ bars, values: this._values, settings, calculation, tailOnly, refresh, current, from }, payload => {
+      this._alertPolicy.evaluate({ bars, values: this._values, settings, calculation, tailOnly, refresh, current, from, sampled: this._sampled }, payload => {
         this._host.emit?.('indicator:alert', { ...payload, indicatorId: this.indicatorId, instanceId: this.id });
       });
     } catch (error) {
@@ -1860,12 +1858,12 @@ export class IndicatorInstance implements IndicatorApi {
    * The bar the last pass ended on, dated again at `time`: a transformed
    * chart's forming element moved forward by a newer source bar. It is the
    * same bar, so what the alerts and `barState.isNew` said of it holds there;
-   * `own` when the calculation runs on these bars, not the ones under them.
+   * `own` when the calculation runs on these bars, not the ones under them,
+   * which are never dated again and keep a study's checkpoints where they were.
    */
   private _redate(time: number, own: boolean): void {
     if (this._alertTime === this._lastTime) this._alertTime = time;
-    if (own) this._sourceLastTime = time;
-    this._alertPolicy.redate(this._lastTime, time);
+    if (own) { this._sourceLastTime = time; this._alertPolicy.redate(this._lastTime, time); }
   }
 
   /**
