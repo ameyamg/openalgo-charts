@@ -8,9 +8,11 @@
  * the migration's one-field-at-a-time leniency. Pure: no registry, no chart.
  */
 import type { DrawingPoint, DrawingText } from './types';
+import { isRecord } from '../helpers/validate';
 
-export const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
+// The readers here take keyed fields from any object that is not an array:
+// the shared test the widget readers use too, so the two cannot drift apart.
+export { isRecord };
 
 /** A finite number. */
 export const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
