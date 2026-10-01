@@ -115,6 +115,13 @@ A study on the underlying bars computes on your bars, but its hooks run on the e
 element per bar, which is all of them but Heikin Ashi. Read per-bar values from `ctx.values`, which
 the chart samples onto the elements.
 
+A Kagi chart dates the vertex still forming at your newest bar, and a range bar that a newer bar
+extends is dated at that bar too. A study reads that as the same element revised, not as a change
+to history: its alerts judge each new vertex or range bar once, `barState.isNew` is true only on a
+bar that added an element, and a study with a live tail keeps taking it. A tick that takes back an
+element it formed, or a correction of an older bar that changes an element before the forming one,
+still reseeds the alerts silently.
+
 ### Alerts on a transformed chart
 
 [Trader alerts](/docs/alerts#sources-and-timing) judge the elements the chart draws. When one bar

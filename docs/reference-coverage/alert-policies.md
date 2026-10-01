@@ -61,7 +61,10 @@ append still seeds historical state. The omitted-frequency path retains its
 tail-only gate; explicit policies use the stronger native provenance. Either way a
 calculation that appended several bars after an unchanged prefix (a batched burst,
 or one source bar completing several transformed elements) judges each new bar in
-order on its own prefix, as separate appends would.
+order on its own prefix, as separate appends would. A transformed chart's forming
+element dated forward at its index by a newer source bar (Kagi, range bars) is the
+same bar revised, not a correction: the watermarks, the per-bar checkpoint and the
+close checkpoint follow it to its new time.
 
 ## Verification sequence
 
