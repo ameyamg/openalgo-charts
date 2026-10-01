@@ -498,7 +498,13 @@ Each keeps working until 3.0.0 and has a row in COMPATIBILITY.md.
   point once the line reverses past it, which it never did. An `everyTime` alert
   can deliver several `alert:triggered` events in one update, one per matching
   element; repeat, cooldown and expiry act as they would for separate appends.
-- {{PENDING: kagi-alerts}}
+- **Study alerts on in-chart Kagi and range bar charts.** A new source bar that
+  only moves the forming vertex or range bar forward is now a revision of that
+  element rather than a correction, so study alerts judge each new vertex or
+  range bar once (an alert with no frequency never fired on an in-chart Kagi
+  chart before), the calculation is told the bar is live, and studies keep
+  their live tail. A real correction (an earlier element changed, an element
+  dated backward, fewer elements) still reseeds silently.
 - OpenScript 0.8.1 (`openalgo-script` on npm, `openscript` on PyPI) reads an
   alert's message at the bar the chart asks about. Use it with 2.6.0 when
   OpenScript studies compute on the underlying bars of a transform that is not

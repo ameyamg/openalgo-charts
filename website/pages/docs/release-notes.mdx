@@ -122,7 +122,9 @@ a hygiene wave across every tier.
 - Trader alerts judge every element an update appends, each dated at its own element: a
   bar-close crossing on an earlier Renko brick now fires, and an in-chart Kagi turning point
   confirms a bar-close alert.
-- PENDING_KAGI_ALERTS
+- On an in-chart Kagi or range bar chart, a new bar that only moves the forming vertex or range
+  bar forward revises it instead of reading as a correction, so study alerts judge each new
+  vertex once and studies keep their live tail.
 - OpenScript 0.8.1 reads an alert's message at the right bar on the underlying bars of a
   transform; use it with 2.6.0 when OpenScript studies compute there.
 
