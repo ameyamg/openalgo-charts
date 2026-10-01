@@ -16,9 +16,9 @@
  * the source's stacking slot stay on Chart, because the studies, the stacking
  * and the frame read them too. `addSeries` and `setSeriesType` stay public on
  * Chart as delegates and carry the documented contract. Members the chart
- * calls are public on this internal class; no entry point exports the class
- * and the chart holds it in a private field, so none of it reaches the
- * published declarations.
+ * and chart-series-transform.ts call are public on this internal class; no
+ * entry point exports the class and the chart holds it in a private field, so
+ * none of it reaches the published declarations.
  */
 import { InvalidationLevel } from './invalidate-mask';
 import type { Chart } from './chart';
@@ -81,24 +81,33 @@ export interface SeriesHost {
 /** A transformed series: the choice as set, and the run holding its source bars. */
 interface Transformed { readonly spec: SeriesTransformSpec; readonly run: SeriesTransformRun }
 
-/** The same element, whatever colour a study painted onto the copy the data layer holds. */
-function sameElement(a: Bar, b: Bar): boolean {
-  return a === b || (a.time === b.time && a.open === b.open && a.high === b.high && a.low === b.low
-    && a.close === b.close && a.volume === b.volume && a.oi === b.oi);
-}
-
-function sameSpec(a: SeriesTransformSpec, b: SeriesTransformSpec): boolean {
-  const x = a.options ?? {}, y = b.options ?? {};
-  return a.type === b.type && Object.keys(x).length === Object.keys(y).length && Object.keys(x).every(key => x[key] === y[key]);
-}
-
 const copySpec = (spec: SeriesTransformSpec): SeriesTransformSpec =>
   spec.options === undefined ? { type: spec.type } : { type: spec.type, options: { ...spec.options } };
 
+/**
+ * The chart's side of a series transform: turning one on or off, and forming
+ * the elements again on a tick (chart-series-transform.ts). The first
+ * `registerSeriesTransform` installs it, and until something is registered no
+ * series can hold a transform, so a chart-only import, which registers
+ * nothing, carries none of it.
+ */
+interface TransformRuns {
+  set(series: ChartSeries, api: SeriesApi, spec: SeriesTransformSpec | null, notify: boolean): boolean;
+  tick(series: ChartSeries, dataId: number, run: SeriesTransformRun, bar: Bar, options: SeriesUpdateOptions | undefined,
+    owner: { readonly pane: Pane }): void;
+}
+
+let transformRuns: TransformRuns | null = null;
+
+/** Called by `registerSeriesTransform`. */
+export function installTransformRuns(runs: TransformRuns): void {
+  transformRuns = runs;
+}
+
 export class ChartSeries {
-  private readonly _host: SeriesHost;
+  public readonly _host: SeriesHost;
   /** Transformed series by data id. */
-  private readonly _transforms = new Map<number, Transformed>();
+  public readonly _transforms = new Map<number, Transformed>();
 
   public constructor(host: SeriesHost) {
     this._host = host;
@@ -135,24 +144,10 @@ export class ChartSeries {
   /** The work of `Chart.setSeriesTransform`, which carries the documented contract. */
   public _setSeriesTransform(series: SeriesApi, spec: SeriesTransformSpec | null, notify: boolean): boolean {
     if (this._host.seriesType(series) === null) return false;
-    const record = this._host._seriesRecords.get(series)!, owner = this._host._seriesOwners.get(series)!;
-    const dataId = record.dataId, current = this._transforms.get(dataId);
-    const next = spec === null ? undefined : this._newTransform(spec);
-    if (next === undefined ? current === undefined : current !== undefined && sameSpec(current.spec, next.spec)) return false;
-    const source = current?.run.source() ?? this._host._dataLayer.seriesBars(dataId);
-    const confirmation = this._host._seriesProvenance.get(dataId)?.snapshot().confirmation;
-    if (next === undefined) this._transforms.delete(dataId);
-    else {
-      next.run.setData(source);
-      this._transforms.set(dataId, next);
-      // A new transform brings its renderer; new options keep the one the host chose.
-      if (current?.spec.type !== next.spec.type) this._setSeriesType(series, getSeriesTransform(next.spec.type).renderer, false);
-    }
-    // The elements are a new index space, so the view is fitted as for a fresh load.
-    this._host._hasFitContent = false;
-    this._setData(dataId, next?.run.elements() ?? source, confirmation === undefined ? undefined : { confirmation }, owner);
-    if (notify) this._host._emit('objects:change', {});
-    return true;
+    if (transformRuns !== null) return transformRuns.set(this, series, spec, notify);
+    // Nothing is registered, so no series holds a transform and `_newTransform` refuses any spec.
+    if (spec !== null) this._newTransform(spec);
+    return false;
   }
 
   /** The transform a live series was given, as a detached spec; null for none or a handle not on this chart. */
@@ -178,7 +173,7 @@ export class ChartSeries {
   }
 
   /** A run for a spec, and a detached copy of it to keep. The transform refuses an option it does not take. */
-  private _newTransform(spec: SeriesTransformSpec): Transformed {
+  public _newTransform(spec: SeriesTransformSpec): Transformed {
     const options = { ...spec.options };
     const run = getSeriesTransform(spec.type).create(options);
     return { spec: Object.keys(options).length > 0 ? { type: spec.type, options } : { type: spec.type }, run };
@@ -394,7 +389,8 @@ export class ChartSeries {
   private _updateBar(dataId: number, bar: Bar, options: SeriesUpdateOptions | undefined, owner: { readonly pane: Pane }): void {
     validateSeriesOptions(options, true);
     const run = this._transforms.get(dataId)?.run;
-    if (run !== undefined) { this._updateElements(dataId, run, bar, options, owner); return; }
+    // A run exists only once a transform was registered, which installed the runs.
+    if (run !== undefined) { transformRuns!.tick(this, dataId, run, bar, options, owner); return; }
     const before = this._sharedAxis();
     const bars = this._host._dataLayer.seriesBars(dataId);
     const tailTime = bars[bars.length - 1]?.time;
@@ -417,40 +413,7 @@ export class ChartSeries {
     if (dataId === this._host._firstDataId.value) this._host._emit('data:update', { kind: 'update', time: bar.time });
   }
 
-  /**
-   * A tick on a transformed series: the run forms the elements again from its
-   * last closed bar, and only the ones that moved are written. A tail that
-   * grew or was replaced in place goes through the data layer's live path; one
-   * that shrank or moved further back is rewritten whole and recorded as a
-   * correction, so no study tails over an element that is gone. A view
-   * scrolled into history keeps its elements in place as bricks form and
-   * unform at the right edge.
-   */
-  private _updateElements(dataId: number, run: SeriesTransformRun, bar: Bar, options: SeriesUpdateOptions | undefined,
-    owner: { readonly pane: Pane }): void {
-    const layer = this._host._dataLayer, scale = this._host._timeScale;
-    const before = this._sharedAxis();
-    const shown = layer.seriesBars(dataId), count = shown.length;
-    const wasAtRight = scale.rightOffset >= 0;
-    let first = run.update(bar);
-    const next = run.elements();
-    // Every read below is inside both lists: `first` stays under `count` and `next.length`.
-    while (first < count && first < next.length && sameElement(shown[first]!, next[first]!)) first++;
-    const inPlace = first >= count || (first === count - 1 && next.length >= count && next[first]!.time === shown[first]!.time);
-    if (inPlace) for (let i = first; i < next.length; i++) layer.update(dataId, next[i]!);
-    else layer.setSeriesData(dataId, next);
-    const tail = next[next.length - 1]?.time;
-    this._host._seriesProvenance.get(dataId)?.record(!inPlace ? 'correction' : next.length > count ? 'append' : 'replace', tail, options);
-    scale.setBaseIndex(layer.baseIndex);
-    if (next.length !== count && !wasAtRight) this._host._mutateTimeScale(() => scale.setRightOffset(scale.rightOffset - (next.length - count)));
-    const primary = dataId === this._host._firstDataId.value;
-    if (primary) this._host._studies._invalidateIndicators();
-    this._invalidateWrite([owner.pane], before);
-    this._host._updateAccessibleSummary();
-    if (primary) this._host._emit('data:update', { kind: 'update', time: tail ?? bar.time });
-  }
-
-  private _setData(dataId: number, bars: readonly Bar[], options: BarConfirmationOptions | undefined,
+  public _setData(dataId: number, bars: readonly Bar[], options: BarConfirmationOptions | undefined,
     owner: { readonly pane: Pane; readonly indicatorOwned: boolean }): void {
     validateSeriesOptions(options);
     const before = this._sharedAxis();
