@@ -6,9 +6,9 @@ Source of truth: `package.json` (`exports`, `sideEffects`, `files`), `rollup.con
 
 ## The nine entry points
 
-`exports` declares exactly nine specifiers, each with `types`, `import` and (unreleased) `default` conditions, where `default` names the same `.mjs` file as `import`. There is no `main` and no CommonJS build: the package is ESM (`"type": "module"`, `module: dist/openalgo-charts.mjs`).
+`exports` declares exactly nine specifiers, each with `types`, `import` and `default` conditions, where `default` names the same `.mjs` file as `import`. There is no `main` and no CommonJS build: the package is ESM (`"type": "module"`, `module: dist/openalgo-charts.mjs`).
 
-**No CommonJS build, and `require()` gets the ESM files (unreleased).** A CommonJS copy of the code would carry a second set of registries, so a descriptor registered through one copy would be unknown to a chart created by the other (the same failure as a deep import, below). The `default` condition points `require()` at the ESM files themselves instead:
+**No CommonJS build, and `require()` gets the ESM files.** A CommonJS copy of the code would carry a second set of registries, so a descriptor registered through one copy would be unknown to a chart created by the other (the same failure as a deep import, below). The `default` condition points `require()` at the ESM files themselves instead:
 
 - Node 20.19 or later, 22.12 or later, and every later release line load them synchronously: `require('openalgo-charts')` and `require('openalgo-charts/indicators')` return the very modules `import` returns, one registry between them.
 - An older Node throws `ERR_REQUIRE_ESM`, whose message says to use `import()`. A CommonJS module can always do that: `const { createChart } = await import('openalgo-charts');`.
@@ -109,7 +109,7 @@ Lazy-load a tier the user may never touch:
 const { DrawingController } = await import('openalgo-charts/draw');
 ```
 
-**Plain `<script>`, the script-tag build.** Every tier also ships as a classic script (`format: 'iife'`) that needs no module support. `dist/openalgo-charts.standalone.js` is the base, built with `name: 'OpenAlgoCharts'` and nothing external; it defines the `window.OpenAlgoCharts` global. (unreleased) Each tier's `dist/openalgo-charts.<tier>.standalone.js` adds itself to that global under the tier's name, so `import { X } from 'openalgo-charts/draw'` becomes `OpenAlgoCharts.draw.X`:
+**Plain `<script>`, the script-tag build.** Every tier also ships as a classic script (`format: 'iife'`) that needs no module support. `dist/openalgo-charts.standalone.js` is the base, built with `name: 'OpenAlgoCharts'` and nothing external; it defines the `window.OpenAlgoCharts` global. Each tier's `dist/openalgo-charts.<tier>.standalone.js` adds itself to that global under the tier's name, so `import { X } from 'openalgo-charts/draw'` becomes `OpenAlgoCharts.draw.X`:
 
 ```html
 <script src="/dist/openalgo-charts.standalone.js"></script>
@@ -125,7 +125,7 @@ const { DrawingController } = await import('openalgo-charts/draw');
 </script>
 ```
 
-(unreleased) The rules of the script-tag build:
+The rules of the script-tag build:
 
 - **One base, shared.** A tier file leaves the base (and, for the widget, the draw tier) external exactly as its `.mjs` does, and reads them from the global, so it registers into the base the page loaded. Never load a tier's `.mjs` beside the classic base: that module imports its own base, with its own registries.
 - **Order.** The base first, then any tier, with the draw tier before the widget. A tier file loaded too early throws before it runs, naming the files to load first: `openalgo-charts.widget.standalone.js needs openalgo-charts.standalone.js and openalgo-charts.draw.standalone.js loaded before it`. Load each file once.

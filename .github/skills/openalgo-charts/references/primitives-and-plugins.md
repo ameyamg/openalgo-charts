@@ -271,7 +271,7 @@ with `summary?: string` and `fields?: readonly EventDetailField[]`, where each f
 has text `label` and `value` strings. Events and nested detail fields are copied on
 assignment and on return.
 
-(unreleased) `ChartEventDetails.blocks?: readonly EventDetailBlock[]` carries rich
+`ChartEventDetails.blocks?: readonly EventDetailBlock[]` carries rich
 content as structure, never markup, so a feed's text cannot run as code:
 `{ type: 'heading' | 'paragraph', text: EventDetailInline }` or
 `{ type: 'list', items: readonly EventDetailInline[] }`. `EventDetailInline` is a
@@ -346,7 +346,7 @@ the calendar feed and supplies new instrument events.
 ### Widget details popup
 
 The widget tier exports `EventDetailsPopup`, `EVENT_DETAILS_CSS`, `EventDetailsLoader`,
-`EventDetailsLabels`, `EventDetailsPopupOptions` and (unreleased) `EventDetailAction`. `createWidget` opens details
+`EventDetailsLabels`, `EventDetailsPopupOptions` and `EventDetailAction`. `createWidget` opens details
 for chart-owned markers by default. `WidgetOptions.eventDetails: false` disables
 the popup; an options object customizes it:
 
@@ -375,7 +375,7 @@ stack and `injectStyles: false` if the host bundles `EVENT_DETAILS_CSS` itself.
 content is rendered as text. Cluster-member buttons, focus containment, focus
 restoration, Escape/Close and pointer isolation are built in.
 
-(unreleased) Rich blocks and host actions. The popup renders `details.blocks`
+Rich blocks and host actions. The popup renders `details.blocks`
 after the fields: `heading` as a subheading, `paragraph` as a paragraph, `list`
 as a bulleted list, each built with elements and text nodes only, never
 `innerHTML`. A span's `strong` and `em` wrap it in those elements; its `href`

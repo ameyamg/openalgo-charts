@@ -183,14 +183,14 @@ destroyed charts. An unknown type on a live owned series throws without mutation
 It never transforms data: `point-figure` and `kagi` draw the bars they are
 given, which keeps a host that prepares its own elements working.
 
-(unreleased) `chart.setSeriesTransform(series, spec | null): boolean` has the
+`chart.setSeriesTransform(series, spec | null): boolean` has the
 chart apply a transform itself (Heikin Ashi, Renko, range bars, line break, point
 and figure, Kagi, once `openalgo-charts/transform` is imported): the series
 keeps taking the host's bars through `setData`, `update` and `prependData`,
 `getData` returns them, and the chart draws the elements, formed again on every
 tick. A new transform type selects its renderer. `chart.seriesTransform(series)`
 reads the spec; `AddSeriesOptions.transform` sets one at creation. See
-[transforms](transforms.md#in-chart-transforms-unreleased).
+[transforms](transforms.md#in-chart-transforms).
 
 `chart.seriesType(series): SeriesType | null` reads the current renderer for a
 live owned series, including one that is not primary. It returns null for foreign

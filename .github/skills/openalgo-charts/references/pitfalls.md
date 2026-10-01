@@ -334,6 +334,6 @@ On Windows PowerShell substitute `Select-String -Pattern` for `grep` and `Get-Ch
 
 If a symbol is absent from the local `.d.ts`, it does not exist in the installed version, say so and check `CHANGELOG.md` for the release that added it rather than writing code against it.
 
-## A transformed series speaks two sets of bars (unreleased)
+## A transformed series speaks two sets of bars
 
 With `chart.setSeriesTransform` (or a widget chart type such as Renko), the series handle takes and returns the host's own bars: `getData()` is the raw history, not the bricks. What the chart draws, and what `chart.primaryBars()`, the crosshair, the readouts, `data:update` times and studies on `'chart'` bars see, is the elements. Index the view, a readout or a replay cut with `primaryBars()`, and feed updates with raw bars. Never hand a transformed series elements you prepared yourself: the chart transforms them again. A host that prepares its own elements picks the renderer alone, with `addSeries('point-figure')` or `setSeriesType`, which never transform.
