@@ -25,6 +25,7 @@ import { IndicatorFill as IndicatorFillPrimitive } from '../primitives/indicator
 import { IndicatorDrawings } from '../primitives/indicator-draws';
 import { IndicatorBackground } from '../primitives/indicator-background';
 import { PlotWrites } from './indicator-plot-writes';
+import { spliceTail } from './indicator-tail-splice';
 import { drawnTime, parseIndicatorBarSource, sampleIndicatorValues, type IndicatorBarSource } from './indicator-bar-source';
 import { isPlainObject } from '../helpers/validate';
 
@@ -1785,16 +1786,20 @@ export class IndicatorInstance implements IndicatorApi {
     // page of history arriving at the left edge, or a symbol change, can land on
     // a matching count and would then splice new values onto a history that no
     // longer exists, leaving the plot silently wrong until the next full calc.
-    // Native revisions retain historical invalidation across coalesced writes.
-    // Hosts without them retain the timestamp heuristic: the first bar is
-    // unchanged and the last is replaced or followed by new bars.
-    const kept = this._barCount > 0 && n >= this._barCount &&
-      bars[0]!.time === this._firstTime && bars[this._barCount - 1]!.time === this._lastTime;
+    // Native revisions retain historical invalidation across coalesced writes,
+    // and let the last bar sit at its index with a later time: a transformed
+    // chart's forming element, dated at a newer source bar. Hosts without them
+    // retain the timestamp heuristic: the first bar is unchanged and the last
+    // is replaced or followed by new bars.
+    const last = this._barCount > 0 && n >= this._barCount ? bars[this._barCount - 1]!.time : NaN;
+    const kept = (last === this._lastTime || (source !== undefined && last > this._lastTime))
+      && (this._barCount === 1 || bars[0]!.time === this._firstTime);
     const appended = kept && n > this._barCount;
     const tailOnly = kept && (source === undefined || (source.sourceId === this._sourceId && source.revision !== this._sourceRevision &&
       source.historyRevision === this._sourceHistoryRevision && source.provenance === 'live'));
     // Older hosts have no mutation provenance and retain the live heuristic.
     if (source === undefined && tailOnly) this._live = true;
+    if (tailOnly && last > this._lastTime) this._redate(last, calc === bars);
     const ctx = this._calcContext(calc, appended, source);
     ctx.resolveSource = bindings.resolve;
     // The chart's own bars on a transformed series are its elements, not time bars.
@@ -1849,6 +1854,18 @@ export class IndicatorInstance implements IndicatorApi {
     } else this._syncAlerts(bars, settings, tailOnly, ctx, refresh, current);
     if (!current()) return;
     this.updateLegendValues(this._host.legendIndex?.());
+  }
+
+  /**
+   * The bar the last pass ended on, dated again at `time`: a transformed
+   * chart's forming element moved forward by a newer source bar. It is the
+   * same bar, so what the alerts and `barState.isNew` said of it holds there;
+   * `own` when the calculation runs on these bars, not the ones under them.
+   */
+  private _redate(time: number, own: boolean): void {
+    if (this._alertTime === this._lastTime) this._alertTime = time;
+    if (own) this._sourceLastTime = time;
+    this._alertPolicy.redate(this._lastTime, time);
   }
 
   /**
@@ -1944,29 +1961,4 @@ export class IndicatorInstance implements IndicatorApi {
     this._host.indicatorRemoved?.(this.id, !this._constructed && this._ownPane ? this.paneIndex : undefined);
     return true;
   }
-}
-
-/**
- * Overlay a `calcTail` result (values for `[from, n)`) onto the previous full
- * result. Any key the tail omits, or a previous column of the wrong length,
- * forces the caller back to a full recompute by returning `null`.
- */
-function spliceTail(
-  previous: IndicatorValues,
-  tail: IndicatorValues,
-  from: number,
-  n: number,
-): IndicatorValues | null {
-  const out: Record<string, (number | null)[]> = {};
-  for (const key of Object.keys(tail)) {
-    const prev = previous[key];
-    const add = tail[key];
-    if (prev === undefined || add === undefined) return null;
-    if (add.length !== n - from) return null;
-    const col = new Array<number | null>(n);
-    for (let i = 0; i < from; i++) col[i] = prev[i] ?? null;
-    for (let i = from; i < n; i++) col[i] = add[i - from] ?? null;
-    out[key] = col;
-  }
-  return out;
 }

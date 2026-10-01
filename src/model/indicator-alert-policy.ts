@@ -172,6 +172,18 @@ export class IndicatorAlertPolicy {
     if (failed && current()) throw firstError;
   }
 
+  /**
+   * The newest bar was dated again at `to` and is the same bar: a transformed
+   * chart's forming element moved forward by a newer source bar. A bar it
+   * already delivered or closed stays delivered or closed at its new time.
+   */
+  public redate(from: number, to: number): void {
+    for (const entry of this._entries) {
+      if (entry.perBarTime === from) entry.perBarTime = to;
+      if (entry.closedTime === from) entry.closedTime = to;
+    }
+  }
+
   private _seed(bars: readonly Bar[], confirmed: boolean): void {
     const index = bars.length - (confirmed ? 1 : 2);
     const time = index >= 0 ? bars[index]!.time : -Infinity;

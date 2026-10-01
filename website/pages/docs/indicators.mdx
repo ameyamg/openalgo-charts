@@ -1769,7 +1769,9 @@ or `replay`. `change` is `initial`,
 `reset`, `prepend`, `append`, `replace`, `correction` or `refresh`. Its `revision`
 advances with source mutations; `historyRevision` also changes whenever a cached
 prefix may be invalid. This makes same-shaped history replacements and coalesced
-historical corrections take a full calculation. `confirmationSource` is `provider`,
+historical corrections take a full calculation. On a transformed chart, a forming
+element that a newer source bar dates again at its index (a Kagi vertex, a range bar)
+is a live `replace`, or an `append` when the bar also added elements after it. `confirmationSource` is `provider`,
 `replay`, `clock`, `unknown` or `empty`. Mutations can coalesce into one calculation;
 these counters do not promise one script execution per provider tick.
 
@@ -1839,7 +1841,9 @@ batched, or one source bar that completes several Renko bricks, range bars, line
 break lines, point and figure columns or Kagi vertices) judges each new bar in turn,
 as separate appends would, whatever the frequency. The newest may still be forming,
 so a close alert judges it only once it closes. A calculation that changed an earlier
-bar seeds silently instead.
+bar seeds silently instead. On a Kagi or range bar chart a newer source bar dates the
+forming element again at its index; that is the same bar revised, so it is not judged
+as new, and an alert that already delivered on it or closed it stays that way.
 
 Close predicates and message functions, and any alert judged at a bar before the
 newest, receive only bars and output values through their evaluated index. Use

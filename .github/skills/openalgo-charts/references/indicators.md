@@ -1243,7 +1243,11 @@ exactly as separate appends would, for every frequency and the omitted one. The
 newest may still be forming, so `onBarClose` judges it only once it closes. A
 calculation that changed an earlier bar (a reload, a correction, a symbol or interval
 change) still seeds silently. Within one calculation each alert takes its bars in
-order, the omitted-frequency alerts before the explicit ones.
+order, the omitted-frequency alerts before the explicit ones. On a Kagi or range bar
+chart a newer source bar dates the forming element again at its index: the same bar
+revised (a live `replace`, or `append` with the elements after it), so it is not
+judged as new, `barState.isNew` stays false for it, and an alert that already
+delivered on it (`oncePerBar`) or closed it stays that way.
 
 For `onBarClose`, and for any alert judged at a bar before the newest, predicate
 and message contexts contain only bar/output prefixes through the evaluated index. Calculations must still be causal. Native dispatch

@@ -53,9 +53,11 @@ function setTransform(series: ChartSeries, api: SeriesApi, spec: SeriesTransform
  * last closed bar, and only the ones that moved are written. A tail that
  * grew or was replaced in place goes through the data layer's live path; one
  * that shrank or moved further back is rewritten whole and recorded as a
- * correction, so no study tails over an element that is gone. A view
- * scrolled into history keeps its elements in place as bricks form and
- * unform at the right edge.
+ * correction, so no study tails over an element that is gone. The element
+ * still forming dated forward at its index (a Kagi vertex or a range bar a
+ * newer source bar extends) is rewritten whole too, but it is the same
+ * element revised, so the step stays live. A view scrolled into history
+ * keeps its elements in place as bricks form and unform at the right edge.
  */
 function tick(series: ChartSeries, dataId: number, run: SeriesTransformRun, bar: Bar, options: SeriesUpdateOptions | undefined,
   owner: { readonly pane: Pane }): void {
@@ -67,11 +69,13 @@ function tick(series: ChartSeries, dataId: number, run: SeriesTransformRun, bar:
   const next = run.elements();
   // Every read below is inside both lists: `first` stays under `count` and `next.length`.
   while (first < count && first < next.length && sameElement(shown[first]!, next[first]!)) first++;
-  const inPlace = first >= count || (first === count - 1 && next.length >= count && next[first]!.time === shown[first]!.time);
+  const forming = first === count - 1 && next.length >= count;
+  const inPlace = first >= count || (forming && next[first]!.time === shown[first]!.time);
   if (inPlace) for (let i = first; i < next.length; i++) layer.update(dataId, next[i]!);
   else layer.setSeriesData(dataId, next);
   const tail = next[next.length - 1]?.time;
-  host._seriesProvenance.get(dataId)?.record(!inPlace ? 'correction' : next.length > count ? 'append' : 'replace', tail, options);
+  const live = inPlace || (forming && next[first]!.time > shown[first]!.time);
+  host._seriesProvenance.get(dataId)?.record(!live ? 'correction' : next.length > count ? 'append' : 'replace', tail, options);
   scale.setBaseIndex(layer.baseIndex);
   if (next.length !== count && !wasAtRight) host._mutateTimeScale(() => scale.setRightOffset(scale.rightOffset - (next.length - count)));
   const primary = dataId === host._firstDataId.value;

@@ -158,6 +158,84 @@ test.describe('in-chart transforms', () => {
     await page.screenshot({ path: testInfo.outputPath('renko-replay-alerts.png') });
   });
 
+  test('fires a crossing alert once per vertex on a replayed Kagi chart', async ({ page }, testInfo) => {
+    await ready(page, 'type=kagi&study=none');
+    const run = await page.evaluate(async () => {
+      const { chart, series, lib } = (window as any).__probe;
+      // A five-vertex average of the vertex prices, an alert on every new
+      // vertex, and one when a new vertex confirms a turning point that sits
+      // across the average from the one before it. The turning point is final
+      // once the line has left it, so each mark can be checked by eye.
+      const average = (c: number[]) => c.map((_, i) => i < 4 ? null : c.slice(i - 4, i + 1).reduce((sum, x) => sum + x, 0) / 5);
+      const side = (bars: any[], avg: (number | null)[], i: number) => avg[i] == null ? 0 : Math.sign(bars[i].close - avg[i]!);
+      const crossed = (bars: any[], avg: (number | null)[], i: number) =>
+        i > 0 && side(bars, avg, i - 1) * side(bars, avg, i) === -1;
+      lib.registerIndicator({
+        id: 'e2e-vertex-cross', name: 'Vertex cross', placement: 'onchart', inputs: [],
+        plots: [{ key: 'avg', type: 'line', title: 'Average', style: { color: '#f5a623', lineWidth: 2 } }],
+        calc: (bars: any[]) => ({ avg: average(bars.map(b => b.close)) }),
+        alerts: [
+          { id: 'vertex', title: 'New vertex', when: () => true },
+          { id: 'cross', title: 'Turned across the average', when: ({ bars, values, index }: any) => crossed(bars, values.avg, index - 1) },
+        ],
+      });
+      chart.addIndicator('e2e-vertex-cross');
+      const events: { id: string; time: number; index: number }[] = [];
+      chart.on('indicator:alert', (e: any) => events.push({ id: e.alertId, time: e.time, index: e.index }));
+      const start = chart.primaryBars().length;
+      // Seven more hours replayed bar by bar, a seeded continuation of the
+      // session's random walk. Each bar dates the vertex still forming again,
+      // and a bar that turns the line adds a vertex after it.
+      let seed = 20261001;
+      const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      const gauss = () => Math.sqrt(-2 * Math.log(random() || 1e-9)) * Math.cos(2 * Math.PI * random());
+      let last = series.getData().at(-1);
+      // What separate appends would judge: each vertex a bar added, once, at
+      // the time it had then, on the vertices and the average as they stood.
+      const expected = { vertex: [] as { index: number; time: number }[], cross: [] as { index: number; time: number }[] };
+      let redated = 0;
+      for (let i = 0; i < 84; i++) {
+        const open = last.close;
+        const close = Math.round(open * (1 + gauss() * 0.0019) * 20) / 20;
+        const bar = { time: last.time + 300, open, close, high: Math.max(open, close), low: Math.min(open, close), volume: 50000 };
+        const before = chart.primaryBars().map((v: any) => v.time);
+        series.update(bar);
+        await (window as any).__frame();
+        const now = chart.primaryBars();
+        if (now[before.length - 1].time > before[before.length - 1]) redated++;
+        const avg = average(now.map((v: any) => v.close));
+        for (let k = before.length; k < now.length; k++) {
+          expected.vertex.push({ index: k, time: now[k].time });
+          if (crossed(now, avg, k - 1)) expected.cross.push({ index: k, time: now[k].time });
+        }
+        last = bar;
+      }
+      const vertices = chart.primaryBars();
+      const avg = chart.indicators()[0].values().avg;
+      // The same turning points read off the final vertices: the ones the marks show.
+      const turns = vertices.map((_: unknown, j: number) => j).filter((j: number) => j >= start - 1 && j < vertices.length - 1 && crossed(vertices, avg, j));
+      const pick = (id: string) => events.filter(e => e.id === id).map(e => ({ index: e.index, time: e.time }));
+      series.createMarkers().setMarkers(events.filter(e => e.id === 'cross').map(e => {
+        const turn = vertices[e.index - 1], up = turn.close > avg[e.index - 1]!;
+        return { time: turn.time, position: up ? 'aboveBar' : 'belowBar', shape: up ? 'arrowUp' : 'arrowDown', size: 'small',
+          color: up ? '#26a69a' : '#ef5350', text: up ? 'Up' : 'Down' };
+      }));
+      chart.setVisibleLogicalRange({ from: start - 6, to: vertices.length + 1 });
+      await (window as any).__frame();
+      return { start, count: vertices.length, redated, expected, turns, vertex: pick('vertex'), cross: pick('cross') };
+    });
+    // Nearly every bar dates the forming vertex again, and the line turned many times.
+    expect(run.redated).toBeGreaterThan(70);
+    expect(run.count - run.start).toBeGreaterThan(8);
+    // Every vertex the replay formed is judged once, in order, at the time it had then.
+    expect(run.vertex.map(e => e.index)).toEqual(Array.from({ length: run.count - run.start }, (_, i) => run.start + i));
+    expect(run.vertex).toEqual(run.expected.vertex);
+    expect(run.cross).toEqual(run.expected.cross);
+    expect(run.cross.map(e => e.index - 1)).toEqual(run.turns);
+    expect(run.cross.length).toBeGreaterThan(2);
+    await page.screenshot({ path: testInfo.outputPath('kagi-replay-alerts.png') });
+  });
+
   for (const type of ['heikin-ashi', 'renko', 'range-bars', 'line-break', 'point-figure', 'kagi']) {
     test(`draws a ${type} chart`, async ({ page }, testInfo) => {
       await ready(page, `type=${type}`);
