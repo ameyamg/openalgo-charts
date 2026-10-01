@@ -3,7 +3,8 @@ import type { DrawContext, Drawing, DrawingTool, HitContext, ScreenPoint } from 
 import type { AnalysisStatus, AnchoredVwapSource } from './analysis';
 import { analysisNumber, anchoredVwapAnalysis, fixedRangeVolumeProfileAnalysis } from './analysis';
 import { clippedLine } from './advanced-shared';
-import { dashFor, fontOf, projectPoint, strokeWidth, textOf } from './tool-paint';
+import { fontOf, projectPoint, strokeWidth, textOf } from './tool-paint';
+import { dashFor } from '../render/line';
 import { distToSegment, distToRect } from './geometry';
 import { composeSettings, FONT_FIELDS, LINE_FIELDS, SHOW_LABELS_FIELD } from './schema';
 

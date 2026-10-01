@@ -6,7 +6,8 @@ import type {
 import { distToSegment } from './geometry';
 import { drawingTextWidth } from './text-metrics';
 import { analysisNumber } from './analysis';
-import { dashFor, fontOf, strokeWidth, textOf } from './tool-paint';
+import { fontOf, strokeWidth, textOf } from './tool-paint';
+import { dashFor } from '../render/line';
 
 export interface GeometryPath {
   points: ScreenPoint[];
