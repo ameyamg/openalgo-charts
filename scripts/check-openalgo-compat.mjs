@@ -958,7 +958,7 @@ try {
   }
   if (args.correctness === 'true') await checkChartCorrectness({ page, terminal, report, sendDepth, screenshot: args.screenshot });
   if (args.oi === 'true') await checkOpenInterest({ page, terminal, check, reload, sendDepth, screenshot: args.screenshot, orderCount: () => orderCounter });
-  if (args.alerts === 'true') await checkAlerts({ page, terminal, check, reload, sendDepth, screenshot: args.screenshot, orderCount: () => orderCounter });
+  if (args.alerts === 'true') await checkAlerts({ page, terminal, check, reload, sendDepth, screenshot: args.screenshot, orderCount: () => orderCounter, hostFinding });
   if (args.workspaces === 'true') await checkWorkspaces({ page, check, reload, screenshot: args.screenshot, orderCount: () => orderCounter, sendDepth });
   if (args['consumer-checks']) {
     const file = resolve(args['consumer-checks']);
