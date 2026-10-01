@@ -40,6 +40,7 @@ that names no removal release, so none can stay open-ended.
 | Widget message key `History is stale for {symbol} {interval}. Reload to retry.` | 3.0.0 | `History is stale for {symbol} {interval}`, beside the Retry button |
 | Widget message keys `Magnet weak: snaps when O/H/L/C is within a few pixels`, `Magnet strong: every anchor lands on the nearest O/H/L/C`, `Click for weak: snaps when O/H/L/C is within a few pixels` and `Click for strong: every anchor lands on the nearest O/H/L/C` | 3.0.0 | The same keys with "a bar or study value" for "O/H/L/C", since the magnet snaps to study values too |
 | Widget message keys `Ratio` and `Remove level` | 3.0.0 | `Level {level} ratio` and `Remove level {level}`, which name the row |
+| Widget message keys `From (UTC seconds)`, `To (UTC seconds)` and `Enter finite UTC seconds or leave the bound blank` | 3.0.0 | `From`, `To` and `Enter a date and a time on the chart clock`: the chart data dialog asks for its bounds as a date and a time on the chart's clock |
 | `shiftKey`, `ctrlKey` and `metaKey` on a `click` event | 3.0.0 | `modifiers.shift`, `modifiers.ctrl` and `modifiers.meta`, the same state |
 | `chart.renderer` | 3.0.0 | `chart.rendererKind`, the same value |
 | `chart.movePriceAxis(pane, from, to)` | 3.0.0 | `chart.setPriceAxisPlacement(pane, scaleId, side)`, which keeps the scale's id |
@@ -47,6 +48,11 @@ that names no removal release, so none can stay open-ended.
 | The `priceAxisMoved` event, which only `movePriceAxis` emits | 3.0.0 | `priceAxisPlacementChanged`, which `setPriceAxisPlacement` emits |
 | `chart.on`, `once` and `off` given a name outside `ChartEventMap` | 3.0.0 | A `ChartEventMap` name, which types the listener; declare an event of your own by merging it into `ChartEventMap` |
 | `chart.emit(name, payload)` | 3.0.0 | `chart.setDataContext` for an instrument, `group.setSymbol`, `setInterval` and `setChartType` for a link group, and your own emitter for events of your own |
+| `TimeScaleOp`, `InvalidateMask.addTimeScaleOp` and `InvalidateMask.timeScaleOps` | 3.0.0 | Nothing to queue: since 2.5.8 the frame reads no queued operation; change the time scale with `chart.timeScale`, `chart.fitContent` or `chart.setVisibleLogicalRange` |
+| `InvalidateMask.merge` | 3.0.0 | Nothing: the chart raises one mask per frame, and a host raises levels on the mask `chart.invalidate` hands it |
+| `chart.trading.updatePositionPnl(id, unrealizedPnl, pnlText?, pnlPercent?)`, the number first | 3.0.0 | `updatePositionPnl(id, pnlText?, pnlPercent?)`, the same call without the number, which the pill never showed |
+| `SeriesStyle.hollow` | 3.0.0 | The `hollow-candle` series type, which draws up candles as outlines and down candles filled; the field itself never had an effect |
+| `VolumeProfileOptions` | 3.0.0 | Nothing takes this type: pass `computeVolumeProfile(bars, tickSize, valueAreaPercent)` its arguments as before, or use `computeVolumeProfileSessions` with `VolumeProfileFamilyOptions` for an options object |
 
 ```ts
 // before
@@ -66,6 +72,10 @@ Kept on purpose as well: the `draw:*` events beside `drawing:select` and
 `drawing:change`. They are two granularities of one model, not an old and a new form:
 `draw:*` fires once per drawing and carries it, `drawing:*` once per change with the ids.
 The event names that predate the `namespace:action` rule keep their spelling too.
+
+Planned for 3.0.0, not deprecated yet: one name for the switches that show or hide part of
+the chart, now `xVisible` in the style bags that mirror a series property and `showX` on
+the profile primitives and pane options. Until then a new option follows its neighbours.
 
 Not decided yet: what the tiers' structural hosts (`DrawingChartHost`, `AlertChartHost`
 and the rest) require in place of `emit` once `chart.emit` goes in 3.0.0. They keep it
