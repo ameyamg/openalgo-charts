@@ -1,7 +1,7 @@
 /**
  * Indicator runtime (ARCHITECTURE.md §8). Turns an `IndicatorDescriptor` into
  * live chart objects: one series per plot, optional reference levels, an
- * optional fixed pane range — and recomputes them when the source data or the
+ * optional fixed pane range, and recomputes them when the source data or the
  * settings change.
  *
  * It adds **no rendering code**. Every plot names a registered chart type, so
@@ -261,7 +261,7 @@ export interface IndicatorHost {
   resourcesChanged?(): void;
   /** A study's policy changed: the chart redraws its legend buttons and the inventory. */
   policyChanged?(): void;
-  /** Bars of the primary price series — the calculation input. */
+  /** Bars of the primary price series: the calculation input. */
   sourceBars(): readonly Bar[];
   /**
    * The host's bars under a transformed primary series and the source bar each
@@ -400,7 +400,7 @@ export interface IndicatorApi {
   setSettings(patch: Readonly<IndicatorSettings>, options?: IndicatorEditOptions): boolean;
   /** The series backing one plot key, for direct styling. */
   series(plotKey: string): SeriesApi | undefined;
-  /** Latest computed values (a reference — do not mutate). */
+  /** Latest computed values (a reference: do not mutate). */
   values(): IndicatorValues;
   /** Whether the plots are drawn (the legend's eye toggle). */
   visible(): boolean;
@@ -840,7 +840,7 @@ export class IndicatorInstance implements IndicatorApi {
   /**
    * The numeric/select inputs as a compact string (`14 close`), the way a
    * charting legend abbreviates an indicator's configuration. Colors are
-   * excluded — the swatch already carries that. Booleans are excluded for the
+   * excluded: the swatch already carries that. Booleans are excluded for the
    * same reason in reverse: a bare `true true true` names nothing, and what a
    * visibility toggle did is already visible on the chart.
    */
@@ -970,7 +970,7 @@ export class IndicatorInstance implements IndicatorApi {
   }
 
   /**
-   * Show one reading per plot on the legend row, each in its plot's own color —
+   * Show one reading per plot on the legend row, each in its plot's own color:
    * a multi-plot source (an MA ribbon, MACD) is unreadable as a single number.
    * `index` is the crosshair's bar; omit it for the latest bar.
    */
@@ -1682,7 +1682,7 @@ export class IndicatorInstance implements IndicatorApi {
     this._settings = this._validatedSettings({ ...this._settings, ...cloneIndicatorSettings(patch) });
     this._outputPending = true;
     this._host.indicatorOutputChanged?.(this.id, true);
-    // Restyle before recomputing — appearance is independent of the maths, so a
+    // Restyle before recomputing: appearance is independent of the maths, so a
     // colour or thickness change must not wait on a full recalculation.
     for (const plot of this._d.plots) {
       // Native hosts can retain the handle while changing its renderer.
