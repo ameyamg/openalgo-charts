@@ -108,6 +108,13 @@ Heikin Ashi keeps one candle per bar at the bar's own time, so there the underly
 reading across. On a chart with no transform the two choices are the same bars. The choice is saved
 with the study (`barSource: 'underlying'`, written only when it is not the default).
 
+A study on the underlying bars computes on your bars, but its hooks run on the elements: a plot's
+`colorBy`, an alert's `when` and `message`, and the other per-bar hooks receive `ctx.index`,
+`ctx.bars` and `ctx.values` indexed by element. A custom descriptor that keeps per-bar state from
+`calc` and reads it back by index therefore reads the wrong bar on every transform that is not one
+element per bar, which is all of them but Heikin Ashi. Read per-bar values from `ctx.values`, which
+the chart samples onto the elements.
+
 ## Heikin Ashi
 
 <RunnableExample height={320} tiers={['transform']} code={`const chart = lib.createChart(el);

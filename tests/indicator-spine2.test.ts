@@ -149,6 +149,29 @@ describe('the calculation context', () => {
     bars[5] = bar(1300, 201); // the same forming bar, moved by a tick
     inst.recompute();
     expect(p.seen().barState.isNew).toBe(false);
+    // Two bars in one pass: a burst of ticks between frames, or one source bar
+    // that completed two bricks. The newest bar is new all the same.
+    bars.push(bar(1360, 202), bar(1420, 203));
+    inst.recompute();
+    expect(p.seen().barState).toMatchObject({ isNew: true, isRealtime: true, lastIndex: 7 });
+  });
+
+  it('keeps a tail to one appended bar and takes a full calc for two', () => {
+    const froms: number[] = [];
+    const d: IndicatorDescriptor = {
+      id: 'w2-ctx-tail-burst', name: 'T', placement: 'pane', inputs: [],
+      plots: [{ key: 'v', type: 'line', title: 'v' }],
+      calc: (b) => ({ v: b.map((x) => x.close) }),
+      calcTail: (b, _s, from) => { froms.push(from); return { v: b.slice(from).map((x) => x.close) }; },
+    };
+    const bars = wave(5);
+    const inst = new IndicatorInstance(rig(bars).host, d);
+    bars.push(bar(1300, 200));
+    inst.recompute();
+    bars.push(bar(1360, 201), bar(1420, 202));
+    inst.recompute();
+    expect(froms).toEqual([4]);
+    expect(inst.values().v).toEqual(bars.map((x) => x.close));
   });
 
   it('stays realtime once a tick has landed, including across a symbol change', () => {
@@ -407,6 +430,25 @@ describe('alerts', () => {
       time: 1300,
       index: 5,
     }]);
+  });
+
+  it('fires for each bar one pass appended, in order', () => {
+    const bars = wave(5);
+    const r = rig(bars);
+    const inst = new IndicatorInstance(r.host, crossing('w2-alert-burst'));
+    bars.push(bar(1300, 200), bar(1360, 210));
+    inst.recompute();
+    expect(alerts(r).map((a) => [a.time, a.index])).toEqual([[1300, 5], [1360, 6]]);
+  });
+
+  it('stays silent when a pass pages history in and appends', () => {
+    const bars = wave(5);
+    const r = rig(bars);
+    const inst = new IndicatorInstance(r.host, crossing('w2-alert-burst-history'));
+    bars.unshift(bar(940, 300));
+    bars.push(bar(1300, 200), bar(1360, 210));
+    inst.recompute();
+    expect(alerts(r)).toHaveLength(0);
   });
 
   it('does not fire again while the same forming bar moves', () => {

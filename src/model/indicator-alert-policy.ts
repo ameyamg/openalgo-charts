@@ -16,6 +16,8 @@ export interface IndicatorAlertPolicyPass {
   tailOnly: boolean;
   refresh: boolean;
   current(): boolean;
+  /** The first bar this pass appended after an unchanged prefix; `bars.length` when it appended none. */
+  from: number;
 }
 
 interface Entry {
@@ -37,6 +39,17 @@ function copyValues(values: IndicatorValues, end?: number): IndicatorValues {
     });
   }
   return Object.freeze(result);
+}
+
+/**
+ * What an alert judges at `index`: the bars and outputs through it. A bar
+ * before the newest is judged as it stood when it was the newest, so a pass
+ * that appended several bars reads each the way separate appends would have.
+ */
+export function alertContext(bars: readonly Bar[], values: IndicatorValues, settings: Readonly<IndicatorSettings>,
+  index: number): IndicatorAlertContext {
+  return index === bars.length - 1 ? { bars, values, settings, index }
+    : { bars: Object.freeze(bars.slice(0, index + 1)), values: copyValues(values, index + 1), settings, index };
 }
 
 /** Explicit policies only. The instance retains the omitted-frequency legacy path. */
@@ -110,20 +123,21 @@ export class IndicatorAlertPolicy {
     let firstError: unknown;
     const last = bars.length - 1;
     const closed = confirmed ? last : last - 1;
+    // Each bar the pass appended, in order, as separate appends would judge
+    // them; a tick that appended none judges the newest bar alone.
+    const start = Math.min(pass.from, last);
+    const fresh = Array.from({ length: last + 1 - start }, (_, i) => start + i);
     for (const entry of this._entries) {
       if (!current()) return;
-      if (entry.busy || (entry.spec.frequency === 'once' && entry.onceSpent)) continue;
+      if (entry.busy) continue;
       const close = entry.spec.frequency === 'onBarClose';
-      const indices = close ? this._closeIndices(entry, bars, closed) : [last];
+      const indices = close ? this._closeIndices(entry, bars, closed) : fresh;
       for (const index of indices) { // bar indices, `last` at most
         if (!current()) return;
+        if (entry.spec.frequency === 'once' && entry.onceSpent) break;
         const time = bars[index]!.time;
         if (entry.spec.frequency === 'oncePerBar' && time <= entry.perBarTime) continue;
-        const context: IndicatorAlertContext = {
-          bars: close ? Object.freeze(bars.slice(0, index + 1)) : bars,
-          values: close ? copyValues(values, index + 1) : values,
-          settings, index,
-        };
+        const context = alertContext(bars, values, settings, index);
         let committed = false;
         entry.busy = true;
         try {

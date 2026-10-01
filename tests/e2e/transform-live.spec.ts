@@ -81,6 +81,83 @@ test.describe('in-chart transforms', () => {
     expect(await page.evaluate(() => (window as any).__probe.lastSource().close)).toBeCloseTo(edge - box * 1.9, 6);
   });
 
+  test('fires a crossing alert once per brick on a replayed Renko chart', async ({ page }, testInfo) => {
+    await ready(page, 'type=renko&study=none');
+    const run = await page.evaluate(async () => {
+      const { chart, series, lib } = (window as any).__probe;
+      // A five-brick average of the brick closes, and two alerts: one on every
+      // new brick, one on a brick that closes across the average.
+      const average = (c: number[]) => c.map((_, i) => i < 4 ? null : c.slice(i - 4, i + 1).reduce((sum, x) => sum + x, 0) / 5);
+      const side = (bars: any[], avg: (number | null)[], i: number) => avg[i] == null ? 0 : Math.sign(bars[i].close - avg[i]!);
+      const crossed = (bars: any[], avg: (number | null)[], i: number) =>
+        i > 0 && side(bars, avg, i - 1) * side(bars, avg, i) === -1;
+      lib.registerIndicator({
+        id: 'e2e-brick-cross', name: 'Brick cross', placement: 'onchart', inputs: [],
+        plots: [{ key: 'avg', type: 'line', title: 'Average', style: { color: '#f5a623', lineWidth: 2 } }],
+        calc: (bars: any[]) => ({ avg: average(bars.map(b => b.close)) }),
+        alerts: [
+          { id: 'brick', title: 'New brick', when: () => true },
+          { id: 'cross', title: 'Crossed the average', when: ({ bars, values, index }: any) => crossed(bars, values.avg, index) },
+        ],
+      });
+      chart.addIndicator('e2e-brick-cross');
+      const events: { id: string; time: number; index: number }[] = [];
+      chart.on('indicator:alert', (e: any) => events.push({ id: e.alertId, time: e.time, index: e.index }));
+      const start = chart.primaryBars().length;
+      // Seven more hours replayed bar by bar, as a feed delivers them: a seeded
+      // continuation of the session's random walk. Each bar is one update, and
+      // a bar that moves more than a box completes several bricks at once.
+      let seed = 20261001;
+      const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      const gauss = () => Math.sqrt(-2 * Math.log(random() || 1e-9)) * Math.cos(2 * Math.PI * random());
+      let last = series.getData().at(-1);
+      const steps: number[] = [];
+      for (let i = 0; i < 84; i++) {
+        const open = last.close;
+        const close = Math.round(open * (1 + gauss() * 0.0019) * 20) / 20;
+        const bar = { time: last.time + 300, open, close, high: Math.max(open, close), low: Math.min(open, close), volume: 50000 };
+        const before = chart.primaryBars().length;
+        series.update(bar);
+        await (window as any).__frame();
+        steps.push(chart.primaryBars().length - before);
+        last = bar;
+      }
+      const bricks = chart.primaryBars();
+      const avg = chart.indicators()[0].values().avg;
+      // Each brick formed once and never changed, so the final bricks say what
+      // each alert should have judged.
+      const expected = bricks.map((_: unknown, i: number) => i).filter((i: number) => i >= start && crossed(bricks, avg, i));
+      const cross = events.filter(e => e.id === 'cross');
+      series.createMarkers().setMarkers(cross.map(e => {
+        const up = bricks[e.index].close > avg[e.index]!;
+        return { time: e.time, position: up ? 'belowBar' : 'aboveBar', shape: up ? 'arrowUp' : 'arrowDown', size: 'small',
+          color: up ? '#26a69a' : '#ef5350', text: up ? 'Up' : 'Down' };
+      }));
+      // The brick each replayed bar completed last, so a brick before it formed in the same step.
+      const lastOfStep = new Set<number>();
+      steps.reduce((at, k) => { if (k > 0) lastOfStep.add(at + k - 1); return at + k; }, start);
+      // The replayed bricks and a few before them, wide enough to read.
+      chart.setVisibleLogicalRange({ from: start - 8, to: bricks.length + 2 });
+      await (window as any).__frame();
+      return {
+        start, count: bricks.length, steps, expected,
+        brick: events.filter(e => e.id === 'brick').map(e => e.index),
+        cross: cross.map(e => e.index),
+        timesMatch: events.every(e => bricks[e.index].time === e.time),
+        crossInsideStep: cross.filter(e => !lastOfStep.has(e.index)).length,
+      };
+    });
+    expect(run.steps.filter(k => k >= 2).length).toBeGreaterThan(3);
+    // Every brick the replay formed is judged once, in order, including those
+    // that formed two or more to a bar.
+    expect(run.brick).toEqual(Array.from({ length: run.count - run.start }, (_, i) => run.start + i));
+    expect(run.cross).toEqual(run.expected);
+    expect(run.cross.length).toBeGreaterThan(4);
+    expect(run.crossInsideStep).toBeGreaterThan(0);
+    expect(run.timesMatch).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath('renko-replay-alerts.png') });
+  });
+
   for (const type of ['heikin-ashi', 'renko', 'range-bars', 'line-break', 'point-figure', 'kagi']) {
     test(`draws a ${type} chart`, async ({ page }, testInfo) => {
       await ready(page, `type=${type}`);

@@ -9,7 +9,7 @@
  */
 import type { Bar } from './bar';
 import { runAbortable } from './abortable-request';
-import { IndicatorAlertPolicy } from './indicator-alert-policy';
+import { IndicatorAlertPolicy, alertContext } from './indicator-alert-policy';
 import { cloneIndicatorSettings, planIndicatorDependencies, type IndicatorDependencyNode } from './indicator-dependencies';
 import { validateIndicatorInputs } from './indicator-inputs';
 import { parseIndicatorPolicy, type IndicatorEditOptions, type IndicatorPolicy } from './indicator-policy';
@@ -1300,10 +1300,10 @@ export class IndicatorInstance implements IndicatorApi {
    * arriving at the left edge changes every index and would otherwise re-fire
    * the whole chart.
    *
-   * Only a tail-only change can fire, which is the same gate `calcTail` uses and
-   * for the same reason: any other change replaced history, and an indicator
-   * dropped onto a loaded chart (or moved to another symbol) must not announce
-   * every crossover of the last two years at once. Such a pass reseeds silently.
+   * Only a tail-only change fires, and each bar it appended is judged in turn,
+   * as the newest. Any other change replaced history, and an indicator dropped
+   * onto a loaded chart (or moved to another symbol) must not announce every
+   * crossover of the last two years at once. Such a pass reseeds silently.
    */
   private _syncAlerts(
     bars: readonly Bar[],
@@ -1323,10 +1323,10 @@ export class IndicatorInstance implements IndicatorApi {
     let failed = false;
     let failure: unknown;
     for (let i = from; i < n; i++) {
+      const ctx = alertContext(bars, this._values, settings, i);
       for (const spec of specs) {
         if (spec.frequency !== undefined) continue;
         if (!current()) return;
-        const ctx = { bars, values: this._values, settings, index: i };
         try {
           const matches = spec.when(ctx);
           if (!current()) return;
@@ -1345,7 +1345,7 @@ export class IndicatorInstance implements IndicatorApi {
     }
     if (!current()) return;
     try {
-      this._alertPolicy.evaluate({ bars, values: this._values, settings, calculation, tailOnly, refresh, current }, payload => {
+      this._alertPolicy.evaluate({ bars, values: this._values, settings, calculation, tailOnly, refresh, current, from }, payload => {
         this._host.emit?.('indicator:alert', { ...payload, indicatorId: this.indicatorId, instanceId: this.id });
       });
     } catch (error) {
@@ -1787,13 +1787,12 @@ export class IndicatorInstance implements IndicatorApi {
     // longer exists, leaving the plot silently wrong until the next full calc.
     // Native revisions retain historical invalidation across coalesced writes.
     // Hosts without them retain the timestamp heuristic: the first bar is
-    // unchanged and the last is replaced or followed by exactly one new bar.
-    const appended = this._barCount > 0 && n === this._barCount + 1 && // so two bars or more
-      bars[n - 2]!.time === this._lastTime && bars[0]!.time === this._firstTime;
-    const tailOnly = n > 0 && this._barCount > 0 && bars[0]!.time === this._firstTime &&
-      ((n === this._barCount && bars[n - 1]!.time === this._lastTime) || appended) &&
-      (source === undefined || (source.sourceId === this._sourceId && source.revision !== this._sourceRevision &&
-        source.historyRevision === this._sourceHistoryRevision && source.provenance === 'live'));
+    // unchanged and the last is replaced or followed by new bars.
+    const kept = this._barCount > 0 && n >= this._barCount &&
+      bars[0]!.time === this._firstTime && bars[this._barCount - 1]!.time === this._lastTime;
+    const appended = kept && n > this._barCount;
+    const tailOnly = kept && (source === undefined || (source.sourceId === this._sourceId && source.revision !== this._sourceRevision &&
+      source.historyRevision === this._sourceHistoryRevision && source.provenance === 'live'));
     // Older hosts have no mutation provenance and retain the live heuristic.
     if (source === undefined && tailOnly) this._live = true;
     const ctx = this._calcContext(calc, appended, source);
@@ -1801,7 +1800,8 @@ export class IndicatorInstance implements IndicatorApi {
     // The chart's own bars on a transformed series are its elements, not time bars.
     if (this._barSource === 'chart' && (this._host.underlyingBars?.() ?? null) !== null) ctx.transformed = true;
     let usedTail = false;
-    if (tailOnly && sourceIndex === null && bindings.canTail && this._d.calcTail !== undefined) {
+    // One appended bar at most: more (a frame's burst of ticks, or the bricks one source bar completes) take a full `calc`.
+    if (tailOnly && n <= this._barCount + 1 && sourceIndex === null && bindings.canTail && this._d.calcTail !== undefined) {
       const from = this._barCount - 1; // the previously-last bar may have been replaced
       const tail = this._d.calcTail(calc, settings, from, this._values, this._store, ctx);
       if (tail !== null) { values = spliceTail(this._values, tail, from, n); usedTail = true; }
