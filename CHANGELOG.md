@@ -4,7 +4,7 @@ All notable changes to OpenAlgo Charts.
 
 ## 2.6.0
 
-{{DATE}}
+2026-10-01
 
 Analysis depth and a stricter API. A chart now applies Heikin Ashi, Renko,
 range bars, line break, point and figure and Kagi to the bars a host feeds,
@@ -515,9 +515,9 @@ Each keeps working until 3.0.0 and has a row in COMPATIBILITY.md.
 
 - **A tick on a transformed chart costs the same at any history length.** It
   forms only the newest element again, from a clone of the state, and writes
-  only the tail that moved: {{MEASURE: one tick per transform at 200,000 one-minute bars (A1
-  branch: 0.7 to 1.0 microseconds), a node timing over dist of the final
-  build}}. Line break keeps only the lines a break is judged against.
+  only the tail that moved: one tick costs 0.4 to 1.1 microseconds for each
+  transform at 200,000 one-minute bars (a node timing over the release build).
+  Line break keeps only the lines a break is judged against.
 - **A plain chart carries none of the transform runs.** The code that switches a
   series into a transform and compares its elements on each tick is installed
   by `registerSeriesTransform`, so a chart-only import that never registers a
@@ -525,16 +525,19 @@ Each keeps working until 3.0.0 and has a row in COMPATIBILITY.md.
 - **Higher-timeframe folds read the zone once per local day.**
   `securitySeries` and `securityExpression` resolve the timezone only when an
   instant leaves the current local day, with identical output:
-  {{MEASURE: securitySeries(bars, '1d') on 7,500 one-minute bars, 2.5.10
-  against 2.6.0 (#22 branch: about 24 ms to under 1 ms), a node timing over the
-  dist of both builds}}. A study with a timeframe set takes its live tail inside
-  a bucket: {{MEASURE: full and per-tick ms for a 15m and a 1h timeframe on
-  7,500 and 30,000 one-minute bars, npm run bench section C}}.
+  `securitySeries(bars, '1d')` on 7,500 one-minute bars takes 0.43 ms where
+  2.5.10 took 23.8 ms (median of 30 runs on each build). A study with a
+  timeframe set takes its live tail inside a bucket: an EMA, Supertrend, RSI
+  and Bollinger set on 15m costs 3.96 ms in full and 0.014 ms a tick on 7,500
+  one-minute bars, and 15.7 ms and 0.010 ms on 30,000 (`npm run bench`,
+  section C).
 - **Measured against 2.5.10** on the release bench (five runs of each build in
   one session, `benchmarks/releases.json`, the website's Benchmarks page):
-  {{MEASURE: frame medians and p95 against 2.5.10, npm run
-  bench:release on the idle reference machine after the version bump and the
-  final build}}.
+  frames are on par. With Canvas 2D at 200,000 bars a pan, a full zoom-out and
+  a ten-study tick measure 2.2, 54.9 and 164.1 ms against 2.3, 54.1 and
+  167.8 ms (each the lowest p95 of its five runs); the ten-study tick at 50,000
+  bars is faster (45.7 against 57.8 ms), and WebGL2 frames are within 4
+  percent.
 
 ### Website
 
@@ -563,15 +566,16 @@ Each keeps working until 3.0.0 and has a row in COMPATIBILITY.md.
 
 ### Tests
 
-- {{MEASURE: unit tests and files, npm test}} unit tests and
-  {{MEASURE: reference host tests and files, npm run test:demo}} reference host
-  tests pass, and the browser suite passes {{MEASURE: browser cases, npx
-  playwright test, three engines}} cases in three browser engines.
-  {{MEASURE: skipped cases and the written reason for each, npx playwright
-  test}}. Each fix carries a test that fails with the fix reverted. Against
-  2.5.10, render parity finds {{MEASURE: differing pixels,
-  tests/e2e/render-parity.spec.ts against dist-baseline built from v2.5.10 with
-  node scripts/build-baseline.mjs v2.5.10}}.
+- 11564 unit tests across 511 files and 687 reference host tests across 67
+  files pass. The browser suite runs 2061 cases in three browser engines with
+  two workers: 2045 pass, 13 are skipped, each for an engine limit its spec
+  names (device pixel scaling Playwright can change only in Chromium, a
+  resampled page in headless Chromium and WebKit, and WebKit's missing
+  device-pixel content box), and 3 timed out under that load and pass when run
+  alone (the legend tip check 5 of 5, two reference host reloads 9 of 9 each).
+  The two reference host tests that reload saved alerts now write the layout
+  before reloading instead of waiting out the autosave debounce. Each fix carries a test that fails with the
+  fix reverted. Against 2.5.10, render parity finds no differing pixel.
 - **A compatibility gate.** `npm run check:compat`, part of `npm run verify`,
   fails a removed export, a removed member or a narrowed type in any tier against
   2.5.10 and 2.5.1, unless COMPATIBILITY.md lists it for the next major, and
@@ -625,56 +629,41 @@ type was narrowed and no runtime dependency was added; the package gains the
 eight tier script files, which ship without source maps.
 
 Sizes, measured on this release and against 2.5.10 (Brotli, decimal kB): base
-engine 134.69 to {{MEASURE: Base engine row, npx size-limit}}, base plus trade
-151.38 to {{MEASURE: Base + trade layer row, npx size-limit}}, indicators 40.43
-to {{MEASURE: Indicator tier row, npx size-limit}}, draw 57.98 to
-{{MEASURE: Draw tier row, npx size-limit}}, transform 4.55 to
-{{MEASURE: Transform tier row, npx size-limit}}, profile 14.97 to
-{{MEASURE: Profile tier row, npx size-limit}}, widget 121.36 to
-{{MEASURE: Widget tier row, npx size-limit}}, the widget's first-use parts 18.19
-to {{MEASURE: Widget first-use parts row, npx size-limit}}, workspace 11.53 to
-{{MEASURE: Workspace tier row, npx size-limit}}, widget terminal 354.46 to
-{{MEASURE: Widget terminal row, npx size-limit}} and every tier together 409.13
-to {{MEASURE: Everything row, npx size-limit}}; the trade tier on its own 16.69
-to {{MEASURE: Base + trade row less Base engine row, npx size-limit}}, and
-{{MEASURE: rows unchanged from 2.5.10 (expected: WebGL2 only), npx
-size-limit}}. The nine classic-script files, a new row, measure
-{{MEASURE: Script tags row, npx size-limit}} together. The chart-only import
-grows from 85.73 to {{MEASURE: chart-only import KiB and bytes, npm run
-shake}}. The package measures {{MEASURE: files, packed and unpacked bytes
-against 2.5.10 (47 files, 2,098,359 packed, 6,730,951 unpacked per the E6
-report's 2.5.10 figures, to be re-measured), npm pack --dry-run}}. Each budget is
-the smallest two-decimal value that passes.
+engine 134.69 to 137.37, base plus trade 151.38 to 154.24, indicators 40.43 to
+43.02, draw 57.98 to 58.35, transform 4.55 to 6.07, profile 14.97 to 14.85,
+widget 121.36 to 123.53, the widget's first-use parts 18.19 to 18.24, workspace
+11.53 to 11.73, widget terminal 354.46 to 362.26 and every tier together 409.13
+to 418.74; the trade tier on its own 16.69 to 16.88, and WebGL2 6.93 to 6.97.
+The nine classic-script files, a new row, measure 430.57 together. The
+chart-only import grows from 85.73 to 87.04 KiB (89,134 bytes, up 1,349). The
+package grows from 47 files, 2,098,074 bytes packed and 6,730,951 unpacked to 55
+files, 2,499,689 packed and 8,075,883 unpacked. Each budget is the smallest
+two-decimal value that passes.
 
 Where the growth goes, each figure measured from builds of the commits before
-and after a feature, so they overlap slightly once merged. In the base engine
-the in-chart transforms and the study bar source take {{MEASURE: base bytes
-(leanness attribution: A1 +1,567)}}: the series routing every chart's data path
-passes through, which does nothing for a series without a transform; the
-transform runs themselves are installed by `registerSeriesTransform`, so a
-chart-only import that never registers one leaves them out
-({{MEASURE: chart-only bytes saved, leanness 4000ec26: -347}}). The OpenAlgo
-feed's search and the copy of rich event details take {{MEASURE: base bytes
-(A2 and A6: +324)}}, of which the chart-only import pays only the copy
-({{MEASURE: chart-only bytes (+48)}}); the pane index check takes
-{{MEASURE: base bytes (strict base: +217)}}, and the base and edge hygiene
-waves {{MEASURE: base bytes (h-core +193, h-edges +11, the shared dash table
--110)}}, raw code going down while Brotli rose with new function boundaries.
-Study and trader alerts that judge every element a step appends take
-{{MEASURE: base bytes (transform-alerts: +94, of which the chart-only import
-pays +0.08 KiB; trader-alerts: +130, none of it in the chart-only import)}}.
-The indicator tier carries the seven new studies {{MEASURE: bytes (A4: +2,424,
-about 346 a study)}} and the timeframe wrapper and fold {{MEASURE: bytes (#22:
-+1,482)}}, less the hygiene wave's one settings reader and shared kernels
-{{MEASURE: bytes (h-analysis: -1,266)}}. The transform tier's growth is the live
-runs and their registration {{MEASURE: bytes (A1: +1,511)}}. The widget tier grew
-by the chart grid's split over a state object {{MEASURE: bytes (h-desk: +697)}},
-the transformed chart types and the Compute on row {{MEASURE: bytes (A1:
-+597)}}, the rich popup, its actions and the feed search {{MEASURE: bytes (A2
-and A6: +553)}}, and the strict and widget hygiene passes {{MEASURE: bytes (+135
-each)}}. The chart-only import grows by {{MEASURE: chart-only bytes against
-2.5.10 (leanness: +1,191 on its branch)}}, most of it the transform routing and
-the study bar source a host can call on any chart.
+and after a feature, so they overlap slightly once merged, and Brotli layout
+moves a single step by up to about 150 bytes. In the base engine the in-chart
+transforms and the study bar source take 1,567 bytes: the series routing every
+chart's data path passes through, which does nothing for a series without a
+transform. The switch into a transform and the per-tick element diff are
+installed by `registerSeriesTransform`, so a chart-only import that never
+registers one leaves them out (347 bytes there); moving them shifted the base
+file's layout by about 200. The OpenAlgo feed's search and the copy of rich
+event details take 324 bytes, of which the chart-only import pays only the copy
+(48); the pane index check takes 217, and the base and edge hygiene waves 204,
+raw code going down while Brotli rose with new function boundaries, less 110
+for the shared dash table. The alert fixes take 324: 94 for study alerts that
+judge every element a step appends, 130 for trader alerts that do the same and
+100 for a re-dated forming element that stays live. The indicator tier carries
+the seven new studies (2,424 bytes, about 346 a study) and the timeframe
+wrapper and fold (1,482), less the hygiene wave's one settings reader and
+shared kernels (1,266). The transform tier's growth is the live runs and their
+registration (1,511). The widget tier grew by the chart grid's split over a
+state object (697), the transformed chart types and the Compute on row (597),
+the rich popup, its actions and the feed search (553), and the strict and
+widget hygiene passes (135 each). The chart-only import grows by 1,349 bytes,
+most of it the transform routing and the study bar source a host can call on
+any chart.
 
 ## 2.5.10
 

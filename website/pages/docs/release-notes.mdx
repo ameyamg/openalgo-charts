@@ -10,7 +10,7 @@ The full, authoritative changelog lives in
 
 ## 2.6.0
 
-MEASURE_RELEASE_DATE
+2026-10-01
 
 Analysis depth and a stricter API: transforms applied in the chart with studies on the
 underlying bars, seven new built-ins, a timeframe input on 29 built-ins, symbol search through
@@ -132,12 +132,14 @@ a hygiene wave across every tier.
 
 - A transformed chart forms only its newest element on a tick, and higher-timeframe folds read
   the timezone once a day instead of once a bar:
-  MEASURE_SECURITY_SERIES_SPEEDUP.
-- Against 2.5.10 on the release bench: MEASURE_BENCH_AGAINST_2510.
-- Sizes against 2.5.10: base engine 134.69 to MEASURE_SIZE_BASE_KB kB,
-  widget tier 121.36 to MEASURE_SIZE_WIDGET_KB kB, indicators 40.43 to
-  MEASURE_SIZE_INDICATORS_KB kB, and the chart-only import 85.73 to
-  MEASURE_CHART_ONLY_KIB KiB. A plain chart carries none of the transform
+  a daily fold of 7,500 one-minute bars takes 0.43 ms where 2.5.10 took 23.8 ms.
+- Against 2.5.10 on the release bench, frames are on par: Canvas 2D at 200,000 bars pans in
+  2.2 ms, zooms out in 54.9 ms and takes a ten-study tick in 164.1 ms (p95), against 2.3, 54.1
+  and 167.8 ms ([Benchmarks](/benchmarks#260)).
+- Sizes against 2.5.10: base engine 134.69 to 137.37 kB,
+  widget tier 121.36 to 123.53 kB, indicators 40.43 to
+  43.02 kB, and the chart-only import 85.73 to
+  87.04 KiB. A plain chart carries none of the transform
   runs, and the eight tier scripts ship without source maps.
 
 See [Upgrading to 2.6.0](/docs/upgrading) for what a host may notice, and the

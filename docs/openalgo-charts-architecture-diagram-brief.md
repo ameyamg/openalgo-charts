@@ -101,7 +101,7 @@ Session phases, session shading and the link channels live inside the base engin
 boxes, and the chart grid, bottom bar and saved layouts inside the widget tier, whose `<desc>`
 names them; the release adds no box or arrow.
 
-Rechecked on 2.6.0: {{MEASURE: every tier row and all tiers, npx size-limit}}. Registry
+Rechecked on 2.6.0 with `npx size-limit` on the release build: base 137.37 kB, indicators 43.02 kB, draw 58.35 kB, profile 14.85 kB, transform 6.07 kB, trade 16.88 kB on its own (base + trade 154.24 kB), workspace 11.73 kB, WebGL2 6.97 kB, widget 123.53 kB, and 418.74 kB for all tiers. Registry
 counts: 112 indicators (Trend 40, Momentum 31, Volatility 23, Volume 18), 87 drawing tools
 and 15 chart types with the transform tier loaded, which also registers six series
 transforms the chart applies itself. The `/indicators` chip says 112 built-in studies, and

@@ -255,7 +255,19 @@ const BUNDLE = new URL('../dist/openalgo-charts.mjs', import.meta.url).pathname.
 // rest of the release nets 13 bytes, because the session phases and shading
 // and the link channels for the chart type and drawings shake out of this
 // build. 87785 bytes (85.73 KiB), up 932 from 86853; allow 85.73 KiB.
-const LIMIT_BYTES = 85.73 * 1024;
+// 2.6.0: a chart can apply a transform itself, and what every chart reaches
+// of that stays here (setSeriesTransform, the run lookups in the series
+// handle, the study bar source and its sampling, the countdown and axis
+// rules): 1281 bytes at its merge, of which 347 later moved behind
+// registerSeriesTransform. The core and edge hygiene fixes (several click and
+// drag subscribers, plot opacity on colour-by plots, the variant compare, the
+// shared axis tag) add about 385, rich event details 48, and the two study
+// alert fixes (every element a step appends judged, a re-dated forming
+// element kept live) about 225; the shared dash table takes about 190 back.
+// Each figure was measured at its own merge and Brotli layout moves a single
+// step by up to 150 bytes, so they do not sum to the total, which is measured:
+// 89134 bytes (87.04 KiB), up 1349 from 87785; allow 87.05 KiB.
+const LIMIT_BYTES = 87.05 * 1024;
 
 // Absent from a chart-only build. Each is a string that appears in the adapter
 // source and nowhere in the rendering core.
@@ -347,5 +359,5 @@ if (size > LIMIT_BYTES) {
   failed = true;
 }
 
-console.log(`chart-only import (tree-shaken): ${kb(size)} brotli, budget ${kb(LIMIT_BYTES)}`);
+console.log(`chart-only import (tree-shaken): ${kb(size)} (${size} bytes) brotli, budget ${kb(LIMIT_BYTES)}`);
 if (failed) process.exit(1);
