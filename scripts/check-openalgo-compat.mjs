@@ -14,6 +14,8 @@
  * Add --consumer-checks /absolute/checks.mjs for additional checkTradingWorkspace checks.
  * Use --browser chromium|firefox|webkit to select the rendering engine.
  * Use --port <n> to serve on a fixed port; without it a free one is picked at random.
+ * A defect in the host's own chrome is printed as HOST FINDING and kept in the
+ * report's hostFindings; it fails nothing.
  *
  * No backend is started. Vite proxies are removed and every API/WS is mocked.
  * The app source is unchanged; an entry wrapper records terminal instances so
@@ -232,6 +234,11 @@ try {
     });
   });
   const check = async (name, fn) => { await fn(); report.checks.push(name); console.log(`PASS ${name}`); };
+  // A defect in the host's own chrome, found on the way. It is printed and
+  // kept in the report on every run, and fails nothing: it is not this
+  // package's to fix, and the package's gate should not wait on it.
+  report.hostFindings = [];
+  const hostFinding = message => { report.hostFindings.push({ after: report.checks.at(-1), message }); console.log(`HOST FINDING ${message}`); };
   const terminal = async (fn, arg) => page.evaluate(({ source, arg }) => {
     const t = window.__compatTerminals?.findLast((item) => !item.destroyed && item.chart);
     if (!t) throw new Error('No active terminal');
@@ -292,7 +299,7 @@ try {
     assert.equal(await terminal((t) => t.sym.symbol), 'BHEL');
     assert(report.requests.some((r) => r.path === '/api/v1/history' && r.body.interval === '5m'));
   });
-  if (args.toolbar === 'true') await checkToolbar({ page, check, screenshot: args.screenshot, orderCount: () => orderCounter });
+  if (args.toolbar === 'true') await checkToolbar({ page, check, screenshot: args.screenshot, orderCount: () => orderCounter, hostFinding });
   if (args.branding === 'true') {
     await check('host branding links follow disabled and custom chart branding', async () => {
       const mark = await terminal(t => t.chart.brandingOptions());
@@ -995,4 +1002,5 @@ try {
   await rm(cache, { recursive: true, force: true });
   if (args.output) await writeFile(resolve(args.output), `${JSON.stringify(report, null, 2)}\n`);
   console.log(`${report.label}: ${report.checks.length} browser compatibility checks passed`);
+  if (report.hostFindings?.length) console.log(`${report.label}: ${report.hostFindings.length} host finding(s), listed above`);
 }
