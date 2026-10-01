@@ -21,7 +21,7 @@ import { gunzipSync } from 'node:zlib';
  */
 export const BASELINES = [
   { version: '2.5.1', why: 'the version OpenAlgo pins' },
-  { version: '2.5.10', why: 'the previous release' },
+  { version: '2.6.0', why: 'the previous release' },
 ];
 
 const NAME = 'openalgo-charts';
