@@ -1142,4 +1142,14 @@ describe('drawing shortcuts', () => {
   it('treats Cmd as Ctrl, so a Mac chord does not arm a tool either', () => {
     expect(matchDrawingShortcut({ key: 't', altKey: true, metaKey: true })).toBeNull();
   });
+
+  it('lists the shortcut of a custom tool whatever its id, as its own key', () => {
+    registerDrawingTool({ id: '__proto__', name: 'Odd id', points: 1, shortcut: 'Ctrl+Alt+F9', draw: () => {}, distance: () => 0 });
+    const map = drawingShortcuts();
+    expect(Object.keys(map)).toContain('__proto__');
+    expect(Object.getOwnPropertyDescriptor(map, '__proto__')?.value).toBe('Ctrl+Alt+F9');
+    // Still an ordinary object, so a host reading it with the usual methods keeps working.
+    expect(Object.getPrototypeOf(map)).toBe(Object.prototype);
+    expect(map['trend-line']).toBe('Alt+T');
+  });
 });
