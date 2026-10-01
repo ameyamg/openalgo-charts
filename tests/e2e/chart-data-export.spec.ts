@@ -235,6 +235,25 @@ test('reference data downloads honor replay and reject an obsolete snapshot menu
   await expect(page.locator('#status')).toContainText('changed');
 });
 
+test('reference bounds refuse a year before 100 rather than read it as 19xx', async ({ page }, info) => {
+  await reference(page);
+  const controls = await openDataDialog(page, 'reference');
+  let downloads = 0;
+  page.on('download', () => { downloads++; });
+  // A two-digit year typed for 2026 reaches the field as 0026.
+  for (const [bound, value] of [['from', '0026-09-28T09:15'], ['to', '0099-12-31T23:59']] as const) {
+    await controls.all.click();
+    await controls[bound].fill(value);
+    await expect(controls[bound]).toHaveValue(value);
+    await controls.download.click();
+    await expect(controls.error).toBeVisible();
+    await expect(controls.error).toContainText('Enter a date and a time on the chart clock');
+    await expect(controls.dialog).toBeVisible();
+  }
+  await page.screenshot({ path: info.outputPath('reference-low-year.png') });
+  expect(downloads).toBe(0);
+});
+
 test('widget capture downloads actual CSV and reports browser file failures', async ({ page }, info) => {
   await page.goto('/tests/e2e/widget-fixture.html');
   await page.waitForFunction(() => (window as any).__loaded > 0);

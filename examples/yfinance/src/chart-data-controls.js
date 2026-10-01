@@ -21,11 +21,14 @@ function wallText(time, zone) {
  * UTC seconds for a date and time typed on `zone`'s clock, or null when it
  * does not read (a date the calendar lacks included). A To written to the
  * minute takes the whole minute, so every bar that opens inside it is in.
+ * A year before 100 does not read: the calendar maths takes it as 19xx, so
+ * 0026, a two-digit year in the field, would quietly stand for 1926.
  */
 function wallSeconds(text, zone, end) {
   const m = WALL.exec(text);
   if (!m) return null;
   const [year, month, day, hour, minute] = m.slice(1, 6).map(Number);
+  if (year < 100) return null;
   const second = m[6] !== undefined ? Number(m[6]) : end ? 59 : 0;
   const probe = new Date(Date.UTC(year, month - 1, day));
   if (probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59) return null;
