@@ -654,6 +654,9 @@ feed's search and the copy of rich event details take {{MEASURE: base bytes
 {{MEASURE: base bytes (strict base: +217)}}, and the base and edge hygiene
 waves {{MEASURE: base bytes (h-core +193, h-edges +11, the shared dash table
 -110)}}, raw code going down while Brotli rose with new function boundaries.
+Study and trader alerts that judge every element a step appends take
+{{MEASURE: base bytes (transform-alerts: +94, of which the chart-only import
+pays +0.08 KiB; trader-alerts: +130, none of it in the chart-only import)}}.
 The indicator tier carries the seven new studies {{MEASURE: bytes (A4: +2,424,
 about 346 a study)}} and the timeframe wrapper and fold {{MEASURE: bytes (#22:
 +1,482)}}, less the hygiene wave's one settings reader and shared kernels
