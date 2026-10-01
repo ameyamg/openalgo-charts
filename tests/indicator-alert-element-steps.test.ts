@@ -101,20 +101,23 @@ describe('alerts on a pass that appends several elements', () => {
     study.values();
     const bricks = h.chart.primaryBars();
     expect(bricks.length).toBe(before + 2);
-    // On the chart's bars the value is the brick's close; on the underlying
-    // bars it is the value of the source bar that completed the brick.
+    // On the chart's bars each brick is a bar of the study, judged in turn, and
+    // the value is the brick's close. On the underlying bars both bricks read
+    // the source bar that completed them, which is judged once, at the first.
     const value = (i: number): number => barSource === 'chart' ? bricks[i]!.close : next.close;
     const n = bricks.length;
     expect(summary(h.events)).toEqual([
       { alertId: 'above-0', time: bricks[n - 2]!.time, index: n - 2, message: `${value(n - 2)} at ${n - 1} of ${n - 1}` },
-      { alertId: 'above-1', time: bricks[n - 1]!.time, index: n - 1, message: `${value(n - 1)} at ${n} of ${n}` },
+      ...barSource === 'chart'
+        ? [{ alertId: 'above-1', time: bricks[n - 1]!.time, index: n - 1, message: `${value(n - 1)} at ${n} of ${n}` }] : [],
     ]);
     expect(h.events.every(e => e.indicatorId === study.indicatorId && e.instanceId === study.id)).toBe(true);
 
     // The forming bar ticks on without completing another brick: nothing new to judge.
+    const judged = h.events.length;
     h.series.update({ ...next, close: next.close + 0.1, high: next.high + 0.1 });
     study.values();
-    expect(h.events).toHaveLength(2);
+    expect(h.events).toHaveLength(judged);
   });
 
   it('judges each element a host writes before the chart recomputes', () => {

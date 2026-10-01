@@ -1845,6 +1845,14 @@ bar seeds silently instead. On a Kagi or range bar chart a newer source bar date
 forming element again at its index; that is the same bar revised, so it is not judged
 as new, and an alert that already delivered on it or closed it stays that way.
 
+A study on the underlying bars (`barSource: 'underlying'`) reads each element at the bar
+it was completed on, so the elements one bar completed all read that bar, and its alerts
+count the bars it computes on rather than the elements: such a bar is judged once, at the
+first element it completed, whatever the frequency. `oncePerBar` delivers at most once
+per underlying bar, `onBarClose` judges a bar after that bar has closed, and
+`everyUpdate` judges an update only when an element reads the bar it moved. On the
+chart's own bars every element is a bar of the study and is judged on its own.
+
 Close predicates and message functions, and any alert judged at a bar before the
 newest, receive only bars and output values through their evaluated index. Use
 causal calculations so those values do not already contain future information. A

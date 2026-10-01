@@ -18,6 +18,8 @@ export interface IndicatorAlertPolicyPass {
   current(): boolean;
   /** The first bar this pass appended after an unchanged prefix; `bars.length` when it appended none. */
   from: number;
+  /** A study computed on the bars under a transform: those bars, and the one each element reads. */
+  sampled?: { bars: readonly Bar[]; sourceIndex: readonly number[] } | null;
 }
 
 interface Entry {
@@ -50,6 +52,17 @@ export function alertContext(bars: readonly Bar[], values: IndicatorValues, sett
   index: number): IndicatorAlertContext {
   return index === bars.length - 1 ? { bars, values, settings, index }
     : { bars: Object.freeze(bars.slice(0, index + 1)), values: copyValues(values, index + 1), settings, index };
+}
+
+/**
+ * The time of the bar the study read at each element, the time an alert's
+ * marks are kept in: the element's own, or for a study computed on the bars
+ * under a transform the source bar its values were read at. The elements that
+ * one source bar completed all read that bar, so they are one bar of the
+ * study, judged once, at the first of them.
+ */
+export function studyBarTime(bars: readonly Bar[], sampled?: IndicatorAlertPolicyPass['sampled']): (index: number) => number {
+  return sampled ? i => sampled.bars[sampled.sourceIndex[i]!]!.time : i => bars[i]!.time;
 }
 
 /** Explicit policies only. The instance retains the omitted-frequency legacy path. */
@@ -105,11 +118,15 @@ export class IndicatorAlertPolicy {
     this._historyRevision = execution?.historyRevision;
     this._revision = execution?.revision;
     this._replaying = replaying;
-    const confirmed = pass.calculation.barState.isConfirmed;
+    // The checkpoints are kept in the times of the bars the study computed on;
+    // `closed` is the newest of them that has closed.
+    const rows = pass.sampled?.bars ?? pass.bars;
+    const read = studyBarTime(pass.bars, pass.sampled);
+    const closed = rows[rows.length - (pass.calculation.barState.isConfirmed ? 1 : 2)]?.time ?? -Infinity;
     const refresh = pass.refresh || execution?.change === 'refresh';
     const live = native ? execution.provenance === 'live' : pass.tailOnly;
     if (generation || (!refresh && !live)) {
-      this._seed(pass.bars, confirmed);
+      this._seed(closed);
       return;
     }
     if (refresh || !live || pass.bars.length === 0) return;
@@ -122,21 +139,25 @@ export class IndicatorAlertPolicy {
     let failed = false;
     let firstError: unknown;
     const last = bars.length - 1;
-    const closed = confirmed ? last : last - 1;
     // Each bar the pass appended, in order, as separate appends would judge
-    // them; a tick that appended none judges the newest bar alone.
+    // them, and elements that read one bar once, at the first; a tick that
+    // appended none judges the newest alone, and only when it reads the bar
+    // that moved.
     const start = Math.min(pass.from, last);
-    const fresh = Array.from({ length: last + 1 - start }, (_, i) => start + i);
+    const fresh: number[] = [];
+    for (let i = start; i <= last; i++) {
+      if (i > start ? read(i) !== read(i - 1) : start === pass.from || read(i) === rows[rows.length - 1]!.time) fresh.push(i);
+    }
     for (const entry of this._entries) {
       if (!current()) return;
       if (entry.busy) continue;
       const close = entry.spec.frequency === 'onBarClose';
-      const indices = close ? this._closeIndices(entry, bars, closed) : fresh;
+      const indices = close ? this._closeIndices(entry, read, last, closed) : fresh;
       for (const index of indices) { // bar indices, `last` at most
         if (!current()) return;
         if (entry.spec.frequency === 'once' && entry.onceSpent) break;
-        const time = bars[index]!.time;
-        if (entry.spec.frequency === 'oncePerBar' && time <= entry.perBarTime) continue;
+        const time = bars[index]!.time, bar = read(index);
+        if (entry.spec.frequency === 'oncePerBar' && bar <= entry.perBarTime) continue;
         const context = alertContext(bars, values, settings, index);
         let committed = false;
         entry.busy = true;
@@ -145,7 +166,7 @@ export class IndicatorAlertPolicy {
           const matches = entry.spec.when(context);
           if (!current()) return;
           if (!matches) {
-            if (close) this._judgeClose(entry, time);
+            if (close) this._judgeClose(entry, bar);
             continue;
           }
           const message = typeof entry.spec.message === 'function'
@@ -155,14 +176,14 @@ export class IndicatorAlertPolicy {
           // Native event dispatch is the commitment boundary. A subscriber
           // exception cannot make a spent alert available for another delivery.
           if (entry.spec.frequency === 'once') entry.onceSpent = true;
-          if (entry.spec.frequency === 'oncePerBar') entry.perBarTime = time;
-          if (close) this._judgeClose(entry, time);
+          if (entry.spec.frequency === 'oncePerBar') entry.perBarTime = bar;
+          if (close) this._judgeClose(entry, bar);
           committed = true;
           emit(payload);
           if (!current()) return;
         } catch (error) {
           if (!current()) return;
-          if (close && !committed) entry.failedCloses.add(time);
+          if (close && !committed) entry.failedCloses.add(bar);
           if (!failed) { failed = true; firstError = error; }
         } finally {
           entry.busy = false;
@@ -184,9 +205,7 @@ export class IndicatorAlertPolicy {
     }
   }
 
-  private _seed(bars: readonly Bar[], confirmed: boolean): void {
-    const index = bars.length - (confirmed ? 1 : 2);
-    const time = index >= 0 ? bars[index]!.time : -Infinity;
+  private _seed(time: number): void {
     for (const entry of this._entries) {
       entry.perBarTime = time;
       entry.closedTime = time;
@@ -199,12 +218,12 @@ export class IndicatorAlertPolicy {
     entry.failedCloses.delete(time);
   }
 
-  private _closeIndices(entry: Entry, bars: readonly Bar[], end: number): number[] {
+  /** The elements whose bar has closed and is still to judge, the first element that reads each. */
+  private _closeIndices(entry: Entry, read: (index: number) => number, last: number, closed: number): number[] {
     const indices: number[] = [];
     const available = new Set<number>();
-    for (let i = 0; i <= end; i++) { // `end` is a bar index
-      const time = bars[i]!.time;
-      if (time > entry.closedTime || entry.failedCloses.has(time)) indices.push(i);
+    for (let i = 0, time = 0; i <= last && (time = read(i)) <= closed; i++) {
+      if ((time > entry.closedTime || entry.failedCloses.has(time)) && !available.has(time)) indices.push(i);
       available.add(time);
     }
     for (const time of entry.failedCloses) if (!available.has(time)) entry.failedCloses.delete(time);

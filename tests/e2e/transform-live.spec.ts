@@ -236,6 +236,80 @@ test.describe('in-chart transforms', () => {
     await page.screenshot({ path: testInfo.outputPath('kagi-replay-alerts.png') });
   });
 
+  // Each transform that is not one element per bar. Kagi, range bars and point
+  // and figure keep an element forming that reads the newest bar; Renko and
+  // line break do not.
+  for (const type of ['renko', 'line-break', 'range-bars', 'point-figure', 'kagi']) {
+    test(`delivers a study alert once per bar under a replayed ${type} chart`, async ({ page }, testInfo) => {
+      await ready(page, `type=${type}&study=none`);
+      const run = await page.evaluate(async (forming) => {
+        const { chart, series, lib } = (window as any).__probe;
+        // A study on the five-minute bars under the elements: a five-bar average
+        // of their closes to draw, and an alert on a bar that closes above its
+        // open at each frequency, naming the bar it read. Each element reads the
+        // bar it was completed on, so the elements of one bar all read that bar.
+        const average = (c: number[]) => c.map((_, i) => i < 4 ? null : c.slice(i - 4, i + 1).reduce((sum, x) => sum + x, 0) / 5);
+        const rising = { when: ({ values, index }: any) => values.up[index] === 1, message: ({ values, index }: any) => String(values.at[index]) };
+        lib.registerIndicator({
+          id: 'e2e-underlying-rise', name: 'Underlying rise', placement: 'onchart', inputs: [],
+          plots: [{ key: 'avg', type: 'line', title: 'Average', style: { color: '#f5a623', lineWidth: 2 } }],
+          calc: (bars: any[]) => ({ avg: average(bars.map(b => b.close)), up: bars.map(b => b.close > b.open ? 1 : 0), at: bars.map(b => b.time) }),
+          alerts: [
+            { id: 'omitted', title: 'Rising bar', ...rising },
+            { id: 'oncePerBar', title: 'Rising bar, once per bar', frequency: 'oncePerBar', ...rising },
+            { id: 'everyUpdate', title: 'Rising bar, every update', frequency: 'everyUpdate', ...rising },
+          ],
+        });
+        chart.addIndicator('e2e-underlying-rise', {}, { barSource: 'underlying' });
+        const events: { id: string; time: number; index: number; message: string }[] = [];
+        chart.on('indicator:alert', (e: any) => events.push({ id: e.alertId, time: e.time, index: e.index, message: e.message }));
+        const start = chart.primaryBars().length;
+        // Seven more hours replayed bar by bar, a seeded continuation of the
+        // session's random walk, each bar one update as a feed delivers it.
+        let seed = 20261001;
+        const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+        const gauss = () => Math.sqrt(-2 * Math.log(random() || 1e-9)) * Math.cos(2 * Math.PI * random());
+        let last = series.getData().at(-1);
+        // A rising bar that added an element is delivered once, at the first
+        // element it added. An alert with a frequency also judges a bar that
+        // only moved the element still forming, which reads it, and none that
+        // no element reads.
+        const expected: { index: number; time: number; message: string }[] = [];
+        const explicit: typeof expected = [];
+        let risingSteps = 0;
+        for (let i = 0; i < 84; i++) {
+          const open = last.close;
+          const close = Math.round(open * (1 + gauss() * 0.0019) * 20) / 20;
+          const bar = { time: last.time + 300, open, close, high: Math.max(open, close), low: Math.min(open, close), volume: 50000 };
+          const before = chart.primaryBars().length;
+          series.update(bar);
+          await (window as any).__frame();
+          const bricks = chart.primaryBars(), at = bricks.length > before ? before : forming ? before - 1 : -1;
+          if (close > open && bricks.length > before) expected.push({ index: before, time: bricks[before].time, message: String(bar.time) });
+          if (close > open && at >= 0) explicit.push({ index: at, time: bricks[at].time, message: String(bar.time) });
+          if (close > open && bricks.length > before + 1) risingSteps++;
+          last = bar;
+        }
+        const pick = (id: string) => events.filter(e => e.id === id).map(({ index, time, message }) => ({ index, time, message }));
+        // At the element's time now: a newer bar dates a forming Kagi vertex or range bar again.
+        const final = chart.primaryBars();
+        series.createMarkers().setMarkers(pick('omitted').map(e => ({
+          time: final[e.index].time, position: 'belowBar', shape: 'arrowUp', size: 'small', color: '#26a69a', text: 'Up',
+        })));
+        chart.setVisibleLogicalRange({ from: start - 8, to: chart.primaryBars().length + 2 });
+        await (window as any).__frame();
+        return { expected, explicit, risingSteps, omitted: pick('omitted'), oncePerBar: pick('oncePerBar'), everyUpdate: pick('everyUpdate') };
+      }, ['kagi', 'range-bars', 'point-figure'].includes(type));
+      // On Renko, rising bars that completed two bricks or more: each once, not once per brick.
+      if (type === 'renko') expect(run.risingSteps).toBeGreaterThan(3);
+      expect(run.expected.length).toBeGreaterThan(2);
+      expect(run.omitted).toEqual(run.expected);
+      expect(run.oncePerBar).toEqual(run.explicit);
+      expect(run.everyUpdate).toEqual(run.explicit);
+      await page.screenshot({ path: testInfo.outputPath(`${type}-underlying-alerts.png`) });
+    });
+  }
+
   for (const type of ['heikin-ashi', 'renko', 'range-bars', 'line-break', 'point-figure', 'kagi']) {
     test(`draws a ${type} chart`, async ({ page }, testInfo) => {
       await ready(page, `type=${type}`);
