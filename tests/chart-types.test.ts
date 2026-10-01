@@ -16,7 +16,7 @@ const bar = (time: number, o: number, h: number, l: number, c: number, v = 100):
   ({ time, open: o, high: h, low: l, close: c, volume: v });
 
 const items = (bars: Bar[]): DrawItem[] => bars.map((b, i) => ({ x: 10 + i * 10, bar: b }));
-const identityY = (v: number): number => 1000 - v; // higher value → smaller y
+const identityY = (v: number): number => 1000 - v; // higher value, smaller y
 
 describe('chart-type registry', () => {
   it('registers all base-tier chart types', () => {
@@ -74,7 +74,7 @@ describe('renderers draw expected primitives (recording context)', () => {
   it('hollow candle outlines the up body (strokeRect)', () => {
     const { ctx, rec } = makeCtx();
     getChartType('hollow-candle').draw(ctx, [data[0]], identityY, bs, dpr, {}, { plotHeight: 1000, maxVolume: 100, theme: darkTheme });
-    expect(rec.count('strokeRect')).toBeGreaterThanOrEqual(1); // bar 0 is up → hollow
+    expect(rec.count('strokeRect')).toBeGreaterThanOrEqual(1); // bar 0 is up: hollow
   });
 
   it('column draws one rect per bar', () => {

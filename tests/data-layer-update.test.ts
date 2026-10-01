@@ -31,7 +31,7 @@ describe('DataLayer.update (live hot path)', () => {
     const dl = new DataLayer();
     const id = dl.createSeries();
     dl.setSeriesData(id, [bar(100, 1), bar(300, 3)]);
-    dl.update(id, bar(200, 2)); // older than last (300) → inserted between
+    dl.update(id, bar(200, 2)); // older than last (300): inserted between
     expect(dl.length).toBe(3);
     expect(dl.indexedBars(id).map((b) => b.bar.time)).toEqual([100, 200, 300]);
   });
@@ -56,7 +56,7 @@ describe('DataLayer.update (live hot path)', () => {
     // A live feed that re-opens its candle builder emits a fresh bar for the
     // bucket history already covered, so the host hands setData two bars at the
     // same time. The times collapse to one logical index, so without this both
-    // bars project to the same x and draw on top of each other — a red body
+    // bars project to the same x and draw on top of each other: a red body
     // with a green one painted over it on the forming candle.
     const dl = new DataLayer();
     const id = dl.createSeries();

@@ -19,7 +19,7 @@ import { makeCtx, type RecordingContext } from './helpers/fake-ctx';
 const bar = (time: number, o: number, h: number, l: number, c: number, v: number): Bar => ({ time, open: o, high: h, low: l, close: c, volume: v });
 
 describe('priceBuckets', () => {
-  it('spans inclusive low→high on the tick grid', () => {
+  it('spans inclusive low to high on the tick grid', () => {
     expect(priceBuckets(100, 100.2, 0.05)).toEqual([100, 100.05, 100.1, 100.15, 100.2]);
   });
 
@@ -69,7 +69,7 @@ describe('TPO / Market Profile', () => {
     ];
     const tpo = computeTpo(bars, 2, 0.5, 0.7, 2); // 2 bars/period, IB = first 2 periods
     expect(tpo.buckets.length).toBeGreaterThan(0);
-    // prices around 100 are touched by 2 periods → higher count than 103 band
+    // prices around 100 are touched by 2 periods, so a higher count than the 103 band
     expect(tpo.poc).toBeGreaterThanOrEqual(99.5);
     expect(tpo.poc).toBeLessThanOrEqual(101);
     // IB spans the first two periods' combined range (99 .. 101)
@@ -96,7 +96,7 @@ describe('Footprint & order flow', () => {
   });
 
   it('detects diagonal imbalances by ratio', () => {
-    // strong ask at 100.05 vs bid at 100.0 → buy imbalance
+    // strong ask at 100.05 vs bid at 100.0: buy imbalance
     const fp = computeFootprint(1, trades, 0.05);
     const imb = diagonalImbalances(fp.cells, 3);
     expect(imb.some((i) => i.side === 'buy')).toBe(true);
@@ -178,7 +178,7 @@ describe('profile primitives render', () => {
     const b = makeCtx();
     hot.draw(b.ctx, r);
 
-    // Same geometry either way — an outline would have added strokeRect calls.
+    // Same geometry either way: an outline would have added strokeRect calls.
     expect(b.rec.count('strokeRect')).toBe(0);
     expect(b.rec.count('roundRect')).toBe(a.rec.count('roundRect'));
     // ...but the imbalanced cell is painted a different (saturated) colour.

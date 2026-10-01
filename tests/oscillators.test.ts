@@ -23,7 +23,7 @@ const bars = (n: number, f: (i: number) => number): Bar[] =>
   });
 
 const wave = (n = 200): Bar[] => bars(n, (i) => 100 + Math.sin(i / 5) * 10 + i * 0.05);
-/** Strictly rising closes, highs and lows — every extreme is the current bar. */
+/** Strictly rising closes, highs and lows: every extreme is the current bar. */
 const rising = (n = 40): Bar[] => bars(n, (i) => 100 + i);
 /** The mirror: every extreme is the oldest bar in the window. */
 const falling = (n = 40): Bar[] => bars(n, (i) => 200 - i * 2);
@@ -212,7 +212,7 @@ describe('Chande Momentum Oscillator', () => {
 describe('Coppock Curve', () => {
   it('collapses to the sum of the two rates of change on a constant-growth series', () => {
     // A geometric series makes both roc terms constant, and a WMA of a
-    // constant is that constant — so the expected value is closed-form.
+    // constant is that constant, so the expected value is closed-form.
     const data = bars(40, (i) => 100 * Math.pow(1.01, i));
     const expected = 100 * (Math.pow(1.01, 14) - 1) + 100 * (Math.pow(1.01, 11) - 1);
     const out = run(COPPOCK_CURVE, data);

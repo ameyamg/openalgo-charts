@@ -13,7 +13,7 @@ describe('DataLayer', () => {
     dl.setSeriesData(id, [bar(300, 10), bar(100, 8), bar(200, 9)]); // unsorted input
     expect(dl.length).toBe(3);
     expect(dl.baseIndex).toBe(2);
-    // sorted by time → indices 0,1,2 at times 100,200,300
+    // sorted by time: indices 0,1,2 at times 100,200,300
     expect(dl.indexToTime(0)).toBe(100);
     expect(dl.timeToIndex(300)).toBe(2);
     const ib = dl.indexedBars(id);
@@ -27,7 +27,7 @@ describe('DataLayer', () => {
     const vol = dl.createSeries();
     dl.setSeriesData(price, [bar(100, 1), bar(200, 2), bar(300, 3)]);
     dl.setSeriesData(vol, [bar(200, 5), bar(400, 6)]); // 400 is new, 100/300 absent here
-    // union of times: 100,200,300,400 → 4 indices
+    // union of times: 100,200,300,400, so 4 indices
     expect(dl.length).toBe(4);
     expect(dl.timeToIndex(400)).toBe(3);
     // the volume bar at time 200 must share index 1 with the price bar at 200

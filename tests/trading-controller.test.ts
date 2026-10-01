@@ -144,7 +144,7 @@ describe('TradingController', () => {
   });
 });
 
-describe('TradingController — T2 (brackets, markers, settings, clicks)', () => {
+describe('TradingController: T2 (brackets, markers, settings, clicks)', () => {
   it('applies color settings and re-renders lines', () => {
     const h = fakeHost();
     const tc = new TradingController(h.host);

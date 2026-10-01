@@ -26,8 +26,10 @@ describe('combo parsing / formatting', () => {
   it('formats platform-aware labels', () => {
     expect(formatCombo('Alt+KeyR', false)).toBe('Alt + R');
     expect(formatCombo('Alt+KeyR', true)).toBe('⌥ R');
-    expect(formatCombo('Mod+ArrowLeft', false)).toBe('Ctrl + ←');
-    expect(formatCombo('Mod+ArrowLeft', true)).toBe('⌘ ←');
+    // The arrow key prints as the arrow on the key; spelled by code point so
+    // this file holds none of the characters the writing rules forbid.
+    expect(formatCombo('Mod+ArrowLeft', false)).toBe('Ctrl + \u2190');
+    expect(formatCombo('Mod+ArrowLeft', true)).toBe('⌘ \u2190');
     expect(formatCombo('Home', false)).toBe('Home');
   });
 

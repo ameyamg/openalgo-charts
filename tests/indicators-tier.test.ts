@@ -205,9 +205,9 @@ describe('built-in descriptors', () => {
   it('OBV adds volume on up closes and subtracts on down closes', () => {
     const seq: Bar[] = [
       { time: 1, open: 10, high: 10, low: 10, close: 10, volume: 5 },
-      { time: 2, open: 10, high: 11, low: 10, close: 11, volume: 7 }, // up  → +7
-      { time: 3, open: 11, high: 11, low: 9, close: 9, volume: 4 },   // down → -4
-      { time: 4, open: 9, high: 9, low: 9, close: 9, volume: 9 },     // flat → 0
+      { time: 2, open: 10, high: 11, low: 10, close: 11, volume: 7 }, // up: +7
+      { time: 3, open: 11, high: 11, low: 9, close: 9, volume: 4 },   // down: -4
+      { time: 4, open: 9, high: 9, low: 9, close: 9, volume: 9 },     // flat: 0
     ];
     expect(getIndicator('obv').calc(seq, {}, {}).obv).toEqual([0, 7, 3, 3]);
   });
@@ -224,7 +224,7 @@ describe('built-in descriptors', () => {
 
   it('VWAP resets on a new IST session and is volume-weighted', () => {
     const d = getIndicator('vwap');
-    // 2023-11-14 IST 18:00 and 2023-11-15 IST 18:00 — different IST days.
+    // 2023-11-14 IST 18:00 and 2023-11-15 IST 18:00: different IST days.
     const day1 = 1700000000;
     const seq: Bar[] = [
       { time: day1, open: 100, high: 100, low: 100, close: 100, volume: 10 },
@@ -339,7 +339,7 @@ describe('IndicatorInstance runtime', () => {
 
   it('switches a plot to another chart type by rebuilding its series', () => {
     // The chart type belongs to the series, not the style bag, so this cannot
-    // be an applyOptions — the series has to be rebuilt.
+    // be an applyOptions: the series has to be rebuilt.
     const h = fakeHost(wave());
     const inst = new IndicatorInstance(h.host, getIndicator('sma'));
     const has = (t: string) => [...h.series.keys()].some((k) => k.startsWith(`${t}-`));
@@ -580,7 +580,7 @@ describe('indicator fills (the Ichimoku cloud)', () => {
     fill.draw(ctx, fillRc());
     const fills = rec.ops.filter((o) => o.type === 'fill');
     expect(fills).toHaveLength(2);
-    // Both colours used — a single-colour band would hide which side leads.
+    // Both colours used: a single-colour band would hide which side leads.
     const styles = fills.map((o) => o.fillStyle);
     expect(styles).toContain('#0f0');
     expect(styles).toContain('#f00');
@@ -682,7 +682,7 @@ describe('Williams VIX Fix', () => {
     } as Record<string, (number | null)[]>;
     const at = (i: number) =>
       hist?.colorBy?.({ value: values.wvf[i] as number, index: i, values, settings: {} });
-    // Below the band: normal. Above it: alert — even though 12 < rangeHigh.
+    // Below the band: normal. Above it: alert, even though 12 < rangeHigh.
     expect(at(0)).toBe('#808080');
     expect(at(1)).toBe('#00ff00');
   });
@@ -712,7 +712,7 @@ describe('HalfTrend', () => {
     const up = out.up as (number | null)[];
     const down = out.down as (number | null)[];
     for (let i = 0; i < up.length; i++) {
-      // Never both — the split is what recolours the line at a flip.
+      // Never both: the split is what recolours the line at a flip.
       expect(up[i] === null || down[i] === null, `both set at ${i}`).toBe(true);
     }
     // A 120-bar sine crosses often enough that both sides must appear.
@@ -766,7 +766,7 @@ describe('HalfTrend', () => {
     expect((out.atrLow as (number | null)[]).every((v) => v === null)).toBe(true);
     expect((out.buySignal as (number | null)[]).every((v) => v === null)).toBe(true);
     expect((out.sellSignal as (number | null)[]).every((v) => v === null)).toBe(true);
-    // The level itself is not a toggle — it must still be there.
+    // The level itself is not a toggle: it must still be there.
     const up = out.up as (number | null)[];
     const down = out.down as (number | null)[];
     expect(up.some((v) => v !== null) || down.some((v) => v !== null)).toBe(true);

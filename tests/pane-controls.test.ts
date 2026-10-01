@@ -16,7 +16,7 @@ const H = 600;
 
 // The chart only wires pointer listeners when a `window` exists (`_attachInput`),
 // so under the node environment these tests would otherwise assert against
-// handlers that were never attached — and pass for the wrong reason.
+// handlers that were never attached, and pass for the wrong reason.
 beforeAll(() => {
   const g = globalThis as unknown as { window?: unknown };
   g.window ??= {};
@@ -52,7 +52,7 @@ describe('pane weights', () => {
     chart.addSeries('histogram', { paneIndex: 1 }).setData(bars(50));
     chart.setPaneWeight(1, 0.8);
     expect(chart.paneWeight(1)).toBe(0.8);
-    // The DOM flex-basis must equal the pixel height the canvas was sized to —
+    // The DOM flex-basis must equal the pixel height the canvas was sized to:
     // when they diverge, every hit-test lands somewhere other than what's drawn.
     // The boundary between them sits on a whole pixel (the ratio is 1 here),
     // and the pane below takes what the one above leaves.
@@ -149,7 +149,7 @@ describe('pane legend rows', () => {
     // indicator's own legend flowing beneath it rather than overlapping.
     const symbol = new PaneLegend({ id: 'symbol', title: 'AAPL', actions: [] });
     chart.addPrimitive(symbol, 0);
-    chart.addIndicator('ema'); // onchart → same pane
+    chart.addIndicator('ema'); // onchart: same pane
     expect(symbol.options().row).toBe(0);
     const ema = chart.indicators()[0].legend();
     expect(ema?.options().row).toBe(2); // the persistent study count reserves one row
@@ -157,7 +157,7 @@ describe('pane legend rows', () => {
 
   it('starts indicator legends below a host overlay when legendOffset says so', () => {
     // A host that draws its own OHLC readout in the corner needs the canvas
-    // rows pushed clear of it — otherwise they land underneath, and their
+    // rows pushed clear of it; otherwise they land underneath, and their
     // settings / close buttons are invisible and unclickable.
     const el = fakeDocument().createElement('div') as unknown as FakeElement;
     const chart = new Chart(el, {
@@ -177,7 +177,7 @@ describe('pane legend rows', () => {
 
   it('offsets only the overlaid pane, leaving lower panes at the corner', () => {
     // A lower indicator pane is short. Applying a price-pane offset there would
-    // push its legend — and so its settings and close buttons — off the pane.
+    // push its legend (and so its settings and close buttons) off the pane.
     const el = fakeDocument().createElement('div') as unknown as FakeElement;
     const chart = new Chart(el, {
       document: fakeDocument(), raf: { schedule: () => 0 },
@@ -268,7 +268,7 @@ describe('pane legend rows', () => {
     const series = macd.series('macd') as unknown as { __style?: unknown };
     void series;
     expect(macd.settings()['macd:width']).toBe(4);
-    // Opacity folds into the colour as an alpha — a canvas stroke has no
+    // Opacity folds into the colour as an alpha: a canvas stroke has no
     // separate opacity channel.
     const legend = macd.legend();
     const values = (legend as unknown as { _values: { color?: string }[] })._values;

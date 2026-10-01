@@ -214,7 +214,7 @@ describe('chart time navigator', () => {
     nav.setPointer({ x: 300, y: 560 });
     chart.applySize(800, 600);
 
-    // A fresh chart sits at max bar spacing, so zoom *out* first — zooming in
+    // A fresh chart sits at max bar spacing, so zoom *out* first: zooming in
     // from the clamp would look like a no-op and prove nothing.
     const beforeSpacing = chart.timeScale.barSpacing;
     (chart as unknown as { _handleLegendAction(id: string): boolean })

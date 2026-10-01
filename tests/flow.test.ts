@@ -29,7 +29,7 @@ const closesAt = (n: number, end: 'high' | 'low'): Bar[] =>
     volume: 10 + i,
   }));
 
-/** Same bars, no volume at all — the degenerate feed every descriptor must survive. */
+/** Same bars, no volume at all: the degenerate feed every descriptor must survive. */
 const noVolume = (n = 60): Bar[] => wave(n).map((b) => ({ ...b, volume: 0 }));
 
 const firstValue = (col: readonly (number | null)[]): number => col.findIndex((v) => v !== null);
@@ -183,7 +183,7 @@ describe('flow descriptors', () => {
 // different hands, so these run over whichever of them exist. A static import
 // of a module not written yet would take the whole suite down instead of
 // skipping that one file, and the point of these guards is to catch a clash
-// *between* siblings — they can only do that if a missing sibling is
+// *between* siblings: they can only do that if a missing sibling is
 // survivable. The glob resolves to the files that exist at transform time; a
 // module that exists but is broken still appears here and still fails loudly.
 const FAMILY = ['overlay', 'oscillators', 'volatility', 'flow'] as const;

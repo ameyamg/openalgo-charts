@@ -10,7 +10,7 @@ describe('conflationGroupSize', () => {
     expect(conflationGroupSize(1, 1)).toBe(1); // 1px >= 0.5px threshold
   });
   it('groups more bars as they shrink below the threshold', () => {
-    expect(conflationGroupSize(0.25, 1)).toBe(2); // 0.25px → ceil(0.5/0.25)=2
+    expect(conflationGroupSize(0.25, 1)).toBe(2); // 0.25px: ceil(0.5/0.25)=2
     expect(conflationGroupSize(0.1, 1)).toBe(5);
     expect(conflationGroupSize(0.1, 1, 0.5, 2)).toBe(10); // factor doubles aggressiveness
   });

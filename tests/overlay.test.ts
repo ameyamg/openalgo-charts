@@ -20,13 +20,13 @@ const ramp = (n = 40): Bar[] => bars(n, (i) => i);
 /** Closes chosen so every rolling window has a distinct extreme. */
 const jagged = (): Bar[] => bars(4, (i) => [10, 14, 12, 13][i]);
 
-/** Index of the first plotted bar — the number every warmup assertion is about. */
+/** Index of the first plotted bar: the number every warmup assertion is about. */
 const firstLive = (col: readonly (number | null)[]): number => col.findIndex((v) => v !== null);
 
 const run = (d: IndicatorDescriptor, data: Bar[], overrides: Record<string, unknown> = {}) =>
   d.calc(data, { ...indicatorDefaults(d), ...overrides }, {});
 
-describe('the reference platform overlays — descriptor contract', () => {
+describe('the reference platform overlays: descriptor contract', () => {
   const data = wave();
 
   it('exports the ten overlays with unique ids, all on the price pane', () => {
@@ -84,7 +84,7 @@ describe('the reference platform overlays — descriptor contract', () => {
 
 describe('ALMA', () => {
   it('matches the Gaussian kernel by hand', () => {
-    // length 2, offset 1, sigma 2 → m = 1, s = 1. The current bar sits at the
+    // length 2, offset 1, sigma 2 give m = 1, s = 1. The current bar sits at the
     // peak (weight 1), the previous bar one standard deviation out.
     const w = Math.exp(-0.5);
     const out = run(ALMA, bars(2, (i) => [10, 20][i]), { length: 2, offset: 1, sigma: 2 });
@@ -193,7 +193,7 @@ describe('Donchian Channels', () => {
 });
 
 describe('Chande Kroll Stop', () => {
-  // p = 2 → atr = [na, 3.5, 3.25, 2.625] over true ranges 2, 5, 3, 2.
+  // p = 2 gives atr = [na, 3.5, 3.25, 2.625] over true ranges 2, 5, 3, 2.
   // first_high_stop = highest(high, 2) - atr, first_low_stop = lowest(low, 2) + atr,
   // then each is run through a second 2-bar extreme.
   it('stacks a second extreme on the ATR-padded band', () => {
@@ -206,7 +206,7 @@ describe('Chande Kroll Stop', () => {
 
   it('holds the stop through a pullback', () => {
     // The short stop above is flat across bars 2 and 3 even though the padded
-    // band fell — that monotonicity is the whole point of the second pass.
+    // band fell: that monotonicity is the whole point of the second pass.
     const out = run(CHANDE_KROLL_STOP, jagged(), { p: 2, x: 1, q: 2 });
     expect(out.stopShort[3]).toBe(out.stopShort[2]);
   });

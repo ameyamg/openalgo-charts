@@ -92,7 +92,7 @@ describe('OpenAlgoWsFeed order updates', () => {
     expect(e.orderId).toBe('240221025997024');
     expect(e.action).toBe('BUY');
     expect(e.status).toBe('complete'); // lowercased
-    expect(e.triggerPrice).toBeUndefined(); // 0 → undefined
+    expect(e.triggerPrice).toBeUndefined(); // 0 becomes undefined
     expect(e.filledQuantity).toBe(10);
     expect(e.averagePrice).toBeCloseTo(1423.85);
     expect(parseOrderUpdate({ type: 'market_data', data: { ltp: 1 } })).toBeNull();
@@ -117,7 +117,7 @@ describe('OpenAlgoWsFeed order updates', () => {
     expect(events).toHaveLength(1);
     expect(events[0].symbol).toBe('RELIANCE');
 
-    // unexpected drop → reconnect replays the order-stream subscription too
+    // unexpected drop: reconnect replays the order-stream subscription too
     sockets[0].onclose();
     vi.advanceTimersByTime(100);
     expect(sockets).toHaveLength(2);

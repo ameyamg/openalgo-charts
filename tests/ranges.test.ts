@@ -21,7 +21,7 @@ const bars = (n: number, f: (i: number) => number): Bar[] =>
   });
 
 const wave = (n = 200): Bar[] => bars(n, (i) => 100 + Math.sin(i / 5) * 10 + i * 0.05);
-/** Strictly rising closes, highs and lows — every extreme is the current bar. */
+/** Strictly rising closes, highs and lows: every extreme is the current bar. */
 const rising = (n = 60): Bar[] => bars(n, (i) => 100 + i);
 /** The mirror: every extreme is the oldest bar in the window. */
 const falling = (n = 60): Bar[] => bars(n, (i) => 500 - i * 2);
@@ -410,7 +410,7 @@ describe('Woodies CCI', () => {
     // a negative reading and red for a positive one.
     expect(at([10, -20, 30, -40, 50, -5])).toBe(settings.upColor);
     expect(at([10, -20, 30, -40, 50, 5])).toBe(settings.downColor);
-    // A zero in the run breaks it — the reference comparisons are strict.
+    // A zero in the run breaks it: the reference comparisons are strict.
     expect(at([10, 20, 0, 40, 50, 5])).toBe(settings.downColor);
     // Warmup nulls are neither above nor below zero, so no run is established.
     expect(at([null, null, null, null, null, -5])).toBe(settings.upColor);

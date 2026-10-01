@@ -287,7 +287,7 @@ describe('Gap 3: tickMarkType hint in timeFormatter', () => {
     const seen = new Set<string>();
     const chart = makeChart({ ...immediate, timeFormatter: (t: number, tm?: string) => { if (tm) seen.add(tm); return String(t); } });
     const bars: Bar[] = [];
-    let t = 1703030400; // 2023-12-20 UTC → spans into 2024
+    let t = 1703030400; // 2023-12-20 UTC, spans into 2024
     for (let i = 0; i < 45; i++) { bars.push(bar(t, 100 + i)); t += 86400; }
     chart.addSeries('candlestick').setData(bars);
     chart.fitContent();

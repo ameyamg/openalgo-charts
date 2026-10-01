@@ -7,7 +7,7 @@ import { fakeDocument, pointer, type FakeElement } from './helpers/fake-dom';
  * scrolled the chart instead.
  *
  * A press-drag-release is how every charting UI draws a two-point shape, but the
- * chart's click branch only fires when the pointer never moved — so the gesture
+ * chart's click branch only fires when the pointer never moved, so the gesture
  * produced no anchors at all, while the pan path happily consumed it. Placement
  * mode makes the chart treat the gesture as anchor placement: no pan, and the
  * press and release points are reported as two clicks.
@@ -68,7 +68,7 @@ describe('placement mode', () => {
     expect(clicks).toHaveLength(2);
     expect(clicks[0].viaDrag).toBeUndefined();
     expect(clicks[1].viaDrag).toBe(true);
-    // Distinct anchors — identical ones collapse the shape to nothing.
+    // Distinct anchors: identical ones collapse the shape to nothing.
     expect(clicks[0].point).toEqual({ x: 120, y: 100 });
     expect(clicks[1].point.x).toBe(400);
     expect(clicks[0].price).not.toBe(clicks[1].price);
