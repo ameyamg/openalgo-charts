@@ -115,6 +115,13 @@ A study on the underlying bars computes on your bars, but its hooks run on the e
 element per bar, which is all of them but Heikin Ashi. Read per-bar values from `ctx.values`, which
 the chart samples onto the elements.
 
+### Alerts on a transformed chart
+
+[Trader alerts](/docs/alerts#sources-and-timing) judge the elements the chart draws. When one bar
+completes several bricks, each brick is judged in turn and an alert reports the brick that crossed
+its level. The newest brick is still forming, so a bar-close alert confirms it once the next brick
+follows.
+
 ## Heikin Ashi
 
 <RunnableExample height={320} tiers={['transform']} code={`const chart = lib.createChart(el);

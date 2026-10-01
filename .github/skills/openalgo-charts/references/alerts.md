@@ -132,6 +132,20 @@ Zero is a valid threshold. Non-finite thresholds and negative cooldowns fail.
 previous tail, and the controller evaluates that closed bar, never history
 loaded through setData or prependData. `AlertRepeat` defaults to once.
 
+(unreleased) One `data:update` that appends several bars after the tail an alert
+last saw is judged bar by bar, every alert at one bar before any moves to the next,
+exactly as separate appends would be: a source bar completing several Renko bricks,
+range bars, line break lines, point and figure columns or Kagi vertices, or an
+`AlertChartHost` that writes several bars before emitting. Each bar the update
+closes is confirmed in order, and each match carries its own bar's `time` and
+`index`. The newest stays forming until a newer bar follows it. A tail revised in
+the same update is judged first, as a tick; a forming element dated again (a Kagi
+vertex, a range bar) keeps its place. Repeat, cooldown and expiry apply per bar as
+for separate appends at one instant. An update that leaves fewer bars, or moves the
+tail because history changed, is judged once at the newest bar against the last
+tail seen, as before. Reloads, prepends, late corrections and context changes still
+seed silently, and a corrected bar is never judged.
+
 onTouch observes newly reached extrema and the path between observed closes.
 A wick already present when arming or resuming is not a fresh touch. An intrabar
 trigger may disappear from the final candle: choose this policy explicitly when

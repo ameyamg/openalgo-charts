@@ -16,7 +16,9 @@ import type { LooseOptional } from '../helpers/types';
 
 interface RecordState {
   alert: Alert;
+  /** The newest element this record has judged or seeded on, and where it sat, so an update can tell what it appended. */
   tail?: Bar | undefined;
+  index?: number | undefined;
   value?: number | undefined;
   errorTime?: number;
   plotPane?: number | undefined;
@@ -61,6 +63,9 @@ const samePrices = (a: AlertScope, b: AlertScope): boolean =>
   sameInstrument(a, b) && a.variant?.currency === b.variant?.currency && a.variant?.unit === b.variant?.unit;
 const sameScope = (a: AlertScope, b: AlertScope): boolean =>
   sameInstrument(a, b) && a.interval === b.interval && variantOf(a) === variantOf(b);
+/** Whether an element is still what an alert last read, so an update that appended after it did not also revise it. */
+const sameBar = (a: Bar, b: Bar): boolean => a.time === b.time && a.open === b.open && a.high === b.high
+  && a.low === b.low && a.close === b.close && a.volume === b.volume && a.oi === b.oi;
 /** Where a level evaluates, for its label on a chart that shows something else. */
 const scopeLabel = (scope: AlertScope, context: AlertScope): string => {
   const timeframe = scope.interval ?? 'original timeframe';
@@ -446,6 +451,7 @@ export class AlertController {
     // Finer bars from another timeframe must not consume an original-timeframe close.
     if (!sameScope(record.alert.scope, scopeOf(this._chart))) {
       record.tail = undefined;
+      record.index = undefined;
       record.value = undefined;
       record.plotPane = undefined;
       return;
@@ -453,6 +459,7 @@ export class AlertController {
     const bars = this._chart.primaryBars();
     const tail = bars[bars.length - 1];
     record.tail = tail ? { ...tail } : undefined;
+    record.index = tail ? bars.length - 1 : undefined;
     if (record.alert.source.kind === 'indicator') {
       const plot = this._plot(record.alert.source);
       record.value = this._reading(plot.values, bars.length - 1);
@@ -542,43 +549,76 @@ export class AlertController {
     const tail = bars[bars.length - 1];
     if (!tail || update.time !== tail.time) return;
     const scope = scopeOf(this._chart);
+    // One update can append several elements: a bar that completes two Renko
+    // bricks, or a host that writes two bars before it says so. Each is judged
+    // in turn, every alert at one element before any moves to the next, which
+    // is what as many single appends would have delivered, in that order.
+    const steps = [...this._records.values()].filter(record => sameScope(record.alert.scope, scope))
+      .map(record => ({ record, from: this._firstNew(record, bars) }));
     let changed = false;
-    for (const record of [...this._records.values()]) {
-      if (this._destroyed || revision !== this._revision) break;
-      if (this._records.get(record.alert.id) !== record) continue;
-      if (!sameScope(record.alert.scope, scope)) continue;
-      const previous = record.tail;
-      record.tail = { ...tail };
-      if (record.alert.source.kind === 'drawing' && previous?.time !== tail.time) this._syncVisual(record);
-      if (this._destroyed || revision !== this._revision) break;
-      if (record.alert.state !== 'armed' || !previous) continue;
-      const { alert } = record;
-      if (alert.policy === 'onBarClose') {
-        const index = bars.length - 2;
-        const closed = bars[index];
-        if (tail.time <= previous.time || !closed || closed.time !== previous.time
-          || (alert.lastClosedTime !== undefined && closed.time <= alert.lastClosedTime)) continue;
-        alert.lastClosedTime = closed.time;
-        changed = true;
-        const price = this._closedMatch(record, bars, index);
-        if (price !== undefined && revision === this._revision && this._records.get(alert.id) === record) {
-          this._trigger(record, closed, index, price);
-        }
-      } else {
-        if (tail.time < previous.time || (alert.lastTouchedTime !== undefined && tail.time <= alert.lastTouchedTime)) continue;
-        const price = this._touchMatch(record, bars, previous);
-        if (price !== undefined && revision === this._revision && this._records.get(alert.id) === record) {
-          // A suppressed match is consumed too: an old wick cannot wake after cooldown.
-          alert.lastTouchedTime = tail.time;
-          changed = true;
-          this._trigger(record, tail, bars.length - 1, price);
-        }
+    for (let index = Math.min(...steps.map(step => step.from)); index < bars.length && revision === this._revision; index++) {
+      for (const { record, from } of steps) {
+        if (this._destroyed || revision !== this._revision) break;
+        if (index >= from && this._records.get(record.alert.id) === record) changed = this._judge(record, bars, index, revision) || changed;
       }
     }
     if (changed) {
       this._saveState();
       if (!this._destroyed) this._chart.emit('alerts:checkpoint', {});
     }
+  }
+
+  /**
+   * The first element of this update a record has not judged. An update that
+   * still has the record's tail at its index, at its time or later (a forming
+   * Kagi vertex or range bar is dated again as bars arrive), appended the
+   * elements after it: the tail is judged again only when it changed, then
+   * each newer element. Fewer bars, or a tail that moved because history
+   * changed, leave nothing to attribute, and the update is judged as one to
+   * the newest element against the tail the record last saw.
+   */
+  private _firstNew(record: RecordState, bars: readonly Bar[]): number {
+    const last = bars.length - 1;
+    const { tail, index } = record;
+    if (!tail || index === undefined || index >= last) return last;
+    const kept = bars[index];
+    if (!kept || kept.time < tail.time) return last;
+    return sameBar(kept, tail) ? index + 1 : index;
+  }
+
+  /**
+   * Judge `bars[index]` for one record, as the single update that brought it
+   * would have: an element newer than the record's tail closes the one before
+   * it, and a touch is measured from that tail. Returns whether a checkpoint
+   * moved.
+   */
+  private _judge(record: RecordState, bars: readonly Bar[], index: number, revision: number): boolean {
+    const tail = bars[index]!; // `_onData` steps through indices it read from `bars`
+    const previous = record.tail;
+    record.tail = { ...tail };
+    record.index = index;
+    if (record.alert.source.kind === 'drawing' && index === bars.length - 1 && previous?.time !== tail.time) this._syncVisual(record);
+    if (this._destroyed || revision !== this._revision || record.alert.state !== 'armed' || !previous) return false;
+    const { alert } = record;
+    if (alert.policy === 'onBarClose') {
+      // The newest element is forming; one is closed only once a newer one follows it.
+      const closed = bars[index - 1];
+      if (tail.time <= previous.time || !closed || closed.time !== previous.time
+        || (alert.lastClosedTime !== undefined && closed.time <= alert.lastClosedTime)) return false;
+      alert.lastClosedTime = closed.time;
+      const price = this._closedMatch(record, bars, index - 1);
+      if (price !== undefined && revision === this._revision && this._records.get(alert.id) === record) {
+        this._trigger(record, closed, index - 1, price);
+      }
+      return true;
+    }
+    if (tail.time < previous.time || (alert.lastTouchedTime !== undefined && tail.time <= alert.lastTouchedTime)) return false;
+    const price = this._touchMatch(record, bars, index, previous);
+    if (price === undefined || revision !== this._revision || this._records.get(alert.id) !== record) return false;
+    // A suppressed match is consumed too: an old wick cannot wake after cooldown.
+    alert.lastTouchedTime = tail.time;
+    this._trigger(record, tail, index, price);
+    return true;
   }
 
   private _plot(source: Pick<IndicatorAlertSource, 'instanceId' | 'plotKey'>):
@@ -597,7 +637,7 @@ export class AlertController {
     return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   }
 
-  // `index` is the closed bar `_onData` read from `bars`, so `bars[index]` is there.
+  // `index` is the closed element `_judge` read from `bars`, so `bars[index]` is there.
   private _closedMatch(record: RecordState, bars: readonly Bar[], index: number): number | undefined {
     const { source, condition } = record.alert;
     if (source.kind === 'barCondition') return this._barMatch(record, bars, index) ? bars[index]!.close : undefined;
@@ -619,12 +659,11 @@ export class AlertController {
       ? current : undefined;
   }
 
-  private _touchMatch(record: RecordState, bars: readonly Bar[], previous: Bar): number | undefined {
+  private _touchMatch(record: RecordState, bars: readonly Bar[], index: number, previous: Bar): number | undefined {
     const { source, condition } = record.alert;
-    const index = bars.length - 1;
-    const tail = bars[index]!; // `_onData` evaluates only once `bars` holds its tail
+    const tail = bars[index]!; // `_judge` passes an element it read from `bars`
     if (source.kind === 'barCondition') return this._barMatch(record, bars, index) ? tail.close : undefined;
-    if (source.kind === 'drawing') return this._drawingTouch(record, source, bars, previous);
+    if (source.kind === 'drawing') return this._drawingTouch(record, source, bars, index, previous);
     if (source.kind === 'indicator') {
       const values = this._plot(source).values;
       const current = this._reading(values, index);
@@ -668,14 +707,14 @@ export class AlertController {
     return value;
   }
 
-  private _drawingTouch(record: RecordState, source: DrawingAlertSource, bars: readonly Bar[], previous: Bar): number | undefined {
-    const tail = bars[bars.length - 1]!; // reached through `_touchMatch`, which reads the same tail
+  private _drawingTouch(record: RecordState, source: DrawingAlertSource, bars: readonly Bar[], index: number, previous: Bar): number | undefined {
+    const tail = bars[index]!; // reached through `_touchMatch`, which reads the same element
     const bounds = this._drawingValue(record.alert, tail.time);
     const beforeBounds = this._drawingValue(record.alert, previous.time);
     if (source.input) {
       const values = this._plot(source.input).values;
-      const current = this._reading(values, bars.length - 1);
-      const before = tail.time > previous.time ? this._reading(values, bars.length - 2) : record.value;
+      const current = this._reading(values, index);
+      const before = tail.time > previous.time ? this._reading(values, index - 1) : record.value;
       record.value = current;
       if (!bounds || current === undefined || (current === before && tail.time === previous.time)) return undefined;
       return numericMatch(record.alert.condition, beforeBounds ? before : undefined, current, bounds.price, bounds.upperPrice,
