@@ -29,6 +29,18 @@ describe('priceBuckets', () => {
     for (const step of [-1, -0.05, 0, NaN, Infinity, -Infinity]) expect(priceBuckets(100, 105, step)).toEqual([]);
   });
 
+  // A walk from low to high by step never ended when the step no longer moved
+  // a price that large, or a price ran past the largest number.
+  it('returns no buckets for a range the numbers cannot step through, instead of walking forever', () => {
+    expect(priceBuckets(1e17, 1e17 + 1000, 1)).toEqual([]);
+    expect(priceBuckets(-1e17 - 1000, -1e17, 1)).toEqual([]);
+    expect(priceBuckets(100, Infinity, 0.05)).toEqual([]);
+    expect(priceBuckets(1.7e308, Number.MAX_VALUE, 1e307)).toEqual([]);
+    expect(priceBuckets(NaN, 105, 0.05)).toEqual([]);
+    // A reversed range has no buckets, as before.
+    expect(priceBuckets(105, 100, 0.05)).toEqual([]);
+  });
+
   it('leaves the two positional profiles empty on such a tick size instead of hanging', () => {
     const bars = [bar(0, 100, 101, 99, 100.5, 1000), bar(60, 100.5, 102, 100, 101.5, 800)];
     expect(computeVolumeProfile(bars, -0.5)).toEqual({ buckets: [], poc: 0, vah: 0, val: 0, totalVolume: 0 });

@@ -70,15 +70,22 @@ export function bucketPrice(price: number, step: number): number {
 
 /**
  * Inclusive list of bucket prices spanning [low, high]. A step that is not a
- * positive finite number gives no buckets.
+ * positive finite number gives no buckets, and so does a range the numbers
+ * cannot step through: a step too small to move a price that large, or a
+ * price past the largest number.
  */
 export function priceBuckets(low: number, high: number, step: number): number[] {
   // A negative step would walk away from `high` and never stop.
   if (!(step > 0) || step === Infinity) return [];
   const lo = bucketPrice(low, step);
   const hi = bucketPrice(high, step);
+  // Counted before the walk, which takes the same steps as ever: a step that
+  // no longer moves the price, or a price that overflows, would leave a walk
+  // that never passes `hi`.
+  const count = Math.round((hi - lo) / step) + 1;
+  if (!Number.isFinite(count) || lo + step === lo || hi + step === hi) return [];
   const out: number[] = [];
-  for (let p = lo; p <= hi + step / 2; p += step) out.push(bucketPrice(p, step));
+  for (let i = 0, p = lo; i < count; i++, p += step) out.push(bucketPrice(p, step));
   return out;
 }
 
