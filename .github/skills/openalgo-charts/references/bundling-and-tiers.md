@@ -174,7 +174,7 @@ Enforced by `npm run size` (`size-limit`, Brotli, `@size-limit/file`), from `.si
 | Everything | all nine bundles | 419.06 kB | 419.05 kB |
 | Script tags | the nine classic-script files | 430.91 kB | 430.90 kB |
 | Base classic script | `openalgo-charts.standalone.js` | 137.65 kB | 137.65 kB |
-| Widget classic script | `widget.standalone.js`, first-use parts inlined | 135.21 kB | 135.21 kB |
+| Widget classic script | `openalgo-charts.widget.standalone.js`, first-use parts inlined | 135.21 kB | 135.21 kB |
 
 Version 2.1.2 raises the full-package budget from 187 KB to 188 KB for the feed, indicator lifecycle and recovery fixes. Version 2.1.3 raises base, widget and widget-terminal ceilings to 68 KB, 37 KB and 157 KB for navigation controls, and the chart-only tree-shaking ceiling to 45 KiB. Version 2.1.6 raises the base, base-plus-trade, widget-terminal and total ceilings
 to 73 KB, 81 KB, 165 KB and 197 KB for shared loading, resilient caching and
