@@ -13,6 +13,7 @@
  * Add --alerts true for source controls, live delivery, persistence and replay guards.
  * Add --consumer-checks /absolute/checks.mjs for additional checkTradingWorkspace checks.
  * Use --browser chromium|firefox|webkit to select the rendering engine.
+ * Use --port <n> to serve on a fixed port; without it a free one is picked at random.
  *
  * No backend is started. Vite proxies are removed and every API/WS is mocked.
  * The app source is unchanged; an entry wrapper records terminal instances so
@@ -90,7 +91,7 @@ let historyVolumeBoost = 0;
 const config = (await loadConfigFromFile({ command: 'serve', mode: 'test' }, join(frontend, 'vite.config.ts'))).config;
 const server = await createServer({
   ...config, configFile: false, root: frontend, cacheDir: cache, logLevel: 'error',
-  server: { host: '127.0.0.1', port: 19000 + Math.floor(Math.random() * 10000), strictPort: false, hmr: false, proxy: {} },
+  server: { host: '127.0.0.1', port: args.port ? Number(args.port) : 19000 + Math.floor(Math.random() * 10000), strictPort: !!args.port, hmr: false, proxy: {} },
   plugins: [...config.plugins, {
     name: 'openalgo-compat-observer',
     transformIndexHtml(html) { return html.replace('src="/src/main.tsx"', 'src="/openalgo-compat-entry.ts"'); },
