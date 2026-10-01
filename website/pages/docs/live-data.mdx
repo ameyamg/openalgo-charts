@@ -7,8 +7,10 @@ import { Callout } from 'nextra/components'
 
 # Live data (OpenAlgo)
 
-The chart depends only on the `DataFeed` / `OrderFeed` interfaces, so any source fits behind
-a small adapter. OpenAlgo adapters are included.
+The chart's market data depends only on the `DataFeed` interface, so any source fits behind
+a small adapter. Order entry is a separate contract, the trade tier's `OrderFeed` that its
+`OrderEngine` drives ([Trading](/docs/trading)), which a chart without trading never needs.
+OpenAlgo adapters are included.
 
 ## Historical bars (REST)
 

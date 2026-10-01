@@ -74,7 +74,10 @@ describe('reference chart data controls', () => {
 
   it('keeps unreadable or reversed bounds open without creating a download', () => {
     openChartDataControls(app);
-    for (const [from, to] of [[String(T0), ''], ['2026-02-30T09:15', ''], ['word', '2026-09-28T09:17'], ['2026-09-28T09:17', '2026-09-28T09:16']]) {
+    // A year before 100 would be read as 19xx by the calendar maths: a two-digit
+    // year typed for 2026 must not quietly become 1926 and widen the export.
+    for (const [from, to] of [[String(T0), ''], ['2026-02-30T09:15', ''], ['word', '2026-09-28T09:17'], ['2026-09-28T09:17', '2026-09-28T09:16'],
+      ['0026-09-28T09:15', ''], ['', '0099-12-31T23:59']]) {
       field('csv-from').value = from; field('csv-to').value = to; field('csv-download').click();
       expect(field('csv-error').hidden).toBe(false);
       expect(field('chartdatamodal').hidden).toBe(false);

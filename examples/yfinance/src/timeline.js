@@ -33,13 +33,14 @@ export function sampleTimelineEvents(bars) {
 
 /**
  * The popup's buttons. Mark on chart draws a vertical line at the event on the
- * chart it was clicked on, and does nothing once that chart shows other data.
+ * chart it was clicked on, in the pane the candles are in, which a user can
+ * move below a study, and does nothing once that chart shows other data.
  */
 export function timelineActions(target, entry) {
   return () => [{ label: 'Mark on chart', run: event => {
     if (!target.current()) return;
     const bar = entry.bars.findLast(b => b.time <= event.time) ?? entry.bars[0];
-    if (bar) target.draw.add({ tool: 'vertical-line', paneIndex: 0, points: [{ time: event.time, price: bar.close }] });
+    if (bar) target.draw.add({ tool: 'vertical-line', paneIndex: target.chart.primaryPaneIndex?.() ?? 0, points: [{ time: event.time, price: bar.close }] });
   } }];
 }
 

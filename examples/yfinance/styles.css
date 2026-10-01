@@ -302,7 +302,7 @@ select.field { cursor: pointer; padding-right: 24px; }
 .set-input-error { grid-column: 2 / -1; color: var(--danger, #ef5350); font-size: 11px; overflow-wrap: anywhere; }
 .set-input-error[hidden] { display: none; }
 .set-ctl [aria-invalid=true] { border-color: var(--danger, #ef5350); }
-.set-ctl select, .set-ctl input[type=number], .set-ctl input[type=text] {
+.set-ctl select, .set-ctl input[type=number], .set-ctl input[type=text], .set-ctl input[type=datetime-local] {
   flex: 1 1 auto; min-width: 0; height: 24px; background-color: var(--elev); color: var(--tx);
   border: 1px solid var(--bd); border-radius: 6px; padding: 0 8px; font: inherit; font-size: 12px;
   outline: none; transition: border-color .12s, box-shadow .12s; }
@@ -888,7 +888,7 @@ body:has(.stage.has-bottombar) #goto { display: none; }
   #replaybar button { height: 40px; min-width: 40px; }
   #replaybar input[type=range] { height: 40px; }
   .set-row { min-height: 40px; }
-  .set-ctl select, .set-ctl input[type=number], .set-ctl input[type=text] { height: 36px; }
+  .set-ctl select, .set-ctl input[type=number], .set-ctl input[type=text], .set-ctl input[type=datetime-local] { height: 36px; }
   input[type=checkbox], .chk input { width: 22px; height: 22px; border-radius: 6px; }
   input[type=checkbox]:checked::after { width: 6px; height: 11px; }
   input.swatch { width: 40px; height: 40px;

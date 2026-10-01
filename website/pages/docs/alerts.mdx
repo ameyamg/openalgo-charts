@@ -82,8 +82,8 @@ one match is consumed per alert and bar, including matches suppressed by
 
 From 2.6.0, an update that appends several bars at once is judged bar by bar, in
 order, as the same number of single appends would be. That happens when one source
-bar completes two or more Renko bricks, range bars, line break lines, point and
-figure columns or Kagi vertices on a [transformed chart](/docs/transforms), or when
+bar completes two or more Renko bricks on a [transformed chart](/docs/transforms) (the other
+transforms add at most one element per source bar), or when
 a custom `AlertChartHost` writes two bars before it emits `data:update`. Every bar
 the update closes is confirmed, and each match reports its own bar in `time` and
 `index`. The newest bar may still be forming, so `onBarClose` judges it only once a

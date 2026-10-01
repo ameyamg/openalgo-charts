@@ -24,8 +24,10 @@ export interface VolumeProfileOptions {
  * One volume profile over all of `bars`, each bar's volume spread evenly
  * across the rows its range spans. Arguments are taken as given, not repaired:
  * a `tickSize` that is not a positive finite number gives an empty profile,
- * and `valueAreaPercent` is a fraction that is not clamped, so 1 or more puts
- * every row in the value area.
+ * and `valueAreaPercent` is a fraction that is not clamped. At 1 the value
+ * area grows from the point of control until it holds all the volume, which
+ * leaves out rows without volume at its edges; above 1 it takes every row.
+ * A profile without any volume has the point of control alone as its area.
  */
 export function computeVolumeProfile(
   bars: readonly Bar[],

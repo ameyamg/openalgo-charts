@@ -1,4 +1,5 @@
 import { parseColor, srgbLuminance, type Rgba } from '../render/pill';
+import { clamp } from '../helpers/math';
 
 /** Text coloring is independent of the footprint's background display mode. */
 export type FootprintTextColorMode = 'contrast' | 'side' | 'delta' | 'dominant' | 'imbalance' | 'volume';
@@ -26,6 +27,11 @@ function mix(a: Rgba, b: Rgba, t: number): Rgba {
   return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t, a: 1 };
 }
 
+/** Luminance of the colour a canvas paints: `parseColor` keeps an `rgb()` channel past 255, the canvas does not. */
+function luminance(c: Rgba): number {
+  return srgbLuminance({ r: clamp(c.r, 0, 255), g: clamp(c.g, 0, 255), b: clamp(c.b, 0, 255), a: c.a });
+}
+
 /**
  * Keep readable preferences; otherwise mix toward black or white until WCAG
  * normal-text contrast reaches 4.5:1. Ten bounded bisection steps retain as much
@@ -37,9 +43,9 @@ function mix(a: Rgba, b: Rgba, t: number): Rgba {
 export function readableTextColor(preferred: string, background: string): string {
   const bg = parseColor(background);
   if (!bg) return preferred;
-  const bgLum = srgbLuminance(bg);
+  const bgLum = luminance(bg);
   const contrast = (color: Rgba): number => {
-    const lum = srgbLuminance(color);
+    const lum = luminance(color);
     return (Math.max(lum, bgLum) + 0.05) / (Math.min(lum, bgLum) + 0.05);
   };
   const endpoint = (bgLum + 0.05) / 0.05 >= 1.05 / (bgLum + 0.05) ? 0 : 255;

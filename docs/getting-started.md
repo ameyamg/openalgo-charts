@@ -109,9 +109,11 @@ function disposeLiveFeed() {
 }
 ```
 
-The chart depends only on the `DataFeed` / `OrderFeed` interfaces, so any broker
-can be wired with a small adapter. Verify the exact REST paths against your
-running OpenAlgo build before production use.
+The chart's market data depends only on the `DataFeed` interface, so any broker
+can be wired with a small adapter. Order entry is a separate contract: the trade
+tier's `OrderFeed`, which its `OrderEngine` drives, and which a chart without
+trading never needs. Verify the exact REST paths against your running OpenAlgo
+build before production use.
 
 See [guides.md](./guides.md) for chart types, trading, profiles, and writing
 custom chart styles / primitives, [widget.md](./widget.md) for the one-call terminal,

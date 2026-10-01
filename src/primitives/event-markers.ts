@@ -1,5 +1,6 @@
 ﻿/** Time-anchored event badges. Event feeds and detail loading belong to the host. */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from './primitive';
+import { isPlainObject } from '../helpers/validate';
 
 export interface EventDetailField { label: string; value: string }
 
@@ -72,11 +73,12 @@ const TYPE_COLOR: Record<string, string> = {
 /**
  * Details copied all the way down, so a caller's later edits cannot reach an
  * installed event: fields and blocks arrive from feeds in any shape. Only
- * arrays and plain objects are copied; anything else is shared, as before.
+ * arrays and plain objects (a record without a prototype among them) are
+ * copied; anything else is shared, as before.
  */
 function copyData<T>(value: T): T {
   if (Array.isArray(value)) return value.map(copyData) as T;
-  if (value === null || typeof value !== 'object' || Object.getPrototypeOf(value) !== Object.prototype) return value;
+  if (!isPlainObject(value)) return value;
   return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copyData(v)])) as T;
 }
 

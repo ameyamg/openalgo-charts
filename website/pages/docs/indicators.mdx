@@ -1837,8 +1837,8 @@ is observed on the next eligible live calculation, without a polling timer;
 repaint, settings and asynchronous refresh alone do not trigger it.
 
 A calculation that appends several bars after an unchanged history (ticks one frame
-batched, or one source bar that completes several Renko bricks, range bars, line
-break lines, point and figure columns or Kagi vertices) judges each new bar in turn,
+batched, or one source bar that completes several Renko bricks; the other transforms
+add at most one element per source bar) judges each new bar in turn,
 as separate appends would, whatever the frequency. The newest may still be forming,
 so a close alert judges it only once it closes. A calculation that changed an earlier
 bar seeds silently instead. On a Kagi or range bar chart a newer source bar dates the

@@ -29,6 +29,18 @@ describe('priceBuckets', () => {
     for (const step of [-1, -0.05, 0, NaN, Infinity, -Infinity]) expect(priceBuckets(100, 105, step)).toEqual([]);
   });
 
+  // A walk from low to high by step never ended when the step no longer moved
+  // a price that large, or a price ran past the largest number.
+  it('returns no buckets for a range the numbers cannot step through, instead of walking forever', () => {
+    expect(priceBuckets(1e17, 1e17 + 1000, 1)).toEqual([]);
+    expect(priceBuckets(-1e17 - 1000, -1e17, 1)).toEqual([]);
+    expect(priceBuckets(100, Infinity, 0.05)).toEqual([]);
+    expect(priceBuckets(1.7e308, Number.MAX_VALUE, 1e307)).toEqual([]);
+    expect(priceBuckets(NaN, 105, 0.05)).toEqual([]);
+    // A reversed range has no buckets, as before.
+    expect(priceBuckets(105, 100, 0.05)).toEqual([]);
+  });
+
   it('leaves the two positional profiles empty on such a tick size instead of hanging', () => {
     const bars = [bar(0, 100, 101, 99, 100.5, 1000), bar(60, 100.5, 102, 100, 101.5, 800)];
     expect(computeVolumeProfile(bars, -0.5)).toEqual({ buckets: [], poc: 0, vah: 0, val: 0, totalVolume: 0 });
@@ -51,6 +63,14 @@ describe('Volume Profile', () => {
     // value area holds ~70% of volume
     const vaVol = vp.buckets.filter((b) => b.price <= vp.vah && b.price >= vp.val).reduce((s, b) => s + b.volume, 0);
     expect(vaVol).toBeGreaterThanOrEqual(vp.totalVolume * 0.7 - 1e-6);
+  });
+
+  // What the documentation says of an unclamped fraction, case by case.
+  it('takes every row above 1, stops at all the volume at 1, and has the POC alone without volume', () => {
+    const bars = [bar(0, 100, 100, 100, 100, 10), bar(60, 99, 101, 99, 100, 0)];
+    expect(computeVolumeProfile(bars, 1, 70)).toMatchObject({ poc: 100, vah: 101, val: 99 });
+    expect(computeVolumeProfile(bars, 1, 1)).toMatchObject({ poc: 100, vah: 100, val: 100 });
+    expect(computeVolumeProfile([bar(0, 99, 101, 99, 100, 0)], 1, 70)).toMatchObject({ poc: 101, vah: 101, val: 101, totalVolume: 0 });
   });
 
   it('handles empty input', () => {

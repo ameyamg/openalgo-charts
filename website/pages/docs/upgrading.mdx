@@ -180,8 +180,8 @@ What to do:
 Alerts on a step that adds several elements, what changes:
 
 - A study alert now judges each bar a calculation appends after an unchanged history, in order,
-  as separate appends would: a source bar that completes several Renko bricks, range bars, line
-  break lines, point and figure columns or Kagi vertices, and several bars a host writes before
+  as separate appends would: a source bar that completes several Renko bricks (the other
+  transforms add at most one element per source bar), and several bars a host writes before
   the chart recomputes. An alert with no frequency reseeded silently on such a step and never
   fired; `everyUpdate`, `oncePerBar` and `once` alerts judged only the newest bar. So an
   `everyUpdate` alert over three coalesced writes that delivered once now delivers once per new

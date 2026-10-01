@@ -83,13 +83,14 @@ export function matchDrawingShortcut(e: ShortcutEvent): string | null {
   return null;
 }
 
-/** Every registered tool that has a shortcut, as `id -> shortcut`. */
+/**
+ * Every registered tool that has a shortcut, as `id -> shortcut`. Built as
+ * entries, so an id such as `__proto__` is a key like any other rather than an
+ * assignment to the object's prototype.
+ */
 export function drawingShortcuts(): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const tool of registry.values()) {
-    if (tool.shortcut !== undefined) out[tool.id] = tool.shortcut;
-  }
-  return out;
+  return Object.fromEntries(Array.from(registry.values(), tool => [tool.id, tool.shortcut])
+    .filter((entry): entry is [string, string] => entry[1] !== undefined));
 }
 
 /** Colour, width and dash: the least any tool drawn through `applyStroke` honours. */
