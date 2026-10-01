@@ -4,7 +4,9 @@
 > Historical pre-implementation target: **< 50 KB Brotli** for the full package (engine + trade overlay), no runtime dependencies. *(Brotli is the size metric we hold the budget against - see §11. Gzip runs ~10-15% larger.)*
 > Goal: professional-grade interactive financial-chart rendering + advanced on-chart trading & trade management.
 
-> **Current release: 2.5.10.** Persistence, saved layouts and the chart grid. The widget keeps its saved state in IndexedDB through an asynchronous store (`AsyncStorageLike`, `widget.ready`), reopens named layouts and indicator templates over a `WorkspaceStore` with revision checks, and lets a user move any shortcut from the ? panel. A bottom bar carries preset ranges sized in trading sessions, Go to, the market status and a clock with a timezone menu. Calendars know pre-open, post-close and extended hours (`phaseAt`, `marketStatusAt`), and `attachSessionShading` washes those bars in the price pane. The chart grid lays out one to sixteen charts with maximize, swap and up to sixteen named link groups, whose channels now include the chart type and drawings. UI a plain widget never opens loads on first use from hashed part files beside the widget tier, and text markers take lanes so neighbouring labels no longer overlap. The 2.5.10 build measures **134.69 kB** base, **151.38 kB** base + trade and **409.13 kB** for all tiers (decimal Brotli sizes).
+> **Current release: 2.6.0.** Analysis depth and a stricter API. A chart applies Heikin Ashi, Renko, range bars, line break, point and figure and Kagi to the bars a host feeds, live (`setSeriesTransform`, with the runs installed by `registerSeriesTransform` when the transform tier is imported), and each study computes on the elements drawn or on the underlying bars (`setBarSource`). Seven built-ins are new, 112 in all, and 29 take a `timeframe` input that folds the chart's bars into a higher interval without repainting. The OpenAlgo feed searches symbols (`DataFeed.searchSymbols`), and event markers carry rich details with host actions. `ChartEventMap` types every event on the chart's bus, every tier ships as a classic script on the `OpenAlgoCharts` global, `require()` resolves to the ESM files, and all of `src` compiles under `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. The 2.6.0 build measures {{MEASURE: Base engine row, npx size-limit}} base, {{MEASURE: Base + trade layer row, npx size-limit}} base + trade and {{MEASURE: Everything row, npx size-limit}} for all tiers (decimal Brotli sizes).
+
+> **2.5.10.** Persistence, saved layouts and the chart grid. The widget keeps its saved state in IndexedDB through an asynchronous store (`AsyncStorageLike`, `widget.ready`), reopens named layouts and indicator templates over a `WorkspaceStore` with revision checks, and lets a user move any shortcut from the ? panel. A bottom bar carries preset ranges sized in trading sessions, Go to, the market status and a clock with a timezone menu. Calendars know pre-open, post-close and extended hours (`phaseAt`, `marketStatusAt`), and `attachSessionShading` washes those bars in the price pane. The chart grid lays out one to sixteen charts with maximize, swap and up to sixteen named link groups, whose channels now include the chart type and drawings. UI a plain widget never opens loads on first use from hashed part files beside the widget tier, and text markers take lanes so neighbouring labels no longer overlap. The 2.5.10 build measures **134.69 kB** base, **151.38 kB** base + trade and **409.13 kB** for all tiers (decimal Brotli sizes).
 
 > **2.5.9.** Drawing interaction and replay. Drawings belong to the instrument they were drawn on (`InstrumentDrawings`, the widget's default), and the drawing controller gains the magnet on every pane and in every drag, box select, drag to copy, an eraser, a temporary measure and visibility per interval (drawings document version 3 when a drawing carries a range). A drawing layer keeps a hit box per drawing, so a hover asks only the drawings near the pointer. Replay holds its forming bar inside the bar it closes on and can form a bar with no finer data over simulated steps. Line-family series draw the segment that crosses each edge of the view (`connectsBars`), and the price axis keeps edge labels whole and value tags over level tags. The 2.5.9 build measured **131.68 kB** base, **148.36 kB** base + trade and **381.78 kB** for all tiers (decimal Brotli sizes).
 >
@@ -30,7 +32,7 @@ notifications. Pipeline arrows show data flow, not package dependencies.
 
 ## Current integration map
 
-For 2.5.10 integrations, start with these current guides and implementation
+For 2.6.0 integrations, start with these current guides and implementation
 boundaries. The numbered design sections below retain historical plans and
 explicitly labeled estimates; use the current API types for implementation.
 
@@ -1114,7 +1116,7 @@ reader of that version sees. Three rules fell out of getting this wrong:
 
 ## 13a. Deferred / not-yet-implemented (honest status)
 
-The current implementation keeps these boundaries in 2.5.10:
+The current implementation keeps these boundaries in 2.6.0:
 
 - **Separate price/time axis-widget canvases** - axes draw within the pane
   canvas by design (small-engine simplification).
