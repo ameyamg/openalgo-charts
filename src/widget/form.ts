@@ -67,7 +67,7 @@ export interface FormControl extends IndicatorInputPresentation {
   custom?: string | undefined;
 }
 
-export type FormValues = Readonly<Record<string, unknown>>;
+type FormValues = Readonly<Record<string, unknown>>;
 
 export interface FormOptions extends WidgetTranslationOptions {
   values: FormValues;
@@ -240,7 +240,7 @@ function localizeControls(controls: FormControl[], translation?: FormTranslation
 }
 
 /** Our words for the draw tier's group ids. */
-export const DRAWING_GROUP_LABELS: Readonly<Record<string, string>> = {
+const DRAWING_GROUP_LABELS: Readonly<Record<string, string>> = {
   line: 'Line', fill: 'Fill', text: 'Text', levels: 'Levels', behavior: 'Behavior',
 };
 
@@ -319,7 +319,7 @@ export function chromeGlyph(doc: Document, id: string): HTMLElement {
   return glyph(doc, chromeIconSvg(id), 'chrome');
 }
 
-export type ButtonVariant = 'ghost' | 'primary' | 'danger';
+type ButtonVariant = 'ghost' | 'primary' | 'danger';
 
 export interface ButtonSpec {
   label: string;
@@ -385,7 +385,7 @@ export function stopOwnKeys(node: HTMLElement): void {
 
 // ── dialog furniture ──────────────────────────────────────────────────────
 
-export interface DialogFrame {
+interface DialogFrame {
   /** The card (`role="dialog"`), handed to `openOverlay` as is. */
   el: HTMLElement;
   head: HTMLElement;
@@ -399,7 +399,7 @@ export interface DialogFrame {
   setTitle(title: string): void;
 }
 
-export interface DialogFrameSpec extends WidgetTranslationOptions {
+interface DialogFrameSpec extends WidgetTranslationOptions {
   title: string;
   /** Extra class on the card. */
   className?: string;
@@ -466,7 +466,7 @@ export interface PanelHandle {
 }
 
 /** The slice of the widget context a panel needs to show itself. */
-export interface PanelHost {
+interface PanelHost {
   openOverlay(el: HTMLElement, opts?: OverlayOptions): () => void;
 }
 
@@ -530,7 +530,7 @@ export function openPanel(host: PanelHost, panel: HTMLElement, opts: OverlayOpti
 
 
 /** The slice of a chart a popover needs to sit beside a drawing. */
-export interface AnchorChart {
+interface AnchorChart {
   timeToCoordinate(time: number): number;
   priceToCoordinate(price: number, paneIndex?: number): number | null;
   panes(): ReadonlyArray<{ element: HTMLElement }>;
@@ -566,14 +566,14 @@ export function selectionPoint(
   return { x: off.left + x0, y: off.top + y1 + 12 };
 }
 
-export interface TabSpec {
+interface TabSpec {
   id: string;
   label: string;
   /** Chrome icon id for the glyph beside the label. */
   icon?: string;
 }
 
-export interface TabListHandle {
+interface TabListHandle {
   el: HTMLElement;
   /** Mark `id` as the selected tab. The buttons stay put, so a focused one keeps its focus. */
   setActive(id: string): void;
@@ -634,7 +634,7 @@ export function tabList(
 
 // ── placement ─────────────────────────────────────────────────────────────
 
-export interface PlaceAt {
+interface PlaceAt {
   /** Below this control, left edges aligned; above it when the bottom has no room. */
   anchor?: HTMLElement;
   /** At this point, in root px (a context menu at the pointer). */

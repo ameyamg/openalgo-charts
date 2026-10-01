@@ -30,16 +30,16 @@ export interface TextEditorHandle extends PanelHandle {
 }
 
 /** The stack the draw tier falls back to when a text block sets no family. */
-export const DEFAULT_FONT = 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+const DEFAULT_FONT = 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
 export const TEXT_PAD = 5;
-export const LINE_GAP = 1.35;
-export const TEXT_SIZE = 14;
-export const WRAP_WIDTH = 220;
+const LINE_GAP = 1.35;
+const TEXT_SIZE = 14;
+const WRAP_WIDTH = 220;
 
 type TextLike = Partial<DrawingText>;
 
 /** The CSS font shorthand the draw tier builds for a text block, at `sizePx`. */
-export function fontOf(t: TextLike, sizePx: number): string {
+function fontOf(t: TextLike, sizePx: number): string {
   const w = t.bold === true ? '700 ' : '';
   const italic = t.italic === true ? 'italic ' : '';
   const family = t.fontFamily === undefined || t.fontFamily === '' ? DEFAULT_FONT : t.fontFamily;
@@ -51,7 +51,7 @@ export function fontOf(t: TextLike, sizePx: number): string {
  * soft-wrapped at `maxWidth` when the block asks for it. `measure` returns
  * the width of a string in the font in force.
  */
-export function wrapLines(measure: (s: string) => number, t: TextLike, value: string, maxWidth: number): string[] {
+function wrapLines(measure: (s: string) => number, t: TextLike, value: string, maxWidth: number): string[] {
   const paragraphs = value.split('\n');
   if (t.wrap !== true) return paragraphs;
   const out: string[] = [];
@@ -73,7 +73,7 @@ export function wrapLines(measure: (s: string) => number, t: TextLike, value: st
  * A width function for `font`: a scratch 2D context where one exists, else
  * the 0.6em-per-character estimate the tier's own hit test falls back to.
  */
-export function measurer(doc: Document, font: string, size: number): (s: string) => number {
+function measurer(doc: Document, font: string, size: number): (s: string) => number {
   let ctx: CanvasRenderingContext2D | null = null;
   try {
     const canvas = doc.createElement('canvas');
@@ -87,7 +87,7 @@ export function measurer(doc: Document, font: string, size: number): (s: string)
   return (s) => s.length * size * 0.6;
 }
 
-export interface TextFrame {
+interface TextFrame {
   x: number;
   y: number;
   width: number;

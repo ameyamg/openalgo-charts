@@ -4,7 +4,7 @@
  * distance between two pointers and their midpoint; frame-to-frame it yields a
  * zoom `factor` (distance ratio) and a midpoint translation (`dx`,`dy`) for pan.
  */
-export interface Pt {
+interface Pt {
   x: number;
   y: number;
 }

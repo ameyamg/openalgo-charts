@@ -72,7 +72,7 @@ export interface PlotLayout {
  * to substitute its own. A renderer that reached for the global clock could
  * serve none of the three.
  */
-export type ClockSource = () => number;
+type ClockSource = () => number;
 
 /** Height of a price-axis tag in media px: last price, crosshair, price line. */
 export const AXIS_TAG_HEIGHT = 16;
@@ -95,7 +95,7 @@ export const AXIS_TAG_HEIGHT = 16;
  * promise: `niceTicks` walks up the 1 / 2 / 2.5 / 5 ladder until the count fits,
  * and a range that has no round step at this density simply prints fewer.
  */
-export const PRICE_LABEL_SPACING = 32;
+const PRICE_LABEL_SPACING = 32;
 
 /** Labels that fit in `plotHeight`, clamped so a tiny pane still shows a ladder. */
 export function priceTickCount(plotHeight: number): number {
@@ -503,7 +503,7 @@ function gridIndices(from: number, to: number, stride: number): number[] {
 }
 
 /** The last price's up and down fills, and the text written on them. */
-export interface LastPriceColors {
+interface LastPriceColors {
   up: string;
   down: string;
   text: string;
@@ -806,7 +806,7 @@ export function drawLastPriceTag(
 }
 
 /** Look of the crosshair's date pill on the time axis. */
-export interface TimePillStyle {
+interface TimePillStyle {
   /** Pill fill. */
   background: string;
   /** Label colour on that fill. */

@@ -15,7 +15,7 @@
  */
 import { OFFSET_COLOR, OFFSET_LOCAL, OFFSET_POS, OFFSET_SHAPE, VERTEX_BYTES } from './batch';
 
-export const VERTEX_SHADER = `#version 300 es
+const VERTEX_SHADER = `#version 300 es
 precision highp float;
 uniform vec2 u_resolution;
 in vec2 a_pos;
@@ -34,7 +34,7 @@ void main() {
 }
 `;
 
-export const FRAGMENT_SHADER = `#version 300 es
+const FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 in vec4 v_color;
 in vec2 v_local;

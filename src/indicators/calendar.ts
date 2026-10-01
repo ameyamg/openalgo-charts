@@ -14,7 +14,7 @@
  */
 import { DEFAULT_TIMEZONE, IST_OFFSET_SECONDS, isNewZonedPeriod, utcSecondsToIstParts } from 'openalgo-charts';
 
-export type CalendarPeriod = 'week' | 'month' | 'quarter' | 'year';
+type CalendarPeriod = 'week' | 'month' | 'quarter' | 'year';
 
 /** Monday-start week index on the default zone. 1970-01-01 was a Thursday, hence the +3. */
 const istWeek = (t: number): number => Math.floor((Math.floor((t + IST_OFFSET_SECONDS) / 86400) + 3) / 7);

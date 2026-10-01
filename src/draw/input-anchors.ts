@@ -36,7 +36,7 @@ interface TargetPane {
 }
 
 /** The slice of the chart the anchors need. `Chart` satisfies it. */
-export type InputAnchorHost = Pick<DrawingChartHost, 'on' | 'addPrimitive' | 'removePrimitive' | 'dataLayer' | 'indicators' | 'panes'>;
+type InputAnchorHost = Pick<DrawingChartHost, 'on' | 'addPrimitive' | 'removePrimitive' | 'dataLayer' | 'indicators' | 'panes'>;
 
 /**
  * One anchor move as an undo step, walked by the drawing history or by the

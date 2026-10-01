@@ -18,7 +18,7 @@ import type { DrawingPoint, MagnetMode } from './types';
 import type { DrawingChartHost } from './controller-types';
 
 /** How close, in media px, a value must be for the weak magnet to pull. */
-export const WEAK_MAGNET_PX = 8;
+const WEAK_MAGNET_PX = 8;
 
 /** The 1.9.x boolean and the 2.0 modes, folded onto one. */
 export function magnetModeOf(value: boolean | MagnetMode | undefined): MagnetMode {
@@ -43,7 +43,7 @@ export interface SnapBar {
  * study pane cannot be compared at all, and without the price series or the
  * studies there is nothing to snap to.
  */
-export type MagnetHost = Pick<DrawingChartHost, 'dataLayer' | 'priceToCoordinate' | 'primaryBars' | 'indicators' | 'panes' | 'seriesStyle'>;
+type MagnetHost = Pick<DrawingChartHost, 'dataLayer' | 'priceToCoordinate' | 'primaryBars' | 'indicators' | 'panes' | 'seriesStyle'>;
 
 /** What a study pane is read through: its scales and its own price projection, pane-local. `Pane` has them. */
 interface StudyPane {

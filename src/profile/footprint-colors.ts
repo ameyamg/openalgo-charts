@@ -3,7 +3,7 @@ import { parseColor, srgbLuminance, type Rgba } from '../render/pill';
 /** Text coloring is independent of the footprint's background display mode. */
 export type FootprintTextColorMode = 'contrast' | 'side' | 'delta' | 'dominant' | 'imbalance' | 'volume';
 
-export interface FootprintTextColorInput {
+interface FootprintTextColorInput {
   mode: FootprintTextColorMode;
   side: 'bid' | 'ask' | 'single';
   bidVol: number;

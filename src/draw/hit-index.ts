@@ -296,7 +296,7 @@ function watchFonts(): void {
 }
 
 /** One layer's kept boxes, and the key they were measured against. */
-export interface DrawingHitIndex {
+interface DrawingHitIndex {
   /** A drawing's body box by paint position, or undefined before it is measured. */
   readonly bodies: (HitBox | undefined)[];
   /** A drawing's anchors grown by the handle radius, for the handle test. */

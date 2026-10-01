@@ -123,7 +123,7 @@ export interface WidgetLayouts {
   destroy(): void;
 }
 
-export interface WidgetLayoutsOptions {
+interface WidgetLayoutsOptions {
   workspaces?: WorkspaceStore;
   layouts?: LayoutsController | false;
 }

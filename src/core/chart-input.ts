@@ -67,7 +67,7 @@ type PointerLike = Partial<Pick<PointerEvent,
  * entry per subscription, rather than one per callback, so unsubscribing is
  * one removal.
  */
-export interface SubscribedDrag { end: boolean; id: string; price: number; time: number }
+interface SubscribedDrag { end: boolean; id: string; price: number; time: number }
 
 /** A pointer position projected onto the pane under it, as the handlers read it. */
 type LocalPoint = { x: number; y: number; pane: number; localY: number; paneHeight: number };

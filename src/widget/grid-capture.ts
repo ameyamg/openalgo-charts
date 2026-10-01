@@ -21,7 +21,7 @@ import { solo } from './grid-tracks';
 import type { GridState } from './grid';
 
 /** A rectangle in CSS pixels, relative to the grid's cells area. */
-export interface CaptureBox { left: number; top: number; width: number; height: number }
+interface CaptureBox { left: number; top: number; width: number; height: number }
 
 export interface GridCapturePiece {
   /** The cell's whole box: its chart and its chrome. */
@@ -34,7 +34,7 @@ export interface GridCapturePiece {
   readonly label: string;
 }
 
-export interface GridCaptureColors {
+interface GridCaptureColors {
   /** Behind everything: what shows through the gutters between cells. */
   readonly gutter: string;
   /** Each cell's chrome. */

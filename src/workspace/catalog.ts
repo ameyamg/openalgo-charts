@@ -13,7 +13,7 @@
 import { number, readJson, string, WorkspaceDocumentError } from './json';
 
 /** Storage for one catalog kind. The host must atomically reject writes whose expectedRevision is stale. */
-export interface CatalogStorage<C> {
+interface CatalogStorage<C> {
   read(namespace: string): Promise<unknown | null>;
   write(namespace: string, catalog: C, expectedRevision: number, options?: { signal?: AbortSignal | undefined }): Promise<void>;
 }
@@ -25,7 +25,7 @@ export interface CatalogKind<C> {
   conflict(): Error;
 }
 
-export const copy = <T>(value: T): T => readJson(value) as T;
+const copy = <T>(value: T): T => readJson(value) as T;
 
 /** The ID factory a repository uses unless given one. */
 export function randomId(): string {

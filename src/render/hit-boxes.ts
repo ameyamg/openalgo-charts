@@ -22,7 +22,7 @@ import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext } from '../primi
 import { PRICE_SCALE_MODES, type PriceScale } from '../scale/price-scale';
 
 /** A primitive's hit box: media px relative to the plot, edges inclusive. */
-export interface HitBox {
+interface HitBox {
   left: number;
   top: number;
   right: number;
@@ -55,7 +55,7 @@ export function announcingHost(host: PrimitiveHost): PrimitiveHost {
  * that also change the key, so the place names the same primitive for as long
  * as the boxes are kept, and a pointer move reads each one without a lookup.
  */
-export interface HitBoxes {
+interface HitBoxes {
   /** Start reading the key. The primitives' own announcements are always part of it. */
   begin(): void;
   number(value: number): void;

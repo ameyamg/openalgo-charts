@@ -36,7 +36,7 @@ export interface GestureKeys {
 }
 
 /** A chart click as the gestures read it. */
-export interface GestureClick {
+interface GestureClick {
   id: string | null;
   time: number;
   price: number | null;
@@ -48,7 +48,7 @@ export interface GestureClick {
 }
 
 /** A pointer report as the gestures read it: container px, and whether a button is held. */
-export interface GesturePointer {
+interface GesturePointer {
   paneIndex: number | null;
   point: { x: number; y: number } | null;
   pressed: boolean;
@@ -58,14 +58,14 @@ export interface GesturePointer {
 }
 
 /** Where the pointer is, in data space, on which pane. */
-export interface GestureCursor {
+interface GestureCursor {
   time: number;
   price: number;
   paneIndex: number;
 }
 
 /** What the gestures need of the controller that owns them. */
-export interface GestureHost {
+interface GestureHost {
   /** The armed drawing tool, or null. */
   tool(): string | null;
   /** The gestures the host has left on. */

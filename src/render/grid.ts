@@ -21,7 +21,7 @@ import type { ChartTheme } from '../theme';
 import type { AxisStyle } from './axis';
 import type { CrosshairOptions } from './crosshair';
 
-export interface GridLines {
+interface GridLines {
   /** Vertical line x-positions in media (CSS) px. */
   verticals: number[];
   /** Horizontal line y-positions in media (CSS) px. */

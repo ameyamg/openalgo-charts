@@ -144,7 +144,7 @@ export const SCALE_TOGGLES: ReadonlyArray<{ id: BottombarScaleToggle; icon: stri
 ];
 
 /** The scale the primary series reads from, on the price pane: the one a scale toggle acts on. */
-export function primaryScale(chart: Chart): { pane: number; id: PriceScaleId } | null {
+function primaryScale(chart: Chart): { pane: number; id: PriceScaleId } | null {
   if (chart.isDestroyed) return null;
   const pane = chart.primaryPaneIndex();
   const record = chart.panes()[pane];

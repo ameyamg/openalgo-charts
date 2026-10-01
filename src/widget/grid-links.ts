@@ -60,7 +60,7 @@ export interface GridGroup<C = unknown> {
 }
 
 /** The slice of a grid cell the links drive. */
-export interface LinkedCell {
+interface LinkedCell {
   readonly id: string;
   readonly widget: Widget;
   member: LinkChart;

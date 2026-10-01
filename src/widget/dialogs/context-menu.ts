@@ -96,7 +96,7 @@ const SEP: MenuEntry = { kind: 'separator' };
 const header = (label: string): MenuEntry => ({ kind: 'header', label });
 
 /** Our words for the four scale modes, in the engine's order. */
-export const SCALE_MODE_LABELS: Readonly<Record<PriceScaleMode, string>> = {
+const SCALE_MODE_LABELS: Readonly<Record<PriceScaleMode, string>> = {
   linear: 'Linear',
   logarithmic: 'Logarithmic',
   percentage: 'Percent',

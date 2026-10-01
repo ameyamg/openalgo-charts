@@ -44,10 +44,10 @@ export type Tail = NonNullable<IndicatorDescriptor['calcTail']>;
 export type Cell = number | null;
 
 /** The state after bar `index`, and the outputs that bar produced. */
-export interface Checkpoint { key: string; index: number; time: number; state: unknown; row: Cell[] }
+interface Checkpoint { key: string; index: number; time: number; state: unknown; row: Cell[] }
 
 /** Which full `calc` last ran on an instance's store, and where its tail stands. */
-export interface Claim { owner: Calc; misses: number; at?: Checkpoint }
+interface Claim { owner: Calc; misses: number; at?: Checkpoint }
 
 // Keyed by the store, which the runtime keeps for the instance's lifetime, so
 // nothing is written into the store itself and a descriptor that reads its own

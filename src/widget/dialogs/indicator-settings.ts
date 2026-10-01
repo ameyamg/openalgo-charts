@@ -54,7 +54,7 @@ const detached = (settings: Readonly<IndicatorSettings>): IndicatorSettings => O
 );
 
 /** The defaults of a list of inputs, as a settings patch. */
-export function inputDefaults(inputs: readonly IndicatorInput[]): IndicatorSettings {
+function inputDefaults(inputs: readonly IndicatorInput[]): IndicatorSettings {
   const out: IndicatorSettings = Object.fromEntries(inputs.map(input => [input.key, input.default]));
   for (const input of inputs) {
     if (input.type === 'symbol' && input.exchangeKey !== undefined && !Object.prototype.hasOwnProperty.call(out, input.exchangeKey)) {
