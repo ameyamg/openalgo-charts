@@ -758,8 +758,8 @@ const noise = n => {
 };
 const exchange = {
   previousClose: symbol => 40 + seed(symbol) % 160,
-  last(symbol) {
-    const step = Math.floor(Date.now() / 700);
+  last(symbol, now = Date.now()) {
+    const step = Math.floor(now / 700);
     let walk = 0;
     for (let k = 0; k < 30; k++) walk += noise(seed(symbol) * 100003 + step - k);
     const move = (seed(symbol) % 7 - 3) / 100 + walk * 0.004;
@@ -775,14 +775,22 @@ const bars = (symbol, interval) => {
   return series.map(bar => ({ ...bar, open: round(bar.open * scale), high: round(bar.high * scale),
     low: round(bar.low * scale), close: round(bar.close * scale) }));
 };
-const quote = item => ({ ...item, last: exchange.last(item.symbol), previousClose: exchange.previousClose(item.symbol) });
+// One clock drives the quote source and the forming bar, so a row and the chart
+// read the same step of the exchange at the same moment.
+const ticks = new Set();
+let clock = 0;
+const onTick = fn => {
+  ticks.add(fn);
+  if (!clock) clock = setInterval(() => { const now = Date.now(); ticks.forEach(f => f(now)); }, 700);
+  return () => { ticks.delete(fn); if (!ticks.size) { clearInterval(clock); clock = 0; } };
+};
+const quote = (item, now) => ({ ...item, last: exchange.last(item.symbol, now), previousClose: exchange.previousClose(item.symbol) });
 const quotes = {
-  getQuotes: async ({ instruments }) => instruments.map(quote),
+  getQuotes: async ({ instruments }) => instruments.map(item => quote(item)),
   subscribeQuotes(instruments, { onQuote, onStatus }) {
     const [item] = instruments;
     if (onStatus) onStatus('live');
-    const timer = setInterval(() => onQuote(quote(item)), 700);
-    return () => clearInterval(timer);
+    return onTick(now => onQuote(quote(item, now)));
   },
 };
 const news = {
@@ -807,14 +815,13 @@ const widget = lib.createWidget(el, {
     subscribeBars(request, onBar) {
       const history = bars(request.symbol, request.interval);
       const forming = { ...history[history.length - 1] };
-      const timer = setInterval(() => {
-        const price = exchange.last(request.symbol);
+      return onTick(now => {
+        const price = exchange.last(request.symbol, now);
         forming.close = price;
         forming.high = Math.max(forming.high, price);
         forming.low = Math.min(forming.low, price);
         onBar({ ...forming });
-      }, 700);
-      return () => clearInterval(timer);
+      });
     },
   },
   watchlist: { store, quotes },
