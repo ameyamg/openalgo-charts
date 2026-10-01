@@ -118,14 +118,15 @@ export class IndicatorAlertPolicy {
     this._historyRevision = execution?.historyRevision;
     this._revision = execution?.revision;
     this._replaying = replaying;
-    const confirmed = pass.calculation.barState.isConfirmed;
-    // The checkpoints are kept in the times of the bars the study computed on.
+    // The checkpoints are kept in the times of the bars the study computed on;
+    // `closed` is the newest of them that has closed.
     const rows = pass.sampled?.bars ?? pass.bars;
     const read = studyBarTime(pass.bars, pass.sampled);
+    const closed = rows[rows.length - (pass.calculation.barState.isConfirmed ? 1 : 2)]?.time ?? -Infinity;
     const refresh = pass.refresh || execution?.change === 'refresh';
     const live = native ? execution.provenance === 'live' : pass.tailOnly;
     if (generation || (!refresh && !live)) {
-      this._seed(rows, confirmed);
+      this._seed(closed);
       return;
     }
     if (refresh || !live || pass.bars.length === 0) return;
@@ -138,10 +139,10 @@ export class IndicatorAlertPolicy {
     let failed = false;
     let firstError: unknown;
     const last = bars.length - 1;
-    const closed = rows[rows.length - (confirmed ? 1 : 2)]?.time ?? -Infinity;
     // Each bar the pass appended, in order, as separate appends would judge
-    // them, an element that reads the bar before it once; a tick that appended
-    // none judges the newest element alone, when it reads the bar that moved.
+    // them, and elements that read one bar once, at the first; a tick that
+    // appended none judges the newest alone, and only when it reads the bar
+    // that moved.
     const start = Math.min(pass.from, last);
     const fresh: number[] = [];
     for (let i = start; i <= last; i++) {
@@ -204,9 +205,7 @@ export class IndicatorAlertPolicy {
     }
   }
 
-  private _seed(bars: readonly Bar[], confirmed: boolean): void {
-    const index = bars.length - (confirmed ? 1 : 2);
-    const time = index >= 0 ? bars[index]!.time : -Infinity;
+  private _seed(time: number): void {
     for (const entry of this._entries) {
       entry.perBarTime = time;
       entry.closedTime = time;
@@ -223,8 +222,7 @@ export class IndicatorAlertPolicy {
   private _closeIndices(entry: Entry, read: (index: number) => number, last: number, closed: number): number[] {
     const indices: number[] = [];
     const available = new Set<number>();
-    for (let i = 0; i <= last && read(i) <= closed; i++) {
-      const time = read(i);
+    for (let i = 0, time = 0; i <= last && (time = read(i)) <= closed; i++) {
       if ((time > entry.closedTime || entry.failedCloses.has(time)) && !available.has(time)) indices.push(i);
       available.add(time);
     }
