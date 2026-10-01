@@ -132,7 +132,7 @@ Zero is a valid threshold. Non-finite thresholds and negative cooldowns fail.
 previous tail, and the controller evaluates that closed bar, never history
 loaded through setData or prependData. `AlertRepeat` defaults to once.
 
-(unreleased) One `data:update` that appends several bars after the tail an alert
+One `data:update` that appends several bars after the tail an alert
 last saw is judged bar by bar, every alert at one bar before any moves to the next,
 exactly as separate appends would be: a source bar completing several Renko bricks,
 range bars, line break lines, point and figure columns or Kagi vertices, or an
