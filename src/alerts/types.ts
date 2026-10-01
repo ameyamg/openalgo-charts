@@ -17,7 +17,11 @@ export interface ChartDataUpdate {
   time?: number;
 }
 
-/** Minimum headless chart surface needed to evaluate alerts. */
+/**
+ * Minimum headless chart surface needed to evaluate alerts. A host announces
+ * its writes with `data:update`; one `update` may append several bars, and the
+ * controller judges each of them in turn.
+ */
 export interface AlertChartHost {
   primaryBars(): readonly Bar[];
   /** Owning price scale for primary-price drag snapping, including a left axis. */
