@@ -131,6 +131,24 @@ describe('alerts on the bars under a Renko chart', () => {
     ]);
   });
 
+  it('judges the bars after a reload onto a history that ends earlier', () => {
+    const h = mount(RENKO);
+    const study = h.chart.addIndicator(risingStudy(), {}, { barSource: 'underlying' });
+    h.feed(rising(h.bars, 2.2));
+    study.values();
+    expect(h.events).toHaveLength(1);
+    // A reload ending fifty bars back, as another interval or symbol would: it
+    // seeds silently, and the next bar, older than the one judged, is judged.
+    const shorter = h.bars.slice(0, 250);
+    h.chart.primarySeries()!.setData(shorter);
+    study.values();
+    expect(h.events).toHaveLength(1);
+    const next = rising(shorter, 2.2);
+    h.feed(next);
+    study.values();
+    expect(summary(h.events.slice(1)).map(e => e.message)).toEqual([`bar ${next.time}`]);
+  });
+
   it.each([
     // Two bricks; the same bar ticks on; it completes a third; the next bar completes nothing.
     ['oncePerBar', [1, 0, 0, 0]],
