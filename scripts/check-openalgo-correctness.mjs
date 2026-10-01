@@ -106,7 +106,12 @@ export async function checkChartCorrectness({ page, terminal, report, sendDepth,
     if (screenshot) await page.screenshot({ path: screenshot.replace(/\.png$/, '-index.png') });
   });
   await check('combined symbols retain the sum of distinct leg volumes', async () => {
-    await terminal(t => t.loadSymbol({ symbol: 'NSE:BHEL+NFO:NIFTY29SEP26FUT', exchange: 'NFO' }));
+    // A combination carries no exchange of its own: each leg names its own. The
+    // host folds only an exchange-free request; with one, it asks the history
+    // API for the expression as if it were a single instrument.
+    await terminal(t => t.loadSymbol({ symbol: 'NSE:BHEL+NFO:NIFTY29SEP26FUT', exchange: '' }));
+    await page.waitForFunction(() => window.__compatTerminals.some(t => !t.destroyed && t.sym?.symbol === 'NSE:BHEL+NFO:NIFTY29SEP26FUT'
+      && !t.dataUnavailable() && Object.keys(t.exprFeed?.legBars ?? {}).length === 2));
     const view = await terminal(t => {
       const study = t.chart.addIndicator('volume');
       study.setSettings({ showMA: true, maPeriod: 3 });
