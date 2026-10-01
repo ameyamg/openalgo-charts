@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 
 /** Exercise the real consumer controls against the harness's mocked transport. */
-export async function checkToolbar({ page, check, screenshot, orderCount }) {
+export async function checkToolbar({ page, check, screenshot, orderCount, hostFinding }) {
   const ordersBefore = orderCount();
   const toolbar = page.getByRole('toolbar', { name: 'Chart controls' });
   const state = () => page.evaluate(() => window.__compatTerminals.filter(t => !t.destroyed && t.chart).map(t => ({
@@ -12,6 +12,22 @@ export async function checkToolbar({ page, check, screenshot, orderCount }) {
   })));
   const ready = () => page.waitForFunction(() => window.__compatTerminals.filter(t => !t.destroyed).every(t =>
     t.chart && t.price?.getData().length && !t.dataUnavailable() && t.chart.getDataContext()?.interval === t.interval));
+  // The host's right rail has an Alerts button of its own, which opens its
+  // alerts panel. The toolbar's opens the selected chart's alert form: the
+  // terminal hands the host `cb.onAlerts`, and the host names the chart the
+  // form was opened for, which is how ownership is read here.
+  const alertsButton = toolbar.getByRole('button', { name: 'Alerts', exact: true });
+  const alertForm = page.getByRole('dialog', { name: 'Create alert', exact: true });
+  const openAlertForm = async symbol => {
+    await alertsButton.click();
+    await expect(alertForm).toBeVisible();
+    await expect(alertForm.getByText(`${symbol} on this chart`, { exact: true })).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(1);
+  };
+  const closeAlertForm = async () => {
+    await page.keyboard.press('Escape');
+    await expect(alertForm).toHaveCount(0);
+  };
   await check('one workspace toolbar remains after adding a second chart', async () => {
     await expect(page.getByRole('toolbar', { name: 'Chart controls' })).toHaveCount(1);
     await page.getByRole('button', { name: 'Chart layout: Single', exact: true }).click();
@@ -19,7 +35,7 @@ export async function checkToolbar({ page, check, screenshot, orderCount }) {
     await page.waitForFunction(() => window.__compatTerminals.filter(t => !t.destroyed && t.price?.getData().length).length === 2);
     await expect(page.locator('[data-toolbar-pane]')).toHaveCount(1);
     await expect(page.getByRole('toolbar', { name: 'Chart controls' })).toHaveCount(1);
-    await expect(page.getByRole('button', { name: 'Alerts', exact: true })).toHaveCount(1);
+    await expect(alertsButton).toHaveCount(1);
     assert.equal(await page.locator('[data-toolbar-pane]').getAttribute('data-toolbar-pane'), 'p0');
   });
   await check('keyboard and chart selection move controls without recreating terminals', async () => {
@@ -51,14 +67,8 @@ export async function checkToolbar({ page, check, screenshot, orderCount }) {
     ]);
   });
   await check('alerts snapshots and replay retain the selected chart owner', async () => {
-    await toolbar.getByRole('button', { name: 'Alerts', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: 'Alerts', exact: true })).toBeVisible();
-    assert(await page.evaluate(() => {
-      const t = window.__compatTerminals.find(t => !t.destroyed && t.sk === 'oa-trading-p1');
-      return t.alertDialogOpen() && !window.__compatTerminals.find(t => !t.destroyed && t.sk === 'oa-trading-p0').alertDialogOpen();
-    }));
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog', { name: 'Alerts', exact: true })).toHaveCount(0);
+    await openAlertForm('NIFTY29SEP26FUT');
+    await closeAlertForm();
     const downloaded = page.waitForEvent('download');
     await toolbar.getByRole('button', { name: 'Chart snapshot', exact: true }).click({ modifiers: ['Shift'] });
     assert.match((await downloaded).suggestedFilename(), /^NIFTY29SEP26FUT-15m-.*\.png$/);
@@ -106,21 +116,28 @@ export async function checkToolbar({ page, check, screenshot, orderCount }) {
     await page.waitForFunction(() => !!document.fullscreenElement?.querySelector('[data-toolbar-pane="p1"]'));
     await expect(page.locator('[data-toolbar-pane]')).toHaveCount(1);
     await expect(page.locator('[data-workspace-toolbar] [data-toolbar-pane]')).toHaveCount(0);
-    await toolbar.getByRole('button', { name: 'Alerts', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: 'Alerts', exact: true })).toBeVisible();
+    await openAlertForm('NIFTY29SEP26FUT');
+    // Only the fullscreen element's subtree is painted, so a form opened
+    // anywhere else is in the DOM and invisible to the trader. Where the form
+    // opens is the host's portal, not this package's, so it is reported as a
+    // host finding rather than failing the package's gate.
+    if (screenshot) await page.screenshot({ path: screenshot.replace(/\.png$/, '-fullscreen-alert.png') });
+    if (!await alertForm.evaluate(el => !document.fullscreenElement || document.fullscreenElement.contains(el))) {
+      hostFinding('The toolbar alert form opens outside the fullscreen chart, so it is not painted while the chart is fullscreen');
+    }
     await page.keyboard.press('Escape');
     await page.evaluate(async () => {
       // Escape can also leave native fullscreen, depending on the browser.
       if (document.fullscreenElement) await document.exitFullscreen();
     });
+    if (await alertForm.count()) await closeAlertForm();
     await expect(page.locator('[data-workspace-toolbar] [data-toolbar-pane]')).toHaveCount(1);
   });
   await check('compact toolbar stays reachable without expanding the page', async () => {
     const viewport = page.viewportSize();
     await page.setViewportSize({ width: 390, height: 844 });
-    await toolbar.getByRole('button', { name: 'Alerts', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: 'Alerts', exact: true })).toBeVisible();
-    await page.keyboard.press('Escape');
+    await openAlertForm('NIFTY29SEP26FUT');
+    await closeAlertForm();
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     const selection = await page.getByRole('button', { name: 'Selected chart: 2', exact: true }).boundingBox();
     assert(selection && selection.x >= 0 && selection.x + selection.width <= 390, 'Selected chart stays visible while controls scroll');

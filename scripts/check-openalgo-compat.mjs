@@ -11,8 +11,13 @@
  * Add --workspaces true for complete named chart grids.
  * Add --oi true for history capability, readouts, studies and persistence.
  * Add --alerts true for source controls, live delivery, persistence and replay guards.
- * Add --consumer-checks /absolute/checks.mjs for additional checkTradingWorkspace checks.
+ * Add --consumer-checks /absolute/checks.mjs for additional checkTradingWorkspace checks;
+ * they run last, after every pane is put back on 5m.
  * Use --browser chromium|firefox|webkit to select the rendering engine.
+ * Use --port <n> to serve on a fixed port; without it a free one is picked at random.
+ * A defect in the host's own chrome is printed as HOST FINDING and kept in the
+ * report's hostFindings; it fails nothing.
+ * Every group can run in the same invocation as the others.
  *
  * No backend is started. Vite proxies are removed and every API/WS is mocked.
  * The app source is unchanged; an entry wrapper records terminal instances so
@@ -90,7 +95,7 @@ let historyVolumeBoost = 0;
 const config = (await loadConfigFromFile({ command: 'serve', mode: 'test' }, join(frontend, 'vite.config.ts'))).config;
 const server = await createServer({
   ...config, configFile: false, root: frontend, cacheDir: cache, logLevel: 'error',
-  server: { host: '127.0.0.1', port: 19000 + Math.floor(Math.random() * 10000), strictPort: false, hmr: false, proxy: {} },
+  server: { host: '127.0.0.1', port: args.port ? Number(args.port) : 19000 + Math.floor(Math.random() * 10000), strictPort: !!args.port, hmr: false, proxy: {} },
   plugins: [...config.plugins, {
     name: 'openalgo-compat-observer',
     transformIndexHtml(html) { return html.replace('src="/src/main.tsx"', 'src="/openalgo-compat-entry.ts"'); },
@@ -231,6 +236,11 @@ try {
     });
   });
   const check = async (name, fn) => { await fn(); report.checks.push(name); console.log(`PASS ${name}`); };
+  // A defect in the host's own chrome, found on the way. It is printed and
+  // kept in the report on every run, and fails nothing: it is not this
+  // package's to fix, and the package's gate should not wait on it.
+  report.hostFindings = [];
+  const hostFinding = message => { report.hostFindings.push({ after: report.checks.at(-1), message }); console.log(`HOST FINDING ${message}`); };
   const terminal = async (fn, arg) => page.evaluate(({ source, arg }) => {
     const t = window.__compatTerminals?.findLast((item) => !item.destroyed && item.chart);
     if (!t) throw new Error('No active terminal');
@@ -291,7 +301,7 @@ try {
     assert.equal(await terminal((t) => t.sym.symbol), 'BHEL');
     assert(report.requests.some((r) => r.path === '/api/v1/history' && r.body.interval === '5m'));
   });
-  if (args.toolbar === 'true') await checkToolbar({ page, check, screenshot: args.screenshot, orderCount: () => orderCounter });
+  if (args.toolbar === 'true') await checkToolbar({ page, check, screenshot: args.screenshot, orderCount: () => orderCounter, hostFinding });
   if (args.branding === 'true') {
     await check('host branding links follow disabled and custom chart branding', async () => {
       const mark = await terminal(t => t.chart.brandingOptions());
@@ -950,9 +960,17 @@ try {
   }
   if (args.correctness === 'true') await checkChartCorrectness({ page, terminal, report, sendDepth, screenshot: args.screenshot });
   if (args.oi === 'true') await checkOpenInterest({ page, terminal, check, reload, sendDepth, screenshot: args.screenshot, orderCount: () => orderCounter });
-  if (args.alerts === 'true') await checkAlerts({ page, terminal, check, reload, sendDepth, screenshot: args.screenshot, orderCount: () => orderCounter });
+  if (args.alerts === 'true') await checkAlerts({ page, terminal, check, reload, sendDepth, screenshot: args.screenshot, orderCount: () => orderCounter, hostFinding });
   if (args.workspaces === 'true') await checkWorkspaces({ page, check, reload, screenshot: args.screenshot, orderCount: () => orderCounter, sendDepth });
   if (args['consumer-checks']) {
+    // The consumer's checks start from an intraday grid: they wait for more
+    // than ten bars in every pane, and the core checks end with a daily pane
+    // of three. Leave replay and return every pane to 5m first.
+    await page.evaluate(() => {
+      for (const t of window.__compatTerminals.filter(t => !t.destroyed && t.chart)) { t.stopReplay(); t.setInterval('5m'); }
+    });
+    await page.waitForFunction(() => window.__compatTerminals.filter(t => !t.destroyed && t.chart)
+      .every(t => t.interval === '5m' && !t.dataUnavailable() && t.price?.getData().length > 10));
     const file = resolve(args['consumer-checks']);
     report.consumerChecks = { file, sha256: createHash('sha256').update(await readFile(file)).digest('hex') };
     const { checkTradingWorkspace } = await import(pathToFileURL(file).href);
@@ -994,4 +1012,5 @@ try {
   await rm(cache, { recursive: true, force: true });
   if (args.output) await writeFile(resolve(args.output), `${JSON.stringify(report, null, 2)}\n`);
   console.log(`${report.label}: ${report.checks.length} browser compatibility checks passed`);
+  if (report.hostFindings?.length) console.log(`${report.label}: ${report.hostFindings.length} host finding(s), listed above`);
 }

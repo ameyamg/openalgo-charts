@@ -57,12 +57,22 @@ export async function checkChartCorrectness({ page, terminal, report, sendDepth,
     assert.equal(await terminal(t => t.legendBar?.time), await terminal(t => t.price.getData().at(-1).time));
   });
   await check('plot dragging preserves automatic price fitting', async () => {
+    const drag = async (dx, dy) => {
+      await terminal(t => t.chart.setAutoScale(true));
+      const point = await moveToBar(15);
+      await page.mouse.down();
+      await page.mouse.move(point.x + dx, point.y + dy, { steps: 5 });
+      await page.mouse.up();
+      return terminal(t => t.chart.panes()[0].priceScale.autoScale);
+    };
+    // Moving through time alone never takes the price axis off Auto-fit.
+    assert.equal(await drag(35, 0), true);
+    // A drag that also moves vertically pans price only where the host's
+    // "Mouse drag" setting says so. The host decides: OpenAlgo pinned it to
+    // horizontal until it left the engine default, both, to the trader.
+    const mousePan = await terminal(t => t.chart.navigationOptions().mousePan);
+    assert.equal(await drag(35, 25), mousePan === 'horizontal', `mousePan is ${mousePan}`);
     await terminal(t => t.chart.setAutoScale(true));
-    const point = await moveToBar(15);
-    await page.mouse.down();
-    await page.mouse.move(point.x + 35, point.y + 25, { steps: 5 });
-    await page.mouse.up();
-    assert.equal(await terminal(t => t.chart.panes()[0].priceScale.autoScale), true);
   });
   await check('touchpad time panning preserves Auto-fit and the price axis still adjusts manually', async () => {
     await terminal(t => t.chart.setAutoScale(true));
@@ -96,7 +106,12 @@ export async function checkChartCorrectness({ page, terminal, report, sendDepth,
     if (screenshot) await page.screenshot({ path: screenshot.replace(/\.png$/, '-index.png') });
   });
   await check('combined symbols retain the sum of distinct leg volumes', async () => {
-    await terminal(t => t.loadSymbol({ symbol: 'NSE:BHEL+NFO:NIFTY29SEP26FUT', exchange: 'NFO' }));
+    // A combination carries no exchange of its own: each leg names its own. The
+    // host folds only an exchange-free request; with one, it asks the history
+    // API for the expression as if it were a single instrument.
+    await terminal(t => t.loadSymbol({ symbol: 'NSE:BHEL+NFO:NIFTY29SEP26FUT', exchange: '' }));
+    await page.waitForFunction(() => window.__compatTerminals.some(t => !t.destroyed && t.sym?.symbol === 'NSE:BHEL+NFO:NIFTY29SEP26FUT'
+      && !t.dataUnavailable() && Object.keys(t.exprFeed?.legBars ?? {}).length === 2));
     const view = await terminal(t => {
       const study = t.chart.addIndicator('volume');
       study.setSettings({ showMA: true, maPeriod: 3 });
