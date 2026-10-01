@@ -165,7 +165,12 @@ const scriptTags = Object.entries(entries).map(([key, input]) => ({
     globals: globalOf,
     banner: key === 'index' ? undefined : loadFirst(key),
     inlineDynamicImports: key === 'widget',
-    sourcemap: true,
+    // A map here carries positions and names, not source text, and a page that
+    // wants them can load the module build, whose maps a bundler also composes
+    // into its own. So the tier scripts ship none: maps for them were half a
+    // megabyte of every install, packed. The base script keeps the map it has
+    // always shipped.
+    sourcemap: key === 'index',
   },
   plugins: [
     typescript({ tsconfig: './tsconfig.build.json' }),
