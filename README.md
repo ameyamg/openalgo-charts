@@ -125,7 +125,7 @@ You can also load the library from a CDN in a plain HTML page:
 ```
 
 Each optional tier has its own file. For example,
-`openalgo-charts.indicators.mjs` registers all 105 built-in indicators. Pin the
+`openalgo-charts.indicators.mjs` registers all 112 built-in indicators. Pin the
 version in production. The base chart needs no stylesheet; the widget adds its
 own styles. See
 [Use from a CDN](https://marketcalls.github.io/openalgo-charts/docs/cdn).
@@ -180,7 +180,7 @@ Unused optional tiers stay out of the base chart download.
 | Import | Contents | Brotli |
 |---|---|---|
 | `openalgo-charts` | Engine, 13 chart types, panes and scales, custom indicator registry, primitives, alerts, replay, comparisons, chart linking, state, feeds, bar cache, trading overlays, CSV and SVG export | 134.69 kB |
-| `openalgo-charts/indicators` | 105 built-in indicators, calculation helpers and helpers for studies that use external data | 40.43 kB |
+| `openalgo-charts/indicators` | 112 built-in indicators, calculation helpers and helpers for studies that use external data | 40.43 kB |
 | `openalgo-charts/draw` | 87 drawing tools + a headless drawing controller, clipboard, settings schema, level palette, freehand geometry and SVG icons | 57.98 kB |
 | `openalgo-charts/transform` | Heikin Ashi, Renko, Range bars, Line Break, Point &amp; Figure, Kagi, and symbol arithmetic (`AAPL/MSFT`) | 4.55 kB |
 | `openalgo-charts/profile` | Volume Profile, Market Profile (TPO) with compact pixel letters, Footprint, order flow | 14.97 kB |
@@ -206,7 +206,7 @@ const macd = chart.addIndicator('macd', { fastPeriod: 8 });   // gets its own pa
 macd.setSettings({ 'macd:width': 2, 'macd:lineStyle': 'dashed' });
 ```
 
-105 built-ins across Trend, Momentum, Volatility and Volume, from the everyday (SMA, EMA, WMA, VWAP, Bollinger Bands, RSI, MACD, Stochastic, ADX/DMI, ATR) through Supertrend, HalfTrend, Ichimoku, Keltner, Donchian, Chandelier Exit and CPR with floor pivots to Connors RSI, Fisher Transform, Woodies CCI, Klinger, Vortex, WaveTrend Pro, Chop Zone and Williams Fractals, with a least-squares family (Least Squares Moving Average, Linear Regression Slope, Standard Error, Standard Error Bands) and a Smoothed Moving Average alongside them, joined in 1.8.3 by the T3 average, the Hull Suite (Hma / Ehma / Thma with a displaced band) and Consolidation and Breakout, which tracks inside-bar ranges and marks the bar that leaves one. Twenty-eight of them draw shaded bands, six emit named buy/sell markers, two recolour the price candles, and Seasonality draws a monthly return heatmap as a table over the chart. The full catalogue with ids and defaults is in the docs.
+112 built-ins across Trend, Momentum, Volatility and Volume, from the everyday (SMA, EMA, WMA, VWAP, Bollinger Bands, RSI, MACD, Stochastic, ADX/DMI, ATR) through Supertrend, HalfTrend, Ichimoku, Keltner, Donchian, Chandelier Exit and CPR with floor pivots to Connors RSI, Fisher Transform, Woodies CCI, Klinger, Vortex, WaveTrend Pro, Chop Zone and Williams Fractals, with a least-squares family (Least Squares Moving Average, Linear Regression Slope, Standard Error, Standard Error Bands) and a Smoothed Moving Average alongside them, joined in 1.8.3 by the T3 average, the Hull Suite (Hma / Ehma / Thma with a displaced band) and Consolidation and Breakout, which tracks inside-bar ranges and marks the bar that leaves one. Twenty-eight of them draw shaded bands, six emit named buy/sell markers, two recolour the price candles, and Seasonality draws a monthly return heatmap as a table over the chart. The full catalogue with ids and defaults is in the docs.
 
 Since 2.4.0 a study can fold the chart's own bars up to a higher timeframe with `securitySeries` (as the bucket stood at each bar, or the last completed one, or with lookahead when reproducing a source that repaints), paint a plot displaced by a number of bars, colour a candle's wick and border apart from its body, pin a marker to the pane edge, put a tooltip on a drawn zone, compute an alert message from the bar that fired, and ask the host for another instrument's bars through `chart.setBarsProvider`. A calculation that throws once it is on the chart is reported on that study's data status rather than thrown into the render loop.
 

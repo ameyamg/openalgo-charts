@@ -61,7 +61,7 @@ explicitly labeled estimates; use the current API types for implementation.
 | Study inputs | `visibleWhen`, `activeWhen` and `inline` on `IndicatorInput`; paired `timeKey` point inputs with an optional on-pane anchor; presentation only, `calc` sees every setting | [Indicators](https://marketcalls.github.io/openalgo-charts/docs/indicators/) |
 | Chart export | Loaded or revealed bars, study values and comparison closes; host delivers the CSV | [Chart data](docs/chart-data-export.md) |
 | Custom studies | Descriptor registry in base; optional built-ins and external-data helpers | [Indicators](https://marketcalls.github.io/openalgo-charts/docs/indicators/) |
-| Rendering cost | Level of detail on by default (`conflate`), plot writes in place on a tick, `calcTail` on sixteen built-ins, repaint scoped to the panes a write changes, optional `IPrimitive.hitBounds`, and render-bench budgets per bar count | [Performance and operations](https://marketcalls.github.io/openalgo-charts/docs/performance-and-operations/) |
+| Rendering cost | Level of detail on by default (`conflate`), plot writes in place on a tick, `calcTail` of their own on twenty-three built-ins, repaint scoped to the panes a write changes, optional `IPrimitive.hitBounds`, and render-bench budgets per bar count | [Performance and operations](https://marketcalls.github.io/openalgo-charts/docs/performance-and-operations/) |
 | Host interface | Canvas containers in base; toolbar, Data/Objects dock, rich symbol search, dialogs and translated controls in the widget | [Widget](docs/widget.md) |
 
 ## Chart internals

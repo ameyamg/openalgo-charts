@@ -22,7 +22,7 @@ Source of truth: `package.json` (`exports`, `sideEffects`, `files`), `rollup.con
 | `openalgo-charts/trade` | `dist/openalgo-charts.trade.mjs` | order/position/bracket primitives, DOM ladder, `OrderEngine`, `TradeController`, `FakeBroker` | 16.69 kB standalone; 151.38 kB limit for base + trade | no |
 | `openalgo-charts/transform` | `dist/openalgo-charts.transform.mjs` | Renko, Range, Point & Figure, Kagi, Line Break, Heikin Ashi, `runTransform`, symbol arithmetic (`parseExpression`, `evaluateExpression`) | 4.55 kB / 4.56 kB | **yes**, registers the `point-figure` and `kagi` chart types |
 | `openalgo-charts/profile` | `dist/openalgo-charts.profile.mjs` | Volume Profile, TPO / Market Profile, Footprint, orderflow | 14.97 kB / 14.98 kB | no |
-| `openalgo-charts/indicators` | `dist/openalgo-charts.indicators.mjs` | 105 Tier-1 built-ins plus the Tier-2 contract | 40.43 kB / 40.43 kB | **yes**, registers all 105 descriptors |
+| `openalgo-charts/indicators` | `dist/openalgo-charts.indicators.mjs` | 112 Tier-1 built-ins plus the Tier-2 contract | 40.43 kB / 40.43 kB | **yes**, registers all 112 descriptors |
 | `openalgo-charts/draw` | `dist/openalgo-charts.draw.mjs` | 87 drawing tools including Anchored VWAP and fixed-range Volume Profile, `DrawingController`, `DrawingLinkGroup`, `DrawingLayer` | 57.98 kB / 57.99 kB | **yes**, registers every built-in tool |
 | `openalgo-charts/webgl` | `dist/openalgo-charts.webgl.mjs` | the WebGL2 series backend, `createWebGL2Backend`, `isWebGL2Supported`, `WebGL2Backend`, `GlDevice` | 6.93 kB / 6.94 kB | **yes**, registers the `webgl2` render backend |
 | `openalgo-charts/widget` | `dist/openalgo-charts.widget.mjs` | `createWidget`, the chrome (top bar, rail, status line, toasts), the dialogs, event details, the keymap, the tokens and stylesheet; the only tier that ships DOM. Imports `openalgo-charts/draw` itself | 121.36 kB / 121.36 kB; first-use parts 18.19 kB / 18.19 kB | **yes**, registers the seven dialog mounts with the shell |
@@ -45,7 +45,7 @@ Every `openalgo-charts/<tier>` specifier is external too, and `output.paths` map
 
 Every registry (chart types, indicators, drawing tools) is a module-level `Map` inside exactly one module instance. `createChart` reads the base bundle's copy. A deep import creates a second module instance with a second, empty `Map`:
 
-- `import 'openalgo-charts/dist/openalgo-charts.indicators.mjs'` alongside `import { createChart } from 'openalgo-charts'` in a bundler that resolves the two to different graph nodes registers 105 descriptors into a Map nobody reads. `chart.addIndicator('macd')` then throws as if the tier were never loaded.
+- `import 'openalgo-charts/dist/openalgo-charts.indicators.mjs'` alongside `import { createChart } from 'openalgo-charts'` in a bundler that resolves the two to different graph nodes registers 112 descriptors into a Map nobody reads. `chart.addIndicator('macd')` then throws as if the tier were never loaded.
 - The same failure for `openalgo-charts/transform` shows up as `series type "point-figure" needs the transform tier, import 'openalgo-charts/transform' first`, on a page that plainly did import it.
 - For `openalgo-charts/draw` you get two `DrawingController` classes and two tool tables; `instanceof` checks and tool ids stop lining up across them.
 
