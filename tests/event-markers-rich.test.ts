@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EventMarkers, type ChartEvent, type EventGroup } from '../src/primitives/event-markers';
+import { EventMarkers, type ChartEvent, type ChartEventDetails, type EventDetailField, type EventGroup } from '../src/primitives/event-markers';
 import type { PrimitiveRenderContext } from '../src/primitives/primitive';
 import { DataLayer } from '../src/model/data-layer';
 import { TimeScale } from '../src/scale/time-scale';
@@ -77,6 +77,20 @@ describe('rich timeline markers', () => {
     const when = new Date(0);
     markers.setEvents([{ ...earnings, details: { summary: 'S', source: when } as unknown as ChartEvent['details'] }]);
     expect((markers.events()[0].details as unknown as { source: Date }).source).toBe(when);
+  });
+
+  it('owns details built without a prototype, which are plain data too', () => {
+    const markers = new EventMarkers();
+    const details = Object.assign(Object.create(null) as ChartEventDetails, {
+      summary: 'Original', fields: [Object.assign(Object.create(null) as EventDetailField, { label: 'Revenue', value: '100' })],
+    });
+    markers.setEvents([{ ...earnings, details }]);
+    details.summary = 'Changed';
+    details.fields![0]!.value = 'Changed';
+    expect(markers.events()[0].details).toEqual({ summary: 'Original', fields: [{ label: 'Revenue', value: '100' }] });
+    const handed = markers.events()[0].details as ChartEventDetails;
+    handed.summary = 'Edited';
+    expect((markers.events()[0].details as ChartEventDetails).summary).toBe('Original');
   });
 
   it.each([NaN, Infinity, -Infinity])('rejects a nonfinite timestamp atomically: %s', time => {
