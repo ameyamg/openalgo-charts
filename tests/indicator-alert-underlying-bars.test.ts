@@ -21,6 +21,7 @@ registerTransformChartTypes();
 const BOX = 0.5;
 const RENKO: SeriesTransformSpec = { type: 'renko', options: { boxSize: BOX } };
 const HEIKIN_ASHI: SeriesTransformSpec = { type: 'heikin-ashi' };
+const KAGI: SeriesTransformSpec = { type: 'kagi', options: { reversal: 2 } };
 const charts: Chart[] = [];
 let sequence = 0;
 afterEach(() => charts.splice(0).forEach(chart => chart.destroy()));
@@ -74,9 +75,8 @@ function risingStudy(frequency?: IndicatorAlertFrequency, states?: IndicatorCalc
  * recompute waits for a read, so every write between two reads lands in one
  * pass. The clock stands half a minute into the newest bar, as it does live.
  */
-function mount(spec: SeriesTransformSpec) {
+function mount(spec: SeriesTransformSpec, bars = history()) {
   const document = fakeDocument();
-  const bars = history();
   const clock = { now: last(bars).time + 90 };
   const chart = new Chart(document.createElement('div'), {
     document, pixelRatio: () => 1, shortcuts: false, timezone: 'Etc/UTC',
@@ -203,6 +203,35 @@ describe('alerts on the bars under a Renko chart', () => {
       expect(summary(h.events)).toEqual([before, before + 1].map(i => ({ index: i, time: bricks[i]!.time, message: `bar ${bricks[i]!.time}` })));
     },
   );
+});
+
+describe('alerts on the bars under a Kagi chart', () => {
+  /** Minute `i` of the history, opening at `open`, with a small wick either side. */
+  const minute = (i: number, open: number, close: number): Bar =>
+    ({ time: 1_700_000_040 + i * 60, open, close, high: Math.max(open, close) + 0.05, low: Math.min(open, close) - 0.05 });
+  // Reversal 2: the line turns down at 104, up at 100, and is still rising at
+  // 105, so its vertices are 104, 100 and 105, the last one forming. The bars
+  // fed after it extend that rise three times, each rising, and the fourth
+  // turns the line down.
+  const closes = [104, 101, 100, 103, 105];
+  const feed = [[105, 106], [106, 107], [107, 107.5], [107.5, 104]].map(([open, close], k) => minute(5 + k, open!, close!));
+
+  it.each([
+    // Each rising bar the forming vertex reads is a bar of the study: one delivery each.
+    ['oncePerBar', [5, 6, 7]],
+    // An omitted frequency judges a new vertex only, and the rise added none.
+    [undefined, []],
+  ] as [IndicatorAlertFrequency | undefined, number[]][])('delivers a %s alert once for each bar the forming vertex reads', (frequency, expected) => {
+    const h = mount(KAGI, closes.map((close, i) => minute(i, closes[i - 1] ?? close, close)));
+    const study = h.chart.addIndicator(risingStudy(frequency), {}, { barSource: 'underlying' });
+    expect(h.chart.primaryBars().map(bar => bar.close)).toEqual([104, 100, 105]);
+    for (const bar of feed) {
+      h.feed(bar);
+      study.values();
+    }
+    expect(h.chart.primaryBars().map(bar => bar.close)).toEqual([104, 100, 107.5, 104]);
+    expect(summary(h.events)).toEqual(expected.map(i => ({ index: 2, time: feed[i - 5]!.time, message: `bar ${feed[i - 5]!.time}` })));
+  });
 });
 
 describe('alerts on the bars under a Heikin Ashi chart', () => {
