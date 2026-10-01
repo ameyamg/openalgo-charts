@@ -119,7 +119,10 @@ a hygiene wave across every tier.
   `OpenAlgoWsFeed` callback no longer stops the feed.
 - Study alerts judge every element a step appends, so a bar that completes several Renko bricks
   (or a burst of host writes) fires for each, where an alert with no frequency stayed silent.
-- PENDING_TRADER_ALERTS
+- Trader alerts judge every element an update appends, each dated at its own element: a
+  bar-close crossing on an earlier Renko brick now fires, and an in-chart Kagi turning point
+  confirms a bar-close alert.
+- PENDING_KAGI_ALERTS
 - OpenScript 0.8.1 reads an alert's message at the right bar on the underlying bars of a
   transform; use it with 2.6.0 when OpenScript studies compute there.
 

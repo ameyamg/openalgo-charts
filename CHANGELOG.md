@@ -487,7 +487,18 @@ Each keeps working until 3.0.0 and has a row in COMPATIBILITY.md.
   alerts already did, and on a custom host without source revisions a pass that
   appends several bars is marked `barState.isNew` and realtime, as one appended
   bar was.
-- {{PENDING: trader-alerts}}
+- **Trader alerts judge every element an update appends.** A source bar that
+  completes several Renko bricks, range bars, line break lines, point and figure
+  columns or Kagi vertices, or a host that writes several bars before it
+  announces them, now has each new element judged in order and dated at its own
+  element, as separate appends would be. An `onBarClose` crossing on an earlier
+  element never fired, and an `onTouch` crossing was dated at the newest
+  element; price, study plot, drawing and named bar condition alerts all met
+  this. An `onBarClose` alert on an in-chart Kagi chart now confirms a turning
+  point once the line reverses past it, which it never did. An `everyTime` alert
+  can deliver several `alert:triggered` events in one update, one per matching
+  element; repeat, cooldown and expiry act as they would for separate appends.
+- {{PENDING: kagi-alerts}}
 - OpenScript 0.8.1 (`openalgo-script` on npm, `openscript` on PyPI) reads an
   alert's message at the bar the chart asks about. Use it with 2.6.0 when
   OpenScript studies compute on the underlying bars of a transform that is not
@@ -521,8 +532,9 @@ Each keeps working until 3.0.0 and has a row in COMPATIBILITY.md.
 
 ### Website
 
-- Transforms: in-chart transforms with a live Renko example and studies on a
-  transformed chart; Chart types points to them.
+- Transforms: in-chart transforms with a live Renko example, studies on a
+  transformed chart and alerts on one; Chart types points to them. Alerts: how
+  an update that appends several bars is judged.
 - Indicators: the seven new built-ins, with ZigZag and 52 Week High/Low sections
   and a live example, the first bar each one prints, and "A built-in on a higher
   timeframe" with its opt-in list and its exclusions; the Examples page adds a
@@ -574,8 +586,10 @@ Each keeps working until 3.0.0 and has a row in COMPATIBILITY.md.
   transformed type drawn, the seven new studies drawn and held to a full
   calculation through live ticks, a higher-timeframe EMA and its select in the
   widget and the reference host, feed symbol search and rich event details, a
-  page of classic scripts, the drawing actions on the rail and the menu, and a
-  transform picked from the grid view's chart type menu and kept over a reload.
+  page of classic scripts, the drawing actions on the rail and the menu, a
+  transform picked from the grid view's chart type menu and kept over a reload,
+  and a price alert that fires once, at the brick a replayed Renko step crossed
+  inside it.
 - **Gates that were prose.** CI fails a browser test that passes only on its
   retry (`failOnFlakyTests`), where it reported the test flaky and went green.
   `npm run verify` checks import cycles (`npm run check:cycles`: none at run

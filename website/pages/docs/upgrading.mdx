@@ -190,12 +190,20 @@ Alerts on a step that adds several elements, what changes:
 - The hooks of a study on the underlying bars (plot colours, markers, background, bar colours,
   levels, an alert's `when` and `message`) receive the elements and the values sampled onto
   them, indexed by element.
-- PENDING_TRADER_ALERTS
+- A trader alert judges each element an update appends in the same way, each dated at its own
+  element: an `onBarClose` crossing on an earlier element now fires, an `onTouch` crossing
+  carries the `time` and `index` of the element that crossed, and an `onBarClose` alert on an
+  in-chart Kagi chart confirms a turning point once the line reverses past it. So an
+  `everyTime` alert can deliver several `alert:triggered` events in one update, one per
+  matching element, each dated at its own element; before, it delivered at most one, dated at
+  the newest.
 
 What to do:
 
 - A host that backfills bars through `series.update` in one frame now has each judged. To keep
   a backfill silent, write it with `setData` or `update(bar, { source: 'history' })`.
+- A listener on `alert:triggered` that expected at most one event per update, or the newest
+  bar's time on every event, reads each event's own `time` and `index`.
 - A custom descriptor that keeps per-bar state from `calc` and reads it by index in a hook reads
   the element index on the underlying bars; on a transform that is not one element per bar, that
   is not the source bar's index.
