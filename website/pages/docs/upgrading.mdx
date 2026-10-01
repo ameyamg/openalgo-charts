@@ -187,6 +187,9 @@ Alerts on a step that adds several elements, what changes:
   `everyUpdate` alert over three coalesced writes that delivered once now delivers once per new
   bar; ticks within one bar still collapse.
 - An alert judged at a bar before the newest receives the bars and values through that bar.
+- A study on the underlying bars judges each underlying bar once, at the first element it
+  completed, so a bar that completes several Renko bricks delivers its alerts once; `oncePerBar`
+  counts underlying bars and `onBarClose` waits for the underlying bar to close.
 - The hooks of a study on the underlying bars (plot colours, markers, background, bar colours,
   levels, an alert's `when` and `message`) receive the elements and the values sampled onto
   them, indexed by element.

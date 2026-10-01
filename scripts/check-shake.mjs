@@ -263,11 +263,12 @@ const BUNDLE = new URL('../dist/openalgo-charts.mjs', import.meta.url).pathname.
 // drag subscribers, plot opacity on colour-by plots, the variant compare, the
 // shared axis tag) add about 385, rich event details 48, and the two study
 // alert fixes (every element a step appends judged, a re-dated forming
-// element kept live) about 225; the shared dash table takes about 190 back.
+// element kept live, an underlying bar judged once) about 370; the shared dash
+// table takes about 190 back.
 // Each figure was measured at its own merge and Brotli layout moves a single
 // step by up to 150 bytes, so they do not sum to the total, which is measured:
-// 89134 bytes (87.04 KiB), up 1349 from 87785; allow 87.05 KiB.
-const LIMIT_BYTES = 87.05 * 1024;
+// 89280 bytes (87.19 KiB), up 1495 from 87785; allow 87.19 KiB.
+const LIMIT_BYTES = 87.19 * 1024;
 
 // Absent from a chart-only build. Each is a string that appears in the adapter
 // source and nowhere in the rendering core.

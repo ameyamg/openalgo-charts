@@ -2,7 +2,7 @@
   {
     "name": "Base engine (chart types + indicator registry + watermark + shortcuts + trading API + alerts)",
     "path": "dist/openalgo-charts.mjs",
-    "limit": "137.37 kB",
+    "limit": "137.54 kB",
     "brotli": true
   },
   {
@@ -11,7 +11,7 @@
       "dist/openalgo-charts.mjs",
       "dist/openalgo-charts.trade.mjs"
     ],
-    "limit": "154.25 kB",
+    "limit": "154.42 kB",
     "brotli": true
   },
   {
@@ -23,7 +23,7 @@
   {
     "name": "Draw tier (87 drawing tools + controller)",
     "path": "dist/openalgo-charts.draw.mjs",
-    "limit": "58.35 kB",
+    "limit": "58.36 kB",
     "brotli": true
   },
   {
@@ -35,7 +35,7 @@
   {
     "name": "Profile tier (Volume Profile/TPO/Market Profile/Footprint/Orderflow)",
     "path": "dist/openalgo-charts.profile.mjs",
-    "limit": "14.85 kB",
+    "limit": "14.94 kB",
     "brotli": true
   },
   {
@@ -47,7 +47,7 @@
   {
     "name": "Widget tier (shell, top bar, drawing rail, status line, dialogs, keymap, styles)",
     "path": "dist/openalgo-charts.widget.mjs",
-    "limit": "123.53 kB",
+    "limit": "123.57 kB",
     "brotli": true
   },
   {
@@ -64,7 +64,7 @@
       "dist/openalgo-charts.indicators.mjs",
       "dist/openalgo-charts.widget.mjs"
     ],
-    "limit": "362.26 kB",
+    "limit": "362.48 kB",
     "brotli": true
   },
   {
@@ -86,7 +86,7 @@
       "dist/openalgo-charts.widget.mjs",
       "dist/openalgo-charts.workspace.mjs"
     ],
-    "limit": "418.75 kB",
+    "limit": "419.06 kB",
     "brotli": true
   },
   {
@@ -102,7 +102,19 @@
       "dist/openalgo-charts.widget.standalone.js",
       "dist/openalgo-charts.workspace.standalone.js"
     ],
-    "limit": "430.57 kB",
+    "limit": "430.91 kB",
+    "brotli": true
+  },
+  {
+    "name": "Base classic script (openalgo-charts.standalone.js)",
+    "path": "dist/openalgo-charts.standalone.js",
+    "limit": "137.65 kB",
+    "brotli": true
+  },
+  {
+    "name": "Widget classic script (widget first-use parts inlined)",
+    "path": "dist/openalgo-charts.widget.standalone.js",
+    "limit": "135.21 kB",
     "brotli": true
   }
 ]

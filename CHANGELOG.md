@@ -477,8 +477,8 @@ Each keeps working until 3.0.0 and has a row in COMPATIBILITY.md.
   own state change, and its error goes to `reportError`. A throw during an auth
   refusal left the socket open.
 - **Study alerts judge every element a step appends.** A source bar that
-  completes several Renko bricks, range bars, line break lines, point and figure
-  columns or Kagi vertices, or several bars a host writes before the chart
+  completes several Renko bricks (the other transforms complete at most one
+  element per source bar), or several bars a host writes before the chart
   recomputes, now has each new bar judged in order, as separate appends would
   be. An alert with no frequency reseeded silently on such a step and never
   fired, and `everyUpdate`, `oncePerBar` and `once` alerts judged only the
@@ -488,8 +488,8 @@ Each keeps working until 3.0.0 and has a row in COMPATIBILITY.md.
   appends several bars is marked `barState.isNew` and realtime, as one appended
   bar was.
 - **Trader alerts judge every element an update appends.** A source bar that
-  completes several Renko bricks, range bars, line break lines, point and figure
-  columns or Kagi vertices, or a host that writes several bars before it
+  completes several Renko bricks (the other transforms complete at most one
+  element per source bar), or a host that writes several bars before it
   announces them, now has each new element judged in order and dated at its own
   element, as separate appends would be. An `onBarClose` crossing on an earlier
   element never fired, and an `onTouch` crossing was dated at the newest
@@ -505,6 +505,29 @@ Each keeps working until 3.0.0 and has a row in COMPATIBILITY.md.
   chart before), the calculation is told the bar is live, and studies keep
   their live tail. A real correction (an earlier element changed, an element
   dated backward, fewer elements) still reseeds silently.
+- **A study on the underlying bars judges each of those bars once.** Its values
+  are read onto the elements at the source bar each one completed on, so when one
+  bar completes several Renko bricks its alerts were delivered once per brick;
+  the bar is now judged once, at the first element it completed, `oncePerBar`
+  counts underlying bars, and `onBarClose` waits for the underlying bar to
+  close. A trader alert on such a study's plot that repeats every time still
+  judges each element.
+- `EventMarkers.setEvents` copies detail records built without a prototype, so a
+  caller's later edits no longer reach an installed event.
+- A custom `calcTail` that does not return every column of its study's result
+  now falls back to a full `calc`, where the columns it left out went blank until
+  the next full recompute.
+- `drawingShortcuts()` lists a custom tool's shortcut whatever its id.
+- `priceBuckets` returns no buckets for a range it cannot step through (a step
+  too small for its prices, an infinite bound, an overflowing price) instead of
+  growing an array until it threw, which took the volume profile, TPO or market
+  profile with it; footprint text contrast reads an `rgb()` channel above 255 as
+  255 again.
+- Reference host: picking a replay start on all charts veils what a
+  transformed chart's longer bar, still open at the picked close, had formed;
+  Mark on chart draws in the pane the candles are in after the price pane moves;
+  the chart data dialog refuses a bound dated before the year 100 and its date
+  fields match its other controls.
 - OpenScript 0.8.1 (`openalgo-script` on npm, `openscript` on PyPI) reads an
   alert's message at the bar the chart asks about. Use it with 2.6.0 when
   OpenScript studies compute on the underlying bars of a transform that is not
@@ -534,10 +557,10 @@ Each keeps working until 3.0.0 and has a row in COMPATIBILITY.md.
 - **Measured against 2.5.10** on the release bench (five runs of each build in
   one session, `benchmarks/releases.json`, the website's Benchmarks page):
   frames are on par. With Canvas 2D at 200,000 bars a pan, a full zoom-out and
-  a ten-study tick measure 2.2, 54.9 and 164.1 ms against 2.3, 54.1 and
-  167.8 ms (each the lowest p95 of its five runs); the ten-study tick at 50,000
-  bars is faster (45.7 against 57.8 ms), and WebGL2 frames are within 4
-  percent.
+  a ten-study tick measure 2.6, 63.6 and 178.3 ms against 2.7, 66.6 and
+  175.7 ms (each the lowest p95 of its five runs); every cell of both renderers
+  is within 6 percent of 2.5.10 but the 10,000-bar Canvas 2D zoom-out, 7.8 to
+  8.6 ms.
 
 ### Website
 
@@ -566,15 +589,15 @@ Each keeps working until 3.0.0 and has a row in COMPATIBILITY.md.
 
 ### Tests
 
-- 11564 unit tests across 511 files and 687 reference host tests across 67
-  files pass. The browser suite runs 2061 cases in three browser engines with
-  two workers: 2045 pass, 13 are skipped, each for an engine limit its spec
+- 11591 unit tests across 512 files and 689 reference host tests across 67
+  files pass. The browser suite runs 2091 cases in three browser engines with
+  two workers: 2075 pass, 13 are skipped, each for an engine limit its spec
   names (device pixel scaling Playwright can change only in Chromium, a
   resampled page in headless Chromium and WebKit, and WebKit's missing
-  device-pixel content box), and 3 timed out under that load and pass when run
-  alone (the legend tip check 5 of 5, two reference host reloads 9 of 9 each).
-  The two reference host tests that reload saved alerts now write the layout
-  before reloading instead of waiting out the autosave debounce. Each fix carries a test that fails with the
+  device-pixel content box), and 3 page loads timed out under that load and
+  pass when run alone (5 of 5 and 3 of 3 each). The two reference host tests
+  that reload saved alerts now write the layout before reloading instead of
+  waiting out the autosave debounce. Each fix carries a test that fails with the
   fix reverted. Against 2.5.10, render parity finds no differing pixel.
 - **A compatibility gate.** `npm run check:compat`, part of `npm run verify`,
   fails a removed export, a removed member or a narrowed type in any tier against
@@ -629,15 +652,16 @@ type was narrowed and no runtime dependency was added; the package gains the
 eight tier script files, which ship without source maps.
 
 Sizes, measured on this release and against 2.5.10 (Brotli, decimal kB): base
-engine 134.69 to 137.37, base plus trade 151.38 to 154.24, indicators 40.43 to
-43.02, draw 57.98 to 58.35, transform 4.55 to 6.07, profile 14.97 to 14.85,
-widget 121.36 to 123.53, the widget's first-use parts 18.19 to 18.24, workspace
-11.53 to 11.73, widget terminal 354.46 to 362.26 and every tier together 409.13
-to 418.74; the trade tier on its own 16.69 to 16.88, and WebGL2 6.93 to 6.97.
-The nine classic-script files, a new row, measure 430.57 together. The
-chart-only import grows from 85.73 to 87.04 KiB (89,134 bytes, up 1,349). The
+engine 134.69 to 137.53, base plus trade 151.38 to 154.41, indicators 40.43 to
+43.02, draw 57.98 to 58.36, transform 4.55 to 6.07, profile 14.97 to 14.94,
+widget 121.36 to 123.57, the widget's first-use parts 18.19 to 18.24, workspace
+11.53 to 11.73, widget terminal 354.46 to 362.48 and every tier together 409.13
+to 419.05; the trade tier on its own 16.69 to 16.88, and WebGL2 6.93 to 6.97.
+The nine classic-script files, a new row, measure 430.90 together, and the base
+and widget classic scripts have rows of their own at 137.65 and 135.21. The
+chart-only import grows from 85.73 to 87.19 KiB (89,280 bytes, up 1,495). The
 package grows from 47 files, 2,098,074 bytes packed and 6,730,951 unpacked to 55
-files, 2,499,689 packed and 8,075,883 unpacked. Each budget is the smallest
+files, 2,501,201 packed and 8,079,719 unpacked. Each budget is the smallest
 two-decimal value that passes.
 
 Where the growth goes, each figure measured from builds of the commits before
@@ -652,16 +676,17 @@ file's layout by about 200. The OpenAlgo feed's search and the copy of rich
 event details take 324 bytes, of which the chart-only import pays only the copy
 (48); the pane index check takes 217, and the base and edge hygiene waves 204,
 raw code going down while Brotli rose with new function boundaries, less 110
-for the shared dash table. The alert fixes take 324: 94 for study alerts that
-judge every element a step appends, 130 for trader alerts that do the same and
-100 for a re-dated forming element that stays live. The indicator tier carries
+for the shared dash table. The alert fixes take 482: 94 for study alerts that
+judge every element a step appends, 130 for trader alerts that do the same, 100
+for a re-dated forming element that stays live and 158 for an underlying bar
+judged once; the review fixes add 42. The indicator tier carries
 the seven new studies (2,424 bytes, about 346 a study) and the timeframe
 wrapper and fold (1,482), less the hygiene wave's one settings reader and
 shared kernels (1,266). The transform tier's growth is the live runs and their
 registration (1,511). The widget tier grew by the chart grid's split over a
 state object (697), the transformed chart types and the Compute on row (597),
 the rich popup, its actions and the feed search (553), and the strict and
-widget hygiene passes (135 each). The chart-only import grows by 1,349 bytes,
+widget hygiene passes (135 each). The chart-only import grows by 1,495 bytes,
 most of it the transform routing and the study bar source a host can call on
 any chart.
 

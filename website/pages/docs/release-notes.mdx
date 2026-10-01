@@ -125,6 +125,11 @@ a hygiene wave across every tier.
 - On an in-chart Kagi or range bar chart, a new bar that only moves the forming vertex or range
   bar forward revises it instead of reading as a correction, so study alerts judge each new
   vertex once and studies keep their live tail.
+- A study on the underlying bars judges each of those bars once, so a bar that completes several
+  Renko bricks no longer delivers its alerts once per brick.
+- `priceBuckets` no longer grows an array until it throws on a range it cannot step through, a
+  custom `calcTail` that leaves out a column falls back to `calc`, and `EventMarkers` copies
+  detail records built without a prototype.
 - OpenScript 0.8.1 reads an alert's message at the right bar on the underlying bars of a
   transform; use it with 2.6.0 when OpenScript studies compute there.
 
@@ -134,12 +139,12 @@ a hygiene wave across every tier.
   the timezone once a day instead of once a bar:
   a daily fold of 7,500 one-minute bars takes 0.43 ms where 2.5.10 took 23.8 ms.
 - Against 2.5.10 on the release bench, frames are on par: Canvas 2D at 200,000 bars pans in
-  2.2 ms, zooms out in 54.9 ms and takes a ten-study tick in 164.1 ms (p95), against 2.3, 54.1
-  and 167.8 ms ([Benchmarks](/benchmarks#260)).
-- Sizes against 2.5.10: base engine 134.69 to 137.37 kB,
-  widget tier 121.36 to 123.53 kB, indicators 40.43 to
+  2.6 ms, zooms out in 63.6 ms and takes a ten-study tick in 178.3 ms (p95), against 2.7, 66.6
+  and 175.7 ms ([Benchmarks](/benchmarks#260)).
+- Sizes against 2.5.10: base engine 134.69 to 137.53 kB,
+  widget tier 121.36 to 123.57 kB, indicators 40.43 to
   43.02 kB, and the chart-only import 85.73 to
-  87.04 KiB. A plain chart carries none of the transform
+  87.19 KiB. A plain chart carries none of the transform
   runs, and the eight tier scripts ship without source maps.
 
 See [Upgrading to 2.6.0](/docs/upgrading) for what a host may notice, and the
