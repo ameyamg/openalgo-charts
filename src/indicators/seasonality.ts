@@ -117,8 +117,8 @@ interface MonthSpan {
  *
  * The month a bar falls in is decided by the half-open UTC interval the current
  * month occupies rather than by resolving the bar's own calendar parts. The two
- * are the same test — a bar is in this month exactly when it lands inside the
- * month's span — but the interval is computed once per month instead of once
+ * are the same test (a bar is in this month exactly when it lands inside the
+ * month's span), but the interval is computed once per month instead of once
  * per bar, and resolving a zone costs an `Intl` lookup where comparing two
  * numbers costs nothing. A history of fifty thousand bars covers a couple of
  * hundred months.

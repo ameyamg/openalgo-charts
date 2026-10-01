@@ -501,12 +501,12 @@ export const ATR: IndicatorDescriptor = withTimeframe(withTail({
 }));
 
 /**
- * CM Williams Vix Fix — a synthetic VIX from price alone.
+ * CM Williams Vix Fix: a synthetic VIX from price alone.
  *
  * `wvf` is how far the current low sits below the highest close of the lookback,
  * as a percentage: a spike means capitulation. The signal is not the level but
- * the *breakout* — `wvf` piercing its own Bollinger upper band, or the top
- * percentile of its recent range — so the histogram carries two colours and the
+ * the *breakout* (`wvf` piercing its own Bollinger upper band, or the top
+ * percentile of its recent range), so the histogram carries two colours and the
  * bands are what it is measured against.
  */
 export const WILLIAMS_VIX_FIX: IndicatorDescriptor = {
@@ -576,7 +576,7 @@ export const WILLIAMS_VIX_FIX: IndicatorDescriptor = {
 
     // Two sets of columns. The plotted ones honour the show toggles, exactly as
     // the reference `sd and upperBand ? ... : na` guards do. The colour rule needs
-    // the real values whether or not they are drawn, so it reads its own pair —
+    // the real values whether or not they are drawn, so it reads its own pair:
     // hiding the band must not silently stop the histogram going lime.
     const upper: (number | null)[] = new Array(n);
     const high: (number | null)[] = new Array(n);

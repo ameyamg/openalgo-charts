@@ -1,7 +1,7 @@
 /**
  * Renko bricks (ARCHITECTURE.md §6A). Each fixed box-size move of the close
  * emits one brick. Renders with the candlestick renderer (brick = a body).
- * Simplified single-box step (no 2× reversal rule) — deterministic and
+ * Simplified single-box step (no 2× reversal rule): deterministic and
  * incremental for live updates.
  */
 import type { Bar } from '../model/bar';

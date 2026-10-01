@@ -1,10 +1,10 @@
 /**
  * Working-order line (ARCHITECTURE.md §9.1). A horizontal dashed line at the
  * order price, colored by side, with a broker-style segmented pill group on the
- * line — [SIDE][qty][TYPE price ±LTP-distance][✕] — and a compact price tag on
+ * line ([SIDE][qty][TYPE price ±LTP-distance][close]) and a compact price tag on
  * the axis. Pending (un-acked) orders draw dimmed; partial fills show progress
  * (3/10). Hover thickens the line (hit-test `order:<id>`, ns-resize cursor for
- * drag-to-modify; the ✕ hit-tests as `order:<id>::close`).
+ * drag-to-modify; the close segment hit-tests as `order:<id>::close`).
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from 'openalgo-charts';
 import type { Order } from './types';
@@ -115,7 +115,7 @@ export class WorkingOrderLine implements IPrimitive {
     const px = rc.priceScale.format(price);
     drawAxisTag(ctx, rc, y, px, { fill: pending ? withAlpha(side, 0.7) : side, text: contrastText(side) }, { height: boxH, padX });
 
-    // segmented pill group on the line: [SIDE][qty][TYPE price ±dist][✕]
+    // segmented pill group on the line: [SIDE][qty][TYPE price ±dist][close]
     const surface = rc.theme.background === 'transparent' ? withAlpha(side, 0.14) : rc.theme.background;
     const surfaceText = rc.theme.background === 'transparent' ? rc.theme.axisText : contrastText(rc.theme.background);
     const border = withAlpha(rc.theme.axisText, active ? 0.75 : 0.5);

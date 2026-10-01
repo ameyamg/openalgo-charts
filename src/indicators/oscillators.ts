@@ -6,7 +6,7 @@
  * on the same symbol in the reference platform has to see the same numbers, including the
  * warmup gap. That constraint is why the reference-compatible helpers in `./calc`
  * exist (`smaSeededEma`, `highestBars`, `percentRank`, ...) and why the base
- * bundle's `ema` is deliberately not used anywhere in this file — it seeds from
+ * bundle's `ema` is deliberately not used anywhere in this file: it seeds from
  * bar 0 rather than from an SMA, so it disagrees with `ema` for the first
  * `length` bars.
  *
@@ -28,14 +28,14 @@ import { zip } from './series';
 const hl2 = (bars: readonly Bar[]): number[] => sourceValues(bars, 'hl2');
 
 /**
- * Aroon — how recently the window made its extreme, as a percentage of the
+ * Aroon: how recently the window made its extreme, as a percentage of the
  * window.
  *
  * `highestbars` answers "how many bars back is the high" as a **negative
  * offset**, `0` meaning the current bar. The whole study is that offset mapped
  * onto 0..100, so the sign convention is load-bearing: a fresh high gives
  * `100 * (0 + length) / length` = exactly 100, and a high at the far edge of
- * the window gives 0. Note the window is `length + 1` bars, not `length` —
+ * the window gives 0. Note the window is `length + 1` bars, not `length`:
  * the reference counts the gaps between bars, not the bars.
  */
 export const AROON: IndicatorDescriptor = {
@@ -65,7 +65,7 @@ export const AROON: IndicatorDescriptor = {
 };
 
 /**
- * Aroon Oscillator — Aroon Up minus Aroon Down, so a single line through zero.
+ * Aroon Oscillator: Aroon Up minus Aroon Down, so a single line through zero.
  *
  * The reference colours the *line* by sign and shades it to a hidden zero plot. This
  * library's line renderer has no per-bar colour (only histogram and column
@@ -105,12 +105,12 @@ export const AROON_OSCILLATOR: IndicatorDescriptor = {
 };
 
 /**
- * Awesome Oscillator — the gap between a fast and a slow midpoint average.
+ * Awesome Oscillator: the gap between a fast and a slow midpoint average.
  *
  * The reference hard-codes 5 and 34 and exposes no inputs, so neither does this: the
  * two periods are the definition of the study, not a preference. Colour is the
- * second half of the signal — green while the histogram is building against the
- * previous bar, red while it is fading — and that is a per-bar decision, hence
+ * second half of the signal (green while the histogram is building against the
+ * previous bar, red while it is fading), and that is a per-bar decision, hence
  * `colorBy` on one column rather than two plots that would each carry holes.
  * On the first printed bar the previous value is `na`, and the reference `na <= 0` is
  * false, so it starts green.
@@ -149,7 +149,7 @@ export const AWESOME_OSCILLATOR: IndicatorDescriptor = {
 };
 
 /**
- * Balance of Power — where the close finished inside the bar's range, relative
+ * Balance of Power: where the close finished inside the bar's range, relative
  * to where it opened. No smoothing and no inputs; the reference is one line.
  *
  * A zero-range bar makes this 0/0, which is `na` in the reference, so it draws a gap
@@ -178,14 +178,14 @@ export const BALANCE_OF_POWER: IndicatorDescriptor = {
 };
 
 /**
- * Chande Momentum Oscillator — the same up/down split as RSI, but as a plain
+ * Chande Momentum Oscillator: the same up/down split as RSI, but as a plain
  * ratio of summed moves instead of a Wilder average, so it swings the full
  * -100..100 rather than compressing towards the middle.
  *
  * `change` is `na` on the first bar, so the first published value is the one
  * backed by `length` real changes: index `length`, not `length - 1`. The sums
  * are therefore taken over the series from bar 1 onwards, which also keeps the
- * running total in `rollingSum` from ever touching a NaN — one NaN would poison
+ * running total in `rollingSum` from ever touching a NaN: one NaN would poison
  * it for the rest of the series, because subtracting it back out when it leaves
  * the window does not undo it.
  */
@@ -226,7 +226,7 @@ export const CHANDE_MOMENTUM: IndicatorDescriptor = {
 };
 
 /**
- * Coppock Curve — a weighted average of two rates of change, one long and one
+ * Coppock Curve: a weighted average of two rates of change, one long and one
  * short. Both `roc` terms must have a value before the WMA has anything to
  * chew on, so the first print lands at `longRoCLength + wmaLength - 1`.
  */
@@ -251,7 +251,7 @@ export const COPPOCK_CURVE: IndicatorDescriptor = {
 };
 
 /**
- * Detrended Price Oscillator — price against a moving average taken from half a
+ * Detrended Price Oscillator: price against a moving average taken from half a
  * cycle ago, which strips the trend and leaves the cycle.
  *
  * `barsback = period/2 + 1` indexes a series, so it has to be a whole number:
@@ -296,14 +296,14 @@ export const DPO: IndicatorDescriptor = {
 };
 
 /**
- * Fisher Transform — squash the position of `hl2` inside its recent range into
+ * Fisher Transform: squash the position of `hl2` inside its recent range into
  * -1..1, then run it through the inverse hyperbolic tangent so the tails
  * stretch out and turning points become sharp.
  *
  * Two recursions, each carrying two thirds / one half of the previous bar. The
  * clamp to +/-0.999 is not cosmetic: at exactly +/-1 the log blows up, so the
  * the reference `round_` is what keeps the series finite. Both recursions read the
- * previous bar through `nz`, so a missing previous value counts as 0 — which
+ * previous bar through `nz`, so a missing previous value counts as 0, which
  * happens on the first printed bar and again after any bar that produced `na`.
  * A flat window (`high_ == low_`) is not one of those: the range divide is
  * floored at 0.001, so the ratio is 0, the bar still prints, and both
@@ -371,7 +371,7 @@ export const FISHER_TRANSFORM: IndicatorDescriptor = {
  * positive run or starts a new one at +1; a fall mirrors that.
  *
  * Exported because it is the one piece of Connors RSI worth testing on its own
- * — the rest is three well-known series averaged.
+ * (the rest is three well-known series averaged).
  *
  * Bar 0 is deliberately -1, not 0. In the reference `close == close[1]` and
  * `close > close[1]` are both false against `na`, so the first bar falls into
@@ -390,7 +390,7 @@ export function connorsStreak(values: readonly number[]): number[] {
 }
 
 /**
- * Connors RSI — the mean of three unrelated readings of the same bar: how
+ * Connors RSI is the mean of three unrelated readings of the same bar: how
  * overbought price is (a short RSI), how stretched the up/down streak is (an
  * RSI of the streak itself), and where today's one-bar return sits in its own
  * recent distribution (a percent rank).
@@ -398,7 +398,7 @@ export function connorsStreak(values: readonly number[]): number[] {
  * Averaging only works if all three have a value, and the percent rank is the
  * slow one: `roc(close, 1)` is `na` on bar 0, and `percentrank` compares
  * the current value against the previous `lenroc` of them, so the first
- * complete reading is at index `lenroc + 1` — 101 on defaults. Running the rank
+ * complete reading is at index `lenroc + 1`: 101 on defaults. Running the rank
  * over the series from bar 1 is what keeps that `na` out of the window.
  */
 export const CONNORS_RSI: IndicatorDescriptor = {

@@ -134,7 +134,7 @@ function volumeIndexDescriptor(
 }
 
 /**
- * Negative Volume Index — the price path compounded across only the bars where
+ * Negative Volume Index: the price path compounded across only the bars where
  * volume fell.
  */
 export const NVI: IndicatorDescriptor = volumeIndexDescriptor(
@@ -145,7 +145,7 @@ export const NVI: IndicatorDescriptor = volumeIndexDescriptor(
 );
 
 /**
- * Positive Volume Index — the same construction as NVI over the complementary
+ * Positive Volume Index: the same construction as NVI over the complementary
  * set of bars, the ones where volume rose.
  */
 export const PVI: IndicatorDescriptor = volumeIndexDescriptor(
@@ -156,7 +156,7 @@ export const PVI: IndicatorDescriptor = volumeIndexDescriptor(
 );
 
 /**
- * Price Volume Trend — a running total of each bar's percentage price change
+ * Price Volume Trend: a running total of each bar's percentage price change
  * weighted by the volume behind it.
  *
  * The distinction from On-Balance Volume is the weighting: OBV adds the whole
@@ -185,7 +185,7 @@ export const PVT: IndicatorDescriptor = {
 };
 
 /**
- * Percentage Volume Oscillator — MACD's construction applied to volume instead
+ * Percentage Volume Oscillator: MACD's construction applied to volume instead
  * of price, expressed as a percentage of the slow average.
  *
  * The percentage normalisation is the point: raw volume differences are not
@@ -266,7 +266,7 @@ export const PVO: IndicatorDescriptor = {
 };
 
 /**
- * Mass Index — how much the range is expanding relative to its own recent
+ * Mass Index: how much the range is expanding relative to its own recent
  * expansion, summed over a window.
  *
  * The ratio of a 9-bar EMA of the range to a 9-bar EMA of *that* is near 1 while
@@ -312,7 +312,7 @@ export const MASS_INDEX: IndicatorDescriptor = {
 };
 
 /**
- * Ulcer Index — the root-mean-square percentage drawdown from the window's
+ * Ulcer Index: the root-mean-square percentage drawdown from the window's
  * running high.
  *
  * Standard deviation treats an upside surprise as risk; this only counts the

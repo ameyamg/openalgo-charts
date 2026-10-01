@@ -1,5 +1,5 @@
 /**
- * Supertrend — matching `openalgo.supertrend(high, low, close, period=10, multiplier=3.0)`,
+ * Supertrend: matching `openalgo.supertrend(high, low, close, period=10, multiplier=3.0)`,
  * which returns (supertrend value, direction). Direction follows the OpenAlgo
  * convention: -1 = uptrend (line is support below price), +1 = downtrend (line
  * is resistance above price). ATR uses Wilder smoothing (see ./atr).
@@ -58,11 +58,11 @@ export function supertrend(bars: readonly Bar[], period = 10, multiplier = 3): S
     let st: number;
     let dir: -1 | 1;
     if (!started || prevST === prevUpper) {
-      // previously following the upper band (downtrend) — flip up if close clears it
+      // previously following the upper band (downtrend): flip up if close clears it
       if (close[i]! <= finalUpper) { st = finalUpper; dir = 1; }
       else { st = finalLower; dir = -1; }
     } else {
-      // previously following the lower band (uptrend) — flip down if close breaks it
+      // previously following the lower band (uptrend): flip down if close breaks it
       if (close[i]! >= finalLower) { st = finalLower; dir = -1; }
       else { st = finalUpper; dir = 1; }
     }

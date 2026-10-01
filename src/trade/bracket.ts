@@ -1,7 +1,7 @@
 /**
  * Bracket group (ARCHITECTURE.md §9.1). SL + Target lines tied to a position,
  * with theme-derived shaded risk/reward zones, rounded "SL/TP @ price" chips at
- * the left edge, and an R:R chip near entry — the core advanced-trade-management
+ * the left edge, and an R:R chip near entry: the core advanced-trade-management
  * visualisation. The SL/TP lines thicken on hover and are draggable (OCO modify).
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from 'openalgo-charts';
@@ -52,7 +52,7 @@ export class BracketGroup implements IPrimitive {
     const yTarget = rc.priceScale.priceToY(target) * dpr;
 
     ctx.save();
-    // risk zone (entry ↔ stop) and reward zone (entry ↔ target), theme-derived
+    // risk zone (entry to stop) and reward zone (entry to target), theme-derived
     ctx.fillStyle = withAlpha(rc.theme.loss, 0.09);
     ctx.fillRect(0, Math.min(yEntry, yStop), xEnd, Math.abs(yStop - yEntry));
     ctx.fillStyle = withAlpha(rc.theme.profit, 0.09);

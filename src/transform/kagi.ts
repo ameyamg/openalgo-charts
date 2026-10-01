@@ -57,7 +57,7 @@ export class KagiTransform implements ISeriesTransform {
     if (this._dir >= 0) {
       if (p > this._ext) {
         this._ext = p;
-        if (p > this._prevShoulder) this._thick = true; // broke prior shoulder → yang
+        if (p > this._prevShoulder) this._thick = true; // broke prior shoulder: yang
       } else if (this._ext - p >= this._reversal) {
         out.push(vertex(bar.time, this._ext, this._thick)); // high turning point
         this._prevShoulder = this._ext;
@@ -67,7 +67,7 @@ export class KagiTransform implements ISeriesTransform {
     } else {
       if (p < this._ext) {
         this._ext = p;
-        if (p < this._prevWaist) this._thick = false; // broke prior waist → yin
+        if (p < this._prevWaist) this._thick = false; // broke prior waist: yin
       } else if (p - this._ext >= this._reversal) {
         out.push(vertex(bar.time, this._ext, this._thick)); // low turning point
         this._prevWaist = this._ext;

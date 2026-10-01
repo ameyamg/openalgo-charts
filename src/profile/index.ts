@@ -1,6 +1,6 @@
 // Profile tier (opt-in: "openalgo-charts/profile").
 // Family C: Volume Profile + TPO (from OHLCV) and Footprint + Orderflow (which
-// need classified trade data — see footprint.ts data-dependency note).
+// need classified trade data: see footprint.ts data-dependency note).
 
 export const PROFILE_TIER = 'profile' as const;
 

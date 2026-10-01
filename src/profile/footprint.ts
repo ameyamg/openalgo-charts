@@ -1,6 +1,6 @@
 /**
  * Footprint & order flow (ARCHITECTURE.md §6A, Family C). Per-candle bid/ask
- * volume at each price, delta, and imbalance — plus cumulative delta and
+ * volume at each price, delta, and imbalance, plus cumulative delta and
  * stacked-imbalance detection across bars.
  *
  * DATA DEPENDENCY (honest): this needs trade-by-trade data classified bid/ask

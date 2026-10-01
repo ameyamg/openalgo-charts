@@ -10,7 +10,7 @@
  * to land on the same pixels as a reference platform plot uses `smaSeededEma` from `./calc`.
  *
  * `atr`, `sessionStartFlags`, and the `sourceValues` helper come from the base
- * bundle (`openalgo-charts`), not deep paths — see the note in
+ * bundle (`openalgo-charts`), not deep paths: see the note in
  * `src/indicators/index.ts`.
  */
 import { atr, sourceValues, sessionStartFlags } from 'openalgo-charts';
@@ -46,7 +46,7 @@ export const MA_CROSS: IndicatorDescriptor = {
     { key: 'long', type: 'line', title: 'Long MA', colorKey: 'longColor', style: { color: '#43a047', lineWidth: 1.5 } },
     // the reference draws this one with `plot.style_cross`: a value only on the bars
     // where the averages actually crossed, `na` everywhere else. A line with
-    // `markersOnly` is the same picture here — the gaps carry no segment.
+    // `markersOnly` is the same picture here: the gaps carry no segment.
     {
       key: 'cross', type: 'line', title: 'Cross', colorKey: 'crossColor',
       style: { markersOnly: true, markerRadius: 3 },
@@ -68,7 +68,7 @@ export const MA_CROSS: IndicatorDescriptor = {
 };
 
 /**
- * McGinley Dynamic — an average whose smoothing constant is itself a function of
+ * McGinley Dynamic: an average whose smoothing constant is itself a function of
  * how far price has run from the line, so it tightens in a trend and loosens in
  * a range instead of lagging by a fixed number of bars.
  *
@@ -116,13 +116,13 @@ export const MCGINLEY_DYNAMIC: IndicatorDescriptor = withTimeframe({
 });
 
 /**
- * Median — the nearest-rank 50th percentile of the source, banded by ATR and
+ * Median: the nearest-rank 50th percentile of the source, banded by ATR and
  * shaded against its own EMA. The percentile is a real member of the window
  * rather than an interpolation (see `percentileNearestRank`), so on an
  * even-length window it is the upper of the two middles, not their mean.
  *
  * The EMA is chained onto the percentile series, so it inherits that series'
- * warmup and first prints at `2 * length - 2` — see `emaOfGapped`.
+ * warmup and first prints at `2 * length - 2`: see `emaOfGapped`.
  */
 export const MEDIAN: IndicatorDescriptor = {
   id: 'median',
@@ -208,7 +208,7 @@ const RIBBON_LANES: readonly { lane: number; length: number; color: string }[] =
 ];
 
 /**
- * Moving Average Ribbon — four independent averages on one overlay, so the
+ * Moving Average Ribbon: four independent averages on one overlay, so the
  * spacing between them reads as trend strength and their order as trend
  * direction. Every lane picks its own kernel, source, and length.
  *
@@ -254,7 +254,7 @@ export const MA_RIBBON: IndicatorDescriptor = {
  *
  * Three chained EMAs, each running over a series that is already `na` for its
  * own warmup, so the first printed bar is `3 * length - 3` and not `length - 1`
- * — see `emaOfGapped`. `close` is hard-coded in the reference, so there is no
+ * (see `emaOfGapped`). `close` is hard-coded in the reference, so there is no
  * source setting.
  *
  * The three terms are added left to right, as the definition writes them, not
@@ -286,7 +286,7 @@ export const TEMA: IndicatorDescriptor = withTimeframe({
 });
 
 /**
- * Time Weighted Average Price — the running mean of the source since the anchor,
+ * Time Weighted Average Price: the running mean of the source since the anchor,
  * the volume-blind sibling of VWAP. Where VWAP asks what the average traded
  * price was, TWAP asks what the average quoted price was, so a thin bar counts
  * for exactly as much as a heavy one.
@@ -343,7 +343,7 @@ export const TWAP: IndicatorDescriptor = {
 };
 
 /**
- * Volume Weighted Moving Average — an SMA whose window is weighted by volume,
+ * Volume Weighted Moving Average: an SMA whose window is weighted by volume,
  * so the bars that actually traded set the level. Identical to an SMA when
  * volume is flat, and `na` on any window whose volume sums to zero, which is
  * what a feed with no volume produces.
@@ -370,7 +370,7 @@ export const VWMA: IndicatorDescriptor = withTimeframe({
 });
 
 /**
- * Williams Alligator — three Wilder-smoothed medians of differing speed, each
+ * Williams Alligator: three Wilder-smoothed medians of differing speed, each
  * displaced forward in time. The lines braid when the market has nothing to say
  * and fan out in order once a trend takes hold.
  *
