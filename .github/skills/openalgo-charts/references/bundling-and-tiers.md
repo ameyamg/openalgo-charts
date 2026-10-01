@@ -156,22 +156,25 @@ An import map is optional here. Because the tier bundles reference `./openalgo-c
 
 ## Size budgets
 
-Enforced by `npm run size` (`size-limit`, Brotli, `@size-limit/file`), from `.size-limit.json`. Current measurements are from 2.5.10 and use decimal kB:
+Enforced by `npm run size` (`size-limit`, Brotli, `@size-limit/file`), from `.size-limit.json`. Current measurements are from 2.6.0 and use decimal kB:
 
 | Budget row | Files measured | Limit | Measured |
 |---|---|---|---|
-| Base engine | `openalgo-charts.mjs` | 134.69 kB | 134.69 kB |
-| Base + trade layer | base + `trade.mjs` | 151.38 kB | 151.38 kB |
-| Indicator tier | `indicators.mjs` | 40.43 kB | 40.43 kB |
-| Draw tier | `draw.mjs` | 57.99 kB | 57.98 kB |
-| Transform tier | `transform.mjs` | 4.56 kB | 4.55 kB |
-| Profile tier | `profile.mjs` | 14.98 kB | 14.97 kB |
-| WebGL2 tier | `webgl.mjs` | 6.94 kB | 6.93 kB |
-| Widget tier | `widget.mjs` | 121.36 kB | 121.36 kB |
-| Widget first-use parts | `widget.<part>-<hash>.mjs`, seven files | 18.19 kB | 18.19 kB |
-| Widget terminal | base + `draw.mjs` + `indicators.mjs` + `widget.mjs` | 354.46 kB | 354.46 kB |
-| Workspace tier | `workspace.mjs` | 11.53 kB | 11.53 kB |
-| Everything | all nine bundles | 409.14 kB | 409.13 kB |
+| Base engine | `openalgo-charts.mjs` | 137.54 kB | 137.53 kB |
+| Base + trade layer | base + `trade.mjs` | 154.42 kB | 154.41 kB |
+| Indicator tier | `indicators.mjs` | 43.02 kB | 43.02 kB |
+| Draw tier | `draw.mjs` | 58.36 kB | 58.36 kB |
+| Transform tier | `transform.mjs` | 6.07 kB | 6.07 kB |
+| Profile tier | `profile.mjs` | 14.94 kB | 14.94 kB |
+| WebGL2 tier | `webgl.mjs` | 6.97 kB | 6.97 kB |
+| Widget tier | `widget.mjs` | 123.57 kB | 123.57 kB |
+| Widget first-use parts | `widget.<part>-<hash>.mjs`, seven files | 18.24 kB | 18.24 kB |
+| Widget terminal | base + `draw.mjs` + `indicators.mjs` + `widget.mjs` | 362.48 kB | 362.48 kB |
+| Workspace tier | `workspace.mjs` | 11.73 kB | 11.73 kB |
+| Everything | all nine bundles | 419.06 kB | 419.05 kB |
+| Script tags | the nine classic-script files | 430.91 kB | 430.90 kB |
+| Base classic script | `openalgo-charts.standalone.js` | 137.65 kB | 137.65 kB |
+| Widget classic script | `widget.standalone.js`, first-use parts inlined | 135.21 kB | 135.21 kB |
 
 Version 2.1.2 raises the full-package budget from 187 KB to 188 KB for the feed, indicator lifecycle and recovery fixes. Version 2.1.3 raises base, widget and widget-terminal ceilings to 68 KB, 37 KB and 157 KB for navigation controls, and the chart-only tree-shaking ceiling to 45 KiB. Version 2.1.6 raises the base, base-plus-trade, widget-terminal and total ceilings
 to 73 KB, 81 KB, 165 KB and 197 KB for shared loading, resilient caching and
