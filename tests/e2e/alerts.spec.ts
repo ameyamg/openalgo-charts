@@ -275,3 +275,88 @@ for (const finish of ['trigger', 'expire']) {
     expect(result.visible).toBe(false);
   });
 }
+
+test('a price alert fires once, at the brick a replayed Renko step crossed inside it', async ({ page }, info) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.setViewportSize({ width: 1100, height: 620 });
+  await page.goto('/tests/e2e/transform-live-fixture.html?type=renko&study=none');
+  await page.waitForFunction(() => (window as any).__ready);
+  const run = await page.evaluate(async () => {
+    const { chart, series, lib } = (window as any).__probe;
+    const bricksOf = (bars: any[]) => {
+      const transform = lib.getSeriesTransform('renko').create({ boxSize: 2 });
+      transform.setData(bars);
+      return transform.elements() as any[];
+    };
+    // Seven more hours replayed bar by bar, as a feed delivers them: a seeded
+    // continuation of the session's random walk. A bar that moves more than a
+    // box completes several bricks in one update.
+    const history = series.getData();
+    let seed = 20261001;
+    const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const gauss = () => Math.sqrt(-2 * Math.log(random() || 1e-9)) * Math.cos(2 * Math.PI * random());
+    const replay: any[] = [];
+    for (let i = 0, last = history.at(-1); i < 84; i++) {
+      const open = last.close;
+      const close = Math.round(open * (1 + gauss() * 0.0019) * 20) / 20;
+      last = { time: last.time + 300, open, close, high: Math.max(open, close), low: Math.min(open, close), volume: 50000 };
+      replay.push(last);
+    }
+    // Where each replayed bar's bricks end, worked out ahead, so the level can
+    // sit inside a step of two or more bricks with no crossing before it.
+    const start = chart.primaryBars().length;
+    const ends = replay.map((_, i) => bricksOf([...history, ...replay.slice(0, i + 1)]).length);
+    const bricks = bricksOf([...history, ...replay]);
+    const crosses = (level: number, j: number) => (bricks[j - 1].close - level) * (bricks[j].close - level) < 0;
+    let target = -1, level = NaN;
+    for (let b = start; b < bricks.length - 1 && target < 0; b++) {
+      const step = ends.findIndex(end => end > b);
+      if (b === ends[step] - 1) continue; // the last brick of its step
+      const candidate = (bricks[b - 1].close + bricks[b].close) / 2;
+      let clear = true;
+      for (let j = start - 1; j < b; j++) if (crosses(candidate, j)) clear = false;
+      if (clear) { target = b; level = candidate; }
+    }
+    const alerts = new lib.AlertController(chart);
+    const close = alerts.add({ title: 'Brick close', source: { kind: 'price', price: level }, condition: 'crossing' });
+    const touch = alerts.add({ title: 'Brick touch', source: { kind: 'price', price: level }, condition: 'crossing', policy: 'onTouch' });
+    const every = alerts.add({ title: 'Every brick close', source: { kind: 'price', price: level }, condition: 'crossing', repeat: 'everyTime' });
+    const fired: { id: string; time: number; index: number; price: number }[] = [];
+    chart.on('alert:triggered', (e: any) => fired.push({ id: e.alertId, time: e.time, index: e.index, price: e.price }));
+    for (const bar of replay) {
+      series.update(bar);
+      await (window as any).__frame();
+    }
+    const drawn = chart.primaryBars();
+    const at = (id: string) => fired.filter(e => e.id === id).map(({ time, index, price }) => ({ time, index, price }));
+    series.createMarkers().setMarkers([...at(close.id), ...at(touch.id)].slice(0, 1).map(e => ({
+      time: e.time, position: drawn[e.index].close > level ? 'belowBar' : 'aboveBar',
+      shape: drawn[e.index].close > level ? 'arrowUp' : 'arrowDown', size: 'medium', color: '#f5a623', text: 'Alert',
+    })));
+    chart.setVisibleLogicalRange({ from: target - 30, to: target + 20 });
+    await (window as any).__frame();
+    return {
+      start, target, level, count: drawn.length,
+      same: JSON.stringify(drawn.map((b: any) => [b.time, b.close])) === JSON.stringify(bricks.map(b => [b.time, b.close])),
+      stepOfTarget: ends.findIndex(end => end > target),
+      stepSize: (() => { const s = ends.findIndex(end => end > target); return ends[s] - (s === 0 ? start : ends[s - 1]); })(),
+      brick: { time: bricks[target]?.time, close: bricks[target]?.close },
+      close: at(close.id), touch: at(touch.id), every: at(every.id).map(e => e.index),
+      expectedEvery: bricks.map((_, j) => j).filter(j => j >= start - 1 && j < bricks.length - 1 && crosses(level, j)),
+      states: alerts.list().map((alert: any) => alert.state),
+    };
+  });
+  expect(run.same).toBe(true);
+  expect(run.target).toBeGreaterThanOrEqual(run.start);
+  // The crossing brick formed with at least one more brick in the same update.
+  expect(run.stepSize).toBeGreaterThanOrEqual(2);
+  expect(run.close).toEqual([{ time: run.brick.time, index: run.target, price: run.brick.close }]);
+  expect(run.touch).toEqual([{ time: run.brick.time, index: run.target, price: run.level }]);
+  expect(run.states).toEqual(['triggered', 'triggered', 'armed']);
+  // Every closed brick across the level is confirmed, the first at the target.
+  expect(run.every).toEqual(run.expectedEvery);
+  expect(run.every[0]).toBe(run.target);
+  await page.screenshot({ path: info.outputPath('renko-replay-price-alert.png'), animations: 'disabled' });
+  expect(errors).toEqual([]);
+});
