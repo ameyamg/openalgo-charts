@@ -65,6 +65,14 @@ describe('Volume Profile', () => {
     expect(vaVol).toBeGreaterThanOrEqual(vp.totalVolume * 0.7 - 1e-6);
   });
 
+  // What the documentation says of an unclamped fraction, case by case.
+  it('takes every row above 1, stops at all the volume at 1, and has the POC alone without volume', () => {
+    const bars = [bar(0, 100, 100, 100, 100, 10), bar(60, 99, 101, 99, 100, 0)];
+    expect(computeVolumeProfile(bars, 1, 70)).toMatchObject({ poc: 100, vah: 101, val: 99 });
+    expect(computeVolumeProfile(bars, 1, 1)).toMatchObject({ poc: 100, vah: 100, val: 100 });
+    expect(computeVolumeProfile([bar(0, 99, 101, 99, 100, 0)], 1, 70)).toMatchObject({ poc: 101, vah: 101, val: 101, totalVolume: 0 });
+  });
+
   it('handles empty input', () => {
     const vp = computeVolumeProfile([], 0.05);
     expect(vp.buckets).toHaveLength(0);
