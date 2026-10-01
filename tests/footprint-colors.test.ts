@@ -114,6 +114,12 @@ describe('readable footprint text colors', () => {
     expect(contrast(output, '#ffffff')).toBeGreaterThanOrEqual(4.5);
   });
 
+  // rgb() accepts any channel, and a canvas paints one above 255 as 255.
+  it.each(['#555555', '#80ff80', '#ffffff', 'rgb(0,300,0)'])('reads a channel above 255 as the 255 it paints, for %s', preferred => {
+    expect(readableTextColor(preferred, 'rgb(300,0,0)')).toBe(readableTextColor(preferred, 'rgb(255,0,0)'));
+    expect(readableTextColor(preferred, 'rgb(0,0,999)')).toBe(readableTextColor(preferred, 'rgb(0,0,255)'));
+  });
+
   it('preserves caller preference when the background cannot be resolved', () => {
     expect(readableTextColor('#ffffff', 'var(--background)')).toBe('#ffffff');
   });
