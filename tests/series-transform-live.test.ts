@@ -95,6 +95,29 @@ describe('live transform runs', () => {
     }
   });
 
+  // The alert documentation says one source bar can add several elements on
+  // Renko alone; each other transform completes at most one element per bar.
+  it('adds several elements for one new source bar on Renko only, gaps included', () => {
+    // Every twenty-fifth bar gaps by a tenth, up or down, the move that completes most at once.
+    let shift = 0;
+    const bars = walk(600).map((bar, i) => {
+      if (i % 25 === 0) shift += (i % 50 === 0 ? 1 : -1) * bar.close * 0.1;
+      return { ...bar, open: bar.open + shift, high: bar.high + shift, low: bar.low + shift, close: bar.close + shift };
+    });
+    for (const [type, options] of CASES) {
+      const run = getSeriesTransform(type).create(options);
+      run.setData(bars.slice(0, 1));
+      let most = 0;
+      for (const bar of bars.slice(1)) {
+        const before = run.elements().length;
+        run.update(bar);
+        most = Math.max(most, run.elements().length - before);
+      }
+      if (type === 'renko') expect(most, type).toBeGreaterThan(1);
+      else expect(most, `${type} ${JSON.stringify(options)}`).toBeLessThanOrEqual(1);
+    }
+  });
+
   it('keeps every element strictly increasing in time, so each owns one logical index', () => {
     for (const [type, options] of CASES) {
       const run = getSeriesTransform(type).create(options);

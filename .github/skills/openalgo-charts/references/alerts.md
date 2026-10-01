@@ -134,8 +134,8 @@ loaded through setData or prependData. `AlertRepeat` defaults to once.
 
 One `data:update` that appends several bars after the tail an alert
 last saw is judged bar by bar, every alert at one bar before any moves to the next,
-exactly as separate appends would be: a source bar completing several Renko bricks,
-range bars, line break lines, point and figure columns or Kagi vertices, or an
+exactly as separate appends would be: a source bar completing several Renko bricks
+(the other transforms add at most one element per source bar), or an
 `AlertChartHost` that writes several bars before emitting. Each bar the update
 closes is confirmed in order, and each match carries its own bar's `time` and
 `index`. The newest stays forming until a newer bar follows it. A tail revised in

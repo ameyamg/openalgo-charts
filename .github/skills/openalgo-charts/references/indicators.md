@@ -1237,8 +1237,8 @@ Clock closure waits for an eligible live source calculation; there is no alert
 polling timer. Settings, repaint and asynchronous refresh alone cannot close it.
 
 A calculation that appends several bars after an unchanged prefix (ticks a
-frame batched, or one source bar completing several Renko bricks, range bars, line
-break lines, point and figure columns or Kagi vertices) judges each new bar in order,
+frame batched, or one source bar completing several Renko bricks; the other
+transforms add at most one element per source bar) judges each new bar in order,
 exactly as separate appends would, for every frequency and the omitted one. The
 newest may still be forming, so `onBarClose` judges it only once it closes. A
 calculation that changed an earlier bar (a reload, a correction, a symbol or interval
