@@ -58,7 +58,7 @@ export interface PartSlot { waiting: object | null }
  * arrived a press opens it at once; until then the answer comes later, and
  * by then the user may have asked for something else or moved on.
  */
-export interface PartAsk {
+interface PartAsk {
   readonly slot: PartSlot;
   readonly doc: Document;
   /** The control that asked: pressing it again is asking again, not moving on. */

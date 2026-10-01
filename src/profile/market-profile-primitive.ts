@@ -19,6 +19,7 @@ import type { IPrimitive, PrimitiveHit, PrimitiveHost, PrimitiveRenderContext, Z
 import type { MarketProfileResult, MarketProfileSessionResult, MarketProfileLevel } from './market-profile';
 import { nakedLevels, profileSessionIdentity, rowOf } from './market-profile';
 import { drawCompactText } from './compact-text';
+import { sessionsPriceRange } from './profile-model';
 
 /**
  * `auto` crossfades letters into bricks as rows get short (the default).
@@ -222,15 +223,7 @@ export class MarketProfile implements IPrimitive {
   public options(): MarketProfilePrimitiveOptions { return this._opts; }
 
   public autoscaleInfo(): { min: number; max: number } | null {
-    if (this._result === null) return null;
-    let min = Infinity;
-    let max = -Infinity;
-    for (const s of this._result.sessions) {
-      if (s.levels.length === 0) continue;
-      max = Math.max(max, s.levels[0]!.price);
-      min = Math.min(min, s.levels[s.levels.length - 1]!.price);
-    }
-    return Number.isFinite(min) ? { min, max } : null;
+    return this._result === null ? null : sessionsPriceRange(this._result.sessions);
   }
 
   public setData(result: MarketProfileResult): void {

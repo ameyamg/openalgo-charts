@@ -2,7 +2,7 @@
 import { isPriceScaleId } from '../model/price-axis-layout';
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
-export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 
 export class WorkspaceDocumentError extends Error {
   constructor(message: string) { super(message); this.name = 'WorkspaceDocumentError'; }

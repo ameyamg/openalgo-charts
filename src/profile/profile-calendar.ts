@@ -37,7 +37,7 @@ export function minuteOfDay(utcSeconds: number, zone: string): number {
 }
 
 /** Whole days since 1970-01-01 on `zone`'s calendar. */
-export function dayIndexIn(utcSeconds: number, zone: string): number {
+function dayIndexIn(utcSeconds: number, zone: string): number {
   if (zone === DEFAULT_TIMEZONE) return Math.floor((utcSeconds + IST_OFFSET_SECONDS) / DAY_SECONDS);
   return zonedDayIndex(utcSeconds, zone);
 }

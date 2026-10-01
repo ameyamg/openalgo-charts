@@ -52,7 +52,7 @@ import {
 } from '../candles';
 import { barGeometry } from '../bars';
 import {
-  project, projectSteps, trimToView, dashPeriod, polyline, lineDash, pointColors, CLOSE, HIGH, LOW, EDGE_PAD, HLC_AREA_BAND_COLOR,
+  project, projectSteps, trimToView, dashPeriod, polyline, dashFor, pointColors, CLOSE, HIGH, LOW, EDGE_PAD, HLC_AREA_BAND_COLOR,
   type Polyline,
 } from '../line';
 import { VertexBatch } from './batch';
@@ -512,7 +512,7 @@ function emitLine(
   const fill = style.color ?? '#4f8cff';
   const lineWidth = style.lineWidth ?? 1.5;
   const hw = Math.max(1, lineWidth * dpr) / 2;
-  const dash = lineDash(style, dpr);
+  const dash = dashFor(style.lineStyle, dpr);
   trimToView(pts, items, style.step === true, dashPeriod(dash, dpr), EDGE_PAD + lineWidth);
   if (!style.markersOnly) emitPolyline(batch, pts, dpr, hw, fill, cols, dash, color);
   if (style.markers || style.markersOnly) {

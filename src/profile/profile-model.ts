@@ -48,6 +48,21 @@ export interface FootprintBar {
   tradeCount?: number;
 }
 
+/**
+ * The prices a run of sessions covers, each session's levels sorted high to
+ * low, or null when none has a level: what a session profile autoscales to.
+ */
+export function sessionsPriceRange(sessions: readonly { readonly levels: readonly { readonly price: number }[] }[]): { min: number; max: number } | null {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const s of sessions) {
+    if (s.levels.length === 0) continue;
+    max = Math.max(max, s.levels[0]!.price);
+    min = Math.min(min, s.levels[s.levels.length - 1]!.price);
+  }
+  return Number.isFinite(min) ? { min, max } : null;
+}
+
 /** Bucket a price to the tick grid. */
 export function bucketPrice(price: number, step: number): number {
   return Math.round((Math.round(price / step) * step) * 1e8) / 1e8;

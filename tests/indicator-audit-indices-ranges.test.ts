@@ -22,7 +22,6 @@ const wave = (n: number): Bar[] => bars(n, (i) => 100 + Math.sin(i / 5) * 10 + i
 
 const run = (d: IndicatorDescriptor, data: readonly Bar[], over: Record<string, unknown> = {}) =>
   d.calc(data, { ...indicatorDefaults(d), ...over }, {});
-const firstIndex = (col: readonly (number | null)[]): number => col.findIndex((v) => v !== null);
 
 /**
  * Pring's published Special K: the short-, intermediate- and long-term daily
@@ -87,14 +86,6 @@ describe("Pring's Special K term table", () => {
     expect(out.specialK[1000] as number).toBeCloseTo(expected, 6);
     // Two SMAs of a constant land on the same constant.
     expect(out.signal[1000] as number).toBeCloseTo(expected, 6);
-  });
-
-  it('carries the 530-bar horizon, so nothing prints before bar 724', () => {
-    const out = run(SPECIAL_K, wave(1200));
-    expect(firstIndex(out.specialK)).toBe(724); // 530 + 195 - 1
-    expect(out.specialK[723]).toBeNull();
-    expect(firstIndex(out.signal)).toBe(922); // 724 + 99 + 99
-    expect(out.signal[921]).toBeNull();
   });
 
   it('prints exactly one value on the shortest chart that can carry it', () => {

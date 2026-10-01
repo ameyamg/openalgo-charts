@@ -12,5 +12,5 @@ export type { GlSurface } from './backend';
 export { VertexBatch, FLOATS_PER_VERTEX, VERTICES_PER_QUAD, INDICES_PER_QUAD, SOLID } from './batch';
 export { ColorCache, parsePremultiplied, lerpPremultiplied, normaliseWith2d, TRANSPARENT } from './color';
 export type { PremultipliedRgba } from './color';
-export { VERTEX_SHADER, FRAGMENT_SHADER, compileShapeProgram } from './shaders';
+export { compileShapeProgram } from './shaders';
 export type { ShapeProgram } from './shaders';

@@ -14,7 +14,7 @@
  * `PrimitiveRenderContext` has. Declared here rather than imported so this
  * module stays out of the import loop the primitive types sit in.
  */
-export interface AxisTagContext {
+interface AxisTagContext {
   dpr: number;
   plotWidth: number;
   plotHeight: number;

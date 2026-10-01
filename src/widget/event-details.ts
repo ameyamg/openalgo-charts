@@ -3,6 +3,8 @@ import type { ChartEvent, ChartEventDetails, EventDetailSpan, EventMarkerDetails
 import { createOverlayStack, h, type OverlayStack } from './context';
 import { widgetText, type WidgetTranslationOptions } from './localization';
 import { safeNewsUrl } from './news-panel';
+// A pure helper: importing it by path inlines the event layer's copy and nothing else of it.
+import { copyEvent } from '../primitives/event-markers';
 
 export type EventDetailsLoader = (
   event: ChartEvent,
@@ -84,17 +86,6 @@ export function eventDetailsLabels(translation: WidgetTranslationOptions): Event
     loading: widgetText(translation, 'Loading details...'), empty: widgetText(translation, 'No additional details.'),
     error: widgetText(translation, 'Unable to load additional details.'),
   };
-}
-
-/** The event markers' copy: arrays and plain objects all the way down, anything else shared. */
-function copyData<T>(value: T): T {
-  if (Array.isArray(value)) return value.map(copyData) as T;
-  if (value === null || typeof value !== 'object' || Object.getPrototypeOf(value) !== Object.prototype) return value;
-  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copyData(v)])) as T;
-}
-
-function copyEvent(event: ChartEvent): ChartEvent {
-  return { ...event, ...(typeof event.details === 'object' ? { details: copyData(event.details) } : {}) };
 }
 
 /**

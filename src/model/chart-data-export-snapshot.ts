@@ -4,10 +4,10 @@ import { getIndicator } from './indicator-registry';
 import { replayWindow } from './replay-window';
 import type { ChartDataColumn, ChartDataCsvOptions, ChartDataCsvRange, ChartDataProjectionContext } from './chart-data-export-types';
 
-export const priceFields = ['open', 'high', 'low', 'close', 'volume', 'oi'] as const;
+const priceFields = ['open', 'high', 'low', 'close', 'volume', 'oi'] as const;
 const allFields = ['time', ...priceFields] as const;
 const candleFields = ['open', 'high', 'low', 'close'] as const;
-export const finiteCsvValue = (value: unknown): number | undefined => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+const finiteCsvValue = (value: unknown): number | undefined => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 export const withinCsvRange = (time: number, range: ChartDataCsvRange): boolean =>
   (range.from === undefined || time >= range.from) && (range.to === undefined || time <= range.to);
 

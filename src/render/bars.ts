@@ -17,7 +17,7 @@ export interface BarDrawItem {
   prevClose?: number;
 }
 
-export interface BarGeometry {
+interface BarGeometry {
   cx: number;
   yOpen: number;
   yClose: number;

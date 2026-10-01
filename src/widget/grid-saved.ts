@@ -34,7 +34,7 @@ import { errorText, widgetText } from './localization';
 import type { WidgetChartState } from './widget';
 
 /** What the saved layouts read from the grid. */
-export interface GridSavedHost {
+interface GridSavedHost {
   readonly grid: ChartGrid;
   /** The grid's own persisted desk has landed. */
   readonly ready: Promise<void>;

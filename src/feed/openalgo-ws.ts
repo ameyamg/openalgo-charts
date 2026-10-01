@@ -130,16 +130,16 @@ export interface LtpEvent {
 }
 
 /** Pure: the auth handshake message that must precede any subscription. */
-export function formatAuthenticate(apiKey: string): string {
+function formatAuthenticate(apiKey: string): string {
   return JSON.stringify({ action: 'authenticate', api_key: apiKey });
 }
 
 /** Pure: subscribe to the account-level order-update stream (no symbols/modes). */
-export function formatSubscribeOrders(): string {
+function formatSubscribeOrders(): string {
   return JSON.stringify({ action: 'subscribe_orders' });
 }
 
-export function formatUnsubscribeOrders(): string {
+function formatUnsubscribeOrders(): string {
   return JSON.stringify({ action: 'unsubscribe_orders' });
 }
 
@@ -273,7 +273,7 @@ function marketTimeSec(data: RawData): number {
 }
 
 /** True if the inbound frame is a heartbeat ping (plain "ping" or { type:'ping' }). */
-export function isPing(raw: unknown): boolean {
+function isPing(raw: unknown): boolean {
   if (raw === 'ping') return true;
   return typeof raw === 'object' && raw !== null && (raw as { type?: string }).type === 'ping';
 }

@@ -51,7 +51,7 @@ export function smooth(st: Seeded, x: number, period: number, exponential: boole
 }
 
 /** `observedSmoothing` in ./calc under the propagate policy, as `smaSeededEma` runs it on a study output. */
-export interface Observed { count: number; seed: number[]; value: number }
+interface Observed { count: number; seed: number[]; value: number }
 
 export const observed = (): Observed => ({ count: 0, seed: [], value: NaN });
 
@@ -80,7 +80,7 @@ export function trueRangeAt(bars: readonly Bar[], i: number): number {
 }
 
 /** `atr` in the base bundle: Wilder's average, seeded on `period` consecutive finite true ranges. */
-export interface Wilder { a: number; run: number; recent: number[] }
+interface Wilder { a: number; run: number; recent: number[] }
 
 export const wilder = (): Wilder => ({ a: NaN, run: 0, recent: [] });
 
@@ -111,7 +111,7 @@ export function atrStep(st: Wilder, t: number, period: number): number {
 }
 
 /** `rsi` in the base bundle: Wilder gains and losses, each leg seeded on its own. */
-export interface Rsi {
+interface Rsi {
   primed: boolean; last: number; gain: number; loss: number;
   gainSeeded: boolean; lossSeeded: boolean; run: number; recent: number[];
 }
@@ -167,7 +167,7 @@ export function rsiStep(st: Rsi, x: number, period: number): number {
 }
 
 /** `supertrend` in the base bundle: the band a bar ends on, and which side it is. */
-export interface Supertrend { atr: Wilder; upper: number; lower: number; st: number; close: number; started: boolean }
+interface Supertrend { atr: Wilder; upper: number; lower: number; st: number; close: number; started: boolean }
 
 export const supertrendState = (): Supertrend => ({
   atr: wilder(), upper: NaN, lower: NaN, st: NaN, close: NaN, started: false,
@@ -201,7 +201,7 @@ export function supertrendStep(
 }
 
 /** The parabolic stop and reverse in ./trend, one complete bar at a time. */
-export interface Sar {
+interface Sar {
   prev: Bar | null; prev2: Bar | null; rising: boolean; sar: number; ep: number; af: number;
 }
 

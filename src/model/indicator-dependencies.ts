@@ -8,14 +8,14 @@ export interface IndicatorDependencyNode {
   settings: Readonly<IndicatorSettings>;
 }
 
-export interface IndicatorDependencyEdge {
+interface IndicatorDependencyEdge {
   inputKey: string;
   source: IndicatorStudySource;
   /** False retains a reference to a producer that is not currently attached. */
   available: boolean;
 }
 
-export interface IndicatorDependencyPlan {
+interface IndicatorDependencyPlan {
   order: readonly string[];
   dependencies: ReadonlyMap<string, readonly IndicatorDependencyEdge[]>;
 }

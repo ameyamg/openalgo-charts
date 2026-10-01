@@ -17,7 +17,7 @@ export const DEFAULT_HISTOGRAM_STYLE: HistogramStyle = {
   base: 0,
 };
 
-export interface HistogramDrawItem {
+interface HistogramDrawItem {
   x: number; // bar center, media px
   bar: Bar;
 }

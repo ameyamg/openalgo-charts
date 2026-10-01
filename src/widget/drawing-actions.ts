@@ -22,7 +22,7 @@ import { widgetText } from './localization';
 export type DrawingAction = 'lock' | 'visible' | 'front' | 'back' | 'above' | 'behind' | 'duplicate' | 'delete';
 
 /** What the controls for a selection show, read by the one set of rules. */
-export interface DrawingActionState {
+interface DrawingActionState {
   /** The drawings an edit reaches: the selection without its read-only ones. */
   readonly editable: readonly string[];
   /** Why a selection has nothing to edit, else null. Null for an empty selection. */

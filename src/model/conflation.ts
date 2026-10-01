@@ -169,7 +169,7 @@ export function lodActive(barSpacing: number, dpr: number, columnWidth: number):
  * from frame to frame rather than allocated per column. What `emit` receives
  * is valid until the next `begin`.
  */
-export interface LodColumns {
+interface LodColumns {
   /** Start one series' pass for a frame, in columns `lodColumnWidth(dpr, factor, kind)` wide. */
   begin(kind: LodKind, dpr: number, factor: number): void;
   /** Feed the next visible bar, centred at media-px `x`. */

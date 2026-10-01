@@ -214,12 +214,7 @@ export function trimToView(
   }
 }
 
-/** The line renderer's own dash table (it does not share the grid's). */
-export function lineDash(style: SeriesStyle, dpr: number): number[] {
-  return dashFor(style.lineStyle, dpr);
-}
-
-/** The dash pattern of a named line style in device px: the one table series and study drawings share. */
+/** The dash pattern of a named line style in device px: the one table series lines, study drawings and drawing tools share (not the grid's). */
 export function dashFor(lineStyle: SeriesStyle['lineStyle'], dpr: number): number[] {
   return lineStyle === 'dashed' ? [6 * dpr, 4 * dpr] : lineStyle === 'dotted' ? [1 * dpr, 3 * dpr] : [];
 }
@@ -333,7 +328,7 @@ export function drawLine(
   if (style.step) projectSteps(base, pts = STEPS);
   const cols = pointColors(items, style.step === true);
   const lineWidth = style.lineWidth ?? 1.5;
-  const dash = lineDash(style, dpr);
+  const dash = dashFor(style.lineStyle, dpr);
   trimToView(pts, items, style.step === true, dashPeriod(dash, dpr), EDGE_PAD + lineWidth);
   ctx.save();
   ctx.strokeStyle = style.color ?? '#4f8cff';

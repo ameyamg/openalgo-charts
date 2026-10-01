@@ -4,9 +4,11 @@
  * layout a shape label and the text tool share. Internal to the tier.
  */
 import type { PrimitiveRenderContext } from 'openalgo-charts';
-import type { AnchoredTool, DrawContext, Drawing, DrawingStyle, DrawingText, ScreenPoint } from './types';
+import type { AnchoredTool, DrawContext, Drawing, DrawingText, ScreenPoint } from './types';
 import { rectOf } from './geometry';
 import { roundRectPath, contrastText } from '../render/pill';
+// The one dash table, which series lines and study drawings read too: a pure function, by path.
+import { dashFor } from '../render/line';
 import type { SettingsField } from './schema';
 import { drawingTextWidth } from './text-metrics';
 
@@ -16,14 +18,6 @@ export const OPACITY_FIELD: SettingsField = {
 };
 
 // ── shared drawing helpers ────────────────────────────────────────────────
-
-/**
- * The dash of a line style at ratio `d`: one vocabulary for every tool family,
- * which the base's drawn indicators share (primitives/indicator-draws.ts).
- */
-export function dashFor(lineStyle: DrawingStyle['lineStyle'], d: number): number[] {
-  return lineStyle === 'dashed' ? [6 * d, 4 * d] : lineStyle === 'dotted' ? [1 * d, 3 * d] : [];
-}
 
 /** A stroke's width in device px: whole pixels, and never under one. */
 export const strokeWidth = (width: number, d: number): number => Math.max(1, Math.round(width * d));

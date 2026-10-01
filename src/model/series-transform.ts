@@ -84,8 +84,8 @@ export interface SeriesTransformDefinition {
 
 const registry = new Map<string, SeriesTransformDefinition>();
 
-/** Register a transform under the id a `SeriesTransformSpec` names it by. */
-export function registerSeriesTransform(type: string, definition: SeriesTransformDefinition): void {
+/** Add a transform to the registry; `registerSeriesTransform` (chart-series-transform.ts) is the public door. */
+export function addSeriesTransform(type: string, definition: SeriesTransformDefinition): void {
   registry.set(type, definition);
 }
 

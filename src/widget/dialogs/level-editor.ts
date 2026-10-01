@@ -43,14 +43,14 @@ export function nextRatio(levels: readonly FibLevel[]): number {
 }
 
 /** What the tool prints beside an unlabelled level, for the label box's placeholder. */
-export function levelLabeller(toolId: string): (ratio: number) => string {
+function levelLabeller(toolId: string): (ratio: number) => string {
   if (toolId === 'gann-fan') return gannLabel;
   if (toolId === 'fib-time-zone') return (r) => String(r);
   return formatRatio;
 }
 
 /** The drawings among `ids` the user may edit whose tool declares a levels field, with the first one's schema. */
-export function ladderDrawings(ctx: WidgetContext, ids: readonly string[]): { drawings: Drawing[]; schema: SettingsSchema | null } {
+function ladderDrawings(ctx: WidgetContext, ids: readonly string[]): { drawings: Drawing[]; schema: SettingsSchema | null } {
   const drawings: Drawing[] = [];
   for (const id of ids) {
     const d = ctx.draw.get(id);

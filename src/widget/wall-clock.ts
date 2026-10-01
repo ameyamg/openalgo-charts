@@ -10,14 +10,14 @@
 import { utcSecondsToZonedParts, zonedWallClockToUtcSeconds } from 'openalgo-charts';
 
 /** A date and a time as the fields show them: `YYYY-MM-DD` and `HH:MM`, or `HH:MM:SS` when `seconds`. */
-export interface WallClock {
+interface WallClock {
   date: string;
   time: string;
   seconds: boolean;
 }
 
 /** How a field reads what the user typed. */
-export interface WallClockReading {
+interface WallClockReading {
   /**
    * A blank time reads as the start of the day, or as its last second, for a
    * field that allows one; without it a blank time does not read.

@@ -6,7 +6,8 @@ import type {
 import { distToSegment } from './geometry';
 import { drawingTextWidth } from './text-metrics';
 import { analysisNumber } from './analysis';
-import { dashFor, fontOf, strokeWidth, textOf } from './tool-paint';
+import { fontOf, strokeWidth, textOf } from './tool-paint';
+import { dashFor } from '../render/line';
 
 export interface GeometryPath {
   points: ScreenPoint[];
@@ -19,7 +20,7 @@ export interface GeometryPath {
   stroke?: boolean;
   color?: string | undefined;
 }
-export interface GeometryArc {
+interface GeometryArc {
   center: ScreenPoint;
   rx: number;
   ry: number;
@@ -31,7 +32,7 @@ export interface GeometryArc {
 export interface GeometryLabel { at: ScreenPoint; text: string; color?: string | undefined }
 export interface DrawingGeometry { paths: GeometryPath[]; labels?: GeometryLabel[] }
 /** Builds from media-px anchors, as many as the tool declares (`ToolAnchors`). */
-export type GeometryBuilder<N extends number = number> = (c: HitContext & ToolAnchors<N>) => DrawingGeometry;
+type GeometryBuilder<N extends number = number> = (c: HitContext & ToolAnchors<N>) => DrawingGeometry;
 
 export const midpoint = (a: ScreenPoint, b: ScreenPoint): ScreenPoint => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 export const interpolate = (a: ScreenPoint, b: ScreenPoint, t: number): ScreenPoint => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });

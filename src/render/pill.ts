@@ -111,7 +111,7 @@ export function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: numbe
   else ctx.rect(x, y, w, h);
 }
 
-export interface PillStyle {
+interface PillStyle {
   fill: string;
   text: string;
   /** Optional 1px border color. */
@@ -154,7 +154,7 @@ export function drawPill(
 }
 
 /** Width of a close segment in media px. */
-export const CLOSE_SEGMENT_W = 20;
+const CLOSE_SEGMENT_W = 20;
 
 /** One segment of a broker-style pill group: text box or close box. */
 export interface PillSegment {
@@ -167,7 +167,7 @@ export interface PillSegment {
   border?: string;
 }
 
-export interface PillGroupMetrics {
+interface PillGroupMetrics {
   /** Group left edge, media px. */
   x0: number;
   /** Group right edge, media px. */

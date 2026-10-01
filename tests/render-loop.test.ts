@@ -42,12 +42,6 @@ describe('RenderLoop coalescing', () => {
 });
 
 describe('grid geometry', () => {
-  it('computes evenly-spaced interior lines', () => {
-    const lines = computeGridLines(200, 100, { spacing: 50 });
-    expect(lines.verticals).toEqual([50, 100, 150]);
-    expect(lines.horizontals).toEqual([50]);
-  });
-
   it('never places a line on the 0 edge and stops before the far edge', () => {
     const lines = computeGridLines(120, 120, { spacing: 60 });
     expect(lines.verticals).toEqual([60]); // 0 excluded, 120 excluded

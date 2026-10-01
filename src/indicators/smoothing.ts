@@ -19,7 +19,7 @@ import { num, int, str, type Settings } from './settings';
  * leaves the average off and `BOLLINGER_MA` also draws the two band plots; the
  * rest name a `smoothingMa` kernel.
  */
-export const SMOOTHING_MA_TYPES: readonly { label: string; value: string }[] = [
+const SMOOTHING_MA_TYPES: readonly { label: string; value: string }[] = [
   { label: 'None', value: 'None' },
   { label: 'SMA', value: 'SMA' },
   { label: 'SMA + Bollinger Bands', value: 'SMA + Bollinger Bands' },
@@ -30,7 +30,7 @@ export const SMOOTHING_MA_TYPES: readonly { label: string; value: string }[] = [
 ];
 
 /** Set by `maType` when the two Bollinger band plots become visible. */
-export const BOLLINGER_MA = 'SMA + Bollinger Bands';
+const BOLLINGER_MA = 'SMA + Bollinger Bands';
 
 /**
  * Run `smooth` over the tail that begins at the series' first real value, then

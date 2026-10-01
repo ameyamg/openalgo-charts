@@ -115,7 +115,7 @@ export function keyOf(b: Bucketing, time: number, zone: string, sessionStart: nu
 }
 
 /** One local day: its index since the epoch, its date, and the UTC span from its first instant to the next day's. */
-export interface LocalDay { index: number; year: number; month: number; date: number; from: number; to: number }
+interface LocalDay { index: number; year: number; month: number; date: number; from: number; to: number }
 
 /**
  * The local day of each of a run of instants, asking the zone once per day
