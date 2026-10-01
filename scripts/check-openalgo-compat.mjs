@@ -17,6 +17,7 @@
  * Use --port <n> to serve on a fixed port; without it a free one is picked at random.
  * A defect in the host's own chrome is printed as HOST FINDING and kept in the
  * report's hostFindings; it fails nothing.
+ * Every group can run in the same invocation as the others.
  *
  * No backend is started. Vite proxies are removed and every API/WS is mocked.
  * The app source is unchanged; an entry wrapper records terminal instances so
