@@ -80,7 +80,8 @@ function copyData<T>(value: T): T {
   return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copyData(v)])) as T;
 }
 
-function cloneEvent(event: ChartEvent): ChartEvent {
+/** An event a caller can keep: the widget's details popup copies with this too. */
+export function copyEvent(event: ChartEvent): ChartEvent {
   return { ...event, ...(typeof event.details === 'object' ? { details: copyData(event.details) } : {}) };
 }
 
@@ -110,7 +111,7 @@ export class EventMarkers implements IPrimitive {
   public setEvents(events: readonly ChartEvent[]): void {
     const sorted = events.map(event => {
       if (!Number.isFinite(event.time)) throw new Error('openalgo-charts: event time must be finite');
-      return cloneEvent(event);
+      return copyEvent(event);
     }).sort((a, b) => a.time - b.time);
     const counts = new Map<string, number>();
     this._entries = sorted.map(event => {
@@ -126,7 +127,7 @@ export class EventMarkers implements IPrimitive {
     this._invalidate();
   }
 
-  public events(): ChartEvent[] { return this._entries.map(entry => cloneEvent(entry.event)); }
+  public events(): ChartEvent[] { return this._entries.map(entry => copyEvent(entry.event)); }
 
   /** Replace the hierarchy; duplicate IDs, missing parents and cycles are rejected. */
   public setGroups(groups: readonly EventGroup[]): void {
@@ -186,7 +187,7 @@ export class EventMarkers implements IPrimitive {
   public detailsForHit(externalId: string): EventMarkerDetails | null {
     const hit = this._hits.get(externalId);
     return hit === undefined ? null : {
-      id: hit.id, cluster: hit.entries.length > 1, events: hit.entries.map(entry => cloneEvent(entry.event)),
+      id: hit.id, cluster: hit.entries.length > 1, events: hit.entries.map(entry => copyEvent(entry.event)),
     };
   }
 
