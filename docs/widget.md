@@ -40,7 +40,7 @@ npm install openalgo-charts
 
 The widget entry imports `openalgo-charts` and `openalgo-charts/draw` itself. The
 indicator picker offers whatever the indicator registry holds, so import
-`openalgo-charts/indicators` alongside it for the 105 built-ins; without that import the
+`openalgo-charts/indicators` alongside it for the 112 built-ins; without that import the
 picker offers only what you registered yourself.
 
 ## One call
@@ -237,7 +237,7 @@ to `createChart` unchanged.
 | `exchange` | `string` | Passed to the feed with the symbol. Default `''`. |
 | `interval` | `string` | An interval code the interval registry knows (`'1m'`, `'5m'`, `'1d'`, or one you registered with `registerInterval`). An unknown code throws `UnknownIntervalError`; a persisted code this build does not know falls back to `'1d'`. Default `'1d'`. |
 | `intervals` | `string[]` | The interval pills. Default: `DEFAULT_INTERVALS` (`1m 5m 15m 1h 1d 1w`) plus every other registered code. |
-| `chartType` | `string` | The primary chart type: a registered chart type id or (unreleased) a transform the chart applies to the bars it loads (`heikin-ashi`, `renko`, `range-bars`, `line-break`, `point-figure`, `kagi`, with the transform tier imported). Without a `feed`, point and figure and Kagi stay renderers over the elements the host feeds `widget.series`, as before. Default `'candlestick'`. |
+| `chartType` | `string` | The primary chart type: a registered chart type id or a transform the chart applies to the bars it loads (`heikin-ashi`, `renko`, `range-bars`, `line-break`, `point-figure`, `kagi`, with the transform tier imported). Without a `feed`, point and figure and Kagi stay renderers over the elements the host feeds `widget.series`, as before. Default `'candlestick'`. |
 | `theme` | `'dark'` \| `'light'` \| `ChartTheme` | A named palette or a full theme object. Drives both the canvas and the chrome tokens (see below). Default `'dark'` (the engine's own default is light). |
 | `rail` | `boolean` \| `RailOptions` | The drawing rail. `false` hides it; `tools` restricts which registered tool ids appear (the order follows the rail's own groups); `favorites` seeds the pins when nothing is stored. |
 | `topbar` | `boolean` | The symbol, interval, chart type, indicators, capture, settings and theme controls. |

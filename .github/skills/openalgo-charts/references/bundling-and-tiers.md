@@ -6,9 +6,9 @@ Source of truth: `package.json` (`exports`, `sideEffects`, `files`), `rollup.con
 
 ## The nine entry points
 
-`exports` declares exactly nine specifiers, each with `types`, `import` and (unreleased) `default` conditions, where `default` names the same `.mjs` file as `import`. There is no `main` and no CommonJS build: the package is ESM (`"type": "module"`, `module: dist/openalgo-charts.mjs`).
+`exports` declares exactly nine specifiers, each with `types`, `import` and `default` conditions, where `default` names the same `.mjs` file as `import`. There is no `main` and no CommonJS build: the package is ESM (`"type": "module"`, `module: dist/openalgo-charts.mjs`).
 
-**No CommonJS build, and `require()` gets the ESM files (unreleased).** A CommonJS copy of the code would carry a second set of registries, so a descriptor registered through one copy would be unknown to a chart created by the other (the same failure as a deep import, below). The `default` condition points `require()` at the ESM files themselves instead:
+**No CommonJS build, and `require()` gets the ESM files.** A CommonJS copy of the code would carry a second set of registries, so a descriptor registered through one copy would be unknown to a chart created by the other (the same failure as a deep import, below). The `default` condition points `require()` at the ESM files themselves instead:
 
 - Node 20.19 or later, 22.12 or later, and every later release line load them synchronously: `require('openalgo-charts')` and `require('openalgo-charts/indicators')` return the very modules `import` returns, one registry between them.
 - An older Node throws `ERR_REQUIRE_ESM`, whose message says to use `import()`. A CommonJS module can always do that: `const { createChart } = await import('openalgo-charts');`.
@@ -22,7 +22,7 @@ Source of truth: `package.json` (`exports`, `sideEffects`, `files`), `rollup.con
 | `openalgo-charts/trade` | `dist/openalgo-charts.trade.mjs` | order/position/bracket primitives, DOM ladder, `OrderEngine`, `TradeController`, `FakeBroker` | 16.69 kB standalone; 151.38 kB limit for base + trade | no |
 | `openalgo-charts/transform` | `dist/openalgo-charts.transform.mjs` | Renko, Range, Point & Figure, Kagi, Line Break, Heikin Ashi, `runTransform`, symbol arithmetic (`parseExpression`, `evaluateExpression`) | 4.55 kB / 4.56 kB | **yes**, registers the `point-figure` and `kagi` chart types |
 | `openalgo-charts/profile` | `dist/openalgo-charts.profile.mjs` | Volume Profile, TPO / Market Profile, Footprint, orderflow | 14.97 kB / 14.98 kB | no |
-| `openalgo-charts/indicators` | `dist/openalgo-charts.indicators.mjs` | 105 Tier-1 built-ins plus the Tier-2 contract | 40.43 kB / 40.43 kB | **yes**, registers all 105 descriptors |
+| `openalgo-charts/indicators` | `dist/openalgo-charts.indicators.mjs` | 112 Tier-1 built-ins plus the Tier-2 contract | 40.43 kB / 40.43 kB | **yes**, registers all 112 descriptors |
 | `openalgo-charts/draw` | `dist/openalgo-charts.draw.mjs` | 87 drawing tools including Anchored VWAP and fixed-range Volume Profile, `DrawingController`, `DrawingLinkGroup`, `DrawingLayer` | 57.98 kB / 57.99 kB | **yes**, registers every built-in tool |
 | `openalgo-charts/webgl` | `dist/openalgo-charts.webgl.mjs` | the WebGL2 series backend, `createWebGL2Backend`, `isWebGL2Supported`, `WebGL2Backend`, `GlDevice` | 6.93 kB / 6.94 kB | **yes**, registers the `webgl2` render backend |
 | `openalgo-charts/widget` | `dist/openalgo-charts.widget.mjs` | `createWidget`, the chrome (top bar, rail, status line, toasts), the dialogs, event details, the keymap, the tokens and stylesheet; the only tier that ships DOM. Imports `openalgo-charts/draw` itself | 121.36 kB / 121.36 kB; first-use parts 18.19 kB / 18.19 kB | **yes**, registers the seven dialog mounts with the shell |
@@ -45,7 +45,7 @@ Every `openalgo-charts/<tier>` specifier is external too, and `output.paths` map
 
 Every registry (chart types, indicators, drawing tools) is a module-level `Map` inside exactly one module instance. `createChart` reads the base bundle's copy. A deep import creates a second module instance with a second, empty `Map`:
 
-- `import 'openalgo-charts/dist/openalgo-charts.indicators.mjs'` alongside `import { createChart } from 'openalgo-charts'` in a bundler that resolves the two to different graph nodes registers 105 descriptors into a Map nobody reads. `chart.addIndicator('macd')` then throws as if the tier were never loaded.
+- `import 'openalgo-charts/dist/openalgo-charts.indicators.mjs'` alongside `import { createChart } from 'openalgo-charts'` in a bundler that resolves the two to different graph nodes registers 112 descriptors into a Map nobody reads. `chart.addIndicator('macd')` then throws as if the tier were never loaded.
 - The same failure for `openalgo-charts/transform` shows up as `series type "point-figure" needs the transform tier, import 'openalgo-charts/transform' first`, on a page that plainly did import it.
 - For `openalgo-charts/draw` you get two `DrawingController` classes and two tool tables; `instanceof` checks and tool ids stop lining up across them.
 
@@ -109,7 +109,7 @@ Lazy-load a tier the user may never touch:
 const { DrawingController } = await import('openalgo-charts/draw');
 ```
 
-**Plain `<script>`, the script-tag build.** Every tier also ships as a classic script (`format: 'iife'`) that needs no module support. `dist/openalgo-charts.standalone.js` is the base, built with `name: 'OpenAlgoCharts'` and nothing external; it defines the `window.OpenAlgoCharts` global. (unreleased) Each tier's `dist/openalgo-charts.<tier>.standalone.js` adds itself to that global under the tier's name, so `import { X } from 'openalgo-charts/draw'` becomes `OpenAlgoCharts.draw.X`:
+**Plain `<script>`, the script-tag build.** Every tier also ships as a classic script (`format: 'iife'`) that needs no module support. `dist/openalgo-charts.standalone.js` is the base, built with `name: 'OpenAlgoCharts'` and nothing external; it defines the `window.OpenAlgoCharts` global. Each tier's `dist/openalgo-charts.<tier>.standalone.js` adds itself to that global under the tier's name, so `import { X } from 'openalgo-charts/draw'` becomes `OpenAlgoCharts.draw.X`:
 
 ```html
 <script src="/dist/openalgo-charts.standalone.js"></script>
@@ -125,7 +125,7 @@ const { DrawingController } = await import('openalgo-charts/draw');
 </script>
 ```
 
-(unreleased) The rules of the script-tag build:
+The rules of the script-tag build:
 
 - **One base, shared.** A tier file leaves the base (and, for the widget, the draw tier) external exactly as its `.mjs` does, and reads them from the global, so it registers into the base the page loaded. Never load a tier's `.mjs` beside the classic base: that module imports its own base, with its own registries.
 - **Order.** The base first, then any tier, with the draw tier before the widget. A tier file loaded too early throws before it runs, naming the files to load first: `openalgo-charts.widget.standalone.js needs openalgo-charts.standalone.js and openalgo-charts.draw.standalone.js loaded before it`. Load each file once.
@@ -307,3 +307,5 @@ Version 2.5.8 is the rendering release: the level of detail on by default, frame
 Version 2.5.9 is the drawing interaction and replay release: drawings per instrument, the drawing gestures, visibility per interval, the widget's drawing toolbar, templates and coordinates tab, replay's forming rule and simulated forming, lines across the edges of the view and the price axis fixes. The measured base is 131.68 kB, base plus trade 148.36 kB, draw 55.61 kB (the gestures, visibility per interval and the hit index), widget 99.64 kB (the toolbar, templates and coordinates tab), workspace 11.33 kB (the template catalog), the terminal 327.32 kB and all tiers 381.78 kB. The chart-only import measures 84.82 KiB: the edge-segment and axis work runs on every chart, and the drawing gestures, the widget UI and replay's simulated forming shake out.
 
 Version 2.5.10 is the persistence, saved layouts and chart grid release: widget state in IndexedDB, saved layouts and indicator templates, the shortcuts editor, the bottom bar, market phases and session shading, the chart grid to sixteen charts with named link groups, link channels for the chart type and drawings, the chrome icon registry, marker lanes and the label pass. The measured base is 134.69 kB, base plus trade 151.38 kB, indicators 40.43 kB, draw 57.98 kB (the icon registry), profile 14.97 kB, widget 121.36 kB, workspace 11.53 kB (named link groups), the terminal 354.46 kB and all tiers 409.13 kB; the transform, WebGL2 and trade tiers are unchanged. The widget loads the UI a plain widget never opens from seven part files beside it, named by a content hash (`openalgo-charts.widget.<part>-<hash>.mjs`, 18.19 kB together), which a bundler emits as chunks of their own and a host serving `dist/` serves with the tier file from the same release. The chart-only import measures 85.73 KiB: the marker lanes run on every chart with text markers, and the session phases, the shading and the link channels shake out.
+
+Version 2.6.0 is the analysis depth and stricter API release: transforms applied in the chart with studies on the underlying bars, seven built-ins and a timeframe input on 29 of them, symbol search through the OpenAlgo feed, rich event details, the typed event map, a classic script for every tier and `require()` of the ESM files. The measured base is {{MEASURE: Base engine row, npx size-limit}}, base plus trade {{MEASURE: Base + trade layer row, npx size-limit}}, indicators {{MEASURE: Indicator tier row, npx size-limit}}, transform {{MEASURE: Transform tier row, npx size-limit}}, widget {{MEASURE: Widget tier row, npx size-limit}}, the terminal {{MEASURE: Widget terminal row, npx size-limit}}, all tiers {{MEASURE: Everything row, npx size-limit}} and the nine classic scripts {{MEASURE: Script tags row, npx size-limit}}; the eight tier scripts ship without source maps. The transform runs are installed by `registerSeriesTransform`, so a chart-only import that registers none leaves them out; it measures {{MEASURE: chart-only import KiB, npm run shake}}.

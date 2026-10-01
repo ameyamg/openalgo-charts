@@ -101,6 +101,14 @@ Session phases, session shading and the link channels live inside the base engin
 boxes, and the chart grid, bottom bar and saved layouts inside the widget tier, whose `<desc>`
 names them; the release adds no box or arrow.
 
+Rechecked on 2.6.0: {{MEASURE: every tier row and all tiers, npx size-limit}}. Registry
+counts: 112 indicators (Trend 40, Momentum 31, Volatility 23, Volume 18), 87 drawing tools
+and 15 chart types with the transform tier loaded, which also registers six series
+transforms the chart applies itself. The `/indicators` chip says 112 built-in studies, and
+the title and version label name 2.6.0. In-chart transforms, the study bar source and the
+typed event map live inside the base engine's existing boxes, and the classic tier scripts
+are a second form of the same tiers; the release adds no box or arrow.
+
 Source references: `src/index.ts`, `src/feed/data-controller.ts`,
 `src/feed/instrument.ts`, `src/model/bar.ts`, `src/core/pane.ts`,
 `src/alerts/controller.ts`, `src/replay/group.ts`, `src/link/group.ts`,

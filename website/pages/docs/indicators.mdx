@@ -1980,17 +1980,19 @@ same as a whole rewrite would leave.
 The built-in `sma`, `ema`, `wma`, `rsi`, `atr`, `adx`, `macd`, `bollinger`, `vwap`,
 `supertrend`, `stochastic`, `obv`, `cci`, `keltner-channel`, `donchian`,
 `parabolic-sar`, `zlema`, `vidya`, `elder-ray`, `schaff-trend-cycle`, `volatility-squeeze`,
-`zigzag` and `high-low-52-week` implement `calcTail`. A tick costs them a step, or one window, instead of
+`zigzag` and `high-low-52-week` have a `calcTail` of their own. A tick costs them a step, or one window, instead of
 a pass over the loaded history, and the spliced result equals a full `calc` of the same
 bars value for value, NaN and negative zero included. A study that carries state from bar
 to bar rebuilds it once after each full calculation, so the first tick after a load or a
 settings change costs about one pass.
 
-Their tail declines, and the full `calc` runs, for a length that is not a positive whole
-number, a negative Donchian `offset`, any VWAP `offset`, and a VWAP bar that changes how
-the history's sessions are read: the first overnight gap in a short history, or a bar
-that moves the median gap between bars. `zigzag` declines when a tick changes a bar
-before the tail, which is its last leg repainting (see [ZigZag](#zigzag)).
+A window length is read as a whole number, rounded and at least 1, in `calc` and in the
+tail alike (14.5 reads as 15), so a fractional length no longer turns the tail off. Their
+tail declines, and the full `calc` runs, for a negative Donchian `offset`, any VWAP
+`offset`, and a VWAP bar that changes how the history's sessions are read: the first
+overnight gap in a short history, or a bar that moves the median gap between bars.
+`zigzag` declines when a tick changes a bar before the tail, which is its last leg
+repainting (see [ZigZag](#zigzag)).
 
 A descriptor that spreads a built-in does not inherit its `calcTail`: the built-ins hold
 it as a property a spread does not copy. Such a descriptor recomputes in full on every

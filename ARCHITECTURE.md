@@ -4,7 +4,9 @@
 > Historical pre-implementation target: **< 50 KB Brotli** for the full package (engine + trade overlay), no runtime dependencies. *(Brotli is the size metric we hold the budget against - see §11. Gzip runs ~10-15% larger.)*
 > Goal: professional-grade interactive financial-chart rendering + advanced on-chart trading & trade management.
 
-> **Current release: 2.5.10.** Persistence, saved layouts and the chart grid. The widget keeps its saved state in IndexedDB through an asynchronous store (`AsyncStorageLike`, `widget.ready`), reopens named layouts and indicator templates over a `WorkspaceStore` with revision checks, and lets a user move any shortcut from the ? panel. A bottom bar carries preset ranges sized in trading sessions, Go to, the market status and a clock with a timezone menu. Calendars know pre-open, post-close and extended hours (`phaseAt`, `marketStatusAt`), and `attachSessionShading` washes those bars in the price pane. The chart grid lays out one to sixteen charts with maximize, swap and up to sixteen named link groups, whose channels now include the chart type and drawings. UI a plain widget never opens loads on first use from hashed part files beside the widget tier, and text markers take lanes so neighbouring labels no longer overlap. The 2.5.10 build measures **134.69 kB** base, **151.38 kB** base + trade and **409.13 kB** for all tiers (decimal Brotli sizes).
+> **Current release: 2.6.0.** Analysis depth and a stricter API. A chart applies Heikin Ashi, Renko, range bars, line break, point and figure and Kagi to the bars a host feeds, live (`setSeriesTransform`, with the runs installed by `registerSeriesTransform` when the transform tier is imported), and each study computes on the elements drawn or on the underlying bars (`setBarSource`). Seven built-ins are new, 112 in all, and 29 take a `timeframe` input that folds the chart's bars into a higher interval without repainting. The OpenAlgo feed searches symbols (`DataFeed.searchSymbols`), and event markers carry rich details with host actions. `ChartEventMap` types every event on the chart's bus, every tier ships as a classic script on the `OpenAlgoCharts` global, `require()` resolves to the ESM files, and all of `src` compiles under `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. The 2.6.0 build measures {{MEASURE: Base engine row, npx size-limit}} base, {{MEASURE: Base + trade layer row, npx size-limit}} base + trade and {{MEASURE: Everything row, npx size-limit}} for all tiers (decimal Brotli sizes).
+
+> **2.5.10.** Persistence, saved layouts and the chart grid. The widget keeps its saved state in IndexedDB through an asynchronous store (`AsyncStorageLike`, `widget.ready`), reopens named layouts and indicator templates over a `WorkspaceStore` with revision checks, and lets a user move any shortcut from the ? panel. A bottom bar carries preset ranges sized in trading sessions, Go to, the market status and a clock with a timezone menu. Calendars know pre-open, post-close and extended hours (`phaseAt`, `marketStatusAt`), and `attachSessionShading` washes those bars in the price pane. The chart grid lays out one to sixteen charts with maximize, swap and up to sixteen named link groups, whose channels now include the chart type and drawings. UI a plain widget never opens loads on first use from hashed part files beside the widget tier, and text markers take lanes so neighbouring labels no longer overlap. The 2.5.10 build measures **134.69 kB** base, **151.38 kB** base + trade and **409.13 kB** for all tiers (decimal Brotli sizes).
 
 > **2.5.9.** Drawing interaction and replay. Drawings belong to the instrument they were drawn on (`InstrumentDrawings`, the widget's default), and the drawing controller gains the magnet on every pane and in every drag, box select, drag to copy, an eraser, a temporary measure and visibility per interval (drawings document version 3 when a drawing carries a range). A drawing layer keeps a hit box per drawing, so a hover asks only the drawings near the pointer. Replay holds its forming bar inside the bar it closes on and can form a bar with no finer data over simulated steps. Line-family series draw the segment that crosses each edge of the view (`connectsBars`), and the price axis keeps edge labels whole and value tags over level tags. The 2.5.9 build measured **131.68 kB** base, **148.36 kB** base + trade and **381.78 kB** for all tiers (decimal Brotli sizes).
 >
@@ -30,7 +32,7 @@ notifications. Pipeline arrows show data flow, not package dependencies.
 
 ## Current integration map
 
-For 2.5.10 integrations, start with these current guides and implementation
+For 2.6.0 integrations, start with these current guides and implementation
 boundaries. The numbered design sections below retain historical plans and
 explicitly labeled estimates; use the current API types for implementation.
 
@@ -61,7 +63,7 @@ explicitly labeled estimates; use the current API types for implementation.
 | Study inputs | `visibleWhen`, `activeWhen` and `inline` on `IndicatorInput`; paired `timeKey` point inputs with an optional on-pane anchor; presentation only, `calc` sees every setting | [Indicators](https://marketcalls.github.io/openalgo-charts/docs/indicators/) |
 | Chart export | Loaded or revealed bars, study values and comparison closes; host delivers the CSV | [Chart data](docs/chart-data-export.md) |
 | Custom studies | Descriptor registry in base; optional built-ins and external-data helpers | [Indicators](https://marketcalls.github.io/openalgo-charts/docs/indicators/) |
-| Rendering cost | Level of detail on by default (`conflate`), plot writes in place on a tick, `calcTail` on sixteen built-ins, repaint scoped to the panes a write changes, optional `IPrimitive.hitBounds`, and render-bench budgets per bar count | [Performance and operations](https://marketcalls.github.io/openalgo-charts/docs/performance-and-operations/) |
+| Rendering cost | Level of detail on by default (`conflate`), plot writes in place on a tick, `calcTail` of their own on twenty-three built-ins, repaint scoped to the panes a write changes, optional `IPrimitive.hitBounds`, and render-bench budgets per bar count | [Performance and operations](https://marketcalls.github.io/openalgo-charts/docs/performance-and-operations/) |
 | Host interface | Canvas containers in base; toolbar, Data/Objects dock, rich symbol search, dialogs and translated controls in the widget | [Widget](docs/widget.md) |
 
 ## Chart internals
@@ -632,7 +634,7 @@ Renko, Range bars, Point & Figure, Kagi, Line Break. These **re-bucket** raw dat
 
 Transforms must be **incremental**: `push` takes each source bar once and never recomputes history, the same `series.update` hot-path discipline as Family A (§4.2). Every push moves the state, so a bar that is still forming is not pushed tick by tick; it goes through a copy of the state (the run below), which is the part that makes live Renko and range bars work.
 
-**In-chart transforms (unreleased).** The chart applies a Family B transform itself: `Chart.setSeriesTransform(series, spec)` (or `AddSeriesOptions.transform`). The pieces, and where each lives:
+**In-chart transforms.** The chart applies a Family B transform itself: `Chart.setSeriesTransform(series, spec)` (or `AddSeriesOptions.transform`). The pieces, and where each lives:
 
 - **Registry (base, `model/series-transform.ts`).** `registerSeriesTransform` holds a `SeriesTransformDefinition` per id: its renderer, its options as `IndicatorInput`s, and `create(options)`, which returns the `SeriesTransformRun` the chart drives. The transform tier fills it on import, so the base never loads a transform, the same inversion as the chart-type registry.
 - **Run (transform tier, `transform/live.ts`).** Holds the host's bars and the transform's state as of the last closed bar. The newest bar is forming: each tick pushes it through a copy of that state (`ISeriesTransform.clone`), so its elements are provisional and never baked into the state (CLAUDE.md, never cache the forming bar); a newer bar commits it. Elements get the same one-second bumps `runTransform` gives, so a run's elements are always the batch transform of its bars. Sizes a spec leaves at 0 are resolved from the history on each load, never per tick, and kept through a history page.
@@ -1114,7 +1116,7 @@ reader of that version sees. Three rules fell out of getting this wrong:
 
 ## 13a. Deferred / not-yet-implemented (honest status)
 
-The current implementation keeps these boundaries in 2.5.10:
+The current implementation keeps these boundaries in 2.6.0:
 
 - **Separate price/time axis-widget canvases** - axes draw within the pane
   canvas by design (small-engine simplification).

@@ -25,7 +25,7 @@ with no runtime dependencies.
 npm install openalgo-charts
 ```
 
-Current version: **2.5.10**, persistence, saved layouts and the chart grid: the widget keeps its state in IndexedDB and says when it has landed (`widget.ready`), saves and reopens named layouts and indicator templates, and lets a user move any shortcut from the ? panel; a bottom bar carries preset ranges sized in trading sessions, Go to, the market status and a clock; calendars know pre-open, post-close and extended hours, and a chart can shade them; the chart grid lays out one to sixteen charts with a grid bar, maximize and swap, and named link groups that can share the chart type and drawings; and a label pass makes every control say what it is. 2.5.9 was the drawing interaction and replay release.
+Current version: **2.6.0**, analysis depth and a stricter API: the chart applies Heikin Ashi, Renko, range bars, line break, point and figure and Kagi to the bars you feed, live, with each study on the elements or the underlying bars; seven new built-ins and a timeframe input on 29 of them; symbol search through the OpenAlgo feed; rich event details with host actions; a typed event map for `chart.on`; a classic-script build of every tier and `require()` of the ESM files; and declarations that hold for a host compiling with both strict flags. 2.5.10 was the persistence, saved layouts and chart grid release.
 See the [changelog](./CHANGELOG.md) for release notes.
 
 ## Quick start
@@ -66,7 +66,7 @@ Firefox and WebKit. In Vue, hold the chart in a `shallowRef`, never in `ref()` o
 
 ## Architecture
 
-<a href="docs/architecture-diagram.svg"><img src="docs/architecture-diagram.svg" alt="OpenAlgo Charts 2.5.10 architecture: host responsibilities, the base data-to-rendering pipeline with alerts and shared replay, and eight optional tiers including workspace storage, trading tools and the widget" width="920" /></a>
+<a href="docs/architecture-diagram.svg"><img src="docs/architecture-diagram.svg" alt="OpenAlgo Charts 2.6.0 architecture: host responsibilities, the base data-to-rendering pipeline with alerts and shared replay, and eight optional tiers including workspace storage, trading tools and the widget" width="920" /></a>
 
 How data reaches the chart, what your app owns, and which features you can import.
 [Open the full-size diagram](docs/architecture-diagram.svg).
@@ -117,7 +117,7 @@ You can also load the library from a CDN in a plain HTML page:
 ```html
 <div id="chart" style="width:100vw;height:100vh"></div>
 <script type="module">
-  import { createChart, generateBars } from 'https://unpkg.com/openalgo-charts@2.5.10/dist/openalgo-charts.mjs';
+  import { createChart, generateBars } from 'https://unpkg.com/openalgo-charts@2.6.0/dist/openalgo-charts.mjs';
   const chart = createChart(document.getElementById('chart'), { timezone: 'Asia/Kolkata' });
   chart.addSeries('candlestick').setData(generateBars(1700000000, 200, 3600));
   chart.fitContent();
@@ -125,7 +125,7 @@ You can also load the library from a CDN in a plain HTML page:
 ```
 
 Each optional tier has its own file. For example,
-`openalgo-charts.indicators.mjs` registers all 105 built-in indicators. Pin the
+`openalgo-charts.indicators.mjs` registers all 112 built-in indicators. Pin the
 version in production. The base chart needs no stylesheet; the widget adds its
 own styles. See
 [Use from a CDN](https://marketcalls.github.io/openalgo-charts/docs/cdn).
@@ -180,7 +180,7 @@ Unused optional tiers stay out of the base chart download.
 | Import | Contents | Brotli |
 |---|---|---|
 | `openalgo-charts` | Engine, 13 chart types, panes and scales, custom indicator registry, primitives, alerts, replay, comparisons, chart linking, state, feeds, bar cache, trading overlays, CSV and SVG export | 134.69 kB |
-| `openalgo-charts/indicators` | 105 built-in indicators, calculation helpers and helpers for studies that use external data | 40.43 kB |
+| `openalgo-charts/indicators` | 112 built-in indicators, calculation helpers and helpers for studies that use external data | 40.43 kB |
 | `openalgo-charts/draw` | 87 drawing tools + a headless drawing controller, clipboard, settings schema, level palette, freehand geometry and SVG icons | 57.98 kB |
 | `openalgo-charts/transform` | Heikin Ashi, Renko, Range bars, Line Break, Point &amp; Figure, Kagi, and symbol arithmetic (`AAPL/MSFT`) | 4.55 kB |
 | `openalgo-charts/profile` | Volume Profile, Market Profile (TPO) with compact pixel letters, Footprint, order flow | 14.97 kB |
@@ -206,7 +206,7 @@ const macd = chart.addIndicator('macd', { fastPeriod: 8 });   // gets its own pa
 macd.setSettings({ 'macd:width': 2, 'macd:lineStyle': 'dashed' });
 ```
 
-105 built-ins across Trend, Momentum, Volatility and Volume, from the everyday (SMA, EMA, WMA, VWAP, Bollinger Bands, RSI, MACD, Stochastic, ADX/DMI, ATR) through Supertrend, HalfTrend, Ichimoku, Keltner, Donchian, Chandelier Exit and CPR with floor pivots to Connors RSI, Fisher Transform, Woodies CCI, Klinger, Vortex, WaveTrend Pro, Chop Zone and Williams Fractals, with a least-squares family (Least Squares Moving Average, Linear Regression Slope, Standard Error, Standard Error Bands) and a Smoothed Moving Average alongside them, joined in 1.8.3 by the T3 average, the Hull Suite (Hma / Ehma / Thma with a displaced band) and Consolidation and Breakout, which tracks inside-bar ranges and marks the bar that leaves one. Twenty-eight of them draw shaded bands, six emit named buy/sell markers, two recolour the price candles, and Seasonality draws a monthly return heatmap as a table over the chart. The full catalogue with ids and defaults is in the docs.
+112 built-ins across Trend, Momentum, Volatility and Volume, from the everyday (SMA, EMA, WMA, VWAP, Bollinger Bands, RSI, MACD, Stochastic, ADX/DMI, ATR) through Supertrend, HalfTrend, Ichimoku, Keltner, Donchian, Chandelier Exit and CPR with floor pivots to Connors RSI, Fisher Transform, Woodies CCI, Klinger, Vortex, WaveTrend Pro, Chop Zone and Williams Fractals, with a least-squares family (Least Squares Moving Average, Linear Regression Slope, Standard Error, Standard Error Bands) and a Smoothed Moving Average alongside them, joined in 1.8.3 by the T3 average, the Hull Suite (Hma / Ehma / Thma with a displaced band) and Consolidation and Breakout, which tracks inside-bar ranges and marks the bar that leaves one. Version 2.6.0 adds ZigZag, 52 Week High/Low, Zero Lag EMA, Variable Index Dynamic Average, Elder-Ray Index, Schaff Trend Cycle and Volatility Squeeze. Twenty-eight of them draw shaded bands, six emit named buy/sell markers, three recolour the price candles, and Seasonality draws a monthly return heatmap as a table over the chart. The full catalogue with ids and defaults is in the docs.
 
 Since 2.4.0 a study can fold the chart's own bars up to a higher timeframe with `securitySeries` (as the bucket stood at each bar, or the last completed one, or with lookahead when reproducing a source that repaints), paint a plot displaced by a number of bars, colour a candle's wick and border apart from its body, pin a marker to the pane edge, put a tooltip on a drawn zone, compute an alert message from the bar that fired, and ask the host for another instrument's bars through `chart.setBarsProvider`. A calculation that throws once it is on the chart is reported on that study's data status rather than thrown into the render loop.
 
@@ -598,7 +598,7 @@ npm run verify     # lint + types + unit + endurance harness + build + demo + dt
 
 ## Status &amp; limitations
 
-Version **2.5.10**. All engine build phases are implemented. Upgrading a 1.9.x host: [Migrating to 2.0](./docs/migrating-to-2.md).
+Version **2.6.0**. All engine build phases are implemented. Upgrading a 1.9.x host: [Migrating to 2.0](./docs/migrating-to-2.md).
 
 Known gaps, stated plainly:
 

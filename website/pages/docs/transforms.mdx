@@ -32,7 +32,7 @@ keyed by `brick.time`), as the live example does.
 
 ## In-chart transforms
 
-(unreleased) Give a series a transform and the chart applies it to the bars you feed, forming
+Give a series a transform and the chart applies it to the bars you feed, forming
 the elements again on every tick. The series keeps speaking your bars: `setData`, `update`
 and `prependData` take them and `getData` returns them, so a live feed, replay and history
 paging work unchanged, while the chart draws the bricks. This chart streams: a tick on the
@@ -288,7 +288,7 @@ at the start of a fresh history batch. `push` feeds one source bar and returns z
 completed derived elements as `Bar[]`. Each source bar is pushed once, in time order: every push
 moves the state, so pushing a bar that is still forming again on each tick counts it again. The
 optional `flush` emits any in-progress element at the end of the data stream (for example, the
-current partial range bar). `runTransform` calls all three in sequence. (unreleased) The optional
+current partial range bar). `runTransform` calls all three in sequence. The optional
 `clone` returns an independent copy of the state, which is how an in-chart transform pushes a
 forming bar on every tick without committing it; every built-in transform has one.
 

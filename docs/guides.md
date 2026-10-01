@@ -23,7 +23,7 @@ const bricks = runTransform(new RenkoTransform({ boxSize: 5 }), bars);
 chart.addSeries('candlestick').setData(bricks); // Renko renders as candles
 ```
 
-Or (unreleased) have the chart apply the transform itself, to the bars you feed
+Or have the chart apply the transform itself, to the bars you feed
 it, live: the series keeps taking your bars, and bricks form as ticks land.
 
 ```ts
