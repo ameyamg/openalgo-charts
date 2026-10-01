@@ -1,6 +1,7 @@
 // Trade-management tier (opt-in entry point: "openalgo-charts/trade").
-// Phase 8: read-only order/position/bracket primitives + live P&L, reconciled
-// from book snapshots. Phase 9 adds the place/modify/cancel write path.
+// The on-chart order, position and bracket primitives with live P&L, which
+// the trade controller reconciles from book snapshots, and the order engine's
+// place, modify and cancel path.
 
 export const TRADE_TIER = 'trade' as const;
 

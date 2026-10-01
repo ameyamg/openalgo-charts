@@ -7,7 +7,7 @@ describe('InvalidateMask', () => {
     expect(m.globalLevel).toBe(InvalidationLevel.None);
     m.invalidateGlobal(InvalidationLevel.Light);
     expect(m.globalLevel).toBe(InvalidationLevel.Light);
-    m.invalidateGlobal(InvalidationLevel.Cursor); // lower → ignored
+    m.invalidateGlobal(InvalidationLevel.Cursor); // lower: ignored
     expect(m.globalLevel).toBe(InvalidationLevel.Light);
     m.invalidateGlobal(InvalidationLevel.Full);
     expect(m.globalLevel).toBe(InvalidationLevel.Full);

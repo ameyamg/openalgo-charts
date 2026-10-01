@@ -87,7 +87,7 @@ describe('PriceScale', () => {
     expect(r.max).toBeGreaterThan(r.min);
   });
 
-  it('maps price ↔ y invertibly (higher price → smaller y)', () => {
+  it('maps between price and y invertibly (a higher price gives a smaller y)', () => {
     const ps = new PriceScale();
     ps.setHeight(400);
     ps.setPriceRange({ min: 0, max: 100 });
@@ -103,7 +103,7 @@ describe('PriceScale', () => {
     expect(ps.format(100.05)).toBe('100.05');
   });
 
-  it('panByPixels pans vertically — content tracks 1:1, span preserved, manual mode', () => {
+  it('panByPixels pans vertically: content tracks 1:1, span preserved, manual mode', () => {
     const ps = new PriceScale();
     ps.setHeight(400);
     ps.setPriceRange({ min: 100, max: 200 });
@@ -117,7 +117,7 @@ describe('PriceScale', () => {
 });
 
 describe('TimeScale', () => {
-  it('maps logical index ↔ x invertibly', () => {
+  it('maps between logical index and x invertibly', () => {
     const ts = new TimeScale({ barSpacing: 10, rightOffset: 0 });
     ts.setWidth(500);
     ts.setBaseIndex(49); // 50 bars, base at right edge
@@ -151,7 +151,7 @@ describe('optimalBarWidth', () => {
   it('grows with spacing, stays >= 1, parity-matched to the wick', () => {
     expect(optimalBarWidth(1, 1)).toBeGreaterThanOrEqual(1);
     expect(optimalBarWidth(10, 1)).toBeGreaterThan(optimalBarWidth(4, 1));
-    // wick width at dpr=1 is 1 (odd) → body must be odd
+    // wick width at dpr=1 is 1 (odd), so the body must be odd
     expect(optimalBarWidth(10, 1) % 2).toBe(1);
   });
 });

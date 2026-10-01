@@ -4,12 +4,12 @@ import {
   type PaneState, type PriceScaleId, type PriceScaleState,
 } from 'openalgo-charts';
 import {
-  hostOwnedStudy, parseIndicatorStates, parseIndicatorTemplatePayload,
+  hostOwnedStudy, MAX_PANE_SLOT, parseIndicatorStates, parseIndicatorTemplatePayload, releaseScaleOwner,
   type IndicatorTemplateInput, type IndicatorTemplateLayout, type IndicatorTemplatePayload, type IndicatorTemplatePlotBinding,
 } from './documents';
 import { choice, readJson, record, WorkspaceDocumentError } from './json';
 import {
-  fromTemplatePane, planIndicatorTemplate, remapTemplateIndicatorIds, toTemplatePane, type IndicatorTemplateMode,
+  checkPlanned, fromTemplatePane, planIndicatorTemplate, remapTemplateIndicatorIds, toTemplatePane, type IndicatorTemplateMode,
 } from './templates';
 
 export interface IndicatorTemplateApplyOptions {
@@ -46,12 +46,17 @@ function primaryId(chart: Chart, slot: number, pane: PaneState): PriceScaleId | 
   const primary = chart.primarySeries();
   if (!primary) return undefined;
   const target = primary.priceScale();
-  return scaleEntries(pane).find(([id]) => chart.panes()[slot].scaleFor(id) === target)?.[0];
+  // `slot` is the chart's price pane slot, and a chart always has its price pane.
+  return scaleEntries(pane).find(([id]) => chart.panes()[slot]!.scaleFor(id) === target)?.[0];
 }
 
-/** A chart's pane list in template order: the price pane first, the rest in their order. */
-function templateOrder<T>(items: readonly T[], primary: number): T[] {
-  return [items[primary], ...items.filter((_, index) => index !== primary)];
+/**
+ * A chart's pane list in template order: the price pane first, the rest in
+ * their order. `primary` is the price pane's slot in `items`, so the list is
+ * never empty.
+ */
+function templateOrder<T>(items: readonly T[], primary: number): [T, ...T[]] {
+  return [items[primary]!, ...items.filter((_, index) => index !== primary)];
 }
 
 /** A template-order pane list back in chart order, the price pane at `primary`. */
@@ -106,7 +111,7 @@ function validateBindings(studies: readonly IndicatorState[], layout: IndicatorT
       const reference = study.settings[key] as IndicatorStudySource;
       const producer = studies.find(candidate => candidate.instanceId === reference.instanceId)!;
       const selected = getIndicator(producer.indicatorId).plots.filter(plot => plot.key === reference.plotKey);
-      if (selected.length !== 1 || selected[0].ohlc !== undefined) {
+      if (selected.length !== 1 || selected[0]!.ohlc !== undefined) {
         throw new WorkspaceDocumentError('Template study source must identify one declared scalar plot');
       }
     }
@@ -127,9 +132,10 @@ function validateFills(descriptor: IndicatorDescriptor, study: IndicatorState, b
   const local = firstLocal ? bindings.find(binding => binding.plotKey === firstLocal.key)!.scaleId : study.priceScaleId ?? 'right';
   for (const fill of descriptor.fills ?? []) {
     const pane = fill.overlay === true ? 0 : study.paneIndex;
+    // `between` is a pair, so there are two endpoints.
     const endpoints = fill.between.map(key => bindings.find(binding => binding.plotKey === key)
       ?? { paneIndex: pane, scaleId: fill.overlay === true ? 'right' : local });
-    if (endpoints.some(endpoint => endpoint.paneIndex !== pane) || endpoints[0].scaleId !== endpoints[1].scaleId) {
+    if (endpoints.some(endpoint => endpoint.paneIndex !== pane) || endpoints[0]!.scaleId !== endpoints[1]!.scaleId) {
       throw new WorkspaceDocumentError('Template fill endpoints must share their pane and scale');
     }
   }
@@ -140,7 +146,8 @@ function hostPanes(chart: Chart): Set<number> {
   const counts = chart.panes().map(pane => pane.series().length), primary = chart.primaryPaneIndex();
   for (const instance of chart.indicators()) for (const plot of getIndicator(instance.indicatorId).plots) {
     const handle = instance.series(plot.key);
-    if (handle && chart.seriesType(handle) !== null) counts[plot.overlay === true ? primary : instance.paneIndex]--;
+    // A study's pane, and the price pane, are both panes of the chart that `counts` lists.
+    if (handle && chart.seriesType(handle) !== null) counts[plot.overlay === true ? primary : instance.paneIndex]!--;
   }
   return new Set(counts.flatMap((count, index) => count > 0 ? [toTemplatePane(index, primary)] : []));
 }
@@ -164,9 +171,7 @@ function copiedScale(source: PriceScaleState, owners: ReadonlyMap<string, string
 function clearOutgoingOwners(panes: PaneState[], outgoing: ReadonlySet<string>): void {
   for (const pane of panes) for (const [, scale] of scaleEntries(pane)) {
     const owner = scale.indicatorRange;
-    if (!owner || !outgoing.has(owner.instanceId)) continue;
-    delete scale.indicatorRange; delete scale.fixedRange;
-    if (!owner.manual) { scale.autoScale = true; delete scale.range; delete scale.ratioLock; }
+    if (owner && outgoing.has(owner.instanceId)) releaseScaleOwner(scale);
   }
 }
 
@@ -208,6 +213,42 @@ function listedPanes(chart: Chart, mode: IndicatorTemplateMode): PaneState[] {
   return panes;
 }
 
+/**
+ * Where each of the template's study panes lands: the next slot from `first`
+ * that holds nothing the plan keeps, in the template's order. Pane zero is
+ * the price pane on both sides.
+ */
+function templateSlots(additions: readonly IndicatorState[], reserved: ReadonlySet<number>, first: number): Map<number, number> {
+  const paneMap = new Map<number, number>([[0, 0]]);
+  let nextPane = first;
+  for (const sourcePane of [...new Set(additions.map(study => study.paneIndex).filter(index => index > 0))].sort((a, b) => a - b)) {
+    while (reserved.has(nextPane)) nextPane++;
+    if (nextPane > MAX_PANE_SLOT) throw new WorkspaceDocumentError('Indicator pane limit exceeded');
+    paneMap.set(sourcePane, nextPane++);
+  }
+  return paneMap;
+}
+
+/**
+ * Each template study pane onto its slot, its weight scaled from the
+ * template's price pane to the destination's, with its scales as `copy`
+ * makes them.
+ */
+function copyTemplatePanes(panes: PaneState[], source: readonly PaneState[], paneMap: ReadonlyMap<number, number>,
+  copy: (pane: PaneState) => ReadonlyArray<readonly [PriceScaleId, PriceScaleState]>): void {
+  const main = panes[0]!, templateMain = source[0]!; // both sides always have a price pane (see the planner)
+  for (const [sourcePane, targetPane] of paneMap) {
+    if (!sourcePane) continue;
+    const from = source[sourcePane]!;
+    const weight = from.weight / templateMain.weight * main.weight;
+    if (!(weight > 0) || !Number.isFinite(weight)) throw new WorkspaceDocumentError('Template pane weight is not representable');
+    const entries = copy(from);
+    // scaleEntries lists the right scale first, so a pane always has entry zero.
+    panes[targetPane] = { weight, priceScale: entries[0]![1],
+      ...(entries.length > 1 ? { scales: Object.fromEntries(entries.slice(1)) } : {}) };
+  }
+}
+
 /** The planner proper, run with the destination read in template order. */
 function planTemplateOrder(chart: Chart, incoming: IndicatorTemplateInput, mode: IndicatorTemplateMode,
   options: IndicatorTemplateApplyOptions, primary: number): IndicatorTemplatePlan {
@@ -226,9 +267,7 @@ function planTemplateOrder(chart: Chart, incoming: IndicatorTemplateInput, mode:
   // A study the host keeps from the user survives a replace, and its pane is kept out of the template's way.
   const kept = mode === 'replace' ? previous.filter(study => hostOwnedStudy(study.policy)) : [];
   const planned = mode === 'append' ? [...previous, ...additions] : [...kept, ...additions];
-  if (planned.length > 256) throw new WorkspaceDocumentError('At most 256 indicator instances are supported');
-  const missing = [...new Set(planned.filter(study => !available.has(study.indicatorId)).map(study => study.indicatorId))];
-  if (missing.length) throw new WorkspaceDocumentError(`Missing indicators: ${missing.join(', ')}`);
+  checkPlanned(planned, available);
   const bindings = validateBindings(additions, layout);
   const reservedPanes = mode === 'replace' ? hostPanes(chart) : new Set<number>();
   for (const study of kept) if (study.paneIndex > 0) reservedPanes.add(study.paneIndex);
@@ -240,25 +279,15 @@ function planTemplateOrder(chart: Chart, incoming: IndicatorTemplateInput, mode:
   const panes = current.panes.map(pane => parsePaneState(pane));
   if (mode === 'replace') clearOutgoingOwners(panes, new Set(previous.filter(study => !kept.includes(study))
     .flatMap(study => study.instanceId ? [study.instanceId] : [])));
-  const paneMap = new Map<number, number>([[0, 0]]);
-  let nextPane = mode === 'append' ? panes.length : 1;
-  for (const sourcePane of [...new Set(additions.map(study => study.paneIndex).filter(index => index > 0))].sort((a, b) => a - b)) {
-    while (reservedPanes.has(nextPane)) nextPane++;
-    if (nextPane > 31) throw new WorkspaceDocumentError('Indicator pane limit exceeded');
-    paneMap.set(sourcePane, nextPane++);
-  }
+  const paneMap = templateSlots(additions, reservedPanes, mode === 'append' ? panes.length : 1);
   const originalIds = additions.map(study => study.instanceId!);
   const owners = remapTemplateIndicatorIds(previous, additions);
-  for (const [sourcePane, targetPane] of paneMap) {
-    if (!sourcePane) continue;
-    const source = layout.panes[sourcePane];
-    const weight = source.weight / layout.panes[0].weight * panes[0].weight;
-    if (!(weight > 0) || !Number.isFinite(weight)) throw new WorkspaceDocumentError('Template pane weight is not representable');
-    const entries = scaleEntries(source).map(([id, scale]) => [id, copiedScale(scale, owners, preserve)] as const);
-    panes[targetPane] = { weight, priceScale: entries[0][1],
-      ...(entries.length > 1 ? { scales: Object.fromEntries(entries.slice(1)) } : {}) };
-  }
-  const main = panes[0], originalMainIds = new Set(scaleEntries(main).map(([id]) => id));
+  // Parsing gave the template a pane zero and put every template study on one of
+  // its panes; the destination always has its price pane. A study pane lands at
+  // slot 1 or later, so `main` stays the destination's price pane.
+  const main = panes[0]!, templateMain = layout.panes[0]!;
+  copyTemplatePanes(panes, layout.panes, paneMap, pane => scaleEntries(pane).map(([id, scale]) => [id, copiedScale(scale, owners, preserve)] as const));
+  const originalMainIds = new Set(scaleEntries(main).map(([id]) => id));
   const scaleMap = new Map<PriceScaleId, PriceScaleId>();
   const copiedColumns: { id: PriceScaleId; source: PriceScaleState }[] = [];
   let nextScale = 1;
@@ -271,11 +300,12 @@ function planTemplateOrder(chart: Chart, incoming: IndicatorTemplateInput, mode:
     }
     let target = id;
     if (policy === 'copy') {
-      do { target = `overlay:template-scale-${additions[0].instanceId}-${nextScale++}`; } while (scaleState(main, target));
+      // Only the loop over `additions` below calls this, so there is a first addition.
+      do { target = `overlay:template-scale-${additions[0]!.instanceId}-${nextScale++}`; } while (scaleState(main, target));
     }
     scaleMap.set(id, target);
     if (!scaleState(main, target)) {
-      const source = scaleState(layout.panes[0], id) ?? defaultScale();
+      const source = scaleState(templateMain, id) ?? defaultScale();
       const scale = copiedScale(source, owners, preserve);
       if (target === 'right') main.priceScale = scale;
       else { main.scales ??= {}; main.scales[target] = scale; }
@@ -285,7 +315,8 @@ function planTemplateOrder(chart: Chart, incoming: IndicatorTemplateInput, mode:
     return target;
   };
   additions.forEach((study, index) => {
-    const original = originalIds[index], originalPane = study.paneIndex;
+    // `originalIds` was mapped from `additions`, one id per study.
+    const original = originalIds[index]!, originalPane = study.paneIndex;
     const maps = (bindings.get(original) ?? []).map(binding => [binding.plotKey, mapScale(binding.paneIndex, binding.scaleId)]);
     if (maps.length) study.plotPriceScaleIds = Object.fromEntries(maps);
     if (study.priceScaleId !== undefined) study.priceScaleId = mapScale(originalPane, study.priceScaleId);
@@ -293,8 +324,9 @@ function planTemplateOrder(chart: Chart, incoming: IndicatorTemplateInput, mode:
     study.paneIndex = paneMap.get(originalPane)!;
     // Unplotted overlay fill columns always use the native right fallback.
     // A primary relation remap must remain representable by that same contract.
+    // Every binding's plot key was written into plotPriceScaleIds just above.
     validateFills(getIndicator(study.indicatorId), study, (bindings.get(original) ?? []).map(binding => ({ ...binding,
-      paneIndex: paneMap.get(binding.paneIndex)!, scaleId: study.plotPriceScaleIds![binding.plotKey] })));
+      paneIndex: paneMap.get(binding.paneIndex)!, scaleId: study.plotPriceScaleIds![binding.plotKey]! })));
   });
   for (const side of ['left', 'right', 'hidden'] as const) {
     let order = Math.max(-1, ...scaleEntries(main).filter(([id]) => originalMainIds.has(id))

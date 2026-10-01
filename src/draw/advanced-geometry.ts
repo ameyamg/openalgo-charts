@@ -1,9 +1,9 @@
 /** Screen-space curves and price/time constructions for advanced drawings. */
-import type { DrawingTool, FibLevel, HitContext, ScreenPoint } from './types';
+import type { DrawingTool, FibLevel, HitContext, ScreenPoint, ToolAnchors } from './types';
 import { composeSettings, FILL_FIELDS, FONT_FIELDS, LEVEL_FIELDS, LINE_FIELDS } from './schema';
-import { cloneLevels } from './levels';
+import { activeLevels, cloneLevels } from './levels';
 import {
-  activeLevels, clippedLine, finitePoint, geometryTool, midpoint, numericProp,
+  clippedLine, finitePoint, geometryTool, midpoint, numericProp,
   type DrawingGeometry, type GeometryLabel, type GeometryPath,
 } from './advanced-shared';
 
@@ -24,7 +24,7 @@ const curve = (center: ScreenPoint, rx: number, ry = rx, start = 0, sweep = TAU,
 const ready = (c: HitContext, count = 2): boolean => c.pts.length >= count && c.pts.every(finitePoint);
 const label = (c: HitContext, l: FibLevel, at: ScreenPoint): GeometryLabel[] => c.drawing.style.showLabels === false
   ? [] : [{ at, text: l.label ?? String(l.ratio), color: l.color }];
-function preview(c: HitContext): DrawingGeometry {
+function preview(c: HitContext & ToolAnchors<2>): DrawingGeometry {
   return ready(c) ? { paths: [segment(c.pts[0], c.pts[1])] } : empty();
 }
 
@@ -37,7 +37,7 @@ const trendTime = geometryTool({
   const index = (time: number): number => c.rc.dataLayer.timeToIndexFloat(time);
   const span = index(b.time) - index(a.time), start = index(origin.time);
   const paths: GeometryPath[] = [], labels: GeometryLabel[] = [];
-  for (const l of activeLevels(c.drawing, TIME_LEVELS)) {
+  for (const l of activeLevels(c.drawing.style.levels, TIME_LEVELS)) {
     const x = c.rc.timeScale.indexToX(start + span * l.ratio);
     if (!Number.isFinite(x) || x < 0 || x > c.rc.plotWidth) continue;
     paths.push(segment({ x, y: 0 }, { x, y: c.rc.plotHeight }, l.color));
@@ -61,13 +61,13 @@ function radial(id: string, name: string, kind: 'circle' | 'arc' | 'wedge'): Dra
       paths.push(segment(a, b));
       if (kind === 'arc') { start -= Math.PI / 2; sweep = Math.PI; }
       else {
-        const angle = Math.atan2(other.y - a.y, other.x - a.x);
+        const angle = Math.atan2(other!.y - a.y, other!.x - a.x); // a wedge declares three anchors
         sweep = ((angle - start + 3 * Math.PI) % TAU) - Math.PI;
         paths.push(segment(a, { x: a.x + radius * Math.cos(angle), y: a.y + radius * Math.sin(angle) }));
       }
     }
     let outer = 0;
-    for (const l of activeLevels(c.drawing, defaults)) {
+    for (const l of activeLevels(c.drawing.style.levels, defaults)) {
       const r = radius * l.ratio;
       if (!(r > 0) || !Number.isFinite(r)) continue;
       outer = Math.max(outer, r);
@@ -97,7 +97,7 @@ const spiral = geometryTool({ id: 'fib-spiral', name: 'Fib Spiral', points: 2, s
   for (let quarter = Math.ceil(inward / (Math.PI / 2)); quarter < 2; quarter++) breaks.push(quarter * Math.PI / 2);
   breaks.push(Math.PI);
   for (let i = 1; i < breaks.length; i++) {
-    const from = breaks[i - 1], to = breaks[i];
+    const from = breaks[i - 1]!, to = breaks[i]!; // i is in range
     const count = Math.max(2, Math.min(32, Math.ceil((to - from) * Math.sqrt(radius * Math.exp(growth * to) / 0.8))));
     for (let j = i === 1 ? 0 : 1; j <= count; j++) {
       const t = from + (to - from) * j / count, r = radius * Math.exp(growth * t);
@@ -118,7 +118,7 @@ const gannSquare = geometryTool({
   const paths: GeometryPath[] = [], labels: GeometryLabel[] = [];
   if (c.drawing.style.fill === true) paths.push({ points: [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }], closed: true, fill: true, stroke: false });
   const ia = c.rc.dataLayer.timeToIndexFloat(pa.time), ib = c.rc.dataLayer.timeToIndexFloat(pb.time);
-  for (const l of activeLevels(c.drawing, GRID_LEVELS)) {
+  for (const l of activeLevels(c.drawing.style.levels, GRID_LEVELS)) {
     const x = c.rc.timeScale.indexToX(ia + (ib - ia) * l.ratio);
     const y = c.rc.priceScale.priceToY(pa.price + (pb.price - pa.price) * l.ratio);
     paths.push(segment({ x: left, y }, { x: right, y }, l.color), segment({ x, y: top }, { x, y: bottom }, l.color));
@@ -149,7 +149,7 @@ function clippedUpperArc(center: ScreenPoint, radius: number, left: number, righ
   boundaries.sort((a, b) => a - b);
   const paths: GeometryPath[] = [];
   for (let i = 1; i < boundaries.length; i++) {
-    const start = boundaries[i - 1], sweep = boundaries[i] - start;
+    const start = boundaries[i - 1]!, sweep = boundaries[i]! - start; // i is in range
     if (sweep < 1e-12) continue;
     const angle = start + sweep / 2, x = center.x + radius * Math.cos(angle), y = center.y + radius * Math.sin(angle);
     if (x < left || x > right || y < top || y > bottom) continue;
@@ -169,7 +169,7 @@ const dedekind = geometryTool({
   const x0 = Math.max(0, left), x1 = Math.min(c.rc.plotWidth, right), y0 = Math.max(0, top), y1 = Math.min(c.rc.plotHeight, bottom);
   if (x0 > x1 || y0 > y1) return empty();
   const corners = [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }];
-  const paths: GeometryPath[] = corners.map((p, i) => ({ points: clippedLine(p, corners[(i + 1) % 4], c.rc) }));
+  const paths: GeometryPath[] = corners.map((p, i) => ({ points: clippedLine(p, corners[(i + 1) % 4]!, c.rc) })); // four corners
   const low = (x0 - left) / height, high = (x1 - left) / height;
   const firstWall = Math.ceil(low - 0.5) + 0.5;
   const wallCount = Math.min(2048, Math.floor(high - firstWall) + 1);
@@ -212,7 +212,7 @@ function wavefront(id: string, name: string, golden: boolean, supersonic: boolea
     const direction = { x: (b.x - a.x) / (2 * radius), y: (b.y - a.y) / (2 * radius) };
     const mach = supersonic ? numericProp(c.drawing, 'mach', 2, 1.01, 20) : 1;
     const nose = { x: center.x - mach * radius * direction.x, y: center.y - mach * radius * direction.y };
-    const active = activeLevels(c.drawing, defaults).filter(l => l.ratio > 0).slice().sort((a, b) => a.ratio - b.ratio);
+    const active = activeLevels(c.drawing.style.levels, defaults).filter(l => l.ratio > 0).slice().sort((a, b) => a.ratio - b.ratio);
     if (!golden) active.splice(Math.round(numericProp(c.drawing, 'waveCount', 6, 1, 12)));
     const paths: GeometryPath[] = [], labels: GeometryLabel[] = [];
     let maxRadius = 0;

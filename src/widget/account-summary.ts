@@ -14,13 +14,13 @@ import type { AccountSnapshot, AccountStateSource } from 'openalgo-charts/trade'
 import { chromeIconSvg } from 'openalgo-charts/draw';
 import { h, type WidgetContext } from './context';
 import { errorText, widgetText } from './localization';
-import { openMenu } from './topbar';
+import { openMenu } from './menu';
 
 export interface AccountSummaryOptions {
   /** Usually an `AccountManager` from the trade tier. */
   source: AccountStateSource;
   /** BCP 47 tag for the figures. Default: the widget's. */
-  locale?: string;
+  locale?: string | undefined;
 }
 
 export interface AccountSummaryHandle {

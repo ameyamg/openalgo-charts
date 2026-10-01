@@ -10,10 +10,10 @@
 import type { PlotRect } from 'openalgo-charts';
 import type { Drawing, DrawingPoint, ScreenPoint, ViewportPoint } from './types';
 import type { DrawingChartHost } from './controller-types';
-import { placeViewportAnchors } from './layer';
-import { getDrawingTool, hasDrawingTool } from './tools';
+import { placeViewportAnchors, toolBounds } from './layer';
 import { boundsOf } from './geometry';
 import { rdpSimplify } from './freehand';
+import { clamp } from '../helpers/math';
 
 /**
  * The time scale's default bar spacing, for a horizontal nudge on a host that
@@ -52,9 +52,6 @@ export interface PointerSample {
   pressure?: number;
 }
 
-/** `v` held to `0..size`: a pixel on a plot of that size. */
-export const within = (v: number, size: number): number => (v < 0 ? 0 : v > size ? size : v);
-
 /**
  * Anchors on one axis, from `a0..a1`, cut so the box `b0..b1` they carry fits
  * a plot of `size`: held inside the room the box leaves them, so a label
@@ -66,7 +63,7 @@ const cutInto = (b0: number, b1: number, a0: number, a1: number, size: number) =
   const trail = Math.max(0, b1 - a1);
   return (v: number): number => (b1 - b0 <= size ? v
     : lead + trail < size ? Math.min(Math.max(v, lead), size - trail)
-    : within(v, size));
+    : clamp(v, 0, size));
 };
 
 export class DrawingScreen {
@@ -194,12 +191,12 @@ export class DrawingScreen {
       || p.point === null || p.point === undefined) {
       return [end];
     }
-    const tail = samples[samples.length - 1];
+    const tail = samples[samples.length - 1]!; // two or more, by the check above
     const shift = p.point.y - tail.y;
     if (!Number.isFinite(shift)) return [end];
     const out: DrawingPoint[] = [];
     for (let i = 0; i < samples.length - 1; i++) {
-      const s = samples[i];
+      const s = samples[i]!; // i is in range
       const time = toTime.call(this._chart, s.x);
       const price = toPrice.call(this._chart, s.y + shift, paneIndex);
       if (price === null || !Number.isFinite(time) || !Number.isFinite(price)) continue;
@@ -233,9 +230,9 @@ export class DrawingScreen {
     const out: DrawingPoint[] = [];
     let j = 0;
     for (const k of kept) {
-      while (j < px.length && (px[j].x !== k.x || px[j].y !== k.y)) j++;
+      while (j < px.length && (px[j]!.x !== k.x || px[j]!.y !== k.y)) j++; // j < length, and pts pairs px
       if (j >= px.length) return pts;   // cannot happen; keep everything rather than lose a sample
-      out.push(pts[j]);
+      out.push(pts[j]!);
       j++;
     }
     return out;
@@ -317,7 +314,7 @@ export class DrawingScreen {
       px.push({ x, y });
     }
     const own = boundsOf(px);
-    const box = (hasDrawingTool(d.tool) ? getDrawingTool(d.tool).bounds?.(px, d) : undefined) ?? own;
+    const box = toolBounds(d, px) ?? own;
     const cutX = cutInto(box.x0, box.x1, own.x0, own.x1, frame.width);
     const cutY = cutInto(box.y0, box.y1, own.y0, own.y1, frame.height);
     return this.pinPlot(d, px.map((p) => ({ x: cutX(p.x), y: cutY(p.y) })), frame);

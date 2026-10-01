@@ -306,8 +306,9 @@
       <div class="set-body ws-body">
         <p id="csv-source" class="ws-hint"></p>
         <div class="ws-actions"><button id="csv-all-rows" class="btn btn--ghost" type="button">All loaded rows</button><button id="csv-visible" class="btn btn--ghost" type="button">Use visible bounds</button></div>
-        <div class="set-row"><label for="csv-from">From (UTC seconds)</label><div class="set-ctl"><input id="csv-from" type="text" inputmode="decimal" autocomplete="off" placeholder="No lower bound" /></div></div>
-        <div class="set-row"><label for="csv-to">To (UTC seconds)</label><div class="set-ctl"><input id="csv-to" type="text" inputmode="decimal" autocomplete="off" placeholder="No upper bound" /></div></div>
+        <div class="set-row"><label for="csv-from">From</label><div class="set-ctl"><input id="csv-from" type="datetime-local" step="1" autocomplete="off" /></div></div>
+        <div class="set-row"><label for="csv-to">To</label><div class="set-ctl"><input id="csv-to" type="datetime-local" step="1" autocomplete="off" /></div></div>
+        <p id="csv-zone" class="ws-hint"></p>
         <p class="ws-hint">Bounds are inclusive. Studies keep their full loaded-history warmup.</p>
         <div class="set-row"><label for="csv-alignment">Alignment</label><div class="set-ctl"><select id="csv-alignment"><option value="source">Source rows</option><option value="display">Displayed plot positions</option></select></div></div>
         <p class="ws-hint">Display alignment follows study plot offsets. Projected times are spacing estimates, not future observations.</p>

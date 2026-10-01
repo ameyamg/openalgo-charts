@@ -4,7 +4,7 @@ import { DataLayer } from '../src/model/data-layer';
 import { createSeriesRecord, type PriceScaleId } from '../src/model/series';
 import { TimeScale } from '../src/scale/time-scale';
 import { PriceScale } from '../src/scale/price-scale';
-import { drawLastPriceLabel, drawSeriesValueTag, type BarCountdownOptions, type PlotLayout } from '../src/render/axis';
+import { drawLastPriceTag, drawSeriesValueTag, type BarCountdownOptions, type PlotLayout } from '../src/render/axis';
 import type { SeriesStyle } from '../src/render/series-style';
 import { SvgContext } from '../src/render/svg-export';
 import { darkTheme } from '../src/theme';
@@ -64,8 +64,8 @@ describe('left-axis tag geometry', () => {
   it.each([1, 2])('keeps long price and countdown text inside the left column at dpr %s', dpr => {
     const rec = new FontContext(), priceScale = scale();
     priceScale.setPriceFormatter(() => 'LONG:123456789.0123');
-    drawLastPriceLabel(rec as unknown as CanvasRenderingContext2D, priceScale, 100, true, layout, dpr,
-      undefined, undefined, false, true, countdown, 'left');
+    drawLastPriceTag(rec as unknown as CanvasRenderingContext2D, priceScale, 100, true, layout, dpr,
+      undefined, { countdown, side: 'left' });
     const box = rec.ops.find(op => op.type === 'fillRect')!;
     expect(box).toBeDefined();
     expect(box.args[0]).toBeGreaterThanOrEqual(-layout.plotLeft * dpr);
@@ -91,8 +91,8 @@ describe('left-axis tag geometry', () => {
   it('omits a left tag when there is no column or not enough vertical room', () => {
     for (const tiny of [{ ...layout, plotLeft: 0 }, { ...layout, plotHeight: 10 }]) {
       const rec = new FontContext();
-      drawLastPriceLabel(rec as unknown as CanvasRenderingContext2D, scale(tiny.plotHeight), 100, true,
-        tiny, 1, undefined, undefined, false, true, countdown, 'left');
+      drawLastPriceTag(rec as unknown as CanvasRenderingContext2D, scale(tiny.plotHeight), 100, true,
+        tiny, 1, undefined, { countdown, side: 'left' });
       expect(rec.ops.some(op => op.type === 'fillRect' || op.type === 'fillText')).toBe(false);
     }
   });
@@ -100,8 +100,8 @@ describe('left-axis tag geometry', () => {
   it('fits oversized fonts vertically within each left tag row', () => {
     const rec = new FontContext(), priceScale = scale();
     priceScale.setPriceFormatter(() => '1');
-    drawLastPriceLabel(rec as unknown as CanvasRenderingContext2D, priceScale, 100, true, layout, 1,
-      { textColor: '#ffffff', lineColor: '#888888', font: '48px sans-serif' }, undefined, false, true, countdown, 'left');
+    drawLastPriceTag(rec as unknown as CanvasRenderingContext2D, priceScale, 100, true, layout, 1,
+      { textColor: '#ffffff', lineColor: '#888888', font: '48px sans-serif' }, { countdown, side: 'left' });
     for (const text of rec.ops.filter(op => op.type === 'fillText')) {
       expect(Number(/([\d.]+)px/.exec(text.font!)![1])).toBeLessThanOrEqual(12);
     }

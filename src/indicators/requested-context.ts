@@ -13,7 +13,7 @@ export interface RequestedAlignmentOptions {
    * carry retains the latest eligible row, including null values. missing emits
    * only when the selected row changes; the first target is an initial reading.
    */
-  gaps?: 'carry' | 'missing';
+  gaps?: 'carry' | 'missing' | undefined;
 }
 
 /** Opening-time membership is [start, end); availability may equal end. */
@@ -48,6 +48,11 @@ function column<T>(target: Record<string, T>, key: string, value: T): void {
   Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });
 }
 
+/**
+ * Every column of `values` holds one value per bar, and `eligibleAt` one time
+ * per bar of the confirmed prefix, so an index below `eligibleAt.length` reads
+ * a bar and every column.
+ */
 interface Prepared {
   bars: readonly Readonly<Bar>[];
   eligibleAt: number[];
@@ -137,9 +142,9 @@ export function alignRequestedExpression(
   let selected = -1;
   let lastSelected = -1;
   for (let i = 0; i < targetTimes.length; i++) {
-    while (selected + 1 < eligibleAt.length && eligibleAt[selected + 1] <= targetTimes[i]) selected++;
+    while (selected + 1 < eligibleAt.length && eligibleAt[selected + 1]! <= targetTimes[i]) selected++;
     if (selected >= 0 && (options.gaps !== 'missing' || selected !== lastSelected)) {
-      for (const key of keys) out[key][i] = values[key][selected];
+      for (const key of keys) out[key]![i] = values[key]![selected] as number | null;
     }
     lastSelected = selected;
   }
@@ -174,15 +179,16 @@ export function requestedIntrabars(
   const keys = Object.keys(values);
   const out: RequestedIntrabarValues = { times: targetWindows.map(() => []), values: {} };
   for (const key of keys) column(out.values, key, targetWindows.map(() => []));
+  // `out` holds one list per window in every column; `row` reads as `Prepared` says.
   let row = 0;
   for (let i = 0; i < targetWindows.length; i++) {
     const { start, end } = targetWindows[i];
     const cutoff = Math.min(end, options.asOf ?? Infinity);
-    while (row < eligibleAt.length && bars[row].time < start) row++;
-    while (row < eligibleAt.length && bars[row].time < end) {
-      if (eligibleAt[row] <= cutoff) {
-        out.times[i].push(bars[row].time);
-        for (const key of keys) out.values[key][i].push(values[key][row]);
+    while (row < eligibleAt.length && bars[row]!.time < start) row++;
+    while (row < eligibleAt.length && bars[row]!.time < end) {
+      if (eligibleAt[row]! <= cutoff) {
+        out.times[i]!.push(bars[row]!.time);
+        for (const key of keys) out.values[key]![i]!.push(values[key]![row] as number | null);
       }
       row++;
     }

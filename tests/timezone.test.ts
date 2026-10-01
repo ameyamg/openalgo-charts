@@ -412,7 +412,7 @@ describe('chart timezone', () => {
   /**
    * The pane has to hand the axis the zone itself, not a labeller built from
    * it. A host that formats its own labels still gets the `tickMark` hint, and
-   * that hint is the axis' answer to "did the day turn over here?" — a question
+   * that hint is the axis' answer to "did the day turn over here?": a question
    * only the chart's calendar can settle. Pre-baking a labeller left the hint
    * on IST, so a New York chart told its host the day had turned at 18:30 New
    * York time, in the middle of the trading afternoon.

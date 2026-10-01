@@ -277,6 +277,12 @@ describe('the compatibility shims', () => {
       ['src/core/chart.ts', 'renderer'],
       ['src/core/chart.ts', 'movePriceAxis'],
       ['src/core/chart.ts', 'movable'],
+      // The string form of the bus beside the typed `ChartEventMap` overloads.
+      ['src/core/chart.ts', 'on'],
+      ['src/core/chart.ts', 'once'],
+      ['src/core/chart.ts', 'off'],
+      ['src/core/chart.ts', 'emit'],
+      ['src/core/chart-events.ts', 'priceAxisMoved'],
     ];
     const found = tagged.map(t => `${t.file}#${t.name}`);
     expect(found).toEqual(expect.arrayContaining(shims.map(([file, name]) => `${file}#${name}`)));
@@ -305,11 +311,12 @@ describe('the compatibility shims', () => {
   });
 
   it('list each event only a deprecated method emits, and mark it where events are documented', () => {
-    // An event name has no declaration to carry a tag: `on` takes a string.
-    // One that only a deprecated method emits goes with that method, so the
-    // table and the event pages have to say so themselves.
+    // An event that only a deprecated method emits goes with that method. Its
+    // `ChartEventMap` key carries the tag, but an editor strikes through a
+    // declaration, not the string a host passes to `on`, so the table and the
+    // event pages have to say so themselves. The engine emits through `_emit`.
     const emitted = (node: ts.Node, out: string[]): string[] => {
-      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'emit'
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && /^_?emit$/.test(node.expression.name.text)
         && node.arguments[0] !== undefined && ts.isStringLiteral(node.arguments[0])) out.push(node.arguments[0].text);
       ts.forEachChild(node, child => { emitted(child, out); });
       return out;
@@ -371,7 +378,6 @@ interface Classified {
 }
 
 const CLASSIFIED: readonly Classified[] = [
-  { file: 'src/core/chart.ts', line: /legacy names carry one id/, status: 'undecided', name: '`draw:select`' },
   { file: 'src/core/chart.ts', line: /`rendererKind` shipped under/, status: 'deprecated', name: '`Chart.renderer`' },
   { file: 'src/core/chart-input.ts', line: /flat flags predate `modifiers`/, status: 'deprecated', name: '`shiftKey`' },
   { file: 'src/core/chart-input.ts', line: /typed against either/, status: 'deprecated', name: '`shiftKey`' },

@@ -18,7 +18,12 @@ Use `WidgetOptions.eventDetails` for its detail loader, labels and formatter, or
 chart's current timezone and widget locale. Event data is supplied through
 `widget.chart.setEvents()`, with optional groups and clustering controls.
 Symbol changes, replaced events and widget disposal close the popup and cancel
-pending detail loading. See the timeline section in `primitives-and-plugins.md`.
+pending detail loading. Details may carry rich `blocks`, rendered as
+text with vetted links, and `eventDetails.actions` adds host buttons (the type is
+`EventDetailAction`). The widget's popup takes its words from the widget's
+`translate` (message keys `Event details`, `Close`, `Events`, `Loading details...`,
+`No additional details.`, `Unable to load additional details.`); `eventDetails.labels`
+still wins, one label at a time. See the timeline section in `primitives-and-plugins.md`.
 
 ```ts
 import { createWidget } from 'openalgo-charts/widget';
@@ -35,7 +40,7 @@ const widget = createWidget('#terminal', {
 });
 ```
 
-`container` is an `HTMLElement`, a CSS selector, or an element id and must exist before the call. Give it a real height for rendering; since 2.1.3 an initially hidden chart can receive data and apply its pending initial view when layout reports a usable width. See [host-integration](host-integration.md#hidden-charts-and-preferred-views). The widget imports `openalgo-charts` and `openalgo-charts/draw` itself; the indicator tier is the host's import because not every terminal wants 105 indicators.
+`container` is an `HTMLElement`, a CSS selector, or an element id and must exist before the call. Give it a real height for rendering; since 2.1.3 an initially hidden chart can receive data and apply its pending initial view when layout reports a usable width. See [host-integration](host-integration.md#hidden-charts-and-preferred-views). The widget imports `openalgo-charts` and `openalgo-charts/draw` itself; the indicator tier is the host's import because not every terminal wants 112 indicators.
 
 Importing the module touches no DOM; only `createWidget` does (it injects the stylesheet and builds the root then). Import it anywhere, call it once the container exists. `npm run skills:coverage` imports the built tier under Node and fails on a module-scope `document` access.
 
@@ -155,15 +160,15 @@ The sprite is injected once per document on the body (`id="oac-rail-sprite"`), s
 | Export | Kind | Purpose |
 |---|---|---|
 | `mountTopbar(ctx, host, opts)` | function | Symbol box with search, interval pills, chart type menu, Indicators, Go to (with `onGoTo`), Objects, capture, settings, theme. Returns a `TopbarHandle` (`refresh`, `destroy`). |
-| `openMenu(ctx, anchor, rows, opts?)` | function | A popover menu under `anchor`, with an optional filter box; the chart type menu and the symbol results share it. A row's optional `icon` (a chrome icon id, since 2.5.10) draws that glyph before its label; once one row has one, every row keeps the column, and an id the registry does not carry leaves the slot empty. Returns the closer. |
-| `chartTypeChoices()` | function | The registered chart types a user can pick for the instrument (the registry minus histogram-family internals). |
+| `openMenu(ctx, anchor, rows, opts?)` | function | A popover menu under `anchor`, with an optional filter box; the chart type menu and the symbol results share it. A row's optional `icon` (a chrome icon id, since 2.5.10) draws that glyph before its label; once one row has one, every row keeps the column, and an id the registry does not carry leaves the slot empty. `opts.placement: 'beside'` opens it beside the anchor instead, clearing `opts.edge` too (the rail's right-click menus use it). The first parameter needs only `document`, `openOverlay` and `translate`, so a bottom bar context serves. Returns the closer. |
+| `chartTypeChoices()` | function | The registered chart types a user can pick for the instrument (the registry minus histogram-family internals), then every transform the chart applies, point and figure and Kagi listed once, there. |
 | `chartTypeLabel(id)` | function | A label from `CHART_TYPE_LABELS`, else the id. |
 | `CHART_TYPE_LABELS` | const | Labels for the built-in chart types. |
 | `intervalLabel(code)` | function | `'1d'` as `D`, `'1w'` as `W`, minute and hour codes as written, a registered calendar code upper-cased. |
 | `downloadText(doc, filename, text, mime)` | function | Hand text to the browser as a file; false when the runtime cannot. |
 | `captureName(symbol, interval, now?)` | function | `SYMBOL-5m-2026-01-31-09-15`, filename-safe. |
 | `SEARCH_DEBOUNCE_MS` | const `150` | Quiet before `symbolSearch` runs. |
-| `TopbarOptions`, `TopbarHandle`, `TopbarState`, `SymbolMatch`, `SymbolSearch`, `MenuRow`, `MenuOptions` | types | |
+| `TopbarOptions`, `TopbarHandle`, `TopbarState`, `SymbolMatch`, `SymbolSearch`, `MenuRow`, `MenuOptions` | types | `SymbolMatch` is the base package's type, re-exported. The results panel keeps focus in its field while a row is pressed, and a failed lookup shows "Search unavailable" (`schema.ui.symbolSearchFailed`) with typed entry still committing. Enter in the top bar, the phone header and the watchlist's add box waits for a search that is still running (its debounce or the host lookup), as the typing-navigation box already did, so it picks the result the user was about to see; typed text commits once a search finishes without matches or fails (`SymbolPickerHandle.canCommitRaw`). |
 
 The Capture menu includes **Download chart data (CSV)**, using the base
 `exportChartDataCsv` API. It captures source identity when opened and refuses a
@@ -171,6 +176,10 @@ changed, empty or loading source. The widget supplies source readiness; custom
 `mountTopbar` hosts can supply `TopbarOptions.dataAvailable()` for their own loading
 boundary. Active replay exports only installed rows. File failures surface in
 the status line and download resources are released after handoff or failure.
+The dialog asks for its From and To bounds as a date and a time on
+the chart's clock (the chart's timezone, named under the fields), not as UTC
+seconds; a To written to the minute takes in every bar that opens inside it, and
+the captured visible range fills both to the second.
 
 ### The bottom bar (`bottombar.ts`, `ranges.ts`) (since 2.5.10)
 
@@ -201,7 +210,7 @@ the status line and download resources are released after handoff or failure.
 | `applyTokens(el, tokens)` | function | Write a token set inline on an element. |
 | `themeMode(theme)` | function | `'dark'` or `'light'`, judged from the theme background. |
 | `token(name)` | function | `var(--oac-name)`. |
-| `parseColor(input)`, `formatColor(c)`, `luminance(color)`, `mix(a, b, t)`, `withAlpha(color, alpha)` | functions | The colour maths the tokens are built from; exported for a host deriving its own. |
+| `parseColor(input)`, `formatColor(c)`, `luminance(color)`, `mix(a, b, t)`, `withAlpha(color, alpha)` | functions | The colour maths the tokens are built from; exported for a host deriving its own. This `withAlpha` is not the base package's: it writes a CSS token value, `#rrggbb` when the result is opaque and `rgba()` otherwise, with the alpha clamped to 0..1, where the base one always writes `rgba(r,g,b,a)` with the alpha as given, for canvas. Use this one for chrome styles and the base one for anything the chart paints; alias one when a module imports both. |
 | `contrastRatio(a, b)`, `readableOn(color, surfaces, pole, min?)`, `TEXT_CONTRAST` | functions, const `4.5` | (since 2.5.9) The WCAG ratio of two colours, and a colour stepped toward `pole` by the least amount that reads at `min` on every one of `surfaces`. The text tokens (`mut`, `faint`, `up`, `down`, `amber`, `danger`) are built with it, so they read at 4.5 to 1 in both built-in themes and in a host theme. |
 | `TOKEN_PREFIX` | const `'--oac-'` | |
 | `WIDGET_FONT`, `WIDGET_MONO` | consts | The UI and monospace font stacks. |
@@ -234,7 +243,7 @@ Every mount takes the context and an optional anchor element (so it satisfies `D
 | `contextMenuEntries(ctx, event, hooks)` | function | The `MenuEntry[]` the menu is built from, for a host composing its own. |
 | `WIDGET_DIALOGS` | const | Registry mounts: `settings`, `indicatorPicker`, `indicatorSettings`, `drawingProperties`, `contextMenu`, `levelEditor`, `textEditor`, `alertEditor`, `alerts`. Registered on import. |
 | `renderForm(host, controls, opts)` | function | One control renderer for every generated form: switch column, label, control column; `colorPair` on one row. Returns a `FormHandle`. |
-| `controlsFromInputs(inputs)` | function | `ChartSettingsInput[]` (the engine's settings schema) to `FormControl[]`. |
+| `controlsFromInputs(inputs, translation?, intervals?)` | function | `ChartSettingsInput[]` (the engine's settings schema) to `FormControl[]`. An `interval` input becomes a select: `Chart` (the empty value), then `intervals` in order, or the built-in tokens and every registered code without it. The study settings dialog passes `WidgetContext.intervals`, which the widget sets from `WidgetOptions.intervals` when the host names them. |
 | `controlsFromFields(fields)` | function | A drawing tool's `SettingsField[]` to `FormControl[]`. |
 | `mountIndicatorInputControls(ctx, options)` | function | Adds symbol lookup and chart picking to an existing indicator form. Returns `IndicatorInputControlsHandle` with `cancelPick`, `refresh` and `destroy`. An action beside a disabled field is disabled with the field's reason; call `refresh()` after the form re-reads its conditions. |
 | `inputStates(inputs, values)` | function | (2.5.6) `Map<key, InputState>` of `{ visible, active, dependsOn }` from each input's `visibleWhen` and `activeWhen`, cascading through inputs a condition reads. A colour pair's `enabled`, `up` and `down` keys, on the input or under a form control's `pair`, count as the pair. For a host that renders its own form. |
@@ -315,9 +324,9 @@ Color swatches stay compact. Theme overrides should target these tokens.
 | `symbol` | `string` | `''` (or the saved one) | Upper-cased. With a feed and a symbol, the first load starts in the constructor. |
 | `exchange` | `string` | `''` | Passed to the feed with the symbol. |
 | `interval` | `string` | `'1d'` (or the saved one) | Must be a code the interval registry knows; an unknown code throws the engine's `UnknownIntervalError` at the call site. A saved code this build does not know falls back to `'1d'`. |
-| `intervals` | `readonly string[]` | `DEFAULT_INTERVALS` plus every registered code | The pill list. Each is validated the same way. |
+| `intervals` | `readonly string[]` | `DEFAULT_INTERVALS` plus every registered code | The pill list. Each is validated the same way. A list the host names is also what a study's timeframe select offers (`WidgetContext.intervals`). |
 | `variant` | `DataVariant` | the feed's default series (or the saved one) | Which of the feed's series to show: `{ session: 'extended' }`, `{ adjustment: 'raw' }`, a currency or a unit. A malformed one throws a `TypeError` at the call site. The feed must declare it through `dataVariants`, or the data status reads "Not available from this source: ..." with no retry. Since 2.5.6. |
-| `chartType` | `string` | `'candlestick'` | The primary series type; must be a registered chart type. |
+| `chartType` | `string` | `'candlestick'` | The primary chart type: a registered renderer or a transform the chart applies (`heikin-ashi`, `renko`, `range-bars`, `line-break`, `point-figure`, `kagi`). |
 | `theme` | `'dark' \| 'light' \| ChartTheme` | `'dark'` | Drives the canvas and the chrome tokens. Note the engine's own default is light; the widget's is dark. |
 | `rail` | `boolean \| RailOptions` | on | `false` hides it. `RailOptions.tools` restricts which ids appear (order still follows `RAIL_GROUPS`); `favorites` seeds the pins when nothing is stored. |
 | `topbar` | `boolean` | on | |
@@ -337,9 +346,9 @@ Color swatches stay compact. Theme overrides should target these tokens.
 | `layouts` | `LayoutsController \| false` | a controller over this widget | (since 2.5.10) What the Layouts menu drives. A chart grid gives its charts `false` (no chart saves a layout of its own there) unless the host passes one controller for the whole grid, which every chart's menu then drives. `false` keeps `workspaces` for templates only. |
 | `drawingStore` | `DrawingDocumentStore` | beside the layout with `persist`, else in memory | (since 2.5.9) Where each instrument's drawings are kept in `'instrument'` scope. Not a `ChartGridOptions` field: the grid gives each cell its own. |
 | `locale` | `string` | the runtime's | BCP 47 tag for the numbers on the status line. |
-| `symbolSearch` | `(query) => SymbolMatch[] \| Promise<SymbolMatch[]>` | none | Called as the user types in the symbol box, after `SEARCH_DEBOUNCE_MS`. |
+| `symbolSearch` | `(query, { signal }?) => SymbolMatch[] \| Promise<SymbolMatch[]>` | the feed's `searchSymbols`, when it has one; else none | Called as the user types in the symbol box, after `SEARCH_DEBOUNCE_MS`. The second argument's `signal` aborts once a newer query or a closed picker makes the answer stale; a one-argument callback still works. Without a callback, a feed with `searchSymbols` (both OpenAlgo feeds) serves every picker: the top bar, the phone layout, typed entry, the watchlist and study symbol inputs. That lookup lists the exact symbol on the chart's exchange first, because Enter takes the first result. |
 | `lookbackBars` | `number` | `DEFAULT_LOOKBACK_BARS` | Bars per load. |
-| `now` | `() => number` | `Date.now` | Clock for the load window and the capture filename. |
+| `now` | `() => number` | `Date.now` | The widget's wall clock in epoch milliseconds: the load window, the loading controller (unless `loading.now`, in UTC seconds, gives it its own), the status line and the bottom bar's clock and ranges. It shadows `ChartOptions.now`, the monotonic animation clock, which the widget does not pass to its chart. |
 | `onOrder` | `(order: OrderRequest) => void` | none | Order entry from the right-click menu. Without it the menu draws no trade rows. |
 | `movablePrimaryPane` | `boolean` | `false`, as in the engine | Pass `true` to let a trader move the price pane below its studies; the widget's own chrome (pane menu, status line, alerts, Objects panel) follows it wherever it sits. Leave it off while host code drives `widget.chart` with an explicit pane `0` for the price, or drop those zeros first. `createChartGrid` hands it to every chart it builds. See [scales-and-panes](scales-and-panes.md#moving-the-price-pane-opt-in). |
 | `account` | `AccountStateSource` | none | Account summary in the status line (see `mountAccountSummary`). Omitted shows nothing; a source whose provider declares no accounts shows disabled with the reason. Hidden with the status line (`statusline: false`, and the compact mobile controls, which hide the status line). It only reads and switches accounts. |
@@ -396,7 +405,7 @@ widget.variant();                    // the DataVariant in use, undefined for th
 widget.setSymbol(symbol, exchange?);
 widget.setInterval(code);            // throws UnknownIntervalError for a code the registry lacks
 widget.setDataVariant(variant);      // a new source: aborts, clears, reloads; undefined is the default
-widget.setChartType(id);             // registered renderer; retains handle, data, styles, scale and markers
+widget.setChartType(id);             // registered renderer or transform; retains handle, data, styles, scale and markers
 widget.setTheme('dark' | 'light' | theme);
 widget.openSettings();               // false when no dialog is registered under 'settings'
 widget.openIndicatorPicker();
@@ -416,6 +425,8 @@ widget.destroy();                    // saves if persisting, removes the chrome,
 widget.isDestroyed;
 await widget.ready;                  // (since 2.5.10) the persisted layout applied and the first load started
 ```
+
+**Transformed chart types.** With the transform tier imported, the chart type menu lists Heikin Ashi, Renko, Range bars, Line break, Point and figure and Kagi under a Transforms heading, and picking one has the chart transform the bars the widget loads, live (`chart.setSeriesTransform`); `chartType()` and the saved `chartType` are the transform's id, its options ride in `chart.series[].transform`, and a layout restores them. A widget whose host feeds `widget.series` itself (no `feed`) keeps point and figure and Kagi as renderers over the elements that host prepares, the 2.5.x contract, so nothing is transformed twice; the other four transform there too. A study's settings lead with a Compute on row (chart bars or underlying bars) while the chart transforms.
 
 `getState()` returns `{ version: 1, symbol, exchange, interval, chartType, theme, variant?, chart: chart.getState(), rail: RailPrefs | null }`; `variant` is present only for a non-default series, so a state without one (including every record saved before variants) restores onto the feed's default series, whatever variant the widget shows at the time, while one this build cannot read is refused before anything is applied. A persisted record whose variant this build cannot read opens on the default series without its saved view. The variant is part of the dataset, so a saved viewport lands only on the same variant too, and a `variant` bus event announces a change. The status line names a non-default variant (`.oac-statusline__variant`: localized "Regular hours", "Extended hours", "Adjusted prices", "Raw prices", then the provider's currency and unit names). `restoreState` validates field by field and returns `{ applied, reason?, chart?: RestoreReport }`; a saved viewport is applied only when the state was captured on the same symbol and interval, otherwise `stripView` drops it and the indicators and panes still land, and the drawings land on the state's own symbol (see Drawings per instrument). With `persist`, the state is written under `oac-widget:<namespace>:state` (debounced by `SAVE_DEBOUNCE_MS`, flushed on `pagehide` and on `destroy`) and the rail's preferences under `oac-widget:<namespace>:rail`. Since 2.5.10 those keys live in IndexedDB unless the host passes a synchronous `storage`. The widget is then built on its defaults, kept out of sight, and asks the feed for nothing until the store has answered. Then the saved symbol, interval, variant, chart type, theme, rail preferences, panels, layout and drawings are applied, and the first load goes out for the saved instrument only. `ready` settles at that point and never rejects. Options the host passed win, as before, and so does a symbol, interval or whole `restoreState` set before the store answered. A listener that throws on what the restore announces cannot stop it. Tabs on one namespace keep each other's saved drawings: the copy in memory follows the writes other tabs land, as `localStorage` reads did. A hidden page writes its layout only when a change is pending. A store that cannot be read within 4 s runs the session on memory and says so on the status line and in a toast. A refused write is reported on the status line and sent again with the next change. The writes pending when the page hides, on `pagehide` or on `destroy` are copied to a `localStorage` journal (`oac-widget-journal:<namespace>`) and replayed at the next load, because IndexedDB may not commit a transaction started while a page unloads. A page that offers IndexedDB but cannot open it stays on `localStorage`.
 
@@ -549,10 +560,10 @@ Delivery and persistence remain the host's responsibility. Observe
 persistence. Restore the complete chart document once, with the drawing and
 alert controllers already attached. Do not restore drawings again afterward.
 
-- `package.json` `exports['./widget']`: `types: ./dist/widget/index.d.ts`, `import: ./dist/openalgo-charts.widget.mjs`. Listed in `sideEffects` (importing registers the dialogs).
+- `package.json` `exports['./widget']`: `types: ./dist/widget/index.d.ts`, `import` and `default`: `./dist/openalgo-charts.widget.mjs`. Listed in `sideEffects` (importing registers the dialogs).
 - `rollup.config.js`: `openalgo-charts` and every `openalgo-charts/<tier>` are external for tier builds and emitted as sibling paths (`./openalgo-charts.mjs`, `./openalgo-charts.draw.mjs`), so `dist/` serves with no import map. The widget must never inline the base or the draw tier; `check-dts.mjs` fails a build whose `dist/widget/index.d.ts` declares `Chart` or `DrawingController`.
 - `.size-limit.json`: `Widget tier` row (the bundle alone), `Widget first-use parts` row (every part, by the glob `dist/openalgo-charts.widget.*.mjs`, since a part's name changes with its content) and `Widget terminal` row (base + draw + indicators + widget); `Everything` includes the widget. Read the budgets there and measure with `npm run size`; never quote either from memory.
-- The standalone IIFE is base-only and cannot host the widget. Use native ESM from `dist/`.
+- A page with no module support loads the widget from the script-tag build: `openalgo-charts.standalone.js`, `openalgo-charts.draw.standalone.js`, then `openalgo-charts.widget.standalone.js`, and calls `OpenAlgoCharts.widget.createWidget`. That file bundles the first-use parts below rather than fetching them, since a classic script cannot share a split chunk. See [bundling-and-tiers](bundling-and-tiers.md).
 - Parts that load on first use (since 2.5.10, `src/widget/lazy.ts`): UI a plain widget never opens is not in `openalgo-charts.widget.mjs` but in files beside it, `openalgo-charts.widget.<part>-<hash>.mjs`, fetched with `import()` the first time it is needed. A part resolves against the tier's own URL, so `dist/` or a CDN path needs nothing more and a bundler splits it the same way; under CSP, `script-src` allows the tier's origin as it already must. Once a part has arrived it opens synchronously; a part that cannot load says so in a toast each time it is asked for (a browser keeps a failed module fetch until the page reloads). While a part loads, a control pressed again asks once, the last control pressed is the one answered, and a request the user has moved on from by the time it arrives (a press elsewhere, Escape, or typing into another field) opens nothing (`usePart` and `PartAsk` in lazy.ts). Its rules join the widget's one stylesheet (`addWidgetStyles`), keeping that sheet's nonce. The `Widget tier` size row measures the tier file, which keeps everything a widget loads before a user opens a part (`preserveEntrySignatures: 'allow-extension'`); the file then also exports, under minified names, the shell helpers the parts import. Those are no API: no declaration names them, and `npm run skills:coverage` counts declared exports only. Because those names change from build to build, a tier file works only with the parts built with it; the hash in a part's name is of its content (`chunkFileNames` in rollup.config.js), so a new tier file asks for its own parts and never meets one a cache kept. A host serving `dist/` itself serves the tier files (names unchanged across releases) with revalidation and may cache the hashed parts for a long time; a CDN URL pins the exact version, never a range. Never refer to a part by its full file name: a test route or a size row matches it by glob, and a CSP allows its directory. `npm run build` empties `dist/` first, so no part from an earlier build is packed or measured.
 
 ## Pitfalls
@@ -1091,7 +1102,10 @@ widget.openNews();
   reorders in list order with the revision it was computed from, one move at a time so
   a held key lands every step; ArrowUp/Down moves between rows.
 - Rows take prices only from `quotes`. Without it every row is `unavailable` and shows
-  `n/a`. Row `data-state` is a `QuoteRowStatus`: `loading`, `live`, `delayed`,
+  `n/a`. That word, the `...` of a loading row and the name a row and a
+  message give an instrument (`{symbol} on {exchange}`) translate through
+  `schema.ui.watchlist.noQuote`, `schema.ui.watchlist.quoteLoading` and
+  `schema.ui.watchlist.entry`. Row `data-state` is a `QuoteRowStatus`: `loading`, `live`, `delayed`,
   `snapshot`, `stale`, `unavailable`, `error`; the status line reads the
   `QuoteBoardStatus`, and warns that values are stale only when one is on screen. The
   board holds one timer, for the next visible snapshot to age past `staleAfterMs`; a
@@ -1250,6 +1264,11 @@ while a tool is placing, while a drawing is dragged (`draw:preview`), in the nar
 - A selection with nothing the user may edit (`policy.editable: false`) shows its edit
   controls disabled with "(read-only)" in the title. Delete is also disabled when every
   selected drawing is locked, as in the context menu.
+- The toolbar, the context menu, the properties dialog, the rail, the phone bar
+  and the Delete, Backspace and cut keys share these rules (`drawing-actions.ts`): each
+  press is one history step; lock and hide read every drawing the user may edit, on when
+  every one is, so a partly locked selection locks; a selection whose every drawing is
+  locked is neither deleted nor cut; the order moves and duplicate reach every drawing.
 - Keyboard: it follows the chart in the tab order, so Tab from the focused chart reaches it,
   with one tab stop. Inside it, the arrow keys (with or without Shift), Home and End move
   between controls, and Escape goes back to the chart with the selection kept. Its key scope,

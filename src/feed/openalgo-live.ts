@@ -1,17 +1,18 @@
 /**
- * Composed OpenAlgo live data feed (resolves audit V2-M1). Implements the full
+ * Composed OpenAlgo live data feed. Implements the full
  * `DataFeed` contract by combining history (REST), live ticks (WS), and a
  * per-subscription aggregator, so `subscribeBars()` actually delivers live
  * interval bars instead of being a no-op trap.
  */
 import type { Bar } from '../model/bar';
-import type { BarsRequest, BarSubscriptionOptions, DataFeed, LiveBarMeta, MarketDepth, UnsubscribeFn } from './types';
+import type { BarsRequest, BarSubscriptionOptions, DataFeed, LiveBarMeta, MarketDepth, SymbolMatch, SymbolSearchRequest, UnsubscribeFn } from './types';
 import { OpenAlgoDataFeed, type OpenAlgoConfig } from './openalgo-rest';
 import { OpenAlgoWsFeed, type OpenAlgoWsConfig, type SocketFactory, type LtpEvent, type WsMode } from './openalgo-ws';
-import { CandleBuilder, type VolumeMode } from './candle-builder';
+import { CandleBuilder, type Tick, type VolumeMode } from './candle-builder';
 import { resolveInterval, isTimeBucketed, type Bucketing, type IntervalBucketing } from './intervals';
 import { TickBarAggregator } from './tick-aggregator';
 import { dataVariantError, unsupportedDataVariant } from './data-variant';
+import type { LooseOptional } from '../helpers/types';
 
 export interface OpenAlgoLiveConfig extends OpenAlgoConfig {
   /** WS proxy URL, e.g. ws://127.0.0.1:8765. */
@@ -59,7 +60,7 @@ export interface OpenAlgoLiveConfig extends OpenAlgoConfig {
 interface SubEntry {
   count: number;
   /** Depth level currently on the wire: the largest any attached consumer asked for. */
-  level?: number;
+  level?: number | undefined;
 }
 
 /**
@@ -174,6 +175,10 @@ export class OpenAlgoLiveDataFeed implements DataFeed {
     return this._rest.getBars(req);
   }
 
+  public searchSymbols(request: SymbolSearchRequest): Promise<SymbolMatch[]> {
+    return this._rest.searchSymbols(request);
+  }
+
   /**
    * Live bars: WS tick -> aggregator -> onBar (mutated/append bar). The tick
    * stream is LTP, or Quote when `volumeMode` is 'day-delta' and the bar
@@ -239,9 +244,9 @@ export class OpenAlgoLiveDataFeed implements DataFeed {
     if (opts?.seedFrom) builder.seed(opts.seedFrom, opts.cumDayVolumeSoFar);
     return (e) => {
       // cumDayVolume is only consumed in 'day-delta' mode; harmless otherwise.
-      const u = builder.onTick({
+      const u = builder.onTick({ // a quantity the frame lacks is undefined, which the builder reads as absent
         time: OpenAlgoLiveDataFeed._tickTime(e), price: e.ltp, ltq: e.ltq, cumDayVolume: e.volume,
-      });
+      } satisfies LooseOptional<Tick> as Tick);
       // A bucket the builder opened without having streamed the one before it
       // carries only the ticks it saw; the consumer holds history for the rest.
       if (u !== null) onBar(u.bar, u.provisional ? { provisional: true } : undefined);

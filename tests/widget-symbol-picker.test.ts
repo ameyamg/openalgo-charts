@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { createWidget, type Widget } from '../src/widget/widget';
+import { createWidget, type Widget, type WidgetOptions } from '../src/widget/widget';
+import type { SymbolSearchRequest } from '../src/feed/types';
 import { mountSymbolPicker } from '../src/widget/symbol-picker';
 import { mountQuickEntry } from '../src/widget/quick-entry';
 import { ensureWindowGlobal, fakeContainer, fakeWidgetDocument, fire, fireKey, FakeEvent, type FakeElement } from './helpers/fake-dom-widget';
@@ -106,6 +107,8 @@ describe('shared symbol picker', () => {
       onSelect: (symbol, exchange) => selected.push([symbol, exchange]),
     });
     input.focus(); input.value = 'r'; fire(input, 'input'); await vi.advanceTimersByTimeAsync(150);
+    // Focus stays in the field: a host that restores its text on blur would otherwise void the press.
+    expect(fire(root.querySelector('.oac-symbol-picker__row')!, 'mousedown', { bubbles: true }).defaultPrevented).toBe(true);
     const futures = root.querySelectorAll('.oac-symbol-picker__category').find(el => el.textContent === 'Futures')!;
     futures.click();
     expect(root.querySelectorAll('.oac-symbol-picker__row')).toHaveLength(1);
@@ -126,6 +129,34 @@ describe('shared symbol picker', () => {
     input.focus(); input.value = 'x'; fire(input, 'input'); await vi.advanceTimersByTimeAsync(150);
     expect(root.querySelector('.oac-symbol-picker__row')?.textContent).toContain('<img src=x>');
     expect(root.querySelector('.oac-symbol-picker__row img')).toBeNull();
+    picker.destroy();
+  });
+
+  it('cancels a superseded lookup and shows a failure while typed entry stays available', async () => {
+    vi.useFakeTimers();
+    const { widget, input, root } = make();
+    const signals: AbortSignal[] = [];
+    let fail = false;
+    const picker = mountSymbolPicker(widget.context, input as unknown as HTMLInputElement, {
+      search: (_query, context) => {
+        signals.push(context!.signal);
+        return fail ? Promise.reject(new Error('backend detail')) : new Promise(() => {});
+      },
+      onSelect: () => {},
+    });
+    input.focus(); input.value = 'a'; fire(input, 'input'); await vi.advanceTimersByTimeAsync(150);
+    input.value = 'ab'; fire(input, 'input');
+    expect(signals[0].aborted).toBe(true);
+    fail = true;
+    await vi.advanceTimersByTimeAsync(150);
+    expect(signals[1].aborted).toBe(false);
+    const status = root.querySelector('.oac-symbol-picker__status') as FakeElement;
+    expect(status.textContent).toBe('Search unavailable');
+    expect(status.getAttribute('role')).toBe('status');
+    expect(root.textContent).not.toContain('backend detail');
+    expect(picker.canCommitRaw()).toBe(true);
+    picker.close();
+    expect(signals[1].aborted).toBe(true);
     picker.destroy();
   });
 
@@ -168,6 +199,81 @@ describe('widget search controls', () => {
     (root.querySelector('.oac-symbol-picker__row') as FakeElement).click();
     expect(widget.symbol()).toBe('ROOT26OCT');
     expect(widget.exchange()).toBe('BFO');
+  });
+});
+
+describe('Enter while a search is pending', () => {
+  it.each(['desktop', 'mobile'])('waits for the lookup on %s instead of charting the typed text', async kind => {
+    vi.useFakeTimers();
+    let answer!: (hits: readonly { symbol: string; exchange: string }[]) => void;
+    const doc = fakeWidgetDocument();
+    const widget = createWidget(fakeContainer(doc) as unknown as HTMLElement, {
+      document: doc as unknown as Document, pixelRatio: () => 1,
+      raf: { schedule: cb => { cb(); return 1; }, cancel: () => {} },
+      mobile: kind === 'mobile' ? 'always' : 'never', symbol: 'RELIANCE', exchange: 'NSE',
+      symbolSearch: () => new Promise(resolve => { answer = resolve; }),
+    });
+    live.push(widget);
+    const root = widget.root as unknown as FakeElement;
+    const input = root.querySelector(kind === 'mobile' ? '.oac-mobile__symbol' : '.oac-sym__input') as FakeElement;
+    input.focus(); input.value = 'rel'; fire(input, 'input');
+    fireKey(input, 'Enter');
+    expect(widget.symbol()).toBe('RELIANCE');
+    await vi.advanceTimersByTimeAsync(150);
+    fireKey(input, 'Enter');
+    expect(widget.symbol()).toBe('RELIANCE');
+    answer([{ symbol: 'RELINFRA', exchange: 'BSE' }]); await vi.advanceTimersByTimeAsync(0);
+    fireKey(input, 'Enter');
+    expect(widget.symbol()).toBe('RELINFRA');
+    expect(widget.exchange()).toBe('BSE');
+  });
+});
+
+describe('search through the feed', () => {
+  function feedWidget(options: Partial<WidgetOptions>) {
+    const doc = fakeWidgetDocument();
+    const host = fakeContainer(doc);
+    const widget = createWidget(host as unknown as HTMLElement, {
+      document: doc as unknown as Document,
+      pixelRatio: () => 1,
+      raf: { schedule: cb => { cb(); return 1; }, cancel: () => {} },
+      mobile: 'never', symbol: 'RELIANCE', exchange: 'NSE',
+      ...options,
+    });
+    live.push(widget);
+    const root = widget.root as unknown as FakeElement;
+    return { widget, root, input: root.querySelector('.oac-sym__input') as FakeElement };
+  }
+
+  it('looks symbols up through the feed when the host passes no lookup', async () => {
+    vi.useFakeTimers();
+    const requests: SymbolSearchRequest[] = [];
+    const { widget, root, input } = feedWidget({ feed: { getBars: async () => [], searchSymbols: async request => {
+      requests.push(request);
+      return [{ symbol: 'INFY', exchange: 'BSE', name: 'INFOSYS LIMITED' }, { symbol: 'INFY', exchange: 'NSE', name: 'INFOSYS LIMITED' }];
+    } } });
+    input.focus(); input.value = 'infy'; fire(input, 'input'); await vi.advanceTimersByTimeAsync(150);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].query).toBe('infy');
+    expect(requests[0].signal).toBeInstanceOf(AbortSignal);
+    const rows = root.querySelectorAll('.oac-symbol-picker__row');
+    // The exact symbol on the chart's own exchange comes first, so Enter keeps the venue.
+    expect(rows.map(row => row.querySelector('.oac-menu__label')!.textContent)).toEqual(['NSE:INFY', 'BSE:INFY']);
+    fireKey(input, 'Enter');
+    expect(widget.symbol()).toBe('INFY');
+    expect(widget.exchange()).toBe('NSE');
+  });
+
+  it('prefers the host lookup over the feed', async () => {
+    vi.useFakeTimers();
+    const searchSymbols = vi.fn(async () => [{ symbol: 'FEED', exchange: 'NSE' }]);
+    const { root, input } = feedWidget({
+      feed: { getBars: async () => [], searchSymbols },
+      symbolSearch: () => [{ symbol: 'HOST', exchange: 'NSE' }],
+    });
+    input.focus(); input.value = 'x'; fire(input, 'input'); await vi.advanceTimersByTimeAsync(150);
+    expect(root.querySelector('.oac-symbol-picker__row')?.textContent).toContain('HOST');
+    expect(searchSymbols).not.toHaveBeenCalled();
   });
 });
 

@@ -6,6 +6,7 @@
  * localStorage persistence. Pure and testable - `resolve(event)` and
  * `handleKey(combo)` map input to a command id without needing a real DOM.
  */
+import { dispatch } from '../helpers/dispatch';
 
 export type ShortcutScope = 'hover' | 'global';
 export type ShortcutPreset = 'default' | 'alt';
@@ -47,12 +48,12 @@ export interface ShortcutTriggerEvent {
 }
 
 interface KeyLike {
-  code?: string;
+  code?: string | undefined;
   key?: string;
-  ctrlKey?: boolean;
-  metaKey?: boolean;
-  altKey?: boolean;
-  shiftKey?: boolean;
+  ctrlKey?: boolean | undefined;
+  metaKey?: boolean | undefined;
+  altKey?: boolean | undefined;
+  shiftKey?: boolean | undefined;
 }
 
 const MOD_ORDER = ['Mod', 'Ctrl', 'Meta', 'Alt', 'Shift'];
@@ -72,7 +73,7 @@ export function detectMac(): boolean {
 export function parseCombo(combo: string): { mods: string[]; key: string } | null {
   const parts = combo.split('+').map((p) => p.trim()).filter((p) => p.length > 0);
   if (parts.length === 0) return null;
-  const key = parts[parts.length - 1];
+  const key = parts[parts.length - 1]!; // not empty, checked above
   if (!/^[A-Za-z0-9]+$/.test(key) || MOD_SET.has(key)) return null;
   const mods: string[] = [];
   for (const m of parts.slice(0, -1)) {
@@ -271,7 +272,7 @@ export class ShortcutManager {
 
   public emitTrigger(command: string, combo = ''): void {
     const e: ShortcutTriggerEvent = { command, combo, isCustom: this._custom.has(command) };
-    for (const l of this._listeners) l(e);
+    dispatch(this._listeners, e);
   }
 
   public on(cb: (e: ShortcutTriggerEvent) => void): () => void {

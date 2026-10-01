@@ -13,24 +13,13 @@
  * (`openalgo-charts`), not deep paths, see the note in `src/indicators/index.ts`.
  */
 import { atr, sourceValues } from 'openalgo-charts';
-import type { IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
-import { sma, wma, highest, lowest, nulls, smaSeededEma, alma, linreg } from './calc';
+import type { IndicatorDescriptor } from 'openalgo-charts';
+import { sma, wma, highest, lowest, nulls, smaSeededEma, alma, linreg, standardError } from './calc';
 import { emaOfGapped } from './smoothing';
 import { withTail, windowTail, whole } from './tail';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** the reference `input.int` is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Readonly<Record<string, unknown>>, k: string, d: number, min = 1): number =>
-  Math.max(min, Math.round(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
+import { withTimeframe } from './timeframe';
+import { num, int, offsetOf, str, src } from './settings';
+import { shift, zip } from './series';
 
 const highs = (bars: readonly { high: number }[]): number[] => bars.map((b) => b.high);
 const lows = (bars: readonly { low: number }[]): number[] => bars.map((b) => b.low);
@@ -47,26 +36,16 @@ function extremeStrict(values: readonly number[], period: number, wantHigh: bool
   const n = values.length;
   const out = new Array<number>(n).fill(NaN);
   if (period <= 0) return out;
+  // The one caller passes a whole period, so each window is [i - period + 1, i].
   for (let i = period - 1; i < n; i++) {
     let best = wantHigh ? -Infinity : Infinity;
     let live = true;
     for (let k = 0; k < period; k++) {
-      const v = values[i - k];
+      const v = values[i - k]!;
       if (!Number.isFinite(v)) { live = false; break; }
       if (wantHigh ? v > best : v < best) best = v;
     }
     if (live) out[i] = best;
-  }
-  return out;
-}
-
-/** the reference `plot(..., offset = n)`: positive draws the value `n` bars later. */
-function shift(values: readonly number[], k: number): number[] {
-  const n = values.length;
-  const out = new Array<number>(n).fill(NaN);
-  for (let i = 0; i < n; i++) {
-    const j = i - k;
-    if (j >= 0 && j < n) out[i] = values[j];
   }
   return out;
 }
@@ -82,7 +61,7 @@ const CHANNEL_FILL_OPACITY = 0.05;
  * The source is hard-coded to `close` in the reference (`source = close`,
  * not an `input`), so there is no source setting to expose.
  */
-export const ALMA: IndicatorDescriptor = {
+export const ALMA: IndicatorDescriptor = withTimeframe({
   id: 'alma',
   name: 'Arnaud Legoux Moving Average',
   category: 'Trend',
@@ -105,14 +84,14 @@ export const ALMA: IndicatorDescriptor = {
       num(s, 'sigma', 6),
     )),
   }),
-};
+});
 
 /**
  * `2 * ema - ema(ema)`. The second pass runs over a series that is already NaN
  * for its own warmup, which is what pushes the first plotted bar out to
  * `2 * length - 2`, see `emaOfGapped`.
  */
-export const DEMA: IndicatorDescriptor = {
+export const DEMA: IndicatorDescriptor = withTimeframe({
   id: 'dema',
   name: 'Double EMA',
   category: 'Trend',
@@ -131,11 +110,12 @@ export const DEMA: IndicatorDescriptor = {
     const length = int(s, 'length', 9);
     const e1 = smaSeededEma(values, length);
     const e2 = emaOfGapped(e1, length);
-    return { dema: nulls(e1.map((v, i) => 2 * v - e2[i])) };
+    // Both averages hold one value per bar, as every calc helper returns.
+    return { dema: nulls(zip(e1, e2, (v, e) => 2 * v - e)) };
   },
-};
+});
 
-export const HMA: IndicatorDescriptor = {
+export const HMA: IndicatorDescriptor = withTimeframe({
   id: 'hma',
   name: 'Hull Moving Average',
   category: 'Trend',
@@ -154,9 +134,9 @@ export const HMA: IndicatorDescriptor = {
     const length = int(s, 'length', 9);
     return { hma: nulls(hullHma(values, length)) };
   },
-};
+});
 
-export const ENVELOPE: IndicatorDescriptor = {
+export const ENVELOPE: IndicatorDescriptor = withTimeframe({
   id: 'envelope',
   name: 'Envelope',
   category: 'Volatility',
@@ -192,9 +172,9 @@ export const ENVELOPE: IndicatorDescriptor = {
       lower: nulls(basis.map((b) => b * (1 - k))),
     };
   },
-};
+});
 
-export const DONCHIAN: IndicatorDescriptor = withTail({
+export const DONCHIAN: IndicatorDescriptor = withTimeframe(withTail({
   id: 'donchian',
   name: 'Donchian Channels',
   category: 'Volatility',
@@ -220,10 +200,10 @@ export const DONCHIAN: IndicatorDescriptor = withTail({
   calc: (bars, s) => {
     const length = int(s, 'length', 20);
     // Offset is a displacement, so it is the one setting that may be negative.
-    const offset = Math.round(num(s, 'offset', 0));
+    const offset = offsetOf(s, 'offset', 0);
     const upper = highest(highs(bars), length);
     const lower = lowest(lows(bars), length);
-    const basis = upper.map((u, i) => (u + lower[i]) / 2);
+    const basis = zip(upper, lower, (u, lo) => (u + lo) / 2);
     return {
       upper: nulls(shift(upper, offset)),
       basis: nulls(shift(basis, offset)),
@@ -234,9 +214,9 @@ export const DONCHIAN: IndicatorDescriptor = withTail({
   // A forward offset only reaches further back. A backward one draws the
   // forming bar's channel on an earlier slot than the tail covers.
   const length = int(s, 'length', 20);
-  const offset = Math.round(num(s, 'offset', 0));
+  const offset = offsetOf(s, 'offset', 0);
   return whole(length) && offset >= 0 ? length - 1 + offset : null;
-}));
+})));
 
 /**
  * Two stacked extremes: an ATR-padded high/low band, then the running extreme of
@@ -275,8 +255,8 @@ export const CHANDE_KROLL_STOP: IndicatorDescriptor = {
     const high = highs(bars);
     const low = lows(bars);
     const range = atr(high, low, bars.map((b) => b.close), p);
-    const firstHighStop = highest(high, p).map((v, i) => v - x * range[i]);
-    const firstLowStop = lowest(low, p).map((v, i) => v + x * range[i]);
+    const firstHighStop = zip(highest(high, p), range, (v, r) => v - x * r);
+    const firstLowStop = zip(lowest(low, p), range, (v, r) => v + x * r);
     return {
       stopLong: nulls(extremeStrict(firstLowStop, q, false)),
       stopShort: nulls(extremeStrict(firstHighStop, q, true)),
@@ -312,43 +292,11 @@ export const CHANDELIER_EXIT: IndicatorDescriptor = {
     const low = lows(bars);
     const range = atr(high, low, bars.map((b) => b.close), int(s, 'atrLength', 22));
     return {
-      longExit: nulls(highest(high, length).map((v, i) => v - mult * range[i])),
-      shortExit: nulls(lowest(low, length).map((v, i) => v + mult * range[i])),
+      longExit: nulls(zip(highest(high, length), range, (v, r) => v - mult * r)),
+      shortExit: nulls(zip(lowest(low, length), range, (v, r) => v + mult * r)),
     };
   },
 };
-
-/**
- * Residual spread of the closes about the least squares line fitted to the last
- * `period` of them: `sqrt((Syy - Sxy^2 / Sxx) / (period - 2))`. The divisor is
- * `period - 2`, not `period` or `period - 1`, because the fitted slope and
- * intercept each consume a degree of freedom, and that is what makes this a
- * standard *error* rather than a standard deviation. x runs 1 to `period` over
- * the window, oldest last, but only its spacing reaches the answer.
- */
-function standardError(values: readonly number[], period: number): number[] {
-  const n = values.length;
-  const out = new Array<number>(n).fill(NaN);
-  if (period < 3 || n < period) return out;
-  const meanX = (period + 1) / 2;
-  for (let i = period - 1; i < n; i++) {
-    let sumY = 0;
-    for (let k = 0; k < period; k++) sumY += values[i - k];
-    const meanY = sumY / period;
-    let syy = 0;
-    let sxy = 0;
-    let sxx = 0;
-    for (let k = 0; k < period; k++) {
-      const dy = meanY - values[i - k];
-      const dx = meanX - k - 1;
-      syy += dy * dy;
-      sxy += dx * dy;
-      sxx += dx * dx;
-    }
-    out[i] = Math.sqrt((syy - (sxy * sxy) / sxx) / (period - 2));
-  }
-  return out;
-}
 
 /**
  * Bands centred on the regression **endpoint**, not on a moving average of price:
@@ -406,9 +354,9 @@ export const STANDARD_ERROR_BANDS: IndicatorDescriptor = {
         : s.method === 'Weighted' ? wma(v, avg) : sma(v, avg),
     );
     return {
-      upper: smooth(mid.map((m, i) => m + errors * se[i])),
+      upper: smooth(zip(mid, se, (m, err) => m + errors * err)),
       basis: smooth(mid),
-      lower: smooth(mid.map((m, i) => m - errors * se[i])),
+      lower: smooth(zip(mid, se, (m, err) => m - errors * err)),
     };
   },
 };
@@ -444,8 +392,8 @@ export const MA_CHANNEL: IndicatorDescriptor = {
   }],
   calc: (bars, s) => ({
     // Offsets are displacements, so they are the settings here that may be negative.
-    upper: nulls(shift(sma(highs(bars), int(s, 'upperLength', 20)), Math.round(num(s, 'upperOffset', 0)))),
-    lower: nulls(shift(sma(lows(bars), int(s, 'lowerLength', 20)), Math.round(num(s, 'lowerOffset', 0)))),
+    upper: nulls(shift(sma(highs(bars), int(s, 'upperLength', 20)), offsetOf(s, 'upperOffset', 0))),
+    lower: nulls(shift(sma(lows(bars), int(s, 'lowerLength', 20)), offsetOf(s, 'lowerOffset', 0))),
   }),
 };
 
@@ -473,7 +421,7 @@ function hullHma(values: readonly number[], n: number): number[] {
   const slow = wma(values, n);
   // Each WMA requires a complete finite window, so the outer pass remains
   // unavailable while its window still contains the raw series' warmup gap.
-  return wma(fast.map((v, i) => 2 * v - slow[i]), rootSpan(n));
+  return wma(zip(fast, slow, (v, sl) => 2 * v - sl), rootSpan(n));
 }
 
 function hullEhma(values: readonly number[], n: number): number[] {
@@ -481,7 +429,7 @@ function hullEhma(values: readonly number[], n: number): number[] {
   const slow = smaSeededEma(values, n);
   // The difference inherits `slow`'s warmup gap. Keep the outer smoothing
   // pass aligned with that first available difference.
-  return emaOfGapped(fast.map((v, i) => 2 * v - slow[i]), rootSpan(n));
+  return emaOfGapped(zip(fast, slow, (v, sl) => 2 * v - sl), rootSpan(n));
 }
 
 /**
@@ -493,7 +441,7 @@ function hullThma(values: readonly number[], n: number): number[] {
   const third = wma(values, span(n / 3));
   const half = wma(values, span(n / 2));
   const full = wma(values, n);
-  return wma(third.map((v, i) => v * 3 - half[i] - full[i]), n);
+  return wma(third.map((v, i) => v * 3 - half[i]! - full[i]!), n);
 }
 
 function hullSeries(values: readonly number[], mode: string, len: number): number[] {

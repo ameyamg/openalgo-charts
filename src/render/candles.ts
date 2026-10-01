@@ -3,6 +3,9 @@
  * out for unit testing; drawing happens in the bitmap (device-px) scope.
  */
 import type { Bar } from '../model/bar';
+import type { SeriesStyle } from './series-style';
+import type { ChartTheme } from '../theme';
+import type { LooseOptional } from '../helpers/types';
 
 export interface CandleStyle {
   upColor: string;
@@ -46,6 +49,29 @@ export const DEFAULT_CANDLE_STYLE: CandleStyle = {
   borderVisible: true,
   wickVisible: true,
 };
+
+/**
+ * A candle style from a series style: the style over the theme, plus the
+ * type's own switches (`hollow`, `widthScale`). The 2D registry and the GPU
+ * backend both resolve through this, so a new option is threaded once.
+ */
+export function resolveCandleStyle(s: SeriesStyle, theme: ChartTheme, extra: Partial<CandleStyle> = {}): CandleStyle {
+  return {
+    ...DEFAULT_CANDLE_STYLE,
+    upColor: s.upColor ?? theme.upColor,
+    downColor: s.downColor ?? theme.downColor,
+    borderUpColor: s.borderUpColor ?? theme.upColor,
+    borderDownColor: s.borderDownColor ?? theme.downColor,
+    wickUpColor: s.wickUpColor ?? theme.wickUpColor,
+    wickDownColor: s.wickDownColor ?? theme.wickDownColor,
+    borderVisible: s.borderVisible ?? DEFAULT_CANDLE_STYLE.borderVisible,
+    bodyVisible: s.bodyVisible ?? true,
+    wickVisible: s.wickVisible ?? DEFAULT_CANDLE_STYLE.wickVisible,
+    // Unset stays unset: the renderer reads only `=== true`.
+    colorByPreviousClose: s.colorByPreviousClose,
+    ...extra,
+  } satisfies LooseOptional<CandleStyle> as CandleStyle;
+}
 
 /**
  * Pure: optimal candle body width in device px for a given bar spacing. Leaves
@@ -179,14 +205,14 @@ export function drawCandles(
   const uniformTier = style.widthScale ? null : candleTier(bodyW, wickW, style);
 
   for (let i = 0; i < items.length; i++) {
-    const { x, bar } = items[i];
+    const { x, bar } = items[i]!; // i, and i - 1 when positive, index items
     // Previous-close colouring needs the bar before this one. The first drawn
     // bar has none in `items`, so it takes the caller's `prevClose` (the bar
     // left of the visible range) and otherwise falls back to open-vs-close:
     // the first bar of history has nothing to compare against, and inventing a
     // reference would make it lie. A non-finite reference (a whitespace gap)
     // falls back too, or every bar after a gap would go down off a NaN test.
-    const ref = i > 0 ? items[i - 1].bar.close : items[i].prevClose;
+    const ref = i > 0 ? items[i - 1]!.bar.close : items[i]!.prevClose;
     const up = style.colorByPreviousClose === true && ref !== undefined && Number.isFinite(ref)
       ? bar.close >= ref
       : bar.close >= bar.open;

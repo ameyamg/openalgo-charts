@@ -10,7 +10,7 @@ import type { Bar } from '../src/model/bar';
 
 /**
  * `high = close + 1` and `low = close - 1` makes `hl2` equal `close`, and with
- * `open = close` so does `ohlc4` — so every hand-computed expectation below can
+ * `open = close` so does `ohlc4`, so every hand-computed expectation below can
  * be written against the close list whatever source the study defaults to.
  */
 const bars = (
@@ -30,7 +30,7 @@ const ramp = (n = 40): Bar[] => bars(n, (i) => i);
 const jagged = (): Bar[] => bars(4, (i) => [10, 14, 12, 13][i]);
 
 /**
- * Hourly bars straddling 18:30 UTC, which is midnight IST — the boundary
+ * Hourly bars straddling 18:30 UTC, which is midnight IST: the boundary
  * `isNewIstDay` splits on, and therefore where a session anchor resets.
  */
 const acrossIstMidnight = (): Bar[] => {
@@ -41,13 +41,13 @@ const acrossIstMidnight = (): Bar[] => {
   }));
 };
 
-/** Index of the first plotted bar — the number every warmup assertion is about. */
+/** Index of the first plotted bar: the number every warmup assertion is about. */
 const firstLive = (col: readonly (number | null)[]): number => col.findIndex((v) => v !== null);
 
 const run = (d: IndicatorDescriptor, data: Bar[], overrides: Record<string, unknown> = {}) =>
   d.calc(data, { ...indicatorDefaults(d), ...overrides }, {});
 
-describe('the reference platform averages — descriptor contract', () => {
+describe('the reference platform averages: descriptor contract', () => {
   const data = wave();
 
   it('exports the ten averages with unique ids, all on the price pane', () => {
@@ -156,7 +156,7 @@ describe('McGinley Dynamic', () => {
   it('applies the fourth-power step by hand', () => {
     // length 1 seeds on close[0], then mg = mg[1] + (src - mg[1]) / (1 * (src / mg[1])^4).
     // With 10 then 20 the ratio is 2, so the divisor is 16 and the line advances
-    // 10 / 16 — a fraction of the move, which is the whole point of the kernel.
+    // 10 / 16: a fraction of the move, which is the whole point of the kernel.
     const out = run(MCGINLEY_DYNAMIC, bars(2, (i) => [10, 20][i]), { length: 1 });
     expect(out.mg[0] as number).toBeCloseTo(10, 10);
     expect(out.mg[1] as number).toBeCloseTo(10.625, 10);
@@ -353,7 +353,7 @@ describe('Williams Alligator', () => {
 
   it('leaves exactly `offset` leading nulls and draws the value that many bars later', () => {
     // rma of length 1 is the source itself, so the only thing left in the column
-    // is the displacement — the cleanest possible read on the shift.
+    // is the displacement: the cleanest possible read on the shift.
     const out = run(ALLIGATOR, jagged(), { jawLength: 1, jawOffset: 2 });
     expect(out.jaw).toEqual([null, null, 10, 14]);
   });

@@ -19,10 +19,10 @@
  * drew has a box of the old frame then, so such boxes go at the next paint.
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext } from '../primitives/primitive';
-import type { PriceScale, PriceScaleMode } from '../scale/price-scale';
+import { PRICE_SCALE_MODES, type PriceScale } from '../scale/price-scale';
 
 /** A primitive's hit box: media px relative to the plot, edges inclusive. */
-export interface HitBox {
+interface HitBox {
   left: number;
   top: number;
   right: number;
@@ -34,8 +34,6 @@ const NO_HIT_BOX: HitBox = { left: Infinity, top: Infinity, right: -Infinity, bo
 
 /** The box of a primitive that declares none: every point is inside, so it is always asked. */
 const EVERYWHERE: HitBox = { left: -Infinity, top: -Infinity, right: Infinity, bottom: Infinity };
-
-const SCALE_MODES: readonly PriceScaleMode[] = ['linear', 'logarithmic', 'percentage', 'indexed-to-100'];
 
 /**
  * Bumped whenever a primitive that declares a hit box requests an update, on
@@ -57,7 +55,7 @@ export function announcingHost(host: PrimitiveHost): PrimitiveHost {
  * that also change the key, so the place names the same primitive for as long
  * as the boxes are kept, and a pointer move reads each one without a lookup.
  */
-export interface HitBoxes {
+interface HitBoxes {
   /** Start reading the key. The primitives' own announcements are always part of it. */
   begin(): void;
   number(value: number): void;
@@ -119,7 +117,7 @@ export function createHitBoxes(): HitBoxes {
       number(scale.priceToY(1));
       number(scale.priceToY(1000));
       number(scale.height);
-      number(SCALE_MODES.indexOf(scale.options.mode));
+      number(PRICE_SCALE_MODES.indexOf(scale.options.mode));
       number(scale.options.inverted ? 1 : 0);
     },
     end(): void {

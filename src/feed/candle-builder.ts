@@ -1,14 +1,34 @@
 /**
  * Live candle aggregation (ARCHITECTURE.md §10.2). The WS feed does not deliver
- * interval candles — LTP mode gives a tick price (+ last-traded-qty), Quote mode
+ * interval candles: LTP mode gives a tick price (+ last-traded-qty), Quote mode
  * gives a *cumulative day* volume. This builder buckets ticks into interval OHLC
  * with explicit volume, session-reset, and late-tick policies. Pure and
  * deterministic (no Date/rAF) so it is fully unit-testable.
  */
 import type { Bar, UTCSeconds } from '../model/bar';
+import type { LooseOptional } from '../helpers/types';
 
 export type VolumeMode = 'ltq-sum' | 'day-delta';
 export type LateTickPolicy = 'foldIntoBar' | 'dropOlderThanPrevBar';
+
+/**
+ * Two observations of one bucket as one bar: the extremes are the union,
+ * since each side saw real prices, and the volume the larger, since volume
+ * inside a bar only grows (a bar neither side gave a volume keeps none).
+ * Every other field is `base`'s. Which side owns the open, the close and the
+ * open interest depends on which one the caller trusts for them, so each
+ * caller sets those itself.
+ */
+export function widenBar(base: Bar, observed: Bar): Bar {
+  return {
+    ...base,
+    high: Math.max(base.high, observed.high),
+    low: Math.min(base.low, observed.low),
+    // Bar stays exact for hosts; an undefined volume here is a bar without one.
+    volume: base.volume === undefined && observed.volume === undefined
+      ? undefined : Math.max(base.volume ?? 0, observed.volume ?? 0),
+  } satisfies LooseOptional<Bar> as Bar;
+}
 
 export interface CandleBuilderOptions {
   intervalSec: number;
@@ -115,15 +135,9 @@ export class CandleBuilder {
   public reconcile(authoritative: Bar): Bar | null {
     const current = this._current;
     if (current === null || authoritative.time !== current.time) return null;
-    const volume = current.volume === undefined && authoritative.volume === undefined
-      ? undefined : Math.max(current.volume ?? 0, authoritative.volume ?? 0);
-    const merged: Bar = {
-      ...current,
-      open: this._provisional ? authoritative.open : current.open,
-      high: Math.max(current.high, authoritative.high),
-      low: Math.min(current.low, authoritative.low),
-      volume,
-    };
+    const merged = widenBar(current, authoritative);
+    if (this._provisional) merged.open = authoritative.open;
+    const volume = merged.volume;
     // In day-delta mode the volume is recomputed from the cumulative on every
     // tick, so the baseline moves with it or the next tick would shrink it back.
     if (this._opts.volumeMode === 'day-delta' && this._hasCum && volume !== undefined) {
@@ -178,7 +192,7 @@ export class CandleBuilder {
       return { bar: { ...bar }, isNew: true, provisional };
     }
 
-    // Same bucket → update the current bar in place.
+    // Same bucket: update the current bar in place.
     this._foldInto(this._current, tick);
     this._streamed = true;
     return { bar: { ...this._current }, isNew: false, provisional: this._provisional };
@@ -201,7 +215,7 @@ export class CandleBuilder {
       // First observation: this bar starts at the current cumulative (volume 0).
       this._cumAtBarStart = cum;
     } else if (cum < this._lastCum) {
-      // Daily reset (cumulative dropped) → new day's bar starts from 0.
+      // Daily reset (cumulative dropped): the new day's bar starts from 0.
       this._cumAtBarStart = 0;
     } else {
       // Carry from the previous bar's closing cumulative.

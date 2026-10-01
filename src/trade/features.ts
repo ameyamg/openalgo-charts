@@ -51,12 +51,12 @@ export interface TradingFeatures {
 
 export interface TradingFeatureRequest {
   readonly feature: TradingFeature;
-  readonly symbol?: string;
-  readonly exchange?: string;
-  readonly account?: string;
-  readonly mode?: 'live' | 'analyzer';
-  readonly type?: OrderType;
-  readonly duration?: OrderDuration;
+  readonly symbol?: string | undefined;
+  readonly exchange?: string | undefined;
+  readonly account?: string | undefined;
+  readonly mode?: 'live' | 'analyzer' | undefined;
+  readonly type?: OrderType | undefined;
+  readonly duration?: OrderDuration | undefined;
 }
 
 /** A configured provider returning undefined, throwing or answering late declares nothing. */

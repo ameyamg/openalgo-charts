@@ -92,18 +92,18 @@ export function simulatedForming(final: Bar, step: number, steps: number, oi?: n
   const { open, high, low, close } = final;
   const t = Math.min(1, (step + 1) / steps);
   const lowFirst = open - low < high - open || (open - low === high - open && close >= open);
-  const path = lowFirst ? [open, low, high, close] : [open, high, low, close];
+  const path: [number, number, number, number] = lowFirst ? [open, low, high, close] : [open, high, low, close];
   let left = t * (Math.abs(path[1] - path[0]) + Math.abs(path[2] - path[1]) + Math.abs(path[3] - path[2]));
   let price = open;
   let top = open;
   let bottom = open;
-  for (let i = 1; i < path.length && left > 0; i++) {
-    const leg = Math.abs(path[i] - path[i - 1]);
+  for (let i = 1; i < path.length && left > 0; i++) { // `i` and `i - 1` stay inside the path
+    const leg = Math.abs(path[i]! - path[i - 1]!);
     if (left >= leg) {
-      price = path[i];
+      price = path[i]!;
       left -= leg;
     } else {
-      price = path[i - 1] + Math.sign(path[i] - path[i - 1]) * left;
+      price = path[i - 1]! + Math.sign(path[i]! - path[i - 1]!) * left;
       left = 0;
     }
     if (price > top) top = price;

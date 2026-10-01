@@ -89,7 +89,7 @@ describe('TPO row size', () => {
     // The row grid really is 2 points apart.
     const ls = coarse.sessions[0].levels;
     expect(Math.abs((ls[0].price - ls[1].price) - 2)).toBeLessThan(1e-6);
-    // tickSize is reported unchanged — rowTicks is a display multiplier.
+    // tickSize is reported unchanged: rowTicks is a display multiplier.
     expect(coarse.options.tickSize).toBe(0.1);
     expect(coarse.options.rowTicks).toBe(20);
   });
@@ -173,7 +173,7 @@ describe('market profile analytics', () => {
     const res = computeMarketProfile(bars, { tickSize: 1, session: 'day' });
     const naked = nakedLevels(res);
     // Day 1's levels survive because day 2 never traded back down to them, and
-    // day 2's are naked by definition — nothing came after them yet.
+    // day 2's are naked by definition: nothing came after them yet.
     expect(naked.some((n) => n.time === d1)).toBe(true);
     expect(naked.some((n) => n.time === d2)).toBe(true);
     expect(naked.some((n) => n.kind === 'poc')).toBe(true);

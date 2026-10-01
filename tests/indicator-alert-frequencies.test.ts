@@ -61,12 +61,16 @@ describe('native indicator alert frequency', () => {
     expect(h.events.map(event => event.time)).toEqual([120, 120, 180]);
   });
 
-  it('collapses multiple live source writes into the observed tail calculation', () => {
+  it('collapses ticks within a bar and judges each bar a coalesced pass appended', () => {
     const h = mount('everyUpdate');
     h.source.update(bar(120, 11)); h.source.update(bar(180, 12)); h.source.update(bar(240, 13));
     expect(h.events).toEqual([]);
     h.indicator.values();
-    expect(h.events.map(event => [event.time, event.index])).toEqual([[240, 4]]);
+    // The tick on 120 was superseded before any calculation; 180 and 240 are new bars.
+    expect(h.events.map(event => [event.time, event.index])).toEqual([[180, 3], [240, 4]]);
+    h.source.update(bar(240, 14)); h.source.update(bar(240, 15));
+    h.indicator.values();
+    expect(h.events.map(event => [event.time, event.index])).toEqual([[180, 3], [240, 4], [240, 4]]);
   });
 
   it('waits for the first matching update within each bar', () => {

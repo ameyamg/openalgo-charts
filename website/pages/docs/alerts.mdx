@@ -80,6 +80,19 @@ trigger before close, so a signal may disappear from the final candle. At most
 one match is consumed per alert and bar, including matches suppressed by
 `cooldownSeconds`.
 
+From 2.6.0, an update that appends several bars at once is judged bar by bar, in
+order, as the same number of single appends would be. That happens when one source
+bar completes two or more Renko bricks on a [transformed chart](/docs/transforms) (the other
+transforms add at most one element per source bar), or when
+a custom `AlertChartHost` writes two bars before it emits `data:update`. Every bar
+the update closes is confirmed, and each match reports its own bar in `time` and
+`index`. The newest bar may still be forming, so `onBarClose` judges it only once a
+newer bar follows it; a forming Kagi vertex or range bar that moves to a newer time
+is still that bar. Repeats, cooldowns and expiry work as they would for separate
+appends at the same moment: a `once` alert fires at the first matching bar and stops.
+A reload, a page of older history, a late correction of an older bar, or a symbol or
+interval change still seeds silently, and a corrected bar is never judged.
+
 Use `repeat: 'everyTime'` to keep a triggered condition armed. `expiresAt` is an
 absolute UTC timestamp in seconds; expiration takes priority over a new trigger.
 Programmatic alerts have no expiry unless you supply one. The widget editor

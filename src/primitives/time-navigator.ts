@@ -7,12 +7,13 @@
  * from reading as a glitch when the cursor crosses the reveal band.
  *
  * Reveal is driven by an explicit `setPointer` from the chart, **not** by
- * `rc.hoverId`. Hover ids come from `bestHit`, which picks the nearest primitive
- * — so a drawing or an order line near the bottom of the chart would win the
+ * `rc.hoverId`. Hover ids come from `bestHit`, which picks the nearest primitive,
+ * so a drawing or an order line near the bottom of the chart would win the
  * hit and silently hide the controls. Pointer position is the honest input here;
  * hit-testing still owns the buttons themselves.
  */
 import type { IPrimitive, PrimitiveHit, PrimitiveHost, PrimitiveRenderContext, ZOrder } from './primitive';
+import { parseColor, withAlpha } from '../render/pill';
 
 /** Command each button runs. These are `Chart` shortcut command ids. */
 export type TimeNavigatorAction = 'zoomOut' | 'zoomIn' | 'resetScale' | 'panLeftBar' | 'panRightBar';
@@ -141,7 +142,7 @@ export class TimeNavigator implements IPrimitive {
   /** Top of the reveal band, recomputed each paint from the plot height. */
   private _revealTop = Infinity;
 
-  /** Whether the fade is still running — the chart keeps painting while true. */
+  /** Whether the fade is still running: the chart keeps painting while true. */
   public animating(): boolean {
     return Math.abs(this._targetOpacity() - this._opacity) > 0.001;
   }
@@ -181,7 +182,7 @@ export class TimeNavigator implements IPrimitive {
     this._boxes = [];
     let x = startX;
     for (let i = 0; i < o.buttons.length; i++) {
-      const action = o.buttons[i];
+      const action = o.buttons[i] as TimeNavigatorAction | null; // i is inside the list
       if (action === null) { x += o.groupGap; continue; }
       this._boxes.push({ action, x, y, w: size, h: size });
       x += size;
@@ -336,39 +337,10 @@ export class TimeNavigator implements IPrimitive {
 
 /** Blend two colours; `t` 0 -> a, 1 -> b. Used for opaque plates over the series. */
 function mix(a: string, b: string, t: number): string {
-  const ca = rgb(a);
-  const cb = rgb(b);
+  const ca = parseColor(a);
+  const cb = parseColor(b);
   if (ca === null || cb === null) return a;
   const k = t < 0 ? 0 : t > 1 ? 1 : t;
-  return `rgb(${Math.round(ca[0] + (cb[0] - ca[0]) * k)},${Math.round(ca[1] + (cb[1] - ca[1]) * k)},${Math.round(ca[2] + (cb[2] - ca[2]) * k)})`;
-}
-
-/** Parse `#rgb`, `#rrggbb` or `rgb()/rgba()` into a triple. */
-function rgb(color: string): [number, number, number] | null {
-  if (color.startsWith('#')) {
-    const hex = color.slice(1);
-    const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
-    const n = parseInt(full.slice(0, 6), 16);
-    if (Number.isNaN(n)) return null;
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  }
-  const m = /^rgba?\(([^)]+)\)$/.exec(color);
-  if (m === null) return null;
-  const p = m[1].split(',').map((s2) => parseFloat(s2));
-  return [p[0], p[1], p[2]];
-}
-
-/** Apply an alpha to a hex or rgb() colour. */
-function withAlpha(color: string, alpha: number): string {
-  if (color.startsWith('#')) {
-    const hex = color.slice(1);
-    const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
-    const n = parseInt(full.slice(0, 6), 16);
-    if (Number.isNaN(n)) return color;
-    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
-  }
-  const m = /^rgba?\(([^)]+)\)$/.exec(color);
-  if (m === null) return color;
-  const parts = m[1].split(',').map((s) => s.trim());
-  return `rgba(${parts[0]},${parts[1]},${parts[2]},${alpha})`;
+  const ch = (from: number, to: number): number => Math.round(from + (to - from) * k);
+  return `rgb(${ch(ca.r, cb.r)},${ch(ca.g, cb.g)},${ch(ca.b, cb.b)})`;
 }

@@ -11,8 +11,8 @@ import {
   IST_OFFSET_SECONDS,
 } from '../src/feed/time';
 
-describe('time conversions (IST ↔ UTC seconds)', () => {
-  it('epoch ms → utc seconds floors to the second', () => {
+describe('time conversions (between IST and UTC seconds)', () => {
+  it('epoch ms to utc seconds floors to the second', () => {
     expect(epochMsToUtcSeconds(1_700_000_000_999)).toBe(1_700_000_000);
   });
 

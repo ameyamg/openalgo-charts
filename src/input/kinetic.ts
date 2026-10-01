@@ -9,7 +9,7 @@
  * Distance is in pixels, t in ms. The caller samples `distanceAt(elapsed)`
  * each frame and pans by the delta since the previous sample.
  */
-export interface KineticOptions {
+interface KineticOptions {
   /** Friction constant (1/ms). Larger = stops sooner. */
   friction: number;
   /** Stop when speed drops below this (px/ms). */
@@ -18,7 +18,7 @@ export interface KineticOptions {
   triggerSpeed: number;
 }
 
-export const DEFAULT_KINETIC_OPTIONS: KineticOptions = {
+const DEFAULT_KINETIC_OPTIONS: KineticOptions = {
   friction: 0.0055,
   minSpeed: 0.02,
   triggerSpeed: 0.08,

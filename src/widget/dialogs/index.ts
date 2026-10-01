@@ -20,30 +20,20 @@ import { mountLevelEditor } from './level-editor';
 import { mountSettingsDialog } from './settings';
 import { mountTextEditor } from './text-editor';
 import { mountAlertEditor, mountAlertsPanel } from './alerts';
+import { token as v } from '../tokens';
 export { mountAlertEditor, mountAlertsPanel, type AlertEditorOptions, type AlertsPanelOptions } from './alerts';
 
-export { mountSettingsDialog, tabDefaults, type SettingsDialogOptions } from './settings';
-export { mountIndicatorPicker, filterIndicators, groupIndicators, type IndicatorPickerOptions } from './indicator-picker';
-export {
-  mountIndicatorSettings, inputDefaults, resolveInstance,
-  type IndicatorSettingsOptions, type IndicatorSettingsTab,
-} from './indicator-settings';
-export {
-  mountDrawingProperties, commonSchema, drawingDefaults, resolvedDrawingValues,
-  type DrawingPropertiesOptions,
-} from './drawing-properties';
+// The door for the shell and the tier entry: the mounts and their options.
+// Each dialog's own helpers stay in its module.
+export { mountSettingsDialog, type SettingsDialogOptions } from './settings';
+export { mountIndicatorPicker, type IndicatorPickerOptions } from './indicator-picker';
+export { mountIndicatorSettings, type IndicatorSettingsOptions, type IndicatorSettingsTab } from './indicator-settings';
+export { mountDrawingProperties, type DrawingPropertiesOptions } from './drawing-properties';
 export { mountDrawingCoordinates, DRAWING_COORDINATES_CSS, type DrawingCoordinatesHandle } from './drawing-coordinates';
-export { selectionPoint } from '../form';
+export { mountLevelEditor, type LevelEditorOptions } from './level-editor';
+export { mountTextEditor, type TextEditorOptions, type TextEditorHandle } from './text-editor';
 export {
-  mountLevelEditor, nextRatio, levelLabeller, ladderDrawings, FIB_SEQUENCE, type LevelEditorOptions,
-} from './level-editor';
-export {
-  mountTextEditor, fontOf, wrapLines, measurer, textFrame, readEditable, chartContainer, isTextContent,
-  DEFAULT_FONT, TEXT_PAD, LINE_GAP, TEXT_SIZE, WRAP_WIDTH,
-  type TextEditorOptions, type TextEditorHandle, type TextFrame,
-} from './text-editor';
-export {
-  mountContextMenu, attachContextMenu, contextMenuEntries, drawingIdOf, SCALE_MODE_LABELS,
+  mountContextMenu, attachContextMenu, contextMenuEntries,
   type ContextMenuHooks, type ContextMenuOptions, type MenuEntry, type MenuItem, type OrderRequest,
 } from './context-menu';
 export type { PanelHandle } from '../form';
@@ -62,8 +52,6 @@ export const WIDGET_DIALOGS = {
 } satisfies Record<string, DialogMount>;
 
 registerWidgetDialogs(WIDGET_DIALOGS);
-
-const v = (name: string): string => `var(--oac-${name})`;
 
 /**
  * The rules the dialogs add to the widget stylesheet. Scoped under

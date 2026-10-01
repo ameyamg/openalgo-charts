@@ -215,6 +215,30 @@ test('the grid view lets a chart put its price pane below a study, and a reload 
   expect(errors).toEqual([]);
 });
 
+test('the grid view offers the in-chart transforms in the chart type menu, and a reload keeps the one picked', async ({ page }, info) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(ORIGIN + '/examples/yfinance/grid.html?test=1');
+  await page.waitForFunction(() => (window as any).__grid?.cells().length === 4);
+  await expect.poll(() => loaded(page), { timeout: 20_000 }).toBe(true);
+  await page.locator('.oac-topbar__type').first().click();
+  const menu = page.getByRole('menu', { name: 'Chart type' });
+  await expect(menu.getByText('Transforms', { exact: true })).toBeVisible();
+  await menu.getByRole('menuitemradio', { name: 'Renko', exact: true }).click();
+  const renko = (): Promise<number[]> => grid(page, g => g.cells().flatMap((cell: any, i: number) =>
+    cell.widget.chartType() === 'renko' && cell.widget.chart.seriesTransform(cell.widget.series)?.type === 'renko' ? [i] : []));
+  await expect.poll(renko).toHaveLength(1);
+  const [index] = await renko();
+  // The chart forms the bricks from the fed bars itself.
+  expect(await grid(page, g => g.cells().map((cell: any) => cell.widget.chart.primaryBars().length))).not.toContain(0);
+  await page.screenshot({ path: info.outputPath('yfinance-grid-renko.png') });
+  await page.reload();
+  await page.waitForFunction(() => (window as any).__grid?.cells().length === 4);
+  await expect.poll(() => loaded(page), { timeout: 20_000 }).toBe(true);
+  await expect.poll(renko).toEqual([index]);
+  expect(errors).toEqual([]);
+});
+
 test('a saved grid the page cannot restore is kept and reported, not overwritten', async ({ page }) => {
   await page.goto(ORIGIN + '/examples/yfinance/grid.html?test=1');
   await page.waitForFunction(() => (window as any).__grid?.cells().length === 4);

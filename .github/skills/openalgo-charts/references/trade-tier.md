@@ -26,7 +26,7 @@ Separate bundle entry: `import { OrderEngine } from 'openalgo-charts/trade'` -> 
 
 They are independent: `chart.trading` uses `TradingPosition`/`TradingOrder` and `PriceLine`; this tier uses `Order`/`Position` and its own primitives.
 
-**Do not use `chart.trading` and this tier on the same chart.** `chart.subscribeClick` and `chart.subscribeDrag` are single-slot setters. The `TradingController` claims both on first access to `chart.trading`; the trade tier requires you to claim them yourself for drag-modify and cancel. Whoever registers last wins, and the loser goes silently dead.
+**`chart.trading` and this tier both route drag-modify and cancel through `chart.subscribeDrag` and `chart.subscribeClick`**: the `TradingController` subscribes on first access to `chart.trading`, and a host of this tier subscribes itself (below). Since 2.6.0 both methods take several subscribers, so neither silences the other. Before 2.6.0 they were single-slot setters: whoever registered last won and the other went silently dead, so on an older release keep the two off one chart.
 
 ## Data model (`src/trade/types.ts`)
 
@@ -91,7 +91,7 @@ interface PlaceRequest {
 interface PlaceResult { ok: boolean; clientId?: string; state?: ClientOrderState; reason?: string }
 ```
 
-`OrderFeed` is **not** the base package's `TradeFeed`. Implement `OrderFeed` for the engine.
+`OrderFeed` is **not** the base package's `TradeFeed`, which is deprecated (removed in 3.0.0) and taken by nothing. Implement `OrderFeed` for the engine.
 
 | Method | Behaviour |
 |---|---|
@@ -239,7 +239,7 @@ feed.subscribeDepth({ symbol, exchange, interval }, (d) => ladder.setDepth(d));
 
 ## `FakeBroker`
 
-Deterministic in-memory `OrderFeed` for tests and offline demos. Members: `onBook(cb)` / `setBook(orders, positions)` (copies its inputs), `onLtp(cb)` / `emitLtp(symbol, ltp)`, `onDepth(cb)` / `emitDepth(symbol, depth)`, `place`/`modify`/`cancel` (broker ids `B1`, `B2`, …), `fill(orderId)`, `orders()` / `positions()`, the test hook `rejectNextPlace = 'reason'` (next `place()` throws once), and `static makeDepth(ltp, levels, tickSize = 0.05)`.
+Deterministic in-memory `OrderFeed` for tests and offline demos. Members: `onBook(cb)` / `setBook(orders, positions)` (copies its inputs), `onLtp(cb)` / `emitLtp(symbol, ltp)`, `onDepth(cb)` / `emitDepth(symbol, depth)`, `place`/`modify`/`cancel` (broker ids `B1`, `B2`, …), `fill(orderId)`, `orders()` / `positions()`, the test hook `rejectNextPlace = 'reason'` (next `place()` throws once, as an answer lost on its way back: the engine settles it as ambiguous and keeps the token; for a broker's refusal use `failNext('place', 'reject')` with `accounts`), and `static makeDepth(ltp, levels, tickSize = 0.05)`.
 
 `new FakeBroker()` (no options) is the original book simulator and declares no `features`: `place()` marks `MARKET` orders `'filled'` and everything else `'working'`, appends to the order book and never updates `positions` (seed those with `setBook`). A request carrying `account`, `duration`, `expiresAt` or `leverage` is refused, and the engine refuses every newer operation against it.
 
@@ -367,7 +367,7 @@ Reconciling the fill back onto the chart *is* `refreshBook()`, the filled order 
 
 **Terminal states swallow everything.** After `stale`, a late fill event cannot move the order back; rebuild from a snapshot instead.
 
-**`OpenAlgoTradeFeed` sends `pricetype: req.type` verbatim.** Your `OrderType` strings must be the exact values OpenAlgo expects (`MARKET`, `LIMIT`, `SL`, `SL-M`). `exchange` defaults to `'NSE'`, `product` to `defaultProduct` (default `'MIS'`).
+**`OpenAlgoTradeFeed` sends `pricetype: req.type` verbatim.** Your `OrderType` strings must be the exact values OpenAlgo expects (`MARKET`, `LIMIT`, `SL`, `SL-M`). `exchange` defaults to `'NSE'`, `product` to `defaultProduct` (default `'MIS'`), on `place()` only: `modify()` never guesses either for an order the book does not describe, so pass `exchange` on every order for any other exchange.
 
 ## Deeper
 

@@ -29,7 +29,7 @@ const firstNonNull = (col: readonly (number | null)[]): number => col.findIndex(
 describe('the reference platform volatility descriptors', () => {
   const data = wave();
 
-  it('exports the ten studies under their the reference platform ids', () => {
+  it('exports the eleven studies under their ids', () => {
     expect(VOLATILITY_INDICATORS.map((d) => d.id)).toEqual([
       'bollinger-percent-b',
       'bollinger-bandwidth',
@@ -41,6 +41,7 @@ describe('the reference platform volatility descriptors', () => {
       'chaikin-volatility',
       'standard-deviation',
       'standard-error',
+      'volatility-squeeze',
     ]);
     for (const d of VOLATILITY_INDICATORS) expect(d.placement).toBe('pane');
   });

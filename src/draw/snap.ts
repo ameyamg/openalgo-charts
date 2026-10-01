@@ -13,11 +13,12 @@
  * anchor takes is read back through the pane's own scale.
  */
 import { getIndicator } from 'openalgo-charts';
-import type { Bar, DataLayer, IndicatorApi, SeriesApi } from 'openalgo-charts';
+import type { Bar } from 'openalgo-charts';
 import type { DrawingPoint, MagnetMode } from './types';
+import type { DrawingChartHost } from './controller-types';
 
 /** How close, in media px, a value must be for the weak magnet to pull. */
-export const WEAK_MAGNET_PX = 8;
+const WEAK_MAGNET_PX = 8;
 
 /** The 1.9.x boolean and the 2.0 modes, folded onto one. */
 export function magnetModeOf(value: boolean | MagnetMode | undefined): MagnetMode {
@@ -42,14 +43,7 @@ export interface SnapBar {
  * study pane cannot be compared at all, and without the price series or the
  * studies there is nothing to snap to.
  */
-export interface MagnetHost {
-  readonly dataLayer: DataLayer;
-  priceToCoordinate?(price: number, paneIndex?: number): number | null;
-  primaryBars?(): readonly Bar[];
-  indicators?(): readonly IndicatorApi[];
-  panes?(): readonly unknown[];
-  seriesStyle?(series: SeriesApi): { readonly visible?: boolean; readonly color?: string } | null;
-}
+type MagnetHost = Pick<DrawingChartHost, 'dataLayer' | 'priceToCoordinate' | 'primaryBars' | 'indicators' | 'panes' | 'seriesStyle'>;
 
 /** What a study pane is read through: its scales and its own price projection, pane-local. `Pane` has them. */
 interface StudyPane {
@@ -71,7 +65,7 @@ function indexOfTime(bars: readonly Bar[], time: number): number {
   let hi = bars.length - 1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    const t = bars[mid].time;
+    const t = bars[mid]!.time; // lo <= mid <= hi, all in range
     if (t === time) return mid;
     if (t < time) lo = mid + 1;
     else hi = mid - 1;
@@ -90,8 +84,8 @@ export function barAt(host: MagnetHost, time: number): SnapBar | null {
   const at = host.dataLayer.indexToTime(Math.round(host.dataLayer.timeToIndexFloat(time)));
   const i = at === undefined ? -1 : indexOfTime(bars, at);
   if (i < 0) return null;
-  const { open, high, low, close } = bars[i];
-  return { time: bars[i].time, open, high, low, close };
+  const { open, high, low, close } = bars[i]!; // a found index
+  return { time: bars[i]!.time, open, high, low, close };
 }
 
 /** Whether a colour paints nothing: the helper plot a band or a mark is measured from. */
@@ -100,8 +94,8 @@ function invisible(color: string | undefined): boolean {
   if (c === 'transparent') return true;
   if (/^#[0-9a-f]{4}$/.test(c)) return c[4] === '0';
   if (/^#[0-9a-f]{8}$/.test(c)) return c.endsWith('00');
-  const args = /^(?:rgb|hsl)a?\((.*)\)$/.exec(c)?.[1].split(/[\s,/]+/).filter(Boolean);
-  return args?.length === 4 && parseFloat(args[3]) === 0;
+  const args = /^(?:rgb|hsl)a?\((.*)\)$/.exec(c)?.[1]!.split(/[\s,/]+/).filter(Boolean);
+  return args?.length === 4 && parseFloat(args[3]!) === 0; // the group is in every match; four args
 }
 
 /**
@@ -158,7 +152,7 @@ export function magnetPoint(
   if (paneIndex === pricePane) {
     const values = [bar.open, bar.high, bar.low, bar.close];
     if (mode === 'strong') {
-      let best = values[0];
+      let best = values[0]!; // four values
       let bestD = Infinity;
       for (const v of values) {
         const d = Math.abs(v - point.price);

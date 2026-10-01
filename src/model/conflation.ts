@@ -34,7 +34,9 @@ export function conflationGroupSize(barSpacing: number, dpr: number, minPx = 0.5
 
 /** Merge a single group of bars into one OHLC-preserving bar (uses the first bar's time). */
 export function mergeBars(group: readonly Bar[]): Bar {
-  const first = group[0];
+  // A group holds one bar at least: the conflation helpers never make an empty
+  // one, and an empty one has no time to take, so it throws as it always has.
+  const first = group[0]!;
   let high = first.high;
   let low = first.low;
   let volume = first.volume ?? 0;
@@ -44,7 +46,7 @@ export function mergeBars(group: readonly Bar[]): Bar {
   // by a factor of the group size.
   let oi = first.oi;
   for (let i = 1; i < group.length; i++) {
-    const b = group[i];
+    const b = group[i]!;
     if (b.high > high) high = b.high;
     if (b.low < low) low = b.low;
     if (b.volume !== undefined) { volume += b.volume; hasVolume = true; }
@@ -55,7 +57,7 @@ export function mergeBars(group: readonly Bar[]): Bar {
     open: first.open,
     high,
     low,
-    close: group[group.length - 1].close,
+    close: group[group.length - 1]!.close,
   };
   if (hasVolume) merged.volume = volume;
   if (oi !== undefined) merged.oi = oi;
@@ -167,13 +169,19 @@ export function lodActive(barSpacing: number, dpr: number, columnWidth: number):
  * from frame to frame rather than allocated per column. What `emit` receives
  * is valid until the next `begin`.
  */
-export interface LodColumns {
+interface LodColumns {
   /** Start one series' pass for a frame, in columns `lodColumnWidth(dpr, factor, kind)` wide. */
   begin(kind: LodKind, dpr: number, factor: number): void;
   /** Feed the next visible bar, centred at media-px `x`. */
   push(x: number, bar: Bar): void;
   /** Close the last column. */
   end(): void;
+}
+
+/** A merged stick: every optional field of a bar present, undefined when unset. */
+interface MergedBar extends Omit<Bar, 'volume' | 'oi' | 'color' | 'wickColor' | 'borderColor'> {
+  volume: number | undefined; oi: number | undefined;
+  color: string | undefined; wickColor: string | undefined; borderColor: string | undefined;
 }
 
 /**
@@ -183,7 +191,7 @@ export interface LodColumns {
 export function createLodColumns(emit: (x: number, bar: Bar) => void): LodColumns {
   let kind: LodKind = 'ohlc', dpr = 1, column = 1, stick = 1, current = NaN;
   /** Merged bars, reused across frames; `used` of them hold this frame's sticks. */
-  const merged: Bar[] = [];
+  const merged: MergedBar[] = [];
   let used = 0;
   // The open OHLC stick.
   let any = false, time = 0, open = NaN, high = NaN, low = NaN, close = NaN, volume = 0, hasVolume = false;
@@ -202,10 +210,11 @@ export function createLodColumns(emit: (x: number, bar: Bar) => void): LodColumn
 
   /** Put a bar among the band run's kept ones by arrival, once however many extremes it holds. */
   const keep = (at: number, x: number, bar: Bar): void => {
+    // The run's `kept` entries lead each list, so every read here is in range.
     let i = kept;
-    while (i > 0 && keptAt[i - 1] > at) i--;
+    while (i > 0 && keptAt[i - 1]! > at) i--;
     if (i > 0 && keptAt[i - 1] === at) return;
-    for (let j = kept; j > i; j--) { keptAt[j] = keptAt[j - 1]; keptX[j] = keptX[j - 1]; keptBar[j] = keptBar[j - 1]; }
+    for (let j = kept; j > i; j--) { keptAt[j] = keptAt[j - 1]!; keptX[j] = keptX[j - 1]!; keptBar[j] = keptBar[j - 1]!; }
     keptAt[i] = at; keptX[i] = x; keptBar[i] = bar;
     kept++;
   };
@@ -234,7 +243,7 @@ export function createLodColumns(emit: (x: number, bar: Bar) => void): LodColumn
     // The stick sits on its column, centred when a factor widens the column
     // past one stick, so consecutive sticks tile.
     const left = current * column + ((column - stick) >> 1);
-    emit((left + (stick >> 1)) / dpr, bar);
+    emit((left + (stick >> 1)) / dpr, bar as Bar); // a bar whose unset fields read as absent
   };
 
   /**
@@ -254,7 +263,7 @@ export function createLodColumns(emit: (x: number, bar: Bar) => void): LodColumn
       keep(topAt, topX, topBar as Bar);
       keep(bottomAt, bottomX, bottomBar as Bar);
       keep(lastAt, lastX, last as Bar);
-      for (let i = 0; i < kept; i++) emit(keptX[i], keptBar[i]);
+      for (let i = 0; i < kept; i++) emit(keptX[i]!, keptBar[i]!);
       return;
     }
     const lowFirst = lowAt <= highAt;

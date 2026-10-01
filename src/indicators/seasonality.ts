@@ -41,38 +41,9 @@
  * Original implementation written from the described behaviour, per
  * ARCHITECTURE.md §0.1, not ported from any third-party source.
  */
-import {
-  utcSecondsToZonedParts, zonedWallClockToUtcSeconds, DEFAULT_TIMEZONE, isValidTimezone,
-} from 'openalgo-charts';
+import { utcSecondsToZonedParts, zonedWallClockToUtcSeconds } from 'openalgo-charts';
 import type { Bar, IndicatorDescriptor, TableCell, TablePosition } from 'openalgo-charts';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const on = (s: Readonly<Record<string, unknown>>, k: string): boolean => s[k] !== false;
-
-/**
- * The chart's configured zone, as it reaches an indicator.
- *
- * A descriptor's hooks are handed bars and settings and never the chart, so the
- * zone travels on the settings blob under the reserved `timezone` key. A blob
- * without one, which is every caller that predates the option, resolves to the
- * shipped default and tabulates exactly what 1.2.0 tabulated.
- *
- * An unrecognised name falls back rather than throwing: `chart.setTimezone`
- * already rejects a bad zone at the call site, and a hook that throws takes the
- * whole repaint down with it.
- */
-const zoneOf = (s: Readonly<Record<string, unknown>>): string => {
-  const v = s.timezone;
-  if (typeof v !== 'string' || v === '' || v === DEFAULT_TIMEZONE) return DEFAULT_TIMEZONE;
-  return isValidTimezone(v) ? v : DEFAULT_TIMEZONE;
-};
+import { num, str, flag, zoneOf } from './settings';
 
 const POS_DEFAULT = '#089981';
 const NEG_DEFAULT = '#F23745';
@@ -119,7 +90,9 @@ const SKIP_BG = withOpacity(NEUTRAL, 0.5);
  * outlier month would flatten every other cell into near-invisibility.
  *
  * A missing value gets no fill at all, so an empty cell reads as absent data
- * rather than as a neutral reading.
+ * rather than as a neutral reading. The cells below carry that as
+ * `bgColor: undefined`, which the table paints like an omitted fill; the
+ * public `TableCell` keeps the member exact, hence their assertions.
  */
 function rampColor(value: number | null, cutoff: number, pos: string, neg: string): string | undefined {
   if (value === null || !Number.isFinite(value)) return undefined;
@@ -144,8 +117,8 @@ interface MonthSpan {
  *
  * The month a bar falls in is decided by the half-open UTC interval the current
  * month occupies rather than by resolving the bar's own calendar parts. The two
- * are the same test — a bar is in this month exactly when it lands inside the
- * month's span — but the interval is computed once per month instead of once
+ * are the same test (a bar is in this month exactly when it lands inside the
+ * month's span), but the interval is computed once per month instead of once
  * per bar, and resolving a zone costs an `Intl` lookup where comparing two
  * numbers costs nothing. A history of fifty thousand bars covers a couple of
  * hundred months.
@@ -211,7 +184,7 @@ function buildMatrix(
   // The last month in the data is still being written, so its change is not yet
   // a month's change. The reference reaches the same place from the other side,
   // by reading only closed monthly bars.
-  const forming = spans.length > 0 ? spans[spans.length - 1] : null;
+  const forming = spans.length > 0 ? spans[spans.length - 1]! : null;
   if (forming !== null) skipped.add(monthKey(forming.year, forming.month));
 
   const years: number[] = [];
@@ -221,10 +194,10 @@ function buildMatrix(
   // most of the move. Index 0 is therefore unmeasurable and stays blank: the
   // first month in the data has no predecessor to measure against.
   for (let i = 1; i < spans.length; i++) {
-    const span = spans[i];
+    const span = spans[i]!;
     // The predecessor is the previous month *present in the data*, so a hole in
     // the series bridges rather than swallowing the month after it.
-    const prev = spans[i - 1];
+    const prev = spans[i - 1]!;
     if (span.year < startYear || skipped.has(monthKey(span.year, span.month))) continue;
     // A zero or non-finite previous close has no percentage change to report,
     // and the absolute denominator keeps the sign meaningful on a series that
@@ -359,15 +332,15 @@ export const SEASONALITY: IndicatorDescriptor = {
           continue;
         }
         const v = row[m] ?? null;
-        cells.push(v === null ? { text: '' } : { text: pct(v), bgColor: rampColor(v, cutoff, pos, neg) });
+        cells.push(v === null ? { text: '' } : { text: pct(v), bgColor: rampColor(v, cutoff, pos, neg) } as TableCell);
       }
       rows.push(cells);
       rowWeights.push(1);
     }
 
-    const showAvg = on(settings, 'showAvg');
-    const showStDev = on(settings, 'showStDev');
-    const showPos = on(settings, 'showPos');
+    const showAvg = flag(settings, 'showAvg', true);
+    const showStDev = flag(settings, 'showStDev', true);
+    const showPos = flag(settings, 'showPos', true);
     if (showAvg || showStDev || showPos) {
       // The reference separates the metrics with one cell merged across the
       // table. Without cell merging the same band is thirteen empty cells
@@ -379,7 +352,7 @@ export const SEASONALITY: IndicatorDescriptor = {
         const cells: TableCell[] = [labelCell('Avgs:')];
         for (let m = 0; m < 12; m++) {
           const v = mean(column(matrix, m));
-          cells.push(v === null ? { text: '' } : { text: pct(v), bgColor: rampColor(v, cutoff, pos, neg) });
+          cells.push(v === null ? { text: '' } : { text: pct(v), bgColor: rampColor(v, cutoff, pos, neg) } as TableCell);
         }
         rows.push(cells);
         rowWeights.push(1);
@@ -404,7 +377,7 @@ export const SEASONALITY: IndicatorDescriptor = {
           const v = percentPositive(column(matrix, m));
           cells.push(v === null
             ? { text: '' }
-            : { text: `${Math.round(v)}%`, bgColor: rampColor(v - 50, 50, pos, neg) });
+            : { text: `${Math.round(v)}%`, bgColor: rampColor(v - 50, 50, pos, neg) } as TableCell);
         }
         rows.push(cells);
         rowWeights.push(1);

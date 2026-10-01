@@ -267,7 +267,9 @@ describe('ReplayGroup', () => {
     });
     const group = new ReplayGroup([a.input]);
     group.destroy();
-    expect(disposed).toBe(1);
+    // The group's own listener and the one its member controller holds while
+    // it owns the chart's data, each released once.
+    expect(disposed).toBe(2);
     a.chart.destroy();
     expect(other).toBe(1);
   });

@@ -22,9 +22,12 @@
  * to `setTool` / `undo` / `remove`, and its own `keydown` to
  * `keyToDrawingAction`.
  *
- * Tools register into the base bundle's registry through the package entry, not
- * a deep path, so `createChart` and this tier share one registry; see
- * rollup.config.js.
+ * The drawing-tool registry is this tier's own (registry.ts), and importing
+ * the tier fills it with the built-ins. What the tier needs from the base at
+ * run time, the interval and indicator lookups (`tryResolveInterval`,
+ * `getIndicator`, `plotStyleKeys`), it imports from the package entry rather
+ * than a deep path, because those registries live in the base bundle and a
+ * deep import would inline a second, empty copy of them; see rollup.config.js.
  */
 import { registerBuiltinDrawingTools } from './tools';
 
@@ -58,27 +61,33 @@ export {
   registeredDrawingTools,
   matchDrawingShortcut,
   drawingShortcuts,
+  // A registry lookup, so it lives with the registry rather than in schema.ts.
+  drawingSettingsSchema,
+} from './registry';
+export {
   registerBuiltinDrawingTools,
   BUILTIN_DRAWING_TOOLS,
   TREND_LINE, RAY, EXTENDED_LINE, ARROW,
   HORIZONTAL_LINE, HORIZONTAL_RAY, VERTICAL_LINE, CROSS_LINE,
   RECTANGLE, ELLIPSE, PARALLEL_CHANNEL,
+  PATH,
+  // The 2.0 additions: shape, freehand and cycle families.
+  CIRCLE, TRIANGLE, POLYLINE, ARC, CURVE, ROTATED_RECTANGLE, DOUBLE_CURVE,
+  HIGHLIGHTER, BRUSH,
+  CYCLIC_LINES, TIME_CYCLES, SINE_LINE,
+} from './tools';
+export {
   FIB_RETRACEMENT, FIB_EXTENSION,
-  LONG_POSITION, SHORT_POSITION, MEASURE,
-  TEXT, PATH,
+  FIB_CHANNEL, FIB_TIME_ZONE, FIB_FAN, GANN_FAN, GANN_BOX,
+} from './fib-tools';
+export { LONG_POSITION, SHORT_POSITION, MEASURE, FORECAST, PRICE_RANGE, DATE_RANGE } from './measure-tools';
+export {
+  TEXT,
   // Annotations: the marks whose job is a human sentence on the chart.
   NOTE, BALLOON, COMMENT, SIGNPOST, PRICE_NOTE, TABLE,
   ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT,
   PRICE_LABEL, CALLOUT, FLAG_MARK,
-  // The 2.0 additions: measurement, shape, freehand, fib and cycle families.
-  FORECAST, PRICE_RANGE, DATE_RANGE,
-  CIRCLE, TRIANGLE, POLYLINE, ARC, CURVE, ROTATED_RECTANGLE, DOUBLE_CURVE,
-  HIGHLIGHTER, BRUSH,
-  FIB_CHANNEL, FIB_TIME_ZONE, FIB_FAN, GANN_FAN, GANN_BOX,
-  CYCLIC_LINES, TIME_CYCLES, SINE_LINE,
-  // A registry lookup, so it lives with the registry rather than in schema.ts.
-  drawingSettingsSchema,
-} from './tools';
+} from './annotation-tools';
 
 // Per-tool settings schema. Pure and DOM-free: a host renders its own dialog
 // from the field list and writes the result back through
@@ -141,9 +150,11 @@ export {
 // Clipboard transfer. `DrawingControllerOptions.clipboard` is typed as
 // `ClipboardPort` and `DrawingController.clipboard()` returns a
 // `DrawingClipboard`, so both have to be nameable from the tier entry or a
-// TypeScript host can use neither. The encode / decode / sanitize trio is
-// exported for a host moving drawings over its own transport (a websocket, a
-// saved template) with the same validation a paste gets.
+// TypeScript host can use neither. The encode and decode pair is exported for
+// a host moving drawings over its own transport (a websocket, a saved
+// template): decoding validates exactly as a paste does. `sanitizeDrawing` is
+// the paste's per-entry gate alone, without the migration a paste runs after
+// it, so it keeps a style key this build does not declare, which a paste drops.
 export {
   DrawingClipboard,
   clearMemoryClipboard,
@@ -201,13 +212,21 @@ export type {
 // controller to something other than a Chart can state what it must provide.
 export type { DrawingChartHost } from './controller';
 
+// The tier's payloads on the chart bus. './events' adds the `draw:*` and
+// `drawing:*` names to the base's `ChartEventMap` by declaration merging, so
+// importing the tier types `chart.on('draw:add', ...)`. It holds types alone.
+export type {
+  DrawingEvent, DrawingListEvent, DrawingIdsEvent, DrawingIdEvent, DrawingToolEvent, DrawingModeEvent,
+} from './controller-types';
+import './events';
+
 // Where a study's price input is picked and anchored. The controller draws a
 // paired input's anchor there; a host's own settings form asks the same
 // question before it offers a pick.
 export { studyInputTarget } from './input-anchors';
 export type { StudyInputTarget, InputAnchorStep } from './input-anchors';
 
-export type { ShortcutEvent } from './tools';
+export type { ShortcutEvent } from './registry';
 
 export {
   distToSegment, distToLine, distToPolyline,

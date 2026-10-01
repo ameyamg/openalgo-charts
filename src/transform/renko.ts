@@ -1,13 +1,14 @@
 /**
  * Renko bricks (ARCHITECTURE.md §6A). Each fixed box-size move of the close
  * emits one brick. Renders with the candlestick renderer (brick = a body).
- * Simplified single-box step (no 2× reversal rule) — deterministic and
+ * Simplified single-box step (no 2× reversal rule): deterministic and
  * incremental for live updates.
  */
 import type { Bar } from '../model/bar';
-import type { ISeriesTransform } from './transform';
+import { copyState, type ISeriesTransform } from './transform';
 
 export interface RenkoOptions {
+  /** Brick height in price. The constructor throws unless it is above 0. */
   boxSize: number;
 }
 
@@ -22,6 +23,10 @@ export class RenkoTransform implements ISeriesTransform {
 
   public reset(): void {
     this._edge = NaN;
+  }
+
+  public clone(): RenkoTransform {
+    return copyState(this);
   }
 
   public push(bar: Bar): Bar[] {

@@ -1556,7 +1556,9 @@ test('reference alerts retain drawing anchors through rebuild and reload', async
     app.price.update({ ...tail, time: tail.time + 86400 });
   });
   await expect.poll(() => page.evaluate(() => (window as any).__oac.app.alerts.list()[0].state)).toBe('triggered');
-  await page.waitForTimeout(350);
+  // Write the layout now rather than waiting out the autosave debounce, which a
+  // loaded machine can stretch past the reload.
+  await page.evaluate(async () => { const path = '/examples/yfinance/src/persist.js'; (await import(path)).persistLayoutNow(); });
   await page.reload();
   await page.waitForFunction(() => (window as any).__oac?.app.alerts?.list().length === 3);
   expect(await page.evaluate(() => (window as any).__oac.app.alerts.list().find((alert: any) => alert.title === 'Reference study').source.instanceId)).toBe(studyId);
@@ -1650,7 +1652,9 @@ test('reference second-chart alerts restore on reload and stay scoped to that ch
   await page.locator('.oac-alert-editor').getByRole('button', { name: 'Save', exact: true }).click();
   expect(await page.evaluate(() => (window as any).__oac.app.alerts.list().length)).toBe(0);
   expect(await page.evaluate(() => (window as any).__oac.app.alerts2.list()[0].scope.symbol)).toBe('MSFT');
-  await page.waitForTimeout(350);
+  // Write the layout now rather than waiting out the autosave debounce, which a
+  // loaded machine can stretch past the reload.
+  await page.evaluate(async () => { const path = '/examples/yfinance/src/persist.js'; (await import(path)).persistLayoutNow(); });
   await page.reload();
   await page.waitForFunction(() => (window as any).__oac?.app.alerts2?.list().length === 1);
   expect(await page.evaluate(() => (window as any).__oac.app.alerts2.list()[0].title)).toBe('Secondary alert');

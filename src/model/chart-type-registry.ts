@@ -2,15 +2,19 @@
  * Chart-type registry (ARCHITECTURE.md §6A). Every series type registers a
  * descriptor: how to draw it and how it contributes to autoscale. The core
  * iterates descriptors, so adding a style is one registration and no core change.
- * Phase 5 fills the Family-A (time-indexed) types; Families B/C plug in later.
+ * The time-indexed types register here; the transform tier registers the ones
+ * it draws from its own elements (Point & Figure, Kagi).
  */
 import type { Bar } from './bar';
 import type { SeriesStyle } from '../render/series-style';
 import type { ChartTheme } from '../theme';
-import { drawCandles, DEFAULT_CANDLE_STYLE, type CandleStyle } from '../render/candles';
+import { drawCandles, resolveCandleStyle } from '../render/candles';
 import { drawBars, drawColumns } from '../render/bars';
 import { drawLine, drawArea, drawBaseline, drawHlcArea } from '../render/line';
-import { drawHistogram, type HistogramStyle } from '../render/histogram';
+import { drawHistogram, DEFAULT_HISTOGRAM_STYLE, type HistogramStyle } from '../render/histogram';
+import {
+  withAreaColors, withBaselineColors, withHlcAreaColors, withLineColor, withUpDown,
+} from '../render/series-style';
 
 export type SeriesType =
   | 'candlestick'
@@ -89,23 +93,6 @@ export interface RendererEntry {
   extents(bar: Bar, style: SeriesStyle): { min: number; max: number };
 }
 
-function candleStyle(s: SeriesStyle, theme: ChartTheme, extra: Partial<CandleStyle> = {}): CandleStyle {
-  return {
-    ...DEFAULT_CANDLE_STYLE,
-    upColor: s.upColor ?? theme.upColor,
-    downColor: s.downColor ?? theme.downColor,
-    borderUpColor: s.borderUpColor ?? theme.upColor,
-    borderDownColor: s.borderDownColor ?? theme.downColor,
-    wickUpColor: s.wickUpColor ?? theme.wickUpColor,
-    wickDownColor: s.wickDownColor ?? theme.wickDownColor,
-    borderVisible: s.borderVisible ?? DEFAULT_CANDLE_STYLE.borderVisible,
-    bodyVisible: s.bodyVisible ?? true,
-    wickVisible: s.wickVisible ?? DEFAULT_CANDLE_STYLE.wickVisible,
-    colorByPreviousClose: s.colorByPreviousClose,
-    ...extra,
-  };
-}
-
 const hiLo = (bar: Bar): { min: number; max: number } => ({ min: bar.low, max: bar.high });
 const closeOnly = (bar: Bar): { min: number; max: number } => ({ min: bar.close, max: bar.close });
 const fromBase = (bar: Bar, s: SeriesStyle): { min: number; max: number } => {
@@ -140,20 +127,15 @@ export function registeredChartTypes(): string[] {
 
 // ── Family A registrations ────────────────────────────────────────────────
 
-// Fill common up/down color defaults from the theme.
-const ud = (s: SeriesStyle, t: ChartTheme): SeriesStyle => ({
-  ...s, upColor: s.upColor ?? t.upColor, downColor: s.downColor ?? t.downColor,
-});
-
 registerChartType('candlestick', {
   defaultStyle: {}, isPriceSeries: true,
-  draw: (g, items, toY, bs, dpr, s, rc) => drawCandles(g, items, toY, bs, dpr, candleStyle(s, rc.theme)),
+  draw: (g, items, toY, bs, dpr, s, rc) => drawCandles(g, items, toY, bs, dpr, resolveCandleStyle(s, rc.theme)),
   extents: hiLo,
 });
 
 registerChartType('hollow-candle', {
   defaultStyle: {}, isPriceSeries: true,
-  draw: (g, items, toY, bs, dpr, s, rc) => drawCandles(g, items, toY, bs, dpr, candleStyle(s, rc.theme, { hollow: true })),
+  draw: (g, items, toY, bs, dpr, s, rc) => drawCandles(g, items, toY, bs, dpr, resolveCandleStyle(s, rc.theme, { hollow: true })),
   extents: hiLo,
 });
 
@@ -161,7 +143,7 @@ registerChartType('volume-candle', {
   defaultStyle: {}, isPriceSeries: true,
   draw: (g, items, toY, bs, dpr, s, rc) => {
     const max = rc.maxVolume;
-    const scaled = candleStyle(s, rc.theme, { widthScale: (b) => (max > 0 ? (b.volume ?? 0) / max : 1) });
+    const scaled = resolveCandleStyle(s, rc.theme, { widthScale: (b) => (max > 0 ? (b.volume ?? 0) / max : 1) });
     drawCandles(g, items, toY, bs, dpr, scaled);
   },
   extents: hiLo,
@@ -169,60 +151,49 @@ registerChartType('volume-candle', {
 
 registerChartType('bar', {
   defaultStyle: {}, isPriceSeries: true,
-  draw: (g, items, toY, bs, dpr, s, rc) => drawBars(g, items, toY, bs, dpr, ud(s, rc.theme)),
+  draw: (g, items, toY, bs, dpr, s, rc) => drawBars(g, items, toY, bs, dpr, withUpDown(s, rc.theme)),
   extents: hiLo,
 });
 
 registerChartType('high-low', {
   defaultStyle: {}, isPriceSeries: true,
-  draw: (g, items, toY, bs, dpr, s, rc) => drawBars(g, items, toY, bs, dpr, ud(s, rc.theme), true),
+  draw: (g, items, toY, bs, dpr, s, rc) => drawBars(g, items, toY, bs, dpr, withUpDown(s, rc.theme), true),
   extents: hiLo,
 });
 
 registerChartType('line', {
   defaultStyle: { lineWidth: 1.5 }, isPriceSeries: true, connectsBars: true,
-  draw: (g, items, toY, _bs, dpr, s, rc) => drawLine(g, items, toY, dpr, { ...s, color: s.color ?? rc.theme.lineColor }),
+  draw: (g, items, toY, _bs, dpr, s, rc) => drawLine(g, items, toY, dpr, withLineColor(s, rc.theme)),
   extents: closeOnly,
 });
 
 registerChartType('line-markers', {
   defaultStyle: { lineWidth: 1.5, markers: true }, isPriceSeries: true, connectsBars: true,
-  draw: (g, items, toY, _bs, dpr, s, rc) => drawLine(g, items, toY, dpr, { ...s, color: s.color ?? rc.theme.lineColor, markers: true }),
+  draw: (g, items, toY, _bs, dpr, s, rc) => drawLine(g, items, toY, dpr, withLineColor(s, rc.theme, { markers: true })),
   extents: closeOnly,
 });
 
 registerChartType('step', {
   defaultStyle: { lineWidth: 1.5, step: true }, isPriceSeries: true, connectsBars: true,
-  draw: (g, items, toY, _bs, dpr, s, rc) => drawLine(g, items, toY, dpr, { ...s, color: s.color ?? rc.theme.lineColor, step: true }),
+  draw: (g, items, toY, _bs, dpr, s, rc) => drawLine(g, items, toY, dpr, withLineColor(s, rc.theme, { step: true })),
   extents: closeOnly,
 });
 
 registerChartType('area', {
   defaultStyle: { lineWidth: 1.5 }, isPriceSeries: true, connectsBars: true,
-  draw: (g, items, toY, _bs, dpr, s, rc) => drawArea(g, items, toY, dpr, rc.plotHeight, {
-    ...s,
-    color: s.color ?? rc.theme.lineColor,
-    areaTopColor: s.areaTopColor ?? rc.theme.areaTopColor,
-    areaBottomColor: s.areaBottomColor ?? rc.theme.areaBottomColor,
-  }),
+  draw: (g, items, toY, _bs, dpr, s, rc) => drawArea(g, items, toY, dpr, rc.plotHeight, withAreaColors(s, rc.theme)),
   extents: closeOnly,
 });
 
 registerChartType('hlc-area', {
   defaultStyle: { lineWidth: 1.5 }, isPriceSeries: true, connectsBars: true,
-  draw: (g, items, toY, _bs, dpr, s, rc) => drawHlcArea(g, items, toY, dpr, { ...s, closeColor: s.closeColor ?? rc.theme.lineColor }),
+  draw: (g, items, toY, _bs, dpr, s, rc) => drawHlcArea(g, items, toY, dpr, withHlcAreaColors(s, rc.theme)),
   extents: hiLo,
 });
 
 registerChartType('baseline', {
   defaultStyle: { baseValue: 0, lineWidth: 1.5 }, isPriceSeries: true, connectsBars: true,
-  draw: (g, items, toY, _bs, dpr, s, rc) => drawBaseline(g, items, toY, dpr, {
-    ...s,
-    topColor: s.topColor ?? rc.theme.baselineTopLine,
-    bottomColor: s.bottomColor ?? rc.theme.baselineBottomLine,
-    areaTopColor: s.areaTopColor ?? rc.theme.baselineTopFill,
-    areaBottomColor: s.areaBottomColor ?? rc.theme.baselineBottomFill,
-  }),
+  draw: (g, items, toY, _bs, dpr, s, rc) => drawBaseline(g, items, toY, dpr, withBaselineColors(s, rc.theme)),
   extents: (bar, s) => {
     const base = s.baseValue ?? 0;
     return { min: Math.min(base, bar.close), max: Math.max(base, bar.close) };
@@ -231,14 +202,14 @@ registerChartType('baseline', {
 
 registerChartType('column', {
   defaultStyle: { base: 0 }, isPriceSeries: false,
-  draw: (g, items, toY, bs, dpr, s, rc) => drawColumns(g, items, toY, bs, dpr, ud(s, rc.theme)),
+  draw: (g, items, toY, bs, dpr, s, rc) => drawColumns(g, items, toY, bs, dpr, withUpDown(s, rc.theme)),
   extents: fromBase,
 });
 
 registerChartType('histogram', {
-  defaultStyle: { base: 0, color: '#3a4666' }, isPriceSeries: false,
+  defaultStyle: { base: 0, color: DEFAULT_HISTOGRAM_STYLE.color }, isPriceSeries: false,
   draw: (g, items, toY, bs, dpr, s) => {
-    const hs: HistogramStyle = { color: s.color ?? '#3a4666', base: s.base ?? 0 };
+    const hs: HistogramStyle = { color: s.color ?? DEFAULT_HISTOGRAM_STYLE.color, base: s.base ?? 0 };
     drawHistogram(g, items, toY, bs, dpr, hs);
   },
   extents: fromBase,

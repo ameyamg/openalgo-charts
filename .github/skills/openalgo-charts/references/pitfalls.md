@@ -117,9 +117,9 @@ macd.setSettings({ macdColor: '#f00', 'macd:width': 2 }); // right
 
 **`descriptor.range()` (e.g. RSI 0..100) applies only when the indicator created its own pane.** Two indicators sharing a pane would otherwise fight over the fixed range, so an indicator added onto an existing pane silently autoscales instead.
 
-**There are 102 built-ins, and their ids are not derivable from the display names.** `williams-percent-r`, `bollinger-percent-b`, `smi-ergodic-oscillator`, `special-k`. Read `BUILTIN_INDICATORS` or the table in [indicators](./indicators.md) and probe with `hasIndicator(id)` rather than catching the throw from `getIndicator`. The second and later instances of the same indicator id get auto-rotated colours: only keys you left unset are filled, an explicit colour always wins, and the first instance keeps the descriptor's own choice.
+**There are 112 built-ins, and their ids are not derivable from the display names.** `williams-percent-r`, `bollinger-percent-b`, `smi-ergodic-oscillator`, `special-k`. Read `BUILTIN_INDICATORS` or the table in [indicators](./indicators.md) and probe with `hasIndicator(id)` rather than catching the throw from `getIndicator`. The second and later instances of the same indicator id get auto-rotated colours: only keys you left unset are filled, an explicit colour always wins, and the first instance keeps the descriptor's own choice.
 
-**`registerIndicator` overwrites by id, and 102 ids are already taken.** Registering `momentum`, `median`, `volume` or `atr` for a custom study silently replaces the built-in for the whole page. Namespace custom ids.
+**`registerIndicator` overwrites by id, and 112 ids are already taken.** Registering `momentum`, `median`, `volume` or `atr` for a custom study silently replaces the built-in for the whole page. Namespace custom ids.
 
 **`IndicatorFillSpec.between` names `calc` output columns, not declared plots.** A fill whose `between` references a plot key that `calc` happens not to return draws nothing, with no error. The shaded overbought/oversold bands in the catalogue rely on this the other way round: they fill between two constant columns that no plot names.
 
@@ -235,9 +235,9 @@ place when the server disagrees with the caller's expectation.
 
 ## Events and state
 
-**`chart.emit` swallows exceptions thrown by listeners, silently, with no console output.** One bad listener must not break the render loop, so a bug inside your handler leaves no trace. Wrap handler bodies in your own try/catch while debugging.
+**A listener that throws does not stop the chart.** Since 2.6.0 an exception thrown by a listener on the chart bus, `chart.trading.on` or `chart.shortcuts.on` is reported through `reportError` (the browser console and the window `error` event) and the other listeners and the render loop carry on. Before 2.6.0 the chart bus dropped it silently, so on an older release wrap handler bodies in your own try/catch while debugging.
 
-**`subscribeClick`/`subscribeCrosshairMove`/`subscribeDrag` are single slots (a second call replaces the first) and they are hit-only.** Use `chart.on('click', ...)`, which also fires on empty plot with `id: null` plus `price`, `time` and `point`. Event names are plain strings, so a typo silently never fires; the crosshair-leave payload is all-null and must be handled.
+**`subscribeClick`/`subscribeCrosshairMove`/`subscribeDrag` add a subscriber each call (since 2.6.0; before, a second call replaced the first) and `subscribeClick` is hit-only.** Keep the unsubscribe each returns: a host that subscribes again on the same chart without it hears every click twice. Use `chart.on('click', ...)` for clicks on empty plot, which carry `id: null` plus `price`, `time` and `point`. Event names are plain strings, so a typo silently never fires; the crosshair-leave payload is all-null and must be handled.
 
 **`chart.off('click')` with no callback removes *every* listener for that event, including the drawing tier's and the trade layer's.** Always pass the callback, or keep the unsubscribe function `on()` returns.
 
@@ -333,3 +333,7 @@ grep -n "BUILTIN_INDICATORS\|BUILTIN_DRAWING_TOOLS" node_modules/openalgo-charts
 On Windows PowerShell substitute `Select-String -Pattern` for `grep` and `Get-ChildItem` for `ls`.
 
 If a symbol is absent from the local `.d.ts`, it does not exist in the installed version, say so and check `CHANGELOG.md` for the release that added it rather than writing code against it.
+
+## A transformed series speaks two sets of bars
+
+With `chart.setSeriesTransform` (or a widget chart type such as Renko), the series handle takes and returns the host's own bars: `getData()` is the raw history, not the bricks. What the chart draws, and what `chart.primaryBars()`, the crosshair, the readouts, `data:update` times and studies on `'chart'` bars see, is the elements. Index the view, a readout or a replay cut with `primaryBars()`, and feed updates with raw bars. Never hand a transformed series elements you prepared yourself: the chart transforms them again. A host that prepares its own elements picks the renderer alone, with `addSeries('point-figure')` or `setSeriesType`, which never transform.

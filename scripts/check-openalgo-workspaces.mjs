@@ -165,7 +165,11 @@ export async function checkWorkspaces({ page, check, reload, screenshot, orderCo
     await page.evaluate(() => window.__compatTerminals.find(t => !t.destroyed && t.sk === 'oa-trading-p2').setVolumeVisible(false));
     await expect.poll(async () => (await catalog()).workspaces.find(item => item.id === saved.id).panes[2].volume).toBe(false);
     const revision = (await catalog()).revision;
-    await sendDepth('BHEL', 'NSE', 107);
+    // A tick for the instrument the pane shows, whatever the groups before
+    // this one left loaded there: a tick for an instrument no pane shows
+    // never arrives, and proves nothing about persistence.
+    const shown = await page.evaluate(() => { const { symbol, exchange } = window.__compatTerminals.find(t => !t.destroyed && t.sk === 'oa-trading-p2').sym; return { symbol, exchange }; });
+    await sendDepth(shown.symbol, shown.exchange, 107);
     await page.waitForTimeout(1000);
     assert.equal((await catalog()).revision, revision);
     await menu();

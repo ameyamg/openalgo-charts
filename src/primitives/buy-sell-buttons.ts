@@ -3,7 +3,7 @@
  * panel docked inside the plot: a SELL button (bid), a quantity chip, and a BUY
  * button (ask), drawn on the overlay canvas so it stays fixed while the chart
  * pans/zooms. Clicks hit-test to `${id}:sell` / `${id}:buy` / `${id}:qty`, which
- * the chart routes through `subscribeClick` — the app places the order. Prices
+ * the chart routes through `subscribeClick`: the app places the order. Prices
  * update cheaply on every tick (`setPrices` / `setMark`).
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from './primitive';
@@ -32,7 +32,7 @@ export interface BuySellButtonsOptions {
   /** Show the price line above each label. Default true. */
   showPrices?: boolean;
   /**
-   * Uniform size multiplier for the whole panel — box, gaps and type. Default 1.
+   * Uniform size multiplier for the whole panel: box, gaps and type. Default 1.
    * A dense trading layout wants these smaller so they do not crowd the pane's
    * legend rows. Clamped to 0.6..1.5; below that the labels stop being legible.
    */
@@ -63,8 +63,8 @@ export class BuySellButtons implements IPrimitive {
   private readonly _sellLabel: string;
   private readonly _showPrices: boolean;
   private _qty: string;
-  private _buyColor?: string;
-  private _sellColor?: string;
+  private _buyColor?: string | undefined;
+  private _sellColor?: string | undefined;
   private _bid = NaN;
   private _ask = NaN;
   private _host: PrimitiveHost | null = null;
@@ -198,7 +198,7 @@ export class BuySellButtons implements IPrimitive {
 
   private _drawChip(ctx: CanvasRenderingContext2D, r: Rect, dpr: number, fill: string, txt: string, color: string): void {
     ctx.beginPath();
-    // square middle (no rounding — it butts against the buttons)
+    // square middle (no rounding: it butts against the buttons)
     ctx.rect(r.x * dpr, r.y * dpr, r.w * dpr, r.h * dpr);
     ctx.fillStyle = fill;
     ctx.fill();

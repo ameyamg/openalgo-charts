@@ -18,9 +18,11 @@
  * - **The analyzer/live mode is checked, not claimed.** See `getServerMode`.
  */
 import type { OrderFeed, PlaceRequest, PreflightFailure, TradeMode } from '../trade/order-engine';
-import type { Order, OrderSide, OrderStatus, OrderType, Position } from '../trade/types';
+import type { Order, OrderStatus, Position } from '../trade/types';
+import type { OrderSide, OrderType } from './types';
 import { validateQuantity, type OrderConstraints } from '../trade/validation';
-import { assertTradingCapability, type TradingCapabilitySource } from './trading-capabilities';
+import { assertTradingCapability, type TradingCapabilityRequest, type TradingCapabilitySource } from './trading-capabilities';
+import type { LooseOptional } from '../helpers/types';
 
 /**
  * An error that says the request PROVABLY never left this process.
@@ -128,7 +130,7 @@ export class OpenAlgoTradeFeed implements OrderFeed {
     this._verifyMode = config.verifyMode ?? 'auto';
     this._modeCacheMs = config.modeCacheMs ?? 5000;
     this._now = config.now ?? Date.now;
-    // Bind to the global object — a stored `this._fetch(...)` of window.fetch
+    // Bind to the global object: a stored `this._fetch(...)` of window.fetch
     // throws "Illegal invocation" in browsers.
     const f = config.fetchImpl ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : undefined);
     if (f === undefined) throw new Error('openalgo-charts: no fetch available; pass config.fetchImpl');
@@ -143,7 +145,7 @@ export class OpenAlgoTradeFeed implements OrderFeed {
     });
     if (!res.ok) {
       // Surface OpenAlgo's own error text (e.g. RMS rules, square-off windows)
-      // instead of a bare status code — the UI shows this to the trader.
+      // instead of a bare status code: the UI shows this to the trader.
       let detail = '';
       try {
         const j = (await res.json()) as { message?: string };
@@ -295,6 +297,20 @@ export class OpenAlgoTradeFeed implements OrderFeed {
 
   public get capabilities(): TradingCapabilitySource | undefined { return this._config.capabilities; }
 
+  /**
+   * Place an order through OpenAlgo's placeorder route.
+   *
+   * An order without `exchange` goes to `NSE`, and one without `product` takes
+   * the feed's `defaultProduct`. Both defaults are documented and hosts place
+   * through them, so they stay through 2.x. `modify()` is stricter on purpose:
+   * it never guesses an exchange or product for an order the book does not
+   * describe, since a guess there moves a live order somewhere its owner did
+   * not put it. A host that trades on any other exchange passes `exchange`
+   * with every order.
+   *
+   * Every refusal before the request is sent is a pre-flight error, so the
+   * caller can correct and retry knowing nothing reached the broker.
+   */
   public async place(request: PlaceRequest & { mode: TradeMode }): Promise<{ orderId: string }> {
     const req = { ...request };
     // placeorder has no account, duration, expiry or leverage field; one key is
@@ -379,8 +395,9 @@ export class OpenAlgoTradeFeed implements OrderFeed {
   public async modify(orderId: string, changes: { price?: number; triggerPrice?: number; qty?: number }): Promise<void> {
     const patch = { ...changes };
     const ctx = this._ctx.get(orderId);
+    // An order with no cached context asks without a symbol, which a request reads as absent.
     assertTradingCapability(this.capabilities, { operation: 'modify', orderId,
-      symbol: ctx?.symbol, exchange: ctx?.exchange, type: ctx?.pricetype });
+      symbol: ctx?.symbol, exchange: ctx?.exchange, type: ctx?.pricetype } satisfies LooseOptional<TradingCapabilityRequest> as TradingCapabilityRequest);
     if (ctx === undefined) {
       // Pre-flight: nothing can be built, so nothing is sent, so the order is
       // exactly where it was and the caller may retry once it has the book.
@@ -415,8 +432,8 @@ export class OpenAlgoTradeFeed implements OrderFeed {
 
   public async cancel(orderId: string): Promise<void> {
     const ctx = this._ctx.get(orderId);
-    assertTradingCapability(this.capabilities, { operation: 'cancel', orderId,
-      symbol: ctx?.symbol, exchange: ctx?.exchange, type: ctx?.pricetype });
+    assertTradingCapability(this.capabilities, { operation: 'cancel', orderId, // see modify
+      symbol: ctx?.symbol, exchange: ctx?.exchange, type: ctx?.pricetype } satisfies LooseOptional<TradingCapabilityRequest> as TradingCapabilityRequest);
     await this._post('/api/v1/cancelorder', { orderid: orderId, strategy: this._strategy });
   }
 
@@ -435,7 +452,7 @@ export class OpenAlgoTradeFeed implements OrderFeed {
     const orders: DecodedOrder[] = [];
     const quarantined: QuarantinedRow[] = [];
     for (let i = 0; i < rows.length; i++) {
-      const raw = rows[i];
+      const raw = rows[i]!;
       const res = decodeOrder(raw, `orders[${i}]`);
       if (!res.ok) { quarantined.push({ issue: res.issue, raw }); continue; }
       orders.push(res.order);
@@ -633,7 +650,7 @@ export function decodeOrder(r: RawOrder, path = 'order'): OrderDecodeResult {
   const status = STATUS_MAP[rawStatus.toLowerCase()];
   const order: DecodedOrder = {
     id, symbol, side, type, qty, filledQty: filled, price,
-    // trigger_price 0 means "no trigger" (a plain LIMIT/MARKET) — keep it undefined
+    // trigger_price 0 means "no trigger" (a plain LIMIT/MARKET): keep it undefined
     // so `triggerPrice ?? price` doesn't render the line at 0 (?? ignores undefined, not 0).
     triggerPrice: trigger > 0 ? trigger : undefined,
     status: status ?? 'unknown',

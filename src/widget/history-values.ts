@@ -4,9 +4,8 @@
  * a study's settings. Pure and stateless, so they live apart from the class
  * that records and walks the steps.
  */
-import type { IndicatorSettings } from 'openalgo-charts';
-
-export const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+import type { Chart, IndicatorSettings, SeriesApi, SeriesType } from 'openalgo-charts';
+import { isRecord } from '../helpers/validate';
 
 /** Structural equality for the plain data a capture holds. */
 export function same(a: unknown, b: unknown): boolean {
@@ -33,4 +32,23 @@ export function renameSources(settings: Readonly<IndicatorSettings>, rename: (id
       : isRecord(value) ? { ...value } as never : value;
   }
   return out;
+}
+
+/**
+ * A series' chart type as a step records it: the renderer, and after a `+` the
+ * transform the chart applies, so point and figure drawn from a host's own
+ * columns and point and figure the chart forms are two types, and a series
+ * with no transform records exactly what it always did.
+ */
+export function chartTypeOf(chart: Chart, series: SeriesApi): string | null {
+  const type = chart.seriesType(series), transform = chart.seriesTransform(series);
+  return type === null || transform === null ? type : `${type}+${transform.type}`;
+}
+
+/** Put a recorded chart type back, through the host's own setter when it gave one. */
+export function setChartTypeOf(chart: Chart, series: SeriesApi, recorded: string, set?: (type: string) => unknown): void {
+  const [type, transform] = recorded.split('+') as [SeriesType, string | undefined];
+  if (set !== undefined) { set(transform ?? type); return; }
+  chart.setSeriesTransform(series, transform === undefined ? null : { type: transform });
+  chart.setSeriesType(series, type);
 }

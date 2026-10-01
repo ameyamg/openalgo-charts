@@ -32,53 +32,17 @@
  *     labelled plates carry the same information.
  */
 import { sourceValues } from 'openalgo-charts';
-import type { IndicatorDescriptor, IndicatorSource, SeriesMarker } from 'openalgo-charts';
+import type { IndicatorDescriptor, SeriesMarker } from 'openalgo-charts';
 import {
   smaSeededEma, nulls, pivotHigh, pivotLow, barsSince, valueWhen,
 } from './calc';
 import { windowMean } from './window-mean';
 import { fromFirstValue } from './smoothing';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A length that windows a series, so it has to be a whole number. */
-const len = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.max(1, Math.floor(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>): IndicatorSource =>
-  (s.source as IndicatorSource) ?? 'hlc3';
-
-/**
- * A column holding one value on every bar, warmup included. The two shaded
- * bands are fills between such columns: `fills` resolves its keys out of the
- * `calc` result rather than out of the declared plots, so a level that is never
- * plotted can still anchor a band, and it must stay non-null throughout because
- * the shading covers the whole pane and not just the stretch that prints.
- */
-const constant = (n: number, value: number): (number | null)[] =>
-  new Array<number | null>(n).fill(value);
+import { num, int, str, src } from './settings';
+import { constant, shift, shiftFlags, zip } from './series';
 
 /** The same colour at 60 percent opacity, for the dimmer hidden-divergence plates. */
 const dim = (hex: string): string => (/^#[0-9a-f]{6}$/i.test(hex) ? `${hex}99` : hex);
-
-/** The reading `k` bars back, with no value before the series starts. */
-function shift(values: readonly number[], k: number): number[] {
-  const out = new Array<number>(values.length).fill(NaN);
-  for (let i = k; i < values.length; i++) out[i] = values[i - k];
-  return out;
-}
-
-/** `shift` for a condition series. An out-of-range flag reads as false. */
-function shiftFlags(flags: readonly boolean[], k: number): boolean[] {
-  const out = new Array<boolean>(flags.length).fill(false);
-  for (let i = k; i < flags.length; i++) out[i] = flags[i - k];
-  return out;
-}
 
 export const WAVETREND: IndicatorDescriptor = {
   id: 'wavetrend',
@@ -128,11 +92,7 @@ export const WAVETREND: IndicatorDescriptor = {
       // The sign is the whole reading, and it is the half of the original's
       // per-bar area colour that survives into a shape the renderer can tint.
       colorBy: ({ value, settings }) => {
-        const pick = (key: string, fallback: string): string => {
-          const c = settings[key];
-          return typeof c === 'string' && c !== '' ? c : fallback;
-        };
-        return value >= 0 ? pick('momUpColor', '#008080') : pick('momDownColor', '#880e4f');
+        return value >= 0 ? str(settings, 'momUpColor', '#008080') : str(settings, 'momDownColor', '#880e4f');
       },
     },
     { key: 'wt1', type: 'line', title: 'WT1', colorKey: 'wt1Color', style: { lineWidth: 2 } },
@@ -163,9 +123,9 @@ export const WAVETREND: IndicatorDescriptor = {
   ],
   calc: (bars, s) => {
     const n = bars.length;
-    const n1 = len(s, 'n1', 10);
-    const n2 = len(s, 'n2', 21);
-    const sigLen = len(s, 'sigLen', 4);
+    const n1 = int(s, 'n1', 10);
+    const n2 = int(s, 'n2', 21);
+    const sigLen = int(s, 'sigLen', 4);
     const obLevel1 = num(s, 'obLevel1', 60);
     const obLevel2 = num(s, 'obLevel2', 53);
     const osLevel1 = num(s, 'osLevel1', -60);
@@ -178,10 +138,11 @@ export const WAVETREND: IndicatorDescriptor = {
     const hiddenBull: (number | null)[] = new Array(n).fill(null);
     const hiddenBear: (number | null)[] = new Array(n).fill(null);
 
-    const ap = sourceValues(bars, src(s));
+    // Every series below holds one value per bar.
+    const ap = sourceValues(bars, src(s, 'source', 'hlc3'));
     const esa = fromFirstValue(ap, (t) => smaSeededEma(t, n1));
     const absDev = fromFirstValue(
-      ap.map((v, i) => Math.abs(v - esa[i])),
+      zip(ap, esa, (v, e) => Math.abs(v - e)),
       (t) => smaSeededEma(t, n1),
     );
     // A flat stretch has no deviation to divide by, and the reading there is
@@ -189,13 +150,13 @@ export const WAVETREND: IndicatorDescriptor = {
     // is still warming there is no reading at all, which is a different answer
     // from zero and has to stay missing.
     const ci = ap.map((v, i) => {
-      const dv = absDev[i];
+      const dv = absDev[i]!;
       if (!Number.isFinite(dv)) return NaN;
-      return dv === 0 ? 0 : (v - esa[i]) / (0.015 * dv);
+      return dv === 0 ? 0 : (v - esa[i]!) / (0.015 * dv);
     });
     const wt1 = fromFirstValue(ci, (t) => smaSeededEma(t, n2));
     const wt2 = fromFirstValue(wt1, (t) => windowMean(t, sigLen));
-    const mom = wt1.map((v, i) => v - wt2[i]);
+    const mom = zip(wt1, wt2, (v, w2) => v - w2);
 
     const out = {
       wt1: nulls(wt1),
@@ -221,10 +182,10 @@ export const WAVETREND: IndicatorDescriptor = {
     const obZone = useInner ? obLevel2 : obLevel1;
     const osZone = useInner ? osLevel2 : osLevel1;
     for (let i = 1; i < n; i++) {
-      const prevFast = wt1[i - 1];
-      const prevSlow = wt2[i - 1];
-      const fast = wt1[i];
-      const slow = wt2[i];
+      const prevFast = wt1[i - 1]!;
+      const prevSlow = wt2[i - 1]!;
+      const fast = wt1[i]!;
+      const slow = wt2[i]!;
       // A comparison against a missing value is false in the source definition,
       // which is what stops the warmup from firing a cross on its first print.
       if (!Number.isFinite(prevFast) || !Number.isFinite(prevSlow)) continue;
@@ -240,10 +201,10 @@ export const WAVETREND: IndicatorDescriptor = {
     // the bars since that predecessor. The gate counts from the found flag
     // delayed one bar, so the pivot being confirmed now is not its own
     // predecessor.
-    const lbL = len(s, 'lbL', 3);
-    const lbR = len(s, 'lbR', 3);
-    const lower = num(s, 'rangeLower', 5);
-    const upper = num(s, 'rangeUpper', 60);
+    const lbL = int(s, 'lbL', 3);
+    const lbR = int(s, 'lbR', 3);
+    const lower = int(s, 'rangeLower', 5);
+    const upper = int(s, 'rangeUpper', 60);
     const wantRegular = s.showRegDiv !== false;
     const wantHidden = s.showHidDiv === true;
 
@@ -263,23 +224,24 @@ export const WAVETREND: IndicatorDescriptor = {
       // The signal belongs to the pivot bar, `lbR` back from its confirmation.
       const at = i - lbR;
       if (at < 0) continue;
+      const oscPivot = oscAt[i]!;
 
       if (plFound[i]) {
-        const inRange = lower <= sincePl[i] && sincePl[i] <= upper;
-        if (wantRegular && inRange && oscAt[i] > prevOscLow[i] && lowAt[i] < prevPriceLow[i]) {
-          bull[at] = oscAt[i];
+        const inRange = lower <= sincePl[i]! && sincePl[i]! <= upper;
+        if (wantRegular && inRange && oscPivot > prevOscLow[i]! && lowAt[i]! < prevPriceLow[i]!) {
+          bull[at] = oscPivot;
         }
-        if (wantHidden && inRange && oscAt[i] < prevOscLow[i] && lowAt[i] > prevPriceLow[i]) {
-          hiddenBull[at] = oscAt[i];
+        if (wantHidden && inRange && oscPivot < prevOscLow[i]! && lowAt[i]! > prevPriceLow[i]!) {
+          hiddenBull[at] = oscPivot;
         }
       }
       if (phFound[i]) {
-        const inRange = lower <= sincePh[i] && sincePh[i] <= upper;
-        if (wantRegular && inRange && oscAt[i] < prevOscHigh[i] && highAt[i] > prevPriceHigh[i]) {
-          bear[at] = oscAt[i];
+        const inRange = lower <= sincePh[i]! && sincePh[i]! <= upper;
+        if (wantRegular && inRange && oscPivot < prevOscHigh[i]! && highAt[i]! > prevPriceHigh[i]!) {
+          bear[at] = oscPivot;
         }
-        if (wantHidden && inRange && oscAt[i] > prevOscHigh[i] && highAt[i] < prevPriceHigh[i]) {
-          hiddenBear[at] = oscAt[i];
+        if (wantHidden && inRange && oscPivot > prevOscHigh[i]! && highAt[i]! < prevPriceHigh[i]!) {
+          hiddenBear[at] = oscPivot;
         }
       }
     }
@@ -315,7 +277,7 @@ export const WAVETREND: IndicatorDescriptor = {
         const v = c.col?.[i];
         if (v === null || v === undefined) continue;
         const marker: SeriesMarker = {
-          time: bars[i].time, position: 'atPrice', price: v,
+          time: bars[i]!.time, position: 'atPrice', price: v,
           shape: c.shape, size: c.size, color: c.color,
         };
         if (c.text !== undefined) marker.text = c.text;

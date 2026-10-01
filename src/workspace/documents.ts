@@ -1,11 +1,18 @@
 import type {
-  ChartState, ChartSettingsState, DataVariant, IndicatorPolicy, IndicatorState, LinkMissingPolicy, PaneState, PriceScaleId, SeriesState,
+  ChartState, ChartSettingsState, DataVariant, IndicatorState, LinkMissingPolicy, PaneState, PriceScaleId, PriceScaleState,
+  SeriesState, SeriesTransformSpec,
 } from 'openalgo-charts';
 import { normalizeDataVariant, parseAlertsDocument, parseIndicatorPolicy, parsePaneState } from 'openalgo-charts';
 import { boolean, choice, list, number, readJson, record, string, WorkspaceDocumentError, type Json } from './json';
+import { hostOwnedStudy } from '../model/indicator-policy';
+import { isPriceScaleId } from '../model/price-axis-layout';
 
 export { WorkspaceDocumentError } from './json';
 export const WORKSPACE_VERSION = 1;
+/** The last pane slot a portable document may name: 32 panes, slots 0 to 31. Internal. */
+export const MAX_PANE_SLOT = 31;
+/** The most studies one chart or template may hold. Internal. */
+export const MAX_STUDIES = 256;
 export type WorkspaceKind = 'workspace' | 'indicator-template';
 export type WorkspaceSettings = Record<string, string | number | boolean>;
 export type WorkspaceChartState = ChartState & ChartSettingsState & { timezone?: string };
@@ -21,7 +28,7 @@ export interface WorkspacePane {
   variant?: DataVariant;
   chart: WorkspaceChartState; settings: WorkspaceSettings;
   volume: boolean; magnet: 'off' | 'weak' | 'strong'; stay: boolean;
-  comparisons: WorkspaceComparison[]; comparisonMode: 'price' | 'percent'; historyPeriod?: string;
+  comparisons: WorkspaceComparison[]; comparisonMode: 'price' | 'percent'; historyPeriod?: string | undefined;
   /**
    * The id of the named link group this chart is in, one of `sync.groups`.
    * Absent: in no group when the desk declares groups, and in the desk's one
@@ -97,11 +104,9 @@ function metadata(input: Record<string, Json>, kind: WorkspaceKind): DocumentMet
     createdAt, updatedAt: number(input.updatedAt, 'updatedAt', createdAt) };
 }
 
-function priceScaleId(input: Json, label: string): PriceScaleId {
-  if (typeof input !== 'string' || (input !== 'right' && input !== 'left' && input !== '' && !input.startsWith('overlay:'))) {
-    throw new WorkspaceDocumentError(`Invalid ${label}`);
-  }
-  return input as PriceScaleId;
+function priceScaleId(input: Json | undefined, label: string): PriceScaleId {
+  if (!isPriceScaleId(input)) throw new WorkspaceDocumentError(`Invalid ${label}`);
+  return input;
 }
 
 /**
@@ -110,13 +115,13 @@ function priceScaleId(input: Json, label: string): PriceScaleId {
  */
 function indicatorStates(input: Json | undefined, preserveIdentity = true, keepPolicy = true): IndicatorState[] {
   const ids = new Set<string>();
-  return list(input, 'indicators', 256).map(item => {
+  return list(input, 'indicators', MAX_STUDIES).map(item => {
     const entry = record(item, 'indicator');
     const settings = record(entry.settings, 'indicator settings');
     const out: IndicatorState = {
       indicatorId: string(entry.indicatorId, 'indicatorId'),
       settings,
-      paneIndex: number(entry.paneIndex, 'indicator paneIndex', 0, 31, true),
+      paneIndex: number(entry.paneIndex, 'indicator paneIndex', 0, MAX_PANE_SLOT, true),
     };
     if (entry.studyInputs !== undefined) {
       const keys = list(entry.studyInputs, 'indicator studyInputs', 100000).map(key => {
@@ -134,6 +139,7 @@ function indicatorStates(input: Json | undefined, preserveIdentity = true, keepP
       out.studyInputs = keys;
     }
     if (entry.visible !== undefined) out.visible = boolean(entry.visible, 'indicator visibility');
+    if (entry.barSource !== undefined) out.barSource = choice(entry.barSource, 'indicator bar source', ['chart', 'underlying'] as const);
     if (keepPolicy && entry.policy !== undefined) {
       let policy: ReturnType<typeof parseIndicatorPolicy>;
       try { policy = parseIndicatorPolicy(entry.policy); }
@@ -160,12 +166,18 @@ function indicatorStates(input: Json | undefined, preserveIdentity = true, keepP
 /** Keep repeated/custom descriptor IDs; availability is checked by the applying host. */
 export function parseIndicatorStates(input: unknown): IndicatorState[] { return indicatorStates(readJson(input)); }
 
+// The template planners import it from here; it is declared in the base.
+export { hostOwnedStudy };
+
 /**
- * Whether a study is its host's rather than the user's: one the user may not
- * remove, or cannot see. Internal, shared with the template planners.
+ * A scale whose range owner is leaving lets go of the range. An owner the
+ * user set by hand leaves the scale as the user had it; otherwise the scale
+ * fits again. Internal, shared with the template planner.
  */
-export function hostOwnedStudy(policy: Readonly<IndicatorPolicy> | undefined): boolean {
-  return policy?.removable === false || policy?.listed === false;
+export function releaseScaleOwner(scale: PriceScaleState): void {
+  const manual = scale.indicatorRange?.manual === true;
+  delete scale.indicatorRange; delete scale.fixedRange;
+  if (!manual) { scale.autoScale = true; delete scale.range; delete scale.ratioLock; }
 }
 
 /**
@@ -202,7 +214,7 @@ function portableEntries(entries: readonly Json[]): { kept: Json[]; left: Set<st
 
 function templateIndicatorStates(input: Json | undefined, requireIdentity = false, left?: Set<string>): IndicatorState[] {
   // A portable template is the user's own copy of the user's own studies.
-  const portable = portableEntries(list(input, 'indicators', 256)), entries = portable.kept;
+  const portable = portableEntries(list(input, 'indicators', MAX_STUDIES)), entries = portable.kept;
   for (const id of portable.left) left?.add(id);
   const connected = entries.some(item => {
     const keys = record(item, 'indicator').studyInputs;
@@ -222,11 +234,12 @@ function templateIndicatorStates(input: Json | undefined, requireIdentity = fals
     return target;
   }));
   const active = new Set<number>(), complete = new Set<number>();
+  // Every index visited is a study's: the loop below, or a target read from `identities`.
   const visit = (index: number): void => {
     if (active.has(index)) throw new WorkspaceDocumentError('Study dependencies contain a cycle');
     if (complete.has(index)) return;
     active.add(index);
-    for (const target of dependencies[index]) visit(target);
+    for (const target of dependencies[index]!) visit(target);
     active.delete(index);
     complete.add(index);
   };
@@ -240,7 +253,7 @@ export function parseTemplateIndicatorStates(input: unknown): IndicatorState[] {
 }
 
 function chartPanes(input: Json | undefined): PaneState[] {
-  return list(input, 'chart panes', 32).map(item => {
+  return list(input, 'chart panes', MAX_PANE_SLOT + 1).map(item => {
     try {
       const pane = parsePaneState(item);
       // Portable workspaces retain their established numeric limits; the engine
@@ -282,16 +295,16 @@ function templatePayload(input: Json): IndicatorTemplatePayload {
     // A scale a study left out owned lets go of its range, as it would on a replace.
     const owner = scale?.indicatorRange;
     if (scale && owner && left.has(owner.instanceId)) {
-      delete scale.indicatorRange; delete scale.fixedRange;
-      if (!owner.manual) { scale.autoScale = true; delete scale.range; delete scale.ratioLock; }
+      releaseScaleOwner(scale);
       continue;
     }
     if (scale?.indicatorRange && !studies.has(scale.indicatorRange.instanceId)) {
       throw new WorkspaceDocumentError('Template scale range owner is missing');
     }
   }
+  // Called with a binding's pane, range-checked against `panes`, or with pane zero, which exists.
   const requireScale = (paneIndex: number, scaleId: PriceScaleId): void => {
-    if (scaleId !== 'right' && !panes[paneIndex].scales?.[scaleId]) {
+    if (scaleId !== 'right' && !panes[paneIndex]!.scales?.[scaleId]) {
       throw new WorkspaceDocumentError('Template plot or primary scale is missing');
     }
   };
@@ -373,16 +386,37 @@ function chartState(input: Json | undefined): WorkspaceChartState {
     // Only version 2 says where the price pane sits. A version 1 chart that
     // claims a slot would be misread by every reader that trusts the version.
     if (source.version !== 2) throw new WorkspaceDocumentError('A moved price pane needs chart version 2');
-    out.primaryPane = number(source.primaryPane, 'primaryPane', 0, 31, true);
+    out.primaryPane = number(source.primaryPane, 'primaryPane', 0, MAX_PANE_SLOT, true);
     if (!out.panes || out.primaryPane >= out.panes.length) throw new WorkspaceDocumentError('The price pane slot must name a saved pane');
   }
   if (source.series !== undefined) out.series = list(source.series, 'series descriptors', 512).map(item => {
     const series = record(item, 'series');
     const scaleId = series.priceScaleId;
     if (typeof scaleId !== 'string') throw new WorkspaceDocumentError('priceScaleId must be a string');
-    return { type: string(series.type, 'series type'), style: record(series.style, 'series style'),
-      paneIndex: number(series.paneIndex, 'series paneIndex', 0, 31, true), priceScaleId: scaleId } as SeriesState;
+    const out = { type: string(series.type, 'series type'), style: record(series.style, 'series style'),
+      paneIndex: number(series.paneIndex, 'series paneIndex', 0, MAX_PANE_SLOT, true), priceScaleId: scaleId } as SeriesState;
+    if (series.transform !== undefined) out.transform = seriesTransform(series.transform);
+    return out;
   });
+  return out;
+}
+
+/**
+ * The transform a chart applies to a series, by shape alone: whether this
+ * build registers it, and takes its options, is the applying host's to check,
+ * as it is for a study's descriptor.
+ */
+function seriesTransform(input: Json): SeriesTransformSpec {
+  const source = record(input, 'series transform');
+  const out: SeriesTransformSpec = { type: string(source.type, 'series transform type', 100) };
+  if (source.options === undefined) return out;
+  const options = record(source.options, 'series transform options');
+  for (const value of Object.values(options)) {
+    if (typeof value !== 'string' && (typeof value !== 'number' || !Number.isFinite(value))) {
+      throw new WorkspaceDocumentError('Series transform options must be finite numbers or text');
+    }
+  }
+  out.options = options as Record<string, number | string>;
   return out;
 }
 

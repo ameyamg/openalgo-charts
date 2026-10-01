@@ -49,7 +49,7 @@
  * refreshes the entry); `invalidate()` and `clear()` drop entries by hand.
  */
 import type { Bar, UTCSeconds } from '../model/bar';
-import type { BarsPage, BarsPageRequest, BarsRequest, DataFeed, MarketDepth, UnsubscribeFn, LiveBarMeta } from './types';
+import type { BarsPage, BarsPageRequest, BarsRequest, DataFeed, MarketDepth, UnsubscribeFn, LiveBarMeta, SymbolMatch, SymbolSearchRequest } from './types';
 import { nextBucketStart, tryResolveInterval } from './intervals';
 import { dataVariantKey, type DataVariantCapabilities, type DataVariantQuery } from './data-variant';
 
@@ -129,7 +129,6 @@ const DEFAULT_MAX_BARS = 250_000;
 export const BAR_CACHE_VERSION = 1;
 
 /**
- * Interval token to seconds. Case matters where it disambiguates: lowercase
  * The instant a bar starting at `barStartSec` closes, or null when that cannot
  * be known from the interval alone.
  *
@@ -140,8 +139,8 @@ export const BAR_CACHE_VERSION = 1;
  * that way is served stale for up to a minute at a time, and a registered
  * calendar code was approximated at 30 days.
  *
- * Null means "no fixed close", and it is returned for three genuinely different
- * situations that all demand the same conservative answer:
+ * Null means "no fixed close", and it is returned for two genuinely different
+ * situations that both demand the same conservative answer:
  *
  *  - **tick and volume bars**, which close on trade flow. A 500-tick bar may run
  *    for a second or an hour, so nothing about elapsed time says whether the
@@ -178,7 +177,7 @@ export function barCacheKey(req: BarsRequest): string {
 /** Bars are mutated in place by live builders; never hand out our own objects. */
 function cloneBars(bars: Bar[]): Bar[] {
   const out: Bar[] = new Array(bars.length) as Bar[];
-  for (let i = 0; i < bars.length; i++) out[i] = { ...bars[i] };
+  for (let i = 0; i < bars.length; i++) out[i] = { ...bars[i]! };
   return out;
 }
 
@@ -240,6 +239,9 @@ export class BarCache implements DataFeed {
     if (typeof feed.dataVariants === 'function') {
       this.dataVariants = (query): DataVariantCapabilities | Promise<DataVariantCapabilities> => feed.dataVariants!(query);
     }
+    if (typeof feed.searchSymbols === 'function') {
+      this.searchSymbols = (request): Promise<SymbolMatch[]> => feed.searchSymbols!(request);
+    }
   }
 
   // `...rest` is part of the signature so a caller holding the concrete
@@ -248,6 +250,7 @@ export class BarCache implements DataFeed {
   public subscribeDepth?: (req: BarsRequest, onDepth: (depth: MarketDepth) => void, ...rest: unknown[]) => UnsubscribeFn;
   public getBarsPage?: (req: BarsPageRequest) => Promise<BarsPage>;
   public dataVariants?: (query: DataVariantQuery) => DataVariantCapabilities | Promise<DataVariantCapabilities>;
+  public searchSymbols?: (request: SymbolSearchRequest) => Promise<SymbolMatch[]>;
 
   public async getBars(req: CachedBarsRequest): Promise<Bar[]> {
     throwIfAborted(req.signal);
@@ -382,7 +385,7 @@ export class BarCache implements DataFeed {
     // complete as far as this cache is concerned, so the loop drops the lot and
     // the entry is abandoned below.
     while (end > 0) {
-      const close = this._barCloses(interval, requested[end - 1].time);
+      const close = this._barCloses(interval, requested[end - 1]!.time); // `end > 0`
       if (close !== null && close <= nowSec) break;
       end--;
     }
@@ -391,7 +394,7 @@ export class BarCache implements DataFeed {
     // then itself on the next write, so it is simply not cached.
     if (end > this._maxBars) return;
     const closed = cloneBars(requested.slice(0, end));
-    const last = closed[closed.length - 1];
+    const last = closed[closed.length - 1]!; // `end > 0`, so at least one bar
     // Non-null by construction: the loop above only stopped on a bar that had a
     // close, and `nextClose` is the close of the bar that follows it, which is
     // the instant a hit past coverage stops being safe.

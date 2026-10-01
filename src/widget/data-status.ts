@@ -1,5 +1,6 @@
-import { widgetText, type WidgetTranslationOptions } from './localization';
-import type { DataLoadingController, DataLoadingSnapshot, DataVariant, DataVariantDimension } from 'openalgo-charts';
+import { IndicatorInputError } from 'openalgo-charts';
+import type { DataAdjustment, DataLoadingController, DataLoadingSnapshot, DataSession, DataVariant, DataVariantDimension } from 'openalgo-charts';
+import { errorText, widgetText, type WidgetTranslationOptions } from './localization';
 import { h, type WidgetContext } from './context';
 
 /**
@@ -10,7 +11,7 @@ import { h, type WidgetContext } from './context';
  */
 export function dataVariantLabel(ctx: WidgetTranslationOptions, variant: Readonly<DataVariant> | undefined, only?: DataVariantDimension): string {
   if (variant === undefined) return '';
-  const words: Record<string, string> = {
+  const words: Record<DataSession | DataAdjustment, string> = {
     regular: widgetText(ctx, 'Regular hours'), extended: widgetText(ctx, 'Extended hours'),
     adjusted: widgetText(ctx, 'Adjusted prices'), raw: widgetText(ctx, 'Raw prices'),
   };
@@ -18,7 +19,7 @@ export function dataVariantLabel(ctx: WidgetTranslationOptions, variant: Readonl
   for (const key of ['session', 'adjustment', 'currency', 'unit'] as const) {
     const value = variant[key];
     if (value === undefined || (only !== undefined && only !== key)) continue;
-    parts.push(key === 'session' || key === 'adjustment' ? words[value] : value);
+    parts.push(key === 'session' || key === 'adjustment' ? words[value as DataSession | DataAdjustment] : value);
   }
   return parts.join(' ');
 }
@@ -46,7 +47,7 @@ export function mountDataStatus(
   for (const event of ['pointerdown', 'wheel', 'keydown']) el.addEventListener(event, stop);
   const render = (): void => {
     if (destroyed) return;
-    const rows: { text: string; label?: string; retry?: () => void }[] = [];
+    const rows: { text: string; label?: string; retry?: (() => void) | undefined }[] = [];
     if (state !== null) {
       const symbol = state.request?.symbol ?? '';
       const interval = state.request?.interval ?? '';
@@ -68,6 +69,13 @@ export function mountDataStatus(
     for (const indicator of ctx.chart.indicators()) {
       const status = indicator.dataStatus();
       if (status === null || status.state === 'ready') continue;
+      // A study its inputs refuse (a timeframe on transformed bars) says why and
+      // offers no retry: the same inputs are refused the same way.
+      if (status.state === 'error' && status.error instanceof IndicatorInputError) {
+        const why = errorText(ctx, status.error);
+        rows.push({ text: why.startsWith(`${indicator.name}: `) ? why : widgetText(ctx, '{name}: {error}', { name: indicator.name, error: why }) });
+        continue;
+      }
       const label = { loading: widgetText(ctx, 'Loading'), empty: widgetText(ctx, 'No data'), unsupported: widgetText(ctx, 'Unsupported'), error: widgetText(ctx, 'Could not load') }[status.state];
       rows.push({ text: `${indicator.name}: ${label}`, label: widgetText(ctx, 'Retry {name}', { name: indicator.name }),
         retry: status.state === 'loading' ? undefined : () => indicator.retryData() });
@@ -96,7 +104,7 @@ export function mountDataStatus(
   // An indicator can publish its first status inside its constructor, before
   // Chart has added the instance to its public collection.
   const changed = (): void => { render(); queueMicrotask(render); };
-  const cleanups = ['indicator:data-status', 'indicatorRemoved'].map(event => ctx.chart.on(event, changed));
+  const cleanups = (['indicator:data-status', 'indicatorRemoved'] as const).map(event => ctx.chart.on(event, changed));
   render();
   return {
     el,

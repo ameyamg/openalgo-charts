@@ -23,24 +23,10 @@
  * a stretch with no reading, a documented rule (K13 in the numerical audit).
  */
 import { sourceValues } from 'openalgo-charts';
-import type { Bar, IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
 import { cumulative, highest, nulls, smaSeededEma, rollingSum, sma } from './calc';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A length that windows a series: the reference `input.int` is a whole number. */
-const len = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.max(1, Math.floor(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string =>
-  typeof s[k] === 'string' ? (s[k] as string) : d;
-const src = (s: Readonly<Record<string, unknown>>): IndicatorSource =>
-  (s.source as IndicatorSource) ?? 'close';
-
-/** the reference `nz(volume)`: a bar the feed gave no volume for traded nothing. */
-const vol = (b: Bar): number =>
-  typeof b.volume === 'number' && Number.isFinite(b.volume) ? b.volume : 0;
+import { int, str, src } from './settings';
+import { volumeOf } from './series';
 
 /** A moving average over a window, in the shape every helper in `./calc` shares. */
 type Smoother = (values: readonly number[], period: number) => number[];
@@ -67,7 +53,7 @@ function smoothRuns(values: readonly number[], period: number, smooth: Smoother)
     let end = i;
     while (end < values.length && Number.isFinite(values[end])) end += 1;
     const run = smooth(values.slice(i, end), period);
-    for (let k = 0; k < run.length; k++) out[i + k] = run[k];
+    for (let k = 0; k < run.length; k++) out[i + k] = run[k]!;
     i = end;
   }
   return out;
@@ -93,9 +79,11 @@ function volumeIndex(bars: readonly Bar[], on: 'falling' | 'rising'): number[] {
   let index = 1;
   for (let i = 0; i < bars.length; i++) {
     if (i > 0) {
-      const prevClose = bars[i - 1].close;
-      const close = bars[i].close;
-      const moved = on === 'falling' ? vol(bars[i]) < vol(bars[i - 1]) : vol(bars[i]) > vol(bars[i - 1]);
+      const bar = bars[i]!;
+      const prev = bars[i - 1]!;
+      const prevClose = prev.close;
+      const close = bar.close;
+      const moved = on === 'falling' ? volumeOf(bar) < volumeOf(prev) : volumeOf(bar) > volumeOf(prev);
       // A zero or missing previous close, or a missing close, makes the
       // percentage change undefined. Compounding a NaN in would destroy every
       // later bar of a running product, so the index holds instead, exactly as
@@ -139,14 +127,14 @@ function volumeIndexDescriptor(
       const index = volumeIndex(bars, on);
       return {
         [id]: nulls(index),
-        ema: nulls(smoothRuns(index, len(s, 'maLength', 255), smaSeededEma)),
+        ema: nulls(smoothRuns(index, int(s, 'maLength', 255), smaSeededEma)),
       };
     },
   };
 }
 
 /**
- * Negative Volume Index — the price path compounded across only the bars where
+ * Negative Volume Index: the price path compounded across only the bars where
  * volume fell.
  */
 export const NVI: IndicatorDescriptor = volumeIndexDescriptor(
@@ -157,7 +145,7 @@ export const NVI: IndicatorDescriptor = volumeIndexDescriptor(
 );
 
 /**
- * Positive Volume Index — the same construction as NVI over the complementary
+ * Positive Volume Index: the same construction as NVI over the complementary
  * set of bars, the ones where volume rose.
  */
 export const PVI: IndicatorDescriptor = volumeIndexDescriptor(
@@ -168,7 +156,7 @@ export const PVI: IndicatorDescriptor = volumeIndexDescriptor(
 );
 
 /**
- * Price Volume Trend — a running total of each bar's percentage price change
+ * Price Volume Trend: a running total of each bar's percentage price change
  * weighted by the volume behind it.
  *
  * The distinction from On-Balance Volume is the weighting: OBV adds the whole
@@ -185,9 +173,9 @@ export const PVT: IndicatorDescriptor = {
   calc: (bars) => {
     const term = new Array<number>(bars.length).fill(NaN);
     for (let i = 1; i < bars.length; i++) {
-      const prevClose = bars[i - 1].close;
+      const prevClose = bars[i - 1]!.close;
       if (prevClose === 0 || !Number.isFinite(prevClose)) continue;
-      term[i] = ((bars[i].close - prevClose) / prevClose) * vol(bars[i]);
+      term[i] = ((bars[i]!.close - prevClose) / prevClose) * volumeOf(bars[i]!);
     }
     // `cumulative` reads a non-finite term as 0, which is what bar 0 needs: it
     // has no previous close, so it contributes nothing and the total opens at 0
@@ -197,7 +185,7 @@ export const PVT: IndicatorDescriptor = {
 };
 
 /**
- * Percentage Volume Oscillator — MACD's construction applied to volume instead
+ * Percentage Volume Oscillator: MACD's construction applied to volume instead
  * of price, expressed as a percentage of the slow average.
  *
  * The percentage normalisation is the point: raw volume differences are not
@@ -240,12 +228,10 @@ export const PVO: IndicatorDescriptor = {
       colorBy: ({ value, index, values, settings }) => {
         const prev = values.hist?.[index - 1];
         const rising = prev !== null && prev !== undefined && Number.isFinite(prev) && value > prev;
-        const pick = (k: string, d: string): string =>
-          typeof settings[k] === 'string' ? (settings[k] as string) : d;
         if (value >= 0) {
-          return rising ? pick('histUpColor', '#26a69a') : pick('histUpFadeColor', '#b2dfdb');
+          return rising ? str(settings, 'histUpColor', '#26a69a') : str(settings, 'histUpFadeColor', '#b2dfdb');
         }
-        return rising ? pick('histDownFadeColor', '#ffcdd2') : pick('histDownColor', '#ff5252');
+        return rising ? str(settings, 'histDownFadeColor', '#ffcdd2') : str(settings, 'histDownColor', '#ff5252');
       },
     },
     { key: 'pvo', type: 'line', title: 'PVO', colorKey: 'color', style: { lineWidth: 1.5 } },
@@ -253,33 +239,34 @@ export const PVO: IndicatorDescriptor = {
   ],
   calc: (bars, s) => {
     const n = bars.length;
-    const volumes = bars.map(vol);
+    const volumes = bars.map(volumeOf);
     const osc = smootherFor(str(s, 'oscType', 'EMA'));
-    const fast = osc(volumes, len(s, 'fastLength', 12));
-    const slow = osc(volumes, len(s, 'slowLength', 26));
+    const fast = osc(volumes, int(s, 'fastLength', 12));
+    const slow = osc(volumes, int(s, 'slowLength', 26));
 
     const pvo = new Array<number>(n).fill(NaN);
+    // Every series here holds one value per bar.
     for (let i = 0; i < n; i++) {
       // A window that traded nothing has no baseline to express the spread as a
       // percentage of. the reference division by zero is na, so this stays a gap --
       // which is the whole of a feed the vendor sends no volume for.
-      if (slow[i] !== 0) pvo[i] = (100 * (fast[i] - slow[i])) / slow[i];
+      if (slow[i] !== 0) pvo[i] = (100 * (fast[i]! - slow[i]!)) / slow[i]!;
     }
 
     // After its warmup PVO has no reading only where the slow average is
     // exactly 0: a slow window that traded nothing, which complete data has as
     // often as a feed with missing volume. Holding the signal across it would
     // move readings on complete series, so the restart stays (K13).
-    const signal = smoothRuns(pvo, len(s, 'signalLength', 9), smootherFor(str(s, 'sigType', 'EMA')));
+    const signal = smoothRuns(pvo, int(s, 'signalLength', 9), smootherFor(str(s, 'sigType', 'EMA')));
     const hist = new Array<number>(n);
-    for (let i = 0; i < n; i++) hist[i] = pvo[i] - signal[i];
+    for (let i = 0; i < n; i++) hist[i] = pvo[i]! - signal[i]!;
     return { hist: nulls(hist), pvo: nulls(pvo), signal: nulls(signal) };
   },
   levels: () => [{ price: 0, color: '#787b8680', title: 'Zero' }],
 };
 
 /**
- * Mass Index — how much the range is expanding relative to its own recent
+ * Mass Index: how much the range is expanding relative to its own recent
  * expansion, summed over a window.
  *
  * The ratio of a 9-bar EMA of the range to a 9-bar EMA of *that* is near 1 while
@@ -311,20 +298,21 @@ export const MASS_INDEX: IndicatorDescriptor = {
     const double = smaSeededEma(single, 9);
 
     const ratio = new Array<number>(n).fill(NaN);
+    // Both averages hold one value per bar.
     for (let i = 0; i < n; i++) {
       // A flat market long enough for the smoothed range to reach zero has no
       // expansion to measure; the reference divides by zero and gets na.
-      if (double[i] !== 0) ratio[i] = single[i] / double[i];
+      if (double[i] !== 0) ratio[i] = single[i]! / double[i]!;
     }
     // `rollingSum` accumulates every term it is handed, non-finite ones
     // included, so it has to run inside `smoothRuns` rather than over the
     // ratio's leading gap.
-    return { mi: nulls(smoothRuns(ratio, len(s, 'length', 10), rollingSum)) };
+    return { mi: nulls(smoothRuns(ratio, int(s, 'length', 10), rollingSum)) };
   },
 };
 
 /**
- * Ulcer Index — the root-mean-square percentage drawdown from the window's
+ * Ulcer Index: the root-mean-square percentage drawdown from the window's
  * running high.
  *
  * Standard deviation treats an upside surprise as risk; this only counts the
@@ -351,15 +339,16 @@ export const ULCER_INDEX: IndicatorDescriptor = {
   fills: [{ between: ['ui', 'zero'], colorUpKey: 'fillColor', colorDownKey: 'fillColor', opacity: 0.1 }],
   calc: (bars, s) => {
     const n = bars.length;
-    const length = len(s, 'length', 14);
+    const length = int(s, 'length', 14);
     const values = sourceValues(bars, src(s));
     const peak = highest(values, length);
 
     const squared = new Array<number>(n).fill(NaN);
+    // Every series here holds one value per bar.
     for (let i = 0; i < n; i++) {
-      const hi = peak[i];
+      const hi = peak[i]!;
       if (!Number.isFinite(hi) || hi === 0) continue;
-      const drawdown = (100 * (values[i] - hi)) / hi;
+      const drawdown = (100 * (values[i]! - hi)) / hi;
       squared[i] = drawdown * drawdown;
     }
     // `sma` refuses to average a window holding a non-finite value, so the
@@ -367,7 +356,7 @@ export const ULCER_INDEX: IndicatorDescriptor = {
     // instead of leaking into it.
     const mean = sma(squared, length);
     const ui = new Array<number>(n);
-    for (let i = 0; i < n; i++) ui[i] = Math.sqrt(mean[i]);
+    for (let i = 0; i < n; i++) ui[i] = Math.sqrt(mean[i]!);
     return {
       ui: nulls(ui),
       zero: ui.map((v) => (Number.isFinite(v) ? 0 : null)),

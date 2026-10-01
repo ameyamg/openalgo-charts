@@ -51,7 +51,7 @@ describe('coordinate conversion before the first paint', () => {
     expect(Number.isFinite(p as number)).toBe(true);
   });
 
-  it('round-trips price ↔ y before the first paint', () => {
+  it('round-trips price and y before the first paint', () => {
     const { chart } = makeChart();
     const price = chart.coordinateToPrice(250, 0) as number;
     expect(chart.priceToCoordinate(price, 0)).toBeCloseTo(250, 6);
@@ -196,7 +196,7 @@ describe('new tool families', () => {
   };
 
   it('rotated rectangle follows its own axes, not the screen axes', () => {
-    // 0→1 is a 45° edge; anchor 2 sets the depth perpendicular to it. An
+    // 0 to 1 is a 45° edge; anchor 2 sets the depth perpendicular to it. An
     // axis-aligned rect would report a very different inside.
     const pts = [{ x: 0, y: 0 }, { x: 100, y: 100 }, { x: 60, y: 100 }];
     // Centre of the parallelogram is inside a filled shape.
@@ -1141,5 +1141,15 @@ describe('drawing shortcuts', () => {
 
   it('treats Cmd as Ctrl, so a Mac chord does not arm a tool either', () => {
     expect(matchDrawingShortcut({ key: 't', altKey: true, metaKey: true })).toBeNull();
+  });
+
+  it('lists the shortcut of a custom tool whatever its id, as its own key', () => {
+    registerDrawingTool({ id: '__proto__', name: 'Odd id', points: 1, shortcut: 'Ctrl+Alt+F9', draw: () => {}, distance: () => 0 });
+    const map = drawingShortcuts();
+    expect(Object.keys(map)).toContain('__proto__');
+    expect(Object.getOwnPropertyDescriptor(map, '__proto__')?.value).toBe('Ctrl+Alt+F9');
+    // Still an ordinary object, so a host reading it with the usual methods keeps working.
+    expect(Object.getPrototypeOf(map)).toBe(Object.prototype);
+    expect(map['trend-line']).toBe('Alt+T');
   });
 });

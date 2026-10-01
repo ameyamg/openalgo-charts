@@ -1,6 +1,7 @@
-import { ReplayController, type ReplayChartHost, type ReplayOptions, type ReplayScheduler, type ReplayState } from './controller';
+import { CATCH_UP_LIMIT, ReplayController, type ReplayChartHost, type ReplayOptions, type ReplayScheduler, type ReplayState } from './controller';
 import type { ReplayTiming } from './timeline';
 import { replayWindow, setReplayWindow } from '../model/replay-window';
+import { monotonicNow, repeat } from '../helpers/timers';
 
 export type ReplayScope = 'focused' | 'all';
 
@@ -43,7 +44,11 @@ export interface ReplayGroupOptions {
   speed?: number;
   now?: () => number;
   scheduler?: ReplayScheduler;
-  /** Runs after all active charts reach a frame or transport transition. */
+  /**
+   * Runs after all active charts reach a frame or transport transition. One that
+   * throws ends replay, as any failure inside a transport call does: the group
+   * restores its charts, destroys itself and rethrows.
+   */
   onChange?: (state: ReplayGroupState) => void;
 }
 
@@ -52,7 +57,7 @@ interface Member {
   chart: ReplayGroupChartHost;
   options: ReplayGroupMember['options'];
   controller: ReplayController;
-  dispose?: () => void;
+  dispose?: (() => void) | undefined;
   dead: boolean;
 }
 
@@ -79,7 +84,7 @@ function floorIndex(times: readonly number[], time: number | null): number {
   let from = 0, to = times.length;
   while (from < to) {
     const mid = (from + to) >>> 1;
-    if (times[mid] <= time) from = mid + 1;
+    if (times[mid]! <= time) from = mid + 1; // from <= mid < to <= length
     else to = mid;
   }
   return from - 1;
@@ -104,7 +109,7 @@ export class ReplayGroup {
   private readonly _barMs: number;
   private readonly _now: () => number;
   private readonly _scheduler: ReplayScheduler;
-  private readonly _onChange?: (state: ReplayGroupState) => void;
+  private readonly _onChange?: ((state: ReplayGroupState) => void) | undefined;
   private _cancel: (() => void) | null = null;
   private _clockRevision = 0;
   private _lastAdvance = 0;
@@ -113,17 +118,14 @@ export class ReplayGroup {
   public constructor(members: readonly ReplayGroupMember[], options: ReplayGroupOptions = {}) {
     if (!members.length) throw error('needs at least one member');
     this._scope = options.scope ?? 'focused';
-    this._focusedId = options.focusedId ?? members[0].id;
+    this._focusedId = options.focusedId ?? members[0]!.id; // not empty, checked above
     this._speed = options.speed ?? 1;
     this._barMs = options.barMs ?? 1000;
     positive(this._speed, 'speed'); positive(this._barMs, 'barMs');
     positive(this._barMs / this._speed, 'clock interval');
     if (options.startTime !== undefined) finite(options.startTime, 'start time');
-    this._now = options.now ?? (() => performance.now());
-    this._scheduler = options.scheduler ?? ((callback, ms) => {
-      const timer = setInterval(callback, Math.min(2147483647, Math.max(1, ms)));
-      return () => clearInterval(timer);
-    });
+    this._now = options.now ?? monotonicNow;
+    this._scheduler = options.scheduler ?? repeat;
     this._onChange = options.onChange;
     const ids = new Set<string>(), charts = new Set<object>();
     for (const member of members) {
@@ -328,7 +330,7 @@ export class ReplayGroup {
       if (now < this._lastAdvance) { this._lastAdvance = now; return; }
       let due = Math.floor((now - this._lastAdvance) / interval);
       if (due <= 0) return;
-      if (due > 10) { due = 10; this._lastAdvance = now; }
+      if (due > CATCH_UP_LIMIT) { due = CATCH_UP_LIMIT; this._lastAdvance = now; }
       else this._lastAdvance += due * interval;
       this._move(due);
     });

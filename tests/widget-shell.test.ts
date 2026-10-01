@@ -629,6 +629,18 @@ describe('overlays', () => {
     w.context.overlays.closeAll();
     expect(root.querySelector('.oac-scrim')).toBeNull();
   });
+
+  it('keeps closing popovers on an outside press when one onClose closes an older one', () => {
+    const { w, doc } = make();
+    const panel = (): HTMLElement => doc.createElement('div') as unknown as HTMLElement;
+    const closeFirst = w.context.openOverlay(panel(), { placement: 'below' });
+    w.context.openOverlay(panel(), { placement: 'below' });
+    // The newest takes the oldest with it, the way a submenu can close the chain it opened from.
+    w.context.openOverlay(panel(), { placement: 'below', onClose: closeFirst });
+    expect(w.context.overlays.size()).toBe(3);
+    expect(() => fire(doc.body, 'pointerdown')).not.toThrow();
+    expect(w.context.overlays.size()).toBe(0);
+  });
 });
 
 describe('dialogs and the toolbar', () => {
@@ -671,7 +683,7 @@ describe('dialogs and the toolbar', () => {
   it('captures the chart as PNG through the engine and as SVG through a download', () => {
     const { w, root } = make();
     w.series.setData(bars(10));
-    const png = vi.spyOn(w.chart, 'downloadScreenshot').mockImplementation(() => {});
+    const png = vi.spyOn(w.chart, 'takeScreenshot').mockReturnValue({ toDataURL: () => 'data:image/png;base64,' } as unknown as HTMLCanvasElement);
     const svg = vi.spyOn(w.chart, 'exportSVG');
     const capture = root.querySelector('.oac-topbar .oac-btn[aria-label="Capture chart"]') as FakeElement;
     capture.click();
@@ -681,7 +693,7 @@ describe('dialogs and the toolbar', () => {
     expect(rows[2].getAttribute('aria-disabled')).toBe('true');
     rows[0].click();
     expect(png).toHaveBeenCalledTimes(1);
-    expect(png.mock.calls[0][0]).toMatch(/^chart-1d-.*\.png$/);
+    expect(root.querySelector('.oac-statusline__msg')?.textContent).toBe('Saved a PNG of the chart');
     capture.click();
     root.querySelectorAll('.oac-menu .oac-menu__row')[1].click();
     expect(svg).toHaveBeenCalledTimes(1);
@@ -722,7 +734,7 @@ describe('dialogs and the toolbar', () => {
       fire(input, 'input');
       expect(search).not.toHaveBeenCalled();
       vi.advanceTimersByTime(200);
-      expect(search).toHaveBeenCalledWith('hdfc');
+      expect(search).toHaveBeenCalledWith('hdfc', { signal: expect.any(AbortSignal) });
       return Promise.resolve().then(() => {
         const rows = root.querySelectorAll('.oac-sym__results .oac-menu__row');
         expect(rows).toHaveLength(2);

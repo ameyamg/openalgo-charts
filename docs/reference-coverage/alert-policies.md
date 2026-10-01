@@ -58,7 +58,16 @@ Capture the calculation's original execution context before source checkpoints
 advance. Alert checkpoints are separate from calculation caching. Compare history
 revision as well as final provenance: a correction followed by a coalesced live
 append still seeds historical state. The omitted-frequency path retains its
-existing single-tail gate; explicit policies use the stronger native provenance.
+tail-only gate; explicit policies use the stronger native provenance. Either way a
+calculation that appended several bars after an unchanged prefix (a batched burst,
+or one source bar completing several transformed elements) judges each new bar in
+order on its own prefix, as separate appends would. A transformed chart's forming
+element dated forward at its index by a newer source bar (Kagi, range bars) is the
+same bar revised, not a correction: the watermarks, the per-bar checkpoint and the
+close checkpoint follow it to its new time. A study on the bars under a transform keeps
+its watermarks and checkpoints in the times of those bars, which never move: the
+elements one underlying bar completed read that bar and are judged as one observation,
+at the first of them, and the observation closes when that bar closes.
 
 ## Verification sequence
 

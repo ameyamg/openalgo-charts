@@ -5,6 +5,7 @@
 import type { Bar } from '../model/bar';
 import type { SeriesStyle } from './series-style';
 import { verticalGradient } from './gradient';
+import type { LooseOptional } from '../helpers/types';
 
 export interface LineDrawItem {
   x: number; // bar center, media px
@@ -30,10 +31,11 @@ export function valuePoints(
 /** Pure: expand a value polyline into a step (HV) polyline. */
 export function stepPoints(pts: readonly Pt[]): Pt[] {
   if (pts.length === 0) return [];
-  const out: Pt[] = [{ ...pts[0] }];
+  // Every index read here is below pts.length.
+  const out: Pt[] = [{ ...pts[0]! }];
   for (let i = 1; i < pts.length; i++) {
-    out.push({ x: pts[i].x, y: pts[i - 1].y }); // horizontal
-    out.push({ x: pts[i].x, y: pts[i].y }); // vertical
+    out.push({ x: pts[i]!.x, y: pts[i - 1]!.y }); // horizontal
+    out.push({ x: pts[i]!.x, y: pts[i]!.y }); // vertical
   }
   return out;
 }
@@ -48,6 +50,9 @@ export function stepPoints(pts: readonly Pt[]): Pt[] {
  * runs start to end without yielding, so one set serves every series; each
  * is filled and read within one renderer, and a renderer that calls
  * `drawLine` is done with the line's points before it does.
+ *
+ * Both arrays hold a value at every index below `n` (they may run longer,
+ * with a wider frame's leftovers), so a read under `n` carries `!`.
  */
 export interface Polyline {
   xs: number[];
@@ -91,7 +96,7 @@ export const CLOSE = 0, HIGH = 1, LOW = 2;
 export function project(line: Polyline, items: readonly LineDrawItem[], toY: (value: number) => number, field: number): void {
   const xs = line.xs, ys = line.ys;
   for (let i = 0; i < items.length; i++) {
-    const it = items[i], b = it.bar;
+    const it = items[i]!, b = it.bar;
     xs[i] = it.x;
     ys[i] = toY(field === CLOSE ? b.close : field === HIGH ? b.high : b.low);
   }
@@ -103,8 +108,8 @@ export function projectSteps(src: Polyline, out: Polyline): void {
   const sx = src.xs, sy = src.ys, xs = out.xs, ys = out.ys;
   let k = 0;
   for (let i = 0; i < src.n; i++) {
-    if (i > 0) { xs[k] = sx[i]; ys[k++] = sy[i - 1]; } // horizontal
-    xs[k] = sx[i]; ys[k++] = sy[i]; // vertical
+    if (i > 0) { xs[k] = sx[i]!; ys[k++] = sy[i - 1]!; } // horizontal
+    xs[k] = sx[i]!; ys[k++] = sy[i]!; // vertical
   }
   settle(out, k);
 }
@@ -118,7 +123,7 @@ export const EDGE_PAD = 8;
  */
 export function dashPeriod(dash: readonly number[], dpr: number): number {
   let total = 0;
-  for (let i = 0; i < dash.length; i++) total += dash[i];
+  for (let i = 0; i < dash.length; i++) total += dash[i]!;
   return total > 0 ? (dash.length % 2 === 1 ? 2 * total : total) / dpr : 0;
 }
 
@@ -153,16 +158,18 @@ export function trimToView(
 ): void {
   const count = items.length;
   if (count === 0) return;
-  const head = items[0].edgeX, tail = items[count - 1].edgeX;
+  const head = items[0]!.edgeX, tail = items[count - 1]!.edgeX;
   if (head === undefined && tail === undefined) return;
   // A lone neighbour has nothing in view to join.
   if (count === 1) { line.n = 0; return; }
+  // Two items or more: `line` holds two points or more (three or more on a
+  // step), and every index read below is under `line.n`.
   const xs = line.xs, ys = line.ys;
   if (head !== undefined) {
     const lo = head - pad;
     // The leg runs from the neighbour to its inner end: the first bar, or
     // the corner under it on a step.
-    const ix = xs[1], iy = ys[1], ox = xs[0], oy = ys[0];
+    const ix = xs[1]!, iy = ys[1]!, ox = xs[0]!, oy = ys[0]!;
     if (ix < lo || !Number.isFinite(oy) || !Number.isFinite(iy)) {
       // Out of sight (zoomed in so far that the first bar is past the
       // margin itself) or a gap: the path starts at the first bar, as it did
@@ -177,7 +184,7 @@ export function trimToView(
       // step is the vertical leg further on; when that value is a gap, to the
       // corner under it, where the step's hold ends.
       const on = step && Number.isFinite(ys[2]);
-      const lead = on ? Math.abs(ys[2] - iy) : 0;
+      const lead = on ? Math.abs(ys[2]! - iy) : 0;
       if (period > 0) reach = Math.ceil((reach + lead) / period) * period - lead;
       if (reach !== len) {
         const f = reach / len;
@@ -192,7 +199,7 @@ export function trimToView(
     // A step's last bar is two points (the horizontal leg's end, then the
     // vertical one); its leg starts at the bar before.
     const k = step ? line.n - 2 : line.n - 1;
-    const ix = xs[k - 1], iy = ys[k - 1], ox = xs[k], oy = ys[k];
+    const ix = xs[k - 1]!, iy = ys[k - 1]!, ox = xs[k]!, oy = ys[k]!;
     if (ix > hi || !Number.isFinite(iy) || !Number.isFinite(oy)) {
       line.n = k;
       ys[k] = NaN;
@@ -207,19 +214,24 @@ export function trimToView(
   }
 }
 
+/** The dash pattern of a named line style in device px: the one table series lines, study drawings and drawing tools share (not the grid's). */
+export function dashFor(lineStyle: SeriesStyle['lineStyle'], dpr: number): number[] {
+  return lineStyle === 'dashed' ? [6 * dpr, 4 * dpr] : lineStyle === 'dotted' ? [1 * dpr, 3 * dpr] : [];
+}
+
 /**
  * Per-point colours aligned to the polyline drawn for `items`, or undefined
  * when not one point carries its own. Undefined is the fast path every
  * ordinary series takes: `strokePolyline` then walks the whole line into a
  * single stroke, as before.
  */
-function pointColors(items: readonly LineDrawItem[], step: boolean): (string | undefined)[] | undefined {
+export function pointColors(items: readonly LineDrawItem[], step: boolean): (string | undefined)[] | undefined {
   let any = false;
-  for (let i = 0; i < items.length; i++) if (items[i].bar.color !== undefined) { any = true; break; }
+  for (let i = 0; i < items.length; i++) if (items[i]!.bar.color !== undefined) { any = true; break; }
   if (!any) return undefined;
   let k = 0;
   for (let i = 0; i < items.length; i++) {
-    const color = items[i].bar.color;
+    const color = items[i]!.bar.color;
     // A step's horizontal and vertical legs both belong to the span arriving at
     // this bar, so they take one colour rather than meeting half-recoloured.
     if (step && k > 0) COLORS[k++] = color;
@@ -261,7 +273,7 @@ function strokePolyline(
   // Media px of dashed path since its pattern last started.
   let walked = 0;
   for (let i = line.s; i < n; i++) {
-    const x = xs[i], y = ys[i];
+    const x = xs[i]!, y = ys[i]!;
     if (!Number.isFinite(x) || !Number.isFinite(y)) { prev = -1; continue; }
     if (prev < 0) { ctx.moveTo(x * dpr, y * dpr); prev = i; walked = 0; continue; }
     // A per-point colour series: the segment arriving at a bar takes that
@@ -274,7 +286,7 @@ function strokePolyline(
       if (drawn) {
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(xs[prev] * dpr, ys[prev] * dpr);
+        ctx.moveTo(xs[prev]! * dpr, ys[prev]! * dpr);
         drawn = false;
         walked = 0;
       }
@@ -284,12 +296,12 @@ function strokePolyline(
     if (dashed && drawn && i === out) {
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(xs[prev] * dpr, ys[prev] * dpr);
+      ctx.moveTo(xs[prev]! * dpr, ys[prev]! * dpr);
       ctx.lineDashOffset = walked * dpr;
       drawn = false;
     }
     ctx.lineTo(x * dpr, y * dpr);
-    if (dashed) walked += Math.hypot(x - xs[prev], y - ys[prev]);
+    if (dashed) walked += Math.hypot(x - xs[prev]!, y - ys[prev]!);
     prev = i;
     drawn = true;
     if (dashed && i === a) {
@@ -316,9 +328,7 @@ export function drawLine(
   if (style.step) projectSteps(base, pts = STEPS);
   const cols = pointColors(items, style.step === true);
   const lineWidth = style.lineWidth ?? 1.5;
-  const dash = style.lineStyle === 'dashed' ? [6 * dpr, 4 * dpr]
-    : style.lineStyle === 'dotted' ? [1 * dpr, 3 * dpr]
-    : [];
+  const dash = dashFor(style.lineStyle, dpr);
   trimToView(pts, items, style.step === true, dashPeriod(dash, dpr), EDGE_PAD + lineWidth);
   ctx.save();
   ctx.strokeStyle = style.color ?? '#4f8cff';
@@ -338,13 +348,13 @@ export function drawLine(
     const fill = style.color ?? '#4f8cff';
     ctx.fillStyle = fill;
     for (let i = 0; i < items.length; i++) {
-      const x = base.xs[i], y = base.ys[i];
+      const x = base.xs[i]!, y = base.ys[i]!;
       // A neighbour beyond the view carries the segment in, not a dot of its
       // own; on a plain line its point is the cut one besides.
-      if (!Number.isFinite(x) || !Number.isFinite(y) || items[i].edgeX !== undefined) continue;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || items[i]!.edgeX !== undefined) continue;
       // A dot follows its own bar's colour, not the segment rule: a marker sits
       // on the bar rather than between two of them.
-      if (cols !== undefined) ctx.fillStyle = items[i].bar.color ?? fill;
+      if (cols !== undefined) ctx.fillStyle = items[i]!.bar.color ?? fill;
       ctx.beginPath();
       ctx.arc(x * dpr, y * dpr, r, 0, Math.PI * 2);
       ctx.fill();
@@ -369,9 +379,9 @@ export function drawArea(
   const baseY = plotHeight * dpr;
   ctx.save();
   ctx.beginPath();
-  ctx.moveTo(xs[s] * dpr, baseY);
-  for (let i = s; i < n; i++) ctx.lineTo(xs[i] * dpr, ys[i] * dpr);
-  ctx.lineTo(xs[n - 1] * dpr, baseY);
+  ctx.moveTo(xs[s]! * dpr, baseY);
+  for (let i = s; i < n; i++) ctx.lineTo(xs[i]! * dpr, ys[i]! * dpr);
+  ctx.lineTo(xs[n - 1]! * dpr, baseY);
   ctx.closePath();
   // vertical gradient: solid-ish near the line fading toward the baseline
   ctx.fillStyle = verticalGradient(
@@ -384,11 +394,12 @@ export function drawArea(
   // The outline is a plain line, so it carries the dash the caller asked for.
   // The fill keeps its own gradient: a dashed edge over a solid body is the
   // shape of an area chart, and dashing the fill too would just look broken.
+  // An unset lineStyle is passed on unset, which drawLine reads as solid.
   drawLine(ctx, items, toY, dpr, {
     color: style.color ?? '#4f8cff',
     lineWidth: style.lineWidth ?? 1.5,
     lineStyle: style.lineStyle,
-  });
+  } satisfies LooseOptional<SeriesStyle> as SeriesStyle);
 }
 
 export function drawBaseline(
@@ -408,12 +419,12 @@ export function drawBaseline(
 
   // Gradient fills: above-base region fades down from topFill, below-base fades up
   // from bottomFill. Built as one area polygon to the base line, clipped at baseY.
-  const minX = xs[s] * dpr;
-  const maxX = xs[n - 1] * dpr;
+  const minX = xs[s]! * dpr;
+  const maxX = xs[n - 1]! * dpr;
   const buildArea = (): void => {
     ctx.beginPath();
     ctx.moveTo(minX, baseY);
-    for (let i = s; i < n; i++) ctx.lineTo(xs[i] * dpr, ys[i] * dpr);
+    for (let i = s; i < n; i++) ctx.lineTo(xs[i]! * dpr, ys[i]! * dpr);
     ctx.lineTo(maxX, baseY);
     ctx.closePath();
   };
@@ -438,17 +449,24 @@ export function drawBaseline(
   ctx.save();
   // split stroke: above-base in topColor, below-base in bottomColor
   for (let i = s + 1; i < n; i++) {
-    const ay = ys[i - 1], by = ys[i];
+    const ay = ys[i - 1]!, by = ys[i]!;
     const above = (ay + by) / 2 <= baseY / dpr; // smaller y = higher price = above base
     ctx.strokeStyle = above ? (style.topColor ?? '#26a69a') : (style.bottomColor ?? '#ef5350');
     ctx.lineWidth = Math.max(1, Math.round((style.lineWidth ?? 1.5) * dpr));
     ctx.beginPath();
-    ctx.moveTo(xs[i - 1] * dpr, ay * dpr);
-    ctx.lineTo(xs[i] * dpr, by * dpr);
+    ctx.moveTo(xs[i - 1]! * dpr, ay * dpr);
+    ctx.lineTo(xs[i]! * dpr, by * dpr);
     ctx.stroke();
   }
   ctx.restore();
 }
+
+/**
+ * The HLC area band when the style sets no `areaTopColor`. It is its own
+ * colour on every theme, not the theme's area colour, so a settings dialog
+ * shows it as the default to report what is drawn.
+ */
+export const HLC_AREA_BAND_COLOR = 'rgba(79,140,255,0.15)';
 
 export function drawHlcArea(
   ctx: CanvasRenderingContext2D,
@@ -469,11 +487,11 @@ export function drawHlcArea(
   // gap at the view edge drops the leg of whichever edge has no value there
   ctx.save();
   ctx.beginPath();
-  if (n > s) ctx.moveTo(highs.xs[s] * dpr, highs.ys[s] * dpr);
-  for (let i = s; i < n; i++) ctx.lineTo(highs.xs[i] * dpr, highs.ys[i] * dpr);
-  for (let i = lows.n - 1; i >= lows.s; i--) ctx.lineTo(lows.xs[i] * dpr, lows.ys[i] * dpr);
+  if (n > s) ctx.moveTo(highs.xs[s]! * dpr, highs.ys[s]! * dpr);
+  for (let i = s; i < n; i++) ctx.lineTo(highs.xs[i]! * dpr, highs.ys[i]! * dpr);
+  for (let i = lows.n - 1; i >= lows.s; i--) ctx.lineTo(lows.xs[i]! * dpr, lows.ys[i]! * dpr);
   ctx.closePath();
-  ctx.fillStyle = style.areaTopColor ?? 'rgba(79,140,255,0.15)';
+  ctx.fillStyle = style.areaTopColor ?? HLC_AREA_BAND_COLOR;
   ctx.fill();
   ctx.restore();
   // The two edges of the band, each drawn only when the caller named a colour

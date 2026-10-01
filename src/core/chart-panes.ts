@@ -66,6 +66,8 @@ export interface PanesHost {
   readonly _movablePrimaryPane: Chart['_movablePrimaryPane'];
   readonly _eventMarkers: Chart['_eventMarkers'];
   readonly _destroyed: Chart['_destroyed'];
+  readonly _timeNav: Chart['_timeNav'];
+  readonly _anchored: Chart['_anchored'];
   _primaryPane: Chart['_primaryPane'];
   _eventPane: Chart['_eventPane'];
   _drawingState: Chart['_drawingState'];
@@ -89,7 +91,7 @@ export interface PanesHost {
   applySize: Chart['applySize'];
   movePane: Chart['movePane'];
   invalidate: Chart['invalidate'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
 }
 
 export class ChartPanes {
@@ -112,6 +114,9 @@ export class ChartPanes {
   }
 
   public _ensurePane(index: number): void {
+    // A slot is a whole number of 0 or more. Any other index would add panes up
+    // to it and still find none there, so it is refused before anything moves.
+    if (!Number.isSafeInteger(index) || index < 0) throw new RangeError('Invalid pane index');
     const added: number[] = [];
     while (this._host._panes.length <= index) {
       // price pane (0) takes full weight; lower panes (volume/indicators) are shorter
@@ -129,7 +134,7 @@ export class ChartPanes {
     // the bottom of the chart had no way to learn the bottom had moved. Emitted
     // after the relayout so a listener reads settled geometry.
     this._host._primitives._rehomeAnchored();
-    for (const paneIndex of added) this._host.emit('paneAdded', { paneIndex });
+    for (const paneIndex of added) this._host._emit('paneAdded', { paneIndex });
   }
 
   public _addPane(weight = 1): Pane {
@@ -205,7 +210,7 @@ export class ChartPanes {
     const layout = this._paneLayout();
     const bottomPane = this._bottomPaneIndex();
     this._host._panes.forEach((pane, paneIndex) => {
-      const h = layout[paneIndex].height;
+      const h = layout[paneIndex]!.height; // the layout has a box for each pane
       if (geometryOnly) pane.setLayoutSize(this._host._width, h);
       else {
         // No share means gone, not merely short: a zero-height box still paints
@@ -317,7 +322,8 @@ export class ChartPanes {
 
   /** Drawn as a strip right now: a maximized pane shows whole whatever it is set to. */
   public _collapsedShown(index: number): boolean {
-    return this._maximizedPane === null && this._host._collapsed.has(this._host._panes[index]);
+    // Asked of any index: one with no pane is not a strip.
+    return this._maximizedPane === null && (this._host._collapsed as { has(value: Pane | undefined): boolean }).has(this._host._panes[index]);
   }
 
   /** Grab tolerance around a pane boundary, in media px. */
@@ -335,7 +341,7 @@ export class ChartPanes {
     const layout = this._paneLayout();
     const sizable = (i: number): boolean => this._layoutWeight(i) > 0 && !this._collapsedShown(i);
     for (let i = 0; i < layout.length - 1; i++) {
-      if (Math.abs(y - layout[i].top - layout[i].height) > ChartPanes.DIVIDER_GRAB) continue;
+      if (Math.abs(y - layout[i]!.top - layout[i]!.height) > ChartPanes.DIVIDER_GRAB) continue;
       let a = i, b = i + 1;
       while (a >= 0 && !sizable(a)) a--;
       while (b < layout.length && !sizable(b)) b++;
@@ -354,19 +360,20 @@ export class ChartPanes {
       if (this._host._eventMarkers !== null) {
         this._host.removePrimitive(this._host._eventMarkers);
         this._host._primitives._addPrimitive(home, this._host._eventMarkers);
-        this._host.emit('events:change', undefined);
+        this._host._emit('events:change', undefined);
       }
       this._host._eventPane = home;
     }
     if (this._host._eventPane > index) this._host._eventPane -= 1;
     // Indicators own their series, so let them tear themselves down first,
     // otherwise their series rows would outlive the pane holding them.
+    // Walked from the end, and each pass takes out only the study it removes.
     for (let i = this._host._indicators.length - 1; i >= 0; i--) {
-      if (this._host._indicators[i].paneIndex !== index) continue;
+      if (this._host._indicators[i]!.paneIndex !== index) continue;
       const [instance] = this._host._indicators.splice(i, 1);
-      instance.remove({ force: true });
+      instance!.remove({ force: true });
     }
-    const pane = this._host._panes[index];
+    const pane = this._host._panes[index]!; // an index in range, checked on entry
     for (const record of [...pane.series()]) {
       pane.removeSeries(record);
       this._host._dataLayer.removeSeries(record.dataId);
@@ -395,7 +402,7 @@ export class ChartPanes {
     this._host._primitives._rehomeAnchored();
     this._host._legendStack._syncLegendPanes();
     this._remapSavedDrawings(slot => slot === index ? null : slot > index ? slot - 1 : slot);
-    this._host.emit('paneRemoved', { paneIndex: index });
+    this._host._emit('paneRemoved', { paneIndex: index });
     return true;
   }
 
@@ -431,10 +438,10 @@ export class ChartPanes {
     if (!this._host._movablePrimaryPane && (panes[index] === this._host._primaryPane || panes[target] === this._host._primaryPane)) return false;
     // Before the event, so a drawing tier listening to it writes over this with its own.
     this._remapSavedDrawings(slot => slot === index ? target : slot === target ? index : slot);
-    [panes[index], panes[target]] = [panes[target], panes[index]];
+    [panes[index], panes[target]] = [panes[target]!, panes[index]!]; // both in range, checked on entry
     if (this._host._eventPane === index) this._host._eventPane = target;
     else if (this._host._eventPane === target) this._host._eventPane = index;
-    if (this._host._eventMarkers !== null) this._host.emit('events:change', undefined);
+    if (this._host._eventMarkers !== null) this._host._emit('events:change', undefined);
     // The target names a slot, and the two panes just swapped slots.
     if (this._maximizedPane === index) this._maximizedPane = target;
     else if (this._maximizedPane === target) this._maximizedPane = index;
@@ -448,7 +455,7 @@ export class ChartPanes {
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
     this._host._primitives._rehomeAnchored();
     this._host._legendStack._syncLegendPanes();
-    this._host.emit('paneMoved', { from: index, to: target });
+    this._host._emit('paneMoved', { from: index, to: target });
     return true;
   }
 
@@ -475,15 +482,28 @@ export class ChartPanes {
 
   /** The work of `Chart.maximizePane`, which carries the documented contract. */
   public maximizePane(index: number): boolean {
-    if (index < 0 || index >= this._host._panes.length) return false;
+    // A fractional index matches no pane in the layout, which would then hide them all.
+    if (!Number.isInteger(index) || index < 0 || index >= this._host._panes.length) return false;
     this._maximizedPane = this._maximizedPane === index ? null : index;
     this._relayout();
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
     // Maximize is the case a host cannot work around: it HIDES the other panes,
     // so chrome pinned to the price pane disappears rather than merely sitting wrong.
     this._host._primitives._rehomeAnchored();
-    this._host.emit('paneMaximized', { paneIndex: this._maximizedPane });
+    this._host._emit('paneMaximized', { paneIndex: this._maximizedPane });
     return true;
+  }
+
+  /**
+   * Whether a pane other than the price pane is left with nothing a user put
+   * there: no series, and no primitive but the chart's own furniture (the time
+   * navigator, an anchored primitive, which moves to wherever it is anchored).
+   * Moving a study away, a failed add and a restore prune such a pane. Removing
+   * a study prunes its pane on the series alone, see `ChartStudies._forgetIndicator`.
+   */
+  public _holdsOnlyFurniture(pane: Pane): boolean {
+    return pane !== this._host._primaryPane && pane.series().length === 0
+      && pane.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive));
   }
 
   /** The work of `Chart.setPaneCollapsed`, which carries the documented contract. */
@@ -499,8 +519,8 @@ export class ChartPanes {
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
     // The lowest open pane may have changed, and the brand mark lives there.
     this._host._primitives._rehomeAnchored();
-    if (ended) this._host.emit('paneMaximized', { paneIndex: null });
-    this._host.emit('paneCollapsed', { paneIndex: index, collapsed });
+    if (ended) this._host._emit('paneMaximized', { paneIndex: null });
+    this._host._emit('paneCollapsed', { paneIndex: index, collapsed });
     return true;
   }
 

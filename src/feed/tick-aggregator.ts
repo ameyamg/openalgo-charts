@@ -39,7 +39,7 @@ export interface TickBarOptions {
    * Pass the chart's configured timezone: a month boundary is local midnight on
    * the first, and which instant that is depends on where the exchange is.
    */
-  timezone?: string;
+  timezone?: string | undefined;
 }
 
 export class TickBarAggregator {

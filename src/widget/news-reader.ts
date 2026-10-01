@@ -32,11 +32,11 @@ export interface NewsSnapshot {
 export interface NewsReaderOptions {
   feed: NewsFeed;
   /** Items asked for per page. Default 20. */
-  pageSize?: number;
+  pageSize?: number | undefined;
   /** News older than this since its load is flagged stale. Default 300000 ms. */
-  staleAfterMs?: number;
+  staleAfterMs?: number | undefined;
   /** Items held at most; paging stops there. Default 500. */
-  maxItems?: number;
+  maxItems?: number | undefined;
   now?: () => number;
   onChange?(snapshot: NewsSnapshot): void;
 }

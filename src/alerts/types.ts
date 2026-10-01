@@ -6,13 +6,22 @@ import type { IndicatorApi } from '../model/indicator-instance';
 import type { IPrimitive } from '../primitives/primitive';
 import type { TickSchedule } from '../feed/tick-schedule';
 
-/** A primary-source mutation, emitted after indicator invalidation. */
+/**
+ * The payload of the chart's `data:update` event (see `ChartEventMap`): a
+ * primary-source mutation, emitted after indicator invalidation. Every chart
+ * emits it, alerts or not; the type is declared here because the alert
+ * controller was its first reader.
+ */
 export interface ChartDataUpdate {
   kind: 'update' | 'reset' | 'prepend';
   time?: number;
 }
 
-/** Minimum headless chart surface needed to evaluate alerts. */
+/**
+ * Minimum headless chart surface needed to evaluate alerts. A host announces
+ * its writes with `data:update`; one `update` may append several bars, and the
+ * controller judges each of them in turn.
+ */
 export interface AlertChartHost {
   primaryBars(): readonly Bar[];
   /** Owning price scale for primary-price drag snapping, including a left axis. */
@@ -57,7 +66,7 @@ export type AlertState = 'armed' | 'triggered' | 'expired' | 'disabled';
 export interface PriceAlertSource {
   kind: 'price';
   price: number;
-  upperPrice?: number;
+  upperPrice?: number | undefined;
 }
 
 /** A threshold in plot units, anchored to one specific study instance. */
@@ -66,7 +75,7 @@ export interface IndicatorAlertSource {
   instanceId: string;
   plotKey: string;
   value: number;
-  upperValue?: number;
+  upperValue?: number | undefined;
 }
 
 export interface BarConditionAlertSource {
@@ -87,7 +96,7 @@ export type AlertSource = PriceAlertSource | IndicatorAlertSource | BarCondition
 /** Missing values, an absent anchor or a paused/context-mismatched chart are unavailable. */
 export interface AlertAvailability {
   available: boolean;
-  reason?: string;
+  reason?: string | undefined;
   paneIndex?: number;
 }
 
@@ -149,10 +158,10 @@ export interface AlertInput {
   repeat?: AlertRepeat;
   state?: 'armed' | 'disabled';
   title?: string;
-  message?: string;
+  message?: string | undefined;
   cooldownSeconds?: number;
   /** UTC seconds. At this instant the alert expires before it can trigger. */
-  expiresAt?: number;
+  expiresAt?: number | undefined;
   /** Opaque host routing data. The controller never interprets or delivers it. */
   payload?: unknown;
 }
@@ -196,6 +205,36 @@ export interface AlertEventPayload {
 export interface AlertTriggeredPayload extends AlertEventPayload {
   price: number;
   alert: Alert;
+}
+
+/** Payload of `alert:created`, `alert:updated` and `alert:expired`: a copy of the alert as it now stands. */
+export interface AlertChangeEvent {
+  alert: Alert;
+}
+
+/**
+ * Payload of `alert:removed`. `reason` is `'removed'` for `remove`, `'drawing-removed'`
+ * when its drawing was deleted, and `'drawing-missing'`, `'indicator-missing'` or
+ * `'plot-missing'` when a restore could not find what the alert watches.
+ */
+export interface AlertRemovedEvent extends AlertChangeEvent {
+  reason: string;
+}
+
+/** Payload of `alert:error`: a bar condition threw while the alert was evaluated. */
+export interface AlertErrorEvent extends AlertChangeEvent {
+  error: unknown;
+}
+
+/** Payload of `alerts:changed`: a drag on the chart committed a new level. */
+export interface AlertsChangedEvent {
+  id: string;
+  reason: 'dragged';
+}
+
+/** Payload of `alerts:restored`: every alert after a validated replacement. */
+export interface AlertsRestoredEvent {
+  alerts: Alert[];
 }
 
 export interface AlertControllerOptions {

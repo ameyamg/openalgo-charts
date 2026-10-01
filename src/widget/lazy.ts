@@ -6,6 +6,9 @@
  * bar or its menus, and persists nothing to IndexedDB, so none of them rides
  * in the tier's own file: the build writes each one beside it
  * (rollup.config.js) and `import()` fetches it the first time it is needed.
+ * The script-tag build is the exception: a classic script cannot share a
+ * chunk, so its widget file carries the parts and `import()` settles with no
+ * fetch.
  * Once a part has arrived it is used at once, as if it had been bundled in;
  * until then the request waits for it. A load that fails is reported where
  * the user asked, and forgotten, so the next request asks again rather than
@@ -55,11 +58,11 @@ export interface PartSlot { waiting: object | null }
  * arrived a press opens it at once; until then the answer comes later, and
  * by then the user may have asked for something else or moved on.
  */
-export interface PartAsk {
+interface PartAsk {
   readonly slot: PartSlot;
   readonly doc: Document;
   /** The control that asked: pressing it again is asking again, not moving on. */
-  readonly from?: Element | null;
+  readonly from?: Element | null | undefined;
 }
 
 /**

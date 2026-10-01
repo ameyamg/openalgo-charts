@@ -23,6 +23,7 @@ import type { Chart, PriceAxisState } from './chart';
 import { NON_INSTRUMENT_PRECISION } from './chart-panes';
 import type { PriceScaleOptions } from '../scale/price-scale';
 import type { PriceScaleId } from '../model/series';
+import { isPriceScaleId } from '../model/price-axis-layout';
 
 /**
  * The slice of the chart the price-scale logic reads. The chart itself is the
@@ -99,7 +100,7 @@ export class ChartScales {
 
   public priceAxisState(paneIndex: number, scaleId: PriceScaleId): PriceAxisState | null {
     const pane = this._host._panes[paneIndex];
-    if (pane === undefined) return null;
+    if (pane === undefined || !isPriceScaleId(scaleId)) return null;
     const scale = pane.scaleFor(scaleId);
     const side = pane.axisPlacement(scaleId).side === 'left' ? 'left' : 'right';
     const other: 'right' | 'left' = scaleId === 'left' ? 'right' : 'left';

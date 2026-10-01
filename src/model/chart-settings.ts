@@ -19,9 +19,9 @@
  * there.
  *
  * The tabs are our own five, not a reference terminal's seven. Alerts are not
- * here because the feature is not built, and corporate events are not here
- * because nothing in the engine sources them: an empty tab is worse than an
- * absent one.
+ * here because they have a dialog and a saved document of their own, and
+ * corporate events are not here because nothing in the engine sources them:
+ * an empty tab is worse than an absent one.
  *
  * Keys are dotted paths (`symbol.upColor`, `canvas.grid.vertColor`), so a patch
  * is a flat `Record<string, value>` that survives JSON. They are a wire format
@@ -29,17 +29,20 @@
  * changes: a key names the option it writes, not the tab it is shown on.
  */
 import type { AxisChromeOptions, Chart, ChartEventOptions, ChartNavigationOptions, ChartWatermarkOptions } from '../core/chart';
-import type { IndicatorInput, IndicatorInputPresentation } from './indicator-registry';
+import type { IndicatorInput, IndicatorInputCondition, IndicatorInputPresentation } from './indicator-registry';
 import { getChartType } from './chart-type-registry';
+import { getSeriesTransform } from './series-transform';
 import type { SeriesStyle } from '../render/series-style';
 import type { CanvasOptions, CanvasLineStyle, GridOptions, ScaleCanvasOptions } from '../render/grid';
 import { SCALE_FONT_MIN, SCALE_FONT_MAX } from '../render/grid';
+import { HLC_AREA_BAND_COLOR } from '../render/line';
 import type { CrosshairOptions } from '../render/crosshair';
 import type { LegendStatusLineOptions, LegendTitleMode } from '../primitives/pane-legend';
 import type { TradingColors, TradingSettings } from '../core/trading-controller';
-import type { PriceScaleMode } from '../scale/price-scale';
+import { PRICE_SCALE_MODES, type PriceScaleMode } from '../scale/price-scale';
 import { DEFAULT_TIMEZONE, isValidTimezone } from '../feed/time';
 import { filterLinkAppearance } from '../link/appearance';
+import type { LooseOptional } from '../helpers/types';
 
 /**
  * Tabs of the settings dialog. Five groups, chosen so a trader finds a setting
@@ -183,7 +186,7 @@ function selectCtl(
   tooltip?: string,
 ): Control {
   return {
-    input: { key, type: 'select', label, default: def, options, group, tooltip },
+    input: { key, type: 'select', label, default: def, options, group, tooltip } satisfies LooseOptional<ChartSettingsInput> as ChartSettingsInput, // no tooltip reads as none
     fields: [{ key, read: get, write: (c, v) => set(c, String(v)) }],
   };
 }
@@ -254,6 +257,7 @@ type StyleColorKey =
   | 'areaTopColor' | 'areaBottomColor'
   | 'topColor' | 'bottomColor'
   | 'closeColor'
+  | 'thickColor' | 'thinColor'
   | 'color';
 
 /** Style fields a pair's switch writes. */
@@ -306,7 +310,7 @@ function priceShared(): Control[] {
     selectCtl(
       'symbol.precision', 'Precision', 'Values', 'default', PRECISIONS,
       (c) => { const p = sty(c).precision; return p === undefined ? 'default' : String(p); },
-      (c, v) => setSty(c, { precision: v === 'default' ? undefined : Number(v) }),
+      (c, v) => setSty(c, { precision: v === 'default' ? undefined : Number(v) } satisfies LooseOptional<Partial<SeriesStyle>> as Partial<SeriesStyle>), // undefined clears it
     ),
     boolCtl(
       'symbol.priceLineVisible', 'Price line', 'Values', true,
@@ -333,6 +337,55 @@ const prevCloseCtl = (group: string): Control => boolCtl(
   (c, v) => setSty(c, { colorByPreviousClose: v }),
 );
 
+/** A condition over a transform's option keys, read over the settings keys they are shown under. */
+function underKey(condition: IndicatorInputCondition, prefix: string): IndicatorInputCondition {
+  if ('all' in condition) return { all: condition.all.map(item => underKey(item, prefix)) };
+  if ('any' in condition) return { any: condition.any.map(item => underKey(item, prefix)) };
+  return { ...condition, key: prefix + condition.key };
+}
+
+/**
+ * The options of the primary series' transform (`Chart.setSeriesTransform`),
+ * one control each as the transform declares it, keyed `transform.<option>`
+ * under the transform's name. None without a transform. A write that puts an
+ * option back to its default drops it from the spec, so the saved state
+ * carries only what was chosen and a size left at 0 keeps following the
+ * history. An option the transform refuses is skipped, as a stale zone is.
+ */
+function transformControls(chart: Chart): Control[] {
+  const series = chart.primarySeries();
+  const spec = series === null ? null : chart.seriesTransform(series);
+  if (spec === null) return [];
+  const { name, inputs } = getSeriesTransform(spec.type);
+  const prefix = 'transform.';
+  return inputs.map((option): Control => {
+    const key = prefix + option.key;
+    const input = { ...option, key, group: name } as IndicatorInput;
+    if (option.visibleWhen) input.visibleWhen = underKey(option.visibleWhen, prefix);
+    if (option.activeWhen) input.activeWhen = underKey(option.activeWhen, prefix);
+    const current = (c: Chart): ReturnType<Chart['seriesTransform']> => {
+      const primary = c.primarySeries();
+      const now = primary === null ? null : c.seriesTransform(primary);
+      return now?.type === spec.type ? now : null;
+    };
+    return {
+      input,
+      fields: [{
+        key,
+        read: (c) => current(c)?.options?.[option.key] ?? (option.default as number | string),
+        write: (c, v) => {
+          const now = current(c);
+          if (now === null) return;
+          const options = { ...now.options };
+          if (v === option.default) delete options[option.key];
+          else options[option.key] = v as number | string;
+          try { c.setSeriesTransform(c.primarySeries()!, { type: now.type, options }); } catch { /* refused, as validation says */ }
+        },
+      }],
+    };
+  });
+}
+
 /**
  * Type-dependent Price controls. Only what the primary series' renderer
  * actually reads: a candle has borders and wicks, a line has a dash, and a
@@ -349,14 +402,12 @@ function priceControls(chart: Chart): Control[] {
   // (a bare volume histogram or column). An empty tab is the host's to hide; a
   // tab of controls that do nothing is a lie.
   if (type === undefined) return [];
+  // What the chart derives its elements from comes before how they are painted.
+  out.push(...transformControls(chart));
   if (type === 'candlestick' || type === 'hollow-candle' || type === 'volume-candle') {
     out.push(
-      // No switch on Body: a candle with no body is not a candle, and there is
-      // no style flag behind such a checkbox. Borders and wicks have one.
-      // Body carries a switch like its neighbours now that the renderer can
-      // actually skip the fill. Before `bodyVisible` existed this row was
-      // deliberately left without one rather than shipping a checkbox that
-      // toggled nothing.
+      // Body carries a switch like its neighbours: `bodyVisible` skips the fill
+      // and leaves the outline and the wick.
       seriesColorPair('symbol.body', 'Body', 'Candles',
         { key: 'upColor', label: 'Up', def: t.upColor },
         { key: 'downColor', label: 'Down', def: t.downColor },
@@ -379,6 +430,15 @@ function priceControls(chart: Chart): Control[] {
     // A column is drawn from a base value, not open to close, so it has no
     // previous-close verdict to take: only the two true bar renderers get it.
     if (type !== 'column') out.push(prevCloseCtl(group));
+  } else if (type === 'point-figure') {
+    // A column of Xs rises and one of Os falls: the renderer's up and down colours.
+    out.push(seriesColorPair('symbol.body', 'Boxes', 'Columns',
+      { key: 'upColor', label: 'X', def: '#26a69a' },
+      { key: 'downColor', label: 'O', def: '#ef5350' }));
+  } else if (type === 'kagi') {
+    out.push(seriesColorPair('symbol.kagi', 'Line', 'Kagi',
+      { key: 'thickColor', label: 'Thick', def: '#26a69a' },
+      { key: 'thinColor', label: 'Thin', def: '#ef5350' }));
   } else {
     // Which colour a line-family renderer actually reads is not the same field
     // across the family, and offering the wrong one ships a swatch that moves
@@ -402,13 +462,13 @@ function priceControls(chart: Chart): Control[] {
         (c) => sty(c).lineWidth ?? 1.5, (c, v) => setSty(c, { lineWidth: v }),
       ));
     }
-    // Only the plain line renderers honour a dash; area/baseline redraw their
-    // outline through a fixed-style call, so the control would be inert there.
-    if (type === 'line' || type === 'line-markers' || type === 'step') {
+    // The line renderers and the area outline honour a dash; baseline and HLC
+    // area stroke with a fixed style, so the control would be inert there.
+    if (type === 'line' || type === 'line-markers' || type === 'step' || type === 'area') {
       out.push(selectCtl(
         'symbol.lineStyle', 'Line style', 'Line', 'solid', LINE_STYLES,
         (c) => sty(c).lineStyle ?? 'solid',
-        (c, v) => setSty(c, { lineStyle: v as SeriesStyle['lineStyle'] }),
+        (c, v) => setSty(c, { lineStyle: v as NonNullable<SeriesStyle['lineStyle']> }),
       ));
     }
     if (type === 'area') {
@@ -426,8 +486,8 @@ function priceControls(chart: Chart): Control[] {
     } else if (type === 'hlc-area') {
       // One band between high and low, so one colour: a pair here would put a
       // second swatch on the row with nothing reading it.
-      out.push(colorCtl('symbol.areaTopColor', 'Band', 'Line', t.areaTopColor,
-        (c) => sty(c).areaTopColor ?? t.areaTopColor, (c, v) => setSty(c, { areaTopColor: v })));
+      out.push(colorCtl('symbol.areaTopColor', 'Band', 'Line', HLC_AREA_BAND_COLOR,
+        (c) => sty(c).areaTopColor ?? HLC_AREA_BAND_COLOR, (c, v) => setSty(c, { areaTopColor: v })));
     }
   }
   return [...out, ...priceShared()];
@@ -498,12 +558,15 @@ function readoutControls(chart: Chart): Control[] {
 
 // ── Axes ──────────────────────────────────────────────────────────────────
 
-const SCALE_MODES: readonly { label: string; value: string }[] = [
-  { label: 'Linear', value: 'linear' },
-  { label: 'Logarithmic', value: 'logarithmic' },
-  { label: 'Percent', value: 'percentage' },
-  { label: 'Indexed to 100', value: 'indexed-to-100' },
-];
+/** Keyed by the mode, so a fifth mode fails to compile here until it has a label. */
+const SCALE_MODE_LABELS: Readonly<Record<PriceScaleMode, string>> = {
+  linear: 'Linear',
+  logarithmic: 'Logarithmic',
+  percentage: 'Percent',
+  'indexed-to-100': 'Indexed to 100',
+};
+const SCALE_MODES: readonly { label: string; value: string }[] =
+  PRICE_SCALE_MODES.map(value => ({ label: SCALE_MODE_LABELS[value], value }));
 
 /**
  * Zones offered by the timezone control, roughly east to west so the list reads
@@ -588,7 +651,7 @@ function axesControls(chart: Chart): Control[] {
     ),
     boolCtl(
       'scales.autoScale', 'Auto-fit to the data', 'Price scale', true,
-      (c) => c.panes()[c.primaryPaneIndex()].priceScale.autoScale,
+      (c) => c.panes()[c.primaryPaneIndex()]!.priceScale.autoScale, // a chart always holds its price pane
       (c, v) => c.setAutoScale(v),
     ),
     boolCtl(

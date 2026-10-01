@@ -37,7 +37,11 @@ test('the reference watchlist shows fixture quotes, charts a chosen row and goes
   await expect(panel.locator('tr[aria-current="true"]')).toHaveAttribute('data-symbol', 'AAPL');
   // An arithmetic symbol has no quote source: its row says so instead of borrowing a close.
   await panel.getByRole('searchbox', { name: 'Add symbol' }).fill('aapl/msft');
-  await panel.getByRole('searchbox', { name: 'Add symbol' }).press('Enter');
+  // Enter waits while the lookup runs, as in the top bar; once it has found nothing, the typed text is added.
+  await expect(async () => {
+    await panel.getByRole('searchbox', { name: 'Add symbol' }).press('Enter');
+    await expect(panel.locator('tr[data-symbol="AAPL/MSFT"]')).toHaveCount(1, { timeout: 500 });
+  }).toPass();
   await expect(panel.locator('tr[data-symbol="AAPL/MSFT"]')).toHaveAttribute('data-state', 'unavailable');
   await expect(panel.locator('tr[data-symbol="AAPL/MSFT"] .oac-watchlist__last')).toHaveText('n/a');
   await page.screenshot({ path: info.outputPath('reference-watchlist.png') });

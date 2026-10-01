@@ -14,9 +14,10 @@ export function parseColor(color: string): Rgba | null {
   if (c.startsWith('#')) {
     const hex = c.slice(1);
     if (hex.length === 3 || hex.length === 4) {
-      const [r, g, b, a] = [...hex].map((h) => parseInt(h + h, 16));
+      // Three or four digits: r, g and b are always there, a only with four.
+      const [r, g, b, a] = [...hex].map((h) => parseInt(h + h, 16)) as [number, number, number, number?];
       if ([r, g, b].some(Number.isNaN)) return null;
-      return { r, g, b, a: hex.length === 4 ? a / 255 : 1 };
+      return { r, g, b, a: hex.length === 4 ? a! / 255 : 1 };
     }
     if (hex.length === 6 || hex.length === 8) {
       const n = parseInt(hex.slice(0, 6), 16);
@@ -54,10 +55,12 @@ const srgbLinear = (v: number): number => {
 
 /**
  * Relative luminance (0 black, 1 white) of parsed channels on the sRGB curve.
- * The one copy of this arithmetic: the widget's tokens import it by path and
- * feed it from their own parser. The parsers stay separate on purpose, since
- * the widget's also reads space-separated `rgb()` and the two disagree on
- * malformed input, so sharing one would move a colour on one side or the other.
+ * Code that needs it imports this by path instead of keeping a copy: two
+ * copies of the curve can disagree at its threshold, and the widget's tokens
+ * already feed this one from their own parser. The parsers stay separate on
+ * purpose, since the widget's also reads space-separated `rgb()` and the two
+ * disagree on malformed input, so sharing one would move a colour on one side
+ * or the other.
  */
 export function srgbLuminance(c: Rgba): number {
   return 0.2126 * srgbLinear(c.r) + 0.7152 * srgbLinear(c.g) + 0.0722 * srgbLinear(c.b);
@@ -88,7 +91,7 @@ export function isInvisible(color: string): boolean {
   return c !== null && c.a <= 0;
 }
 
-/** Mix a color toward white (t>0) or black (t<0) by |t| (0..1) — hover states. */
+/** Mix a color toward white (t>0) or black (t<0) by |t| (0..1): hover states. */
 export function shade(color: string, t: number): string {
   const c = parseColor(color);
   if (c === null) return color;
@@ -100,7 +103,7 @@ export function shade(color: string, t: number): string {
 
 /**
  * Trace a rounded-rectangle path (uses native roundRect when available, plain
- * rect otherwise — e.g. recording contexts in tests). Caller begins/fills.
+ * rect otherwise, e.g. recording contexts in tests). Caller begins/fills.
  */
 export function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   const rr = (ctx as CanvasRenderingContext2D & { roundRect?: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect;
@@ -108,7 +111,7 @@ export function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: numbe
   else ctx.rect(x, y, w, h);
 }
 
-export interface PillStyle {
+interface PillStyle {
   fill: string;
   text: string;
   /** Optional 1px border color. */
@@ -116,7 +119,7 @@ export interface PillStyle {
   /** Corner radius in device px. */
   radius: number;
   /** Opaque under-fill so chart lines don't bleed through a translucent pill. */
-  backplate?: string;
+  backplate?: string | undefined;
 }
 
 /** Filled rounded pill with centered-baseline text; returns the pill width. */
@@ -150,31 +153,31 @@ export function drawPill(
   return w;
 }
 
-/** Width of a ✕ (close) segment in media px. */
-export const CLOSE_SEGMENT_W = 20;
+/** Width of a close segment in media px. */
+const CLOSE_SEGMENT_W = 20;
 
-/** One segment of a broker-style pill group: text box or ✕ box. */
+/** One segment of a broker-style pill group: text box or close box. */
 export interface PillSegment {
-  /** Text content; omit for a ✕ (close) segment. */
+  /** Text content; omit for a close segment. */
   text?: string;
-  /** Render a ✕ glyph instead of text. */
+  /** Render the close cross instead of text. */
   close?: boolean;
   fill: string;
   textColor: string;
   border?: string;
 }
 
-export interface PillGroupMetrics {
+interface PillGroupMetrics {
   /** Group left edge, media px. */
   x0: number;
   /** Group right edge, media px. */
   x1: number;
-  /** Left edge of the ✕ segment (Infinity when none), media px. */
+  /** Left edge of the close segment (Infinity when none), media px. */
   closeX0: number;
 }
 
 /**
- * Draw a segmented pill group — [badge][qty][label][✕] — with an opaque
+ * Draw a segmented pill group ([badge][qty][label][close]) with an opaque
  * backplate behind the whole group (so the chart line doesn't bleed through
  * the segment gaps). Coordinates are device px; the returned metrics are
  * media px, ready for hit-testing. The caller sets the font beforehand.
@@ -184,7 +187,7 @@ export function drawPillGroup(
   x: number,
   yCenter: number,
   segments: readonly PillSegment[],
-  opts: { height: number; padX: number; radius: number; gap: number; backplate?: string; dpr: number },
+  opts: { height: number; padX: number; radius: number; gap: number; backplate?: string | undefined; dpr: number },
 ): PillGroupMetrics {
   const { height, padX, radius, gap, dpr } = opts;
   const widths = segments.map((s) => (s.close === true ? CLOSE_SEGMENT_W * dpr : ctx.measureText(s.text ?? '').width + padX * 2));
@@ -198,8 +201,8 @@ export function drawPillGroup(
   let closeX0 = Number.POSITIVE_INFINITY;
   let cx = x;
   for (let i = 0; i < segments.length; i++) {
-    const s = segments[i];
-    const w = widths[i];
+    const s = segments[i]!;
+    const w = widths[i]!; // widths maps segments, so both hold i
     ctx.beginPath();
     roundRectPath(ctx, cx, yCenter - height / 2, w, height, radius);
     ctx.fillStyle = s.fill;

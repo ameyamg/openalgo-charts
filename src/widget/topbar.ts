@@ -1,4 +1,3 @@
-import { errorText, widgetText, type WidgetTranslationOptions } from './localization';
 /**
  * The top bar: symbol, interval, chart type, indicators, settings, capture
  * and theme, left to right.
@@ -7,13 +6,15 @@ import { errorText, widgetText, type WidgetTranslationOptions } from './localiza
  * cannot carry a chord and looks like a form control on a chart. The
  * interval pills come from the list the shell resolves (its own defaults
  * plus every code registered with the engine); the chart type menu is read
- * from the chart-type registry at open time, so a type the transform tier
- * registers appears without a second list to keep in step. The indicators
+ * from the chart-type and series-transform registries at open time, so the
+ * types the transform tier registers appear without a second list to keep in
+ * step. The indicators
  * and settings buttons open the dialog tier's panels; without one registered
  * they render disabled, with their state visible, rather than dead.
  */
-import { registeredChartTypes, getChartType, exportChartDataCsv } from 'openalgo-charts';
-import { chartTypeIcon, chromeIcon, chromeIconSvg } from 'openalgo-charts/draw';
+import { errorText, widgetText, type WidgetTranslationOptions } from './localization';
+import { registeredChartTypes, getChartType, exportChartDataCsv, getSeriesTransform, registeredSeriesTransforms } from 'openalgo-charts';
+import { chartTypeIcon, chromeIconSvg } from 'openalgo-charts/draw';
 import { h, glyph, type WidgetContext } from './context';
 import type { WidgetThemeName } from './tokens';
 import { mountSymbolPicker, type SymbolPickerHandle } from './symbol-picker';
@@ -25,12 +26,15 @@ import type { PanelHandle } from './form';
 import type { LayoutsController } from './layouts';
 import { layoutNeedsAttention, layoutStatusText } from './layouts-widget';
 import { lazyPart, partFailed, usePart, type PartSlot } from './lazy';
-import { ariaKeys } from './keymap';
+import { canCopyImage, copyCanvasImage, downloadCanvas } from './capture';
+import { captureName, downloadText, openMenu, type MenuRow } from './menu';
+export { captureName, downloadText, openMenu } from './menu';
+export type { MenuOptions, MenuRow } from './menu';
 
 /** The chart data dialog, fetched when it first opens. Internal. */
 export const dataExportPart = lazyPart(() => import('./chart-data-export-dialog'));
 
-/** Labels for the built-in chart types; anything else is read from its id. */
+/** Labels for the built-in chart types; a transform's is its own name, and anything else is read from its id. */
 export const CHART_TYPE_LABELS: Readonly<Record<string, string>> = {
   candlestick: 'Candles',
   'hollow-candle': 'Hollow candles',
@@ -48,20 +52,25 @@ export const CHART_TYPE_LABELS: Readonly<Record<string, string>> = {
 };
 
 export function chartTypeLabel(id: string): string {
-  const known = CHART_TYPE_LABELS[id];
+  const known = CHART_TYPE_LABELS[id] ?? (registeredSeriesTransforms().includes(id) ? getSeriesTransform(id).name : undefined);
   if (known !== undefined) return known;
   return id.replace(/[-_]+/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 }
 
 /**
  * The chart types a primary series can be: every registered renderer that
- * declares itself a price series. A volume histogram is registered too and
- * would draw, but it is not a chart type anyone picks for the instrument.
+ * declares itself a price series, then every transform the chart can apply
+ * (Heikin Ashi to Kagi, once the transform tier is imported), which the chart
+ * derives from the bars rather than drawing them as they come. Point and
+ * figure and Kagi are both a renderer and a transform, and are listed once,
+ * with the transforms. A volume histogram is registered too and would draw,
+ * but it is not a chart type anyone picks for the instrument.
  */
 export function chartTypeChoices(): string[] {
-  return registeredChartTypes().filter((t) => {
-    try { return getChartType(t).isPriceSeries; } catch { return false; }
-  });
+  const transforms = registeredSeriesTransforms();
+  return [...registeredChartTypes().filter((t) => {
+    try { return !transforms.includes(t) && getChartType(t).isPriceSeries; } catch { return false; }
+  }), ...transforms];
 }
 
 /**
@@ -73,137 +82,11 @@ export function intervalLabel(code: string): string {
   const m = /^(\d*)\s*([smhdwSMHDW])$/.exec(code.trim());
   if (m === null) return code.toUpperCase();
   const n = m[1] === '' || m[1] === '1' ? '' : m[1];
-  const unit = m[2];
+  const unit = m[2]!; // the unit group is not optional, so a match fills it
   if (unit === 'm') return `${m[1] === '' ? '1' : m[1]}m`;
   if (unit === 's') return `${m[1] === '' ? '1' : m[1]}s`;
   if (unit === 'h' || unit === 'H') return `${m[1] === '' ? '1' : m[1]}h`;
   return n + unit.toUpperCase();
-}
-
-export interface MenuRow {
-  label: string;
-  /**
-   * A chrome icon id for a glyph before the label. Once one row has a glyph,
-   * every row keeps the column, so the labels share a left edge; an id the
-   * registry does not carry leaves its slot empty. Since 2.5.10.
-   */
-  icon?: string;
-  sub?: string;
-  /** Shown at the right edge, for a chord. */
-  key?: string;
-  /** Makes the row one of a set of choices, true for the current one; a row without it is an action. */
-  on?: boolean;
-  disabled?: boolean;
-  danger?: boolean;
-  onSelect: () => void;
-}
-
-export interface MenuOptions {
-  /** A search box at the top with this placeholder; rows filter as the user types. */
-  find?: string;
-  ariaLabel?: string;
-}
-
-/** A menu row's glyph: the registry's, or an empty slot the stylesheet sizes like one. */
-const rowGlyph = (id: string | undefined): string =>
-  id !== undefined && chromeIcon(id) !== undefined ? chromeIconSvg(id) : '<svg aria-hidden="true"></svg>';
-
-/**
- * A popup menu under `anchor`. Rows are buttons; a `{ head }` string starts a
- * group. Returns the closer. Exported for the dialog tier, whose context menu
- * and pickers want the same shape.
- */
-export function openMenu(ctx: WidgetContext, anchor: HTMLElement, rows: ReadonlyArray<MenuRow | string>, opts: MenuOptions = {}): () => void {
-  const doc = ctx.document;
-  const m = h(doc, 'div', 'oac-menu', { role: 'menu' });
-  if (opts.ariaLabel) m.setAttribute('aria-label', opts.ariaLabel);
-  let find: HTMLInputElement | null = null;
-  if (opts.find) {
-    const wrap = h(doc, 'div', 'oac-menu__find');
-    find = h(doc, 'input', undefined, { type: 'text', placeholder: opts.find, 'aria-label': opts.find });
-    wrap.appendChild(find);
-    m.appendChild(wrap);
-  }
-  const body = h(doc, 'div', 'oac-menu__body');
-  m.appendChild(body);
-  let close: () => void = () => {};
-  const glyphs = rows.some((r) => typeof r !== 'string' && r.icon !== undefined);
-
-  const paint = (q: string): void => {
-    const needle = q.trim().toLowerCase();
-    body.textContent = '';
-    let shown = 0;
-    // A group heading is only worth drawing once something under it survives
-    // the filter, so it is held back until the first matching row appears.
-    let pending: string | null = null;
-    for (const r of rows) {
-      if (typeof r === 'string') { pending = r; continue; }
-      if (needle !== '' && !r.label.toLowerCase().includes(needle) && !(r.sub ?? '').toLowerCase().includes(needle)) continue;
-      if (pending !== null) {
-        const g = h(doc, 'div', 'oac-head');
-        g.textContent = pending;
-        body.appendChild(g);
-        pending = null;
-      }
-      // A row with an `on` is one of a set of choices; any other is an action, which has no checked state.
-      const b = h(doc, 'button', 'oac-menu__row' + (r.danger ? ' is-danger' : ''), {
-        type: 'button', role: r.on === undefined ? 'menuitem' : 'menuitemradio', 'aria-disabled': String(r.disabled === true),
-      });
-      if (r.on !== undefined) b.setAttribute('aria-checked', String(r.on));
-      if (glyphs) b.appendChild(glyph(doc, rowGlyph(r.icon), 'chrome'));
-      const label = h(doc, 'span', 'oac-menu__label');
-      label.textContent = r.label;
-      b.appendChild(label);
-      if (r.sub) {
-        const s = h(doc, 'span', 'oac-menu__sub');
-        s.textContent = r.sub;
-        b.appendChild(s);
-      }
-      if (r.key) {
-        // Shown beside the name, said as the row's shortcut rather than read into its name.
-        const k = h(doc, 'kbd', 'oac-menu__key', { 'aria-hidden': 'true' });
-        k.textContent = r.key;
-        b.appendChild(k);
-        b.setAttribute('aria-keyshortcuts', ariaKeys(r.key));
-      }
-      b.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (r.disabled) return;
-        close();
-        r.onSelect();
-      });
-      body.appendChild(b);
-      shown++;
-    }
-    if (shown === 0) {
-      const e = h(doc, 'div', 'oac-menu__empty');
-      e.textContent = widgetText(ctx, 'No match');
-      body.appendChild(e);
-    }
-  };
-  paint('');
-  if (find !== null) {
-    const input = find;
-    input.addEventListener('input', () => paint(input.value));
-    // Enter picks the only remaining row, so a unique search needs no click.
-    input.addEventListener('keydown', (e) => {
-      if ((e as KeyboardEvent).key !== 'Enter') return;
-      // Bottom bar hook: the pick closes the menu and focus returns to its
-      // button, which the same Enter would otherwise press and reopen.
-      e.preventDefault();
-      const only = body.querySelectorAll('.oac-menu__row');
-      if (only.length === 1) (only[0] as HTMLElement).click();
-    });
-  }
-  m.addEventListener('keydown', (e) => {
-    const ke = e as KeyboardEvent;
-    const items = Array.from(body.querySelectorAll('.oac-menu__row')) as HTMLElement[];
-    const at = items.indexOf(doc.activeElement as HTMLElement);
-    if (ke.key === 'ArrowDown') { items[(at + 1) % items.length]?.focus(); ke.preventDefault(); ke.stopPropagation(); }
-    else if (ke.key === 'ArrowUp') { items[(at - 1 + items.length) % items.length]?.focus(); ke.preventDefault(); ke.stopPropagation(); }
-  });
-  close = ctx.openOverlay(m, { anchor, placement: 'below', initialFocus: find ?? (body.querySelector('.oac-menu__row[aria-checked="true"]') as HTMLElement | null) ?? undefined });
-  return close;
 }
 
 export interface TopbarState {
@@ -217,8 +100,8 @@ export interface TopbarState {
 export interface TopbarOptions {
   intervals: readonly string[];
   /** Show the indicators button. Default true. */
-  indicators?: boolean;
-  search?: SymbolSearch;
+  indicators?: boolean | undefined;
+  search?: SymbolSearch | undefined;
   /** The current facts, read on every refresh. */
   state: () => TopbarState;
   onSymbol(symbol: string, exchange?: string): void;
@@ -243,15 +126,15 @@ export interface TopbarOptions {
    * The saved layouts the Layouts button names: it shows the held layout and
    * marks one with unsaved changes. Omitted, with `onLayouts`, without a store.
    */
-  layouts?: LayoutsController;
+  layouts?: LayoutsController | undefined;
   /** Open the Layouts menu from `anchor`. */
   onLayouts?(anchor: HTMLElement): void | boolean;
   settingsAvailable(): boolean;
   indicatorsAvailable(): boolean;
   /** Refuse CSV export while the host is replacing or recovering its data. */
   dataAvailable?(): boolean;
-  /** Hook (chart grid, 2.5.10): more capture menu rows, read on every open; a string starts a group. */
-  captureRows?: () => ReadonlyArray<MenuRow | string>;
+  /** More capture menu rows, read on every open (the chart grid adds its whole-grid capture); a string starts a group. */
+  captureRows?: (() => ReadonlyArray<MenuRow | string>) | undefined;
 }
 
 export interface TopbarHandle {
@@ -265,46 +148,14 @@ export interface TopbarHandle {
   destroy(): void;
 }
 
-interface BrandingLinkOptions {
-  href?: string;
-  label?: string;
-}
-
 /** Read safe link metadata from the chart's active branding. */
 export function brandingLink(chart: WidgetContext['chart'], translation: WidgetTranslationOptions = {}): { href: string; label: string } | null {
-  const options = (chart as unknown as {
-    brandingOptions?(): false | BrandingLinkOptions;
-  }).brandingOptions?.();
+  const options = chart.brandingOptions();
   if (!options || typeof options.href !== 'string' || !/^https?:\/\//i.test(options.href)) return null;
   const label = typeof options.label === 'string' && options.label.trim() !== ''
     ? options.label.trim()
     : widgetText(translation, 'Chart branding');
   return { href: options.href, label };
-}
-
-/** Hand `text` to the browser as a file. False when the runtime has no way to (no `Blob`, no object URLs). */
-export function downloadText(doc: Document, filename: string, text: string, mime: string): boolean {
-  const g = globalThis as { Blob?: typeof Blob; URL?: typeof URL };
-  if (g.Blob === undefined || g.URL === undefined || typeof g.URL.createObjectURL !== 'function') return false;
-  const a = doc.createElement('a');
-  const url = g.URL.createObjectURL(new g.Blob([text], { type: mime }));
-  try {
-    a.href = url;
-    a.download = filename;
-    (doc.body ?? doc.documentElement).appendChild(a);
-    a.click();
-  } finally {
-    a.remove();
-    // Revoking synchronously races browser downloads, including successful handoff.
-    setTimeout(() => g.URL?.revokeObjectURL(url), 0);
-  }
-  return true;
-}
-
-/** `SYMBOL-5m-2026-01-31-09-15` with the characters a filename cannot carry removed. */
-export function captureName(symbol: string, interval: string, now: Date = new Date()): string {
-  const stamp = now.toISOString().slice(0, 16).replace(/[:T]/g, '-');
-  return `${(symbol || 'chart').replace(/[^A-Za-z0-9._-]/g, '')}-${interval || 'chart'}-${stamp}`;
 }
 
 export function mountTopbar(ctx: WidgetContext, host: HTMLElement, opts: TopbarOptions): TopbarHandle {
@@ -353,7 +204,8 @@ export function mountTopbar(ctx: WidgetContext, host: HTMLElement, opts: TopbarO
     const ke = e as KeyboardEvent;
     if (ke.key === 'Enter') {
       ke.preventDefault();
-      commit(symInput.value);
+      // A search still running would have shown what the user meant: wait for it.
+      if (picker === null || picker.canCommitRaw()) commit(symInput.value);
     } else if (ke.key === 'Escape') { refresh(); symInput.blur(); }
   });
   symInput.addEventListener('focus', () => { symInput.select(); });
@@ -383,9 +235,12 @@ export function mountTopbar(ctx: WidgetContext, host: HTMLElement, opts: TopbarO
   typeBtn.setAttribute('aria-haspopup', 'menu');
   typeBtn.addEventListener('click', () => {
     const cur = opts.state().chartType;
-    openMenu(ctx, typeBtn, chartTypeChoices().map((id) => ({
-      label: widgetText(ctx, `schema.chartType.${id}`, {}, chartTypeLabel(id)), icon: `chart-${id}`, on: id === cur, onSelect: () => opts.onChartType(id),
-    })), { ariaLabel: widgetText(ctx, 'Chart type') });
+    // The types the chart forms from price rather than the clock follow under a heading of their own.
+    const first = registeredSeriesTransforms()[0];
+    openMenu(ctx, typeBtn, chartTypeChoices().flatMap((id) => [
+      ...(id === first ? [widgetText(ctx, 'schema.chartType.group.transforms', {}, 'Transforms')] : []),
+      { label: widgetText(ctx, `schema.chartType.${id}`, {}, chartTypeLabel(id)), icon: `chart-${id}`, on: id === cur, onSelect: () => opts.onChartType(id) },
+    ]), { ariaLabel: widgetText(ctx, 'Chart type') });
   });
   host.appendChild(typeBtn);
 
@@ -513,26 +368,18 @@ export function mountTopbar(ctx: WidgetContext, host: HTMLElement, opts: TopbarO
       }
       if (!dataAvailable()) throw new Error(widgetText(ctx, 'Wait for this chart to finish loading its data'));
     };
-    const clip = (globalThis as { navigator?: { clipboard?: { write?: unknown } }; ClipboardItem?: unknown });
-    const canCopy = clip.navigator?.clipboard?.write !== undefined && clip.ClipboardItem !== undefined;
+    const canCopy = canCopyImage();
     openMenu(ctx, anchor, [
       { label: widgetText(ctx, 'Download PNG'), onSelect: () => {
-        ctx.chart.downloadScreenshot(captureName(s.symbol, s.interval) + '.png');
-        ctx.status(widgetText(ctx, 'Saved a PNG of the chart'));
+        const ok = downloadCanvas(doc, () => ctx.chart.takeScreenshot(), captureName(s.symbol, s.interval) + '.png');
+        ctx.status(ok ? widgetText(ctx, 'Saved a PNG of the chart') : widgetText(ctx, 'This runtime cannot save files'), ok ? 'info' : 'error');
       } },
       { label: widgetText(ctx, 'Download SVG'), sub: widgetText(ctx, 'text stays text'), onSelect: () => {
         const ok = downloadText(doc, captureName(s.symbol, s.interval) + '.svg', ctx.chart.exportSVG(), 'image/svg+xml');
         ctx.status(ok ? widgetText(ctx, 'Saved an SVG of the chart') : widgetText(ctx, 'This runtime cannot save files'), ok ? 'info' : 'error');
       } },
       { label: widgetText(ctx, 'Copy image'), sub: canCopy ? widgetText(ctx, 'paste it anywhere') : widgetText(ctx, 'needs https or localhost'), disabled: !canCopy, onSelect: () => {
-        const canvas = ctx.chart.takeScreenshot();
-        canvas.toBlob((blob) => {
-          if (blob === null) { ctx.status(widgetText(ctx, 'The canvas produced no image'), 'error'); return; }
-          const Item = (globalThis as { ClipboardItem: new (parts: Record<string, Blob>) => unknown }).ClipboardItem;
-          (globalThis.navigator.clipboard as unknown as { write(items: unknown[]): Promise<void> })
-            .write([new Item({ 'image/png': blob })])
-            .then(() => ctx.status(widgetText(ctx, 'Chart copied')), (err: unknown) => ctx.status(widgetText(ctx, 'Copy failed: {error}', { error: errorText(ctx, err) }), 'error'));
-        }, 'image/png');
+        copyCanvasImage(ctx, ctx.chart.takeScreenshot(), widgetText(ctx, 'Chart copied'), (message, kind) => ctx.status(message, kind));
       } },
       { label: widgetText(ctx, 'Download chart data (CSV)'), disabled: !dataAvailable(), onSelect: () => {
         const failed = (error: unknown): void => ctx.status(widgetText(ctx, 'Data export failed: {error}', { error: errorText(ctx, error) }), 'error');

@@ -45,7 +45,7 @@ const MIN_DISTINCT_COLORS = 10;
 
 test('paints the same pixels as the baseline build at every zoom', async ({ page, request }) => {
   const probe = await request.get('/dist-baseline/openalgo-charts.mjs');
-  test.skip(!probe.ok(), 'no dist-baseline/ — run: node scripts/build-baseline.mjs');
+  test.skip(!probe.ok(), 'no dist-baseline/; run node scripts/build-baseline.mjs');
 
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));

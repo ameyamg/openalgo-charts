@@ -42,19 +42,23 @@ import type { DrawItem, RendererEntry, SeriesRenderContext, SeriesType } from '.
 // as src/transform/index.ts.
 import { getChartType, registeredChartTypes, registerRenderBackend } from 'openalgo-charts';
 import type { Bar } from '../../model/bar';
-import type { ChartTheme } from '../../theme';
-import type { SeriesStyle } from '../series-style';
+import {
+  withAreaColors, withBaselineColors, withHlcAreaColors, withLineColor, withUpDown, type SeriesStyle,
+} from '../series-style';
+import { DEFAULT_HISTOGRAM_STYLE } from '../histogram';
 import type { IRenderBackend } from '../backend';
 import {
-  candleGeometry, candleTier, optimalBarWidth, DEFAULT_CANDLE_STYLE, type CandleStyle,
+  candleGeometry, candleTier, optimalBarWidth, resolveCandleStyle, type CandleStyle,
 } from '../candles';
 import { barGeometry } from '../bars';
 import {
-  project, projectSteps, trimToView, dashPeriod, polyline, CLOSE, HIGH, LOW, EDGE_PAD, type Polyline,
+  project, projectSteps, trimToView, dashPeriod, polyline, dashFor, pointColors, CLOSE, HIGH, LOW, EDGE_PAD, HLC_AREA_BAND_COLOR,
+  type Polyline,
 } from '../line';
 import { VertexBatch } from './batch';
 import { ColorCache, TRANSPARENT, lerpPremultiplied, normaliseWith2d, type PremultipliedRgba } from './color';
 import { bindShapeAttributes, compileShapeProgram, type ShapeProgram } from './shaders';
+import type { LooseOptional } from '../../helpers/types';
 
 /**
  * What the shared context is created on: a detached canvas or an
@@ -270,26 +274,6 @@ export function isWebGL2Supported(): boolean {
   return sharedGlDevice().available;
 }
 
-// ── colour resolution, mirroring the registry's private helpers ─────────────
-
-/** The registry's `candleStyle`: style over theme, plus the type's own switches. */
-function resolveCandleStyle(s: SeriesStyle, theme: ChartTheme, extra: Partial<CandleStyle> = {}): CandleStyle {
-  return {
-    ...DEFAULT_CANDLE_STYLE,
-    upColor: s.upColor ?? theme.upColor,
-    downColor: s.downColor ?? theme.downColor,
-    borderUpColor: s.borderUpColor ?? theme.upColor,
-    borderDownColor: s.borderDownColor ?? theme.downColor,
-    wickUpColor: s.wickUpColor ?? theme.wickUpColor,
-    wickDownColor: s.wickDownColor ?? theme.wickDownColor,
-    borderVisible: s.borderVisible ?? DEFAULT_CANDLE_STYLE.borderVisible,
-    bodyVisible: s.bodyVisible ?? true,
-    wickVisible: s.wickVisible ?? DEFAULT_CANDLE_STYLE.wickVisible,
-    colorByPreviousClose: s.colorByPreviousClose,
-    ...extra,
-  };
-}
-
 type ColorOf = (css: string) => PremultipliedRgba;
 
 // ── emitters, one per 2D renderer ───────────────────────────────────────────
@@ -324,8 +308,8 @@ function emitCandles(
   const wickW = Math.max(1, Math.floor(dpr));
   const uniformTier = style.widthScale ? null : candleTier(bodyW, wickW, style);
   for (let i = 0; i < items.length; i++) {
-    const { x, bar } = items[i];
-    const ref = i > 0 ? items[i - 1].bar.close : items[i].prevClose;
+    const { x, bar } = items[i]!; // i, and i - 1 when positive, index items
+    const ref = i > 0 ? items[i - 1]!.bar.close : items[i]!.prevClose;
     const up = style.colorByPreviousClose === true && ref !== undefined && Number.isFinite(ref)
       ? bar.close >= ref
       : bar.close >= bar.open;
@@ -372,9 +356,9 @@ function emitBars(
   const tick = Math.max(1, Math.floor(optimalBarWidth(barSpacing, dpr) / 2));
   const lw = Math.max(1, Math.floor(dpr));
   for (let i = 0; i < items.length; i++) {
-    const item = items[i];
+    const item = items[i]!; // i, and i - 1 when positive, index items
     const g = barGeometry(item, toY, dpr);
-    const ref = i > 0 ? items[i - 1].bar.close : item.prevClose;
+    const ref = i > 0 ? items[i - 1]!.bar.close : item.prevClose;
     const up = style.colorByPreviousClose === true && ref !== undefined && Number.isFinite(ref)
       ? item.bar.close >= ref
       : g.up;
@@ -419,26 +403,6 @@ function emitHistogram(
   }
 }
 
-/** The line renderer's own dash table (it does not share the grid's). */
-function lineDash(style: SeriesStyle, dpr: number): number[] {
-  if (style.lineStyle === 'dashed') return [6 * dpr, 4 * dpr];
-  if (style.lineStyle === 'dotted') return [1 * dpr, 3 * dpr];
-  return [];
-}
-
-/** The line renderer's per-point colours: one per polyline point, or nothing. */
-function pointColors(items: readonly DrawItem[], step: boolean): (string | undefined)[] | undefined {
-  let any = false;
-  for (const it of items) if (it.bar.color !== undefined) { any = true; break; }
-  if (!any) return undefined;
-  const out: (string | undefined)[] = [];
-  for (const it of items) {
-    if (step && out.length > 0) out.push(it.bar.color);
-    out.push(it.bar.color);
-  }
-  return out;
-}
-
 /** Where a dash walk stands: which pattern entry, and how much of it is left. */
 interface DashState {
   idx: number;
@@ -467,8 +431,9 @@ function emitDashedSegment(
     t += step;
     state.rem -= step;
     if (state.rem <= 1e-9) {
+      // Only a dashed stroke walks here, and its pattern is not empty.
       state.idx = (state.idx + 1) % dash.length;
-      state.rem = dash[state.idx];
+      state.rem = dash[state.idx]!;
     }
   }
 }
@@ -498,19 +463,20 @@ function emitPolyline(
   if (pattern.length % 2 === 1) pattern = pattern.concat(pattern);
   let total = 0;
   for (const d of pattern) total += d;
+  // `pattern[0]` is read only when dashed, which needs a pattern.
   const dashed = pattern.length > 0 && total > 0;
-  const state: DashState = { idx: 0, rem: dashed ? pattern[0] : 0 };
+  const state: DashState = { idx: 0, rem: dashed ? pattern[0]! : 0 };
   const xs = line.xs, ys = line.ys;
   let prev = -1;
   let run: string | undefined;
   let c = color(fallback);
   for (let i = line.s; i < line.n; i++) {
-    const x = xs[i], y = ys[i];
+    const x = xs[i]!, y = ys[i]!;
     if (!Number.isFinite(x) || !Number.isFinite(y)) { prev = -1; continue; }
     if (prev < 0) {
       prev = i;
       state.idx = 0;
-      state.rem = dashed ? pattern[0] : 0;
+      state.rem = dashed ? pattern[0]! : 0;
       continue;
     }
     const own = colors === undefined ? run : colors[i];
@@ -518,16 +484,16 @@ function emitPolyline(
       run = own;
       c = color(own ?? fallback);
       state.idx = 0;
-      state.rem = dashed ? pattern[0] : 0;
+      state.rem = dashed ? pattern[0]! : 0;
     }
-    if (dashed) emitDashedSegment(batch, xs[prev] * dpr, ys[prev] * dpr, x * dpr, y * dpr, hw, c, pattern, state);
-    else batch.segment(xs[prev] * dpr, ys[prev] * dpr, x * dpr, y * dpr, hw, c, true);
+    if (dashed) emitDashedSegment(batch, xs[prev]! * dpr, ys[prev]! * dpr, x * dpr, y * dpr, hw, c, pattern, state);
+    else batch.segment(xs[prev]! * dpr, ys[prev]! * dpr, x * dpr, y * dpr, hw, c, true);
     // A dashed 2D stroke strokes the bars in view on their own after a leg
     // cut in from beyond the view, which starts their pattern afresh; the leg
     // out it carries on, as the walk here does.
     if (i === line.a) {
       state.idx = 0;
-      state.rem = dashed ? pattern[0] : 0;
+      state.rem = dashed ? pattern[0]! : 0;
     }
     prev = i;
   }
@@ -546,15 +512,15 @@ function emitLine(
   const fill = style.color ?? '#4f8cff';
   const lineWidth = style.lineWidth ?? 1.5;
   const hw = Math.max(1, lineWidth * dpr) / 2;
-  const dash = lineDash(style, dpr);
+  const dash = dashFor(style.lineStyle, dpr);
   trimToView(pts, items, style.step === true, dashPeriod(dash, dpr), EDGE_PAD + lineWidth);
   if (!style.markersOnly) emitPolyline(batch, pts, dpr, hw, fill, cols, dash, color);
   if (style.markers || style.markersOnly) {
     const r = (style.markerRadius ?? 2) * dpr;
     for (let i = 0; i < items.length; i++) {
-      const x = base.xs[i], y = base.ys[i];
-      if (!Number.isFinite(x) || !Number.isFinite(y) || items[i].edgeX !== undefined) continue;
-      const c = color(cols !== undefined ? (items[i].bar.color ?? fill) : fill);
+      const x = base.xs[i]!, y = base.ys[i]!;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || items[i]!.edgeX !== undefined) continue;
+      const c = color(cols !== undefined ? (items[i]!.bar.color ?? fill) : fill);
       batch.segment(x * dpr, y * dpr, x * dpr, y * dpr, r, c, true);
     }
   }
@@ -578,8 +544,8 @@ function emitFillToBase(
   let px = NaN;
   let py = NaN;
   for (let i = line.s; i < line.n; i++) {
-    const x = line.xs[i] * dpr;
-    const y = line.ys[i] * dpr;
+    const x = line.xs[i]! * dpr;
+    const y = line.ys[i]! * dpr;
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     if (Number.isFinite(px)) {
       const aAbove = py <= baseY;
@@ -618,11 +584,12 @@ function emitArea(
     const bottom = color(style.areaBottomColor ?? 'rgba(79,140,255,0.00)');
     emitFillToBase(batch, pts, dpr, baseY, (y) => lerpPremultiplied(top, bottom, y / baseY), 'both');
   }
+  // An unset lineStyle is passed on unset, which emitLine reads as solid.
   emitLine(batch, items, toY, dpr, {
     color: style.color ?? '#4f8cff',
     lineWidth: style.lineWidth ?? 1.5,
     lineStyle: style.lineStyle,
-  }, color);
+  } satisfies LooseOptional<SeriesStyle> as SeriesStyle, color);
 }
 
 /** `drawBaseline`: faded fill above the base, flat fill below, split stroke. */
@@ -647,7 +614,7 @@ function emitBaseline(
   const bottomLine = color(style.bottomColor ?? '#ef5350');
   const xs = pts.xs, ys = pts.ys;
   for (let i = pts.s + 1; i < pts.n; i++) {
-    const ax = xs[i - 1], ay = ys[i - 1], bx = xs[i], by = ys[i];
+    const ax = xs[i - 1]!, ay = ys[i - 1]!, bx = xs[i]!, by = ys[i]!;
     if (!Number.isFinite(ax) || !Number.isFinite(ay) || !Number.isFinite(bx) || !Number.isFinite(by)) continue;
     const above = (ay + by) / 2 <= baseY / dpr;
     batch.segment(ax * dpr, ay * dpr, bx * dpr, by * dpr, hw, above ? topLine : bottomLine, false);
@@ -665,18 +632,19 @@ function emitHlcArea(
   project(highs, items, toY, HIGH);
   project(lows, items, toY, LOW);
   // Both edges are cut at the same x, and a gap at the view edge empties the
-  // dropped point, so they still pair up by index below.
+  // dropped point, so they still pair up by index below. Both were projected
+  // from the same items, so each holds a point at every index under highs.n.
   trimToView(highs, items, false, 0, pad);
   trimToView(lows, items, false, 0, pad);
-  const band = color(style.areaTopColor ?? 'rgba(79,140,255,0.15)');
+  const band = color(style.areaTopColor ?? HLC_AREA_BAND_COLOR);
   const hx = highs.xs, hy = highs.ys, lx = lows.xs, ly = lows.ys;
   let prev = -1;
   for (let i = highs.s; i < highs.n; i++) {
     if (!Number.isFinite(hx[i]) || !Number.isFinite(hy[i]) || !Number.isFinite(ly[i])) continue;
     if (prev >= 0) {
       batch.quad(
-        hx[prev] * dpr, hy[prev] * dpr, band, hx[i] * dpr, hy[i] * dpr, band,
-        lx[prev] * dpr, ly[prev] * dpr, band, lx[i] * dpr, ly[i] * dpr, band,
+        hx[prev]! * dpr, hy[prev]! * dpr, band, hx[i]! * dpr, hy[i]! * dpr, band,
+        lx[prev]! * dpr, ly[prev]! * dpr, band, lx[i]! * dpr, ly[i]! * dpr, band,
       );
     }
     prev = i;
@@ -813,46 +781,31 @@ export class WebGL2Backend implements IRenderBackend {
       }
       case 'bar':
       case 'high-low':
-        emitBars(b, items, priceToY, barSpacing, dpr, {
-          ...style, upColor: style.upColor ?? theme.upColor, downColor: style.downColor ?? theme.downColor,
-        }, kind === 'high-low', c);
+        emitBars(b, items, priceToY, barSpacing, dpr, withUpDown(style, theme), kind === 'high-low', c);
         break;
       case 'line':
-        emitLine(b, items, priceToY, dpr, { ...style, color: style.color ?? theme.lineColor }, c);
+        emitLine(b, items, priceToY, dpr, withLineColor(style, theme), c);
         break;
       case 'line-markers':
-        emitLine(b, items, priceToY, dpr, { ...style, color: style.color ?? theme.lineColor, markers: true }, c);
+        emitLine(b, items, priceToY, dpr, withLineColor(style, theme, { markers: true }), c);
         break;
       case 'step':
-        emitLine(b, items, priceToY, dpr, { ...style, color: style.color ?? theme.lineColor, step: true }, c);
+        emitLine(b, items, priceToY, dpr, withLineColor(style, theme, { step: true }), c);
         break;
       case 'area':
-        emitArea(b, items, priceToY, dpr, rc.plotHeight, {
-          ...style,
-          color: style.color ?? theme.lineColor,
-          areaTopColor: style.areaTopColor ?? theme.areaTopColor,
-          areaBottomColor: style.areaBottomColor ?? theme.areaBottomColor,
-        }, c);
+        emitArea(b, items, priceToY, dpr, rc.plotHeight, withAreaColors(style, theme), c);
         break;
       case 'hlc-area':
-        emitHlcArea(b, items, priceToY, dpr, { ...style, closeColor: style.closeColor ?? theme.lineColor }, c);
+        emitHlcArea(b, items, priceToY, dpr, withHlcAreaColors(style, theme), c);
         break;
       case 'baseline':
-        emitBaseline(b, items, priceToY, dpr, {
-          ...style,
-          topColor: style.topColor ?? theme.baselineTopLine,
-          bottomColor: style.bottomColor ?? theme.baselineBottomLine,
-          areaTopColor: style.areaTopColor ?? theme.baselineTopFill,
-          areaBottomColor: style.areaBottomColor ?? theme.baselineBottomFill,
-        }, c);
+        emitBaseline(b, items, priceToY, dpr, withBaselineColors(style, theme), c);
         break;
       case 'column':
-        emitColumns(b, items, priceToY, barSpacing, dpr, {
-          ...style, upColor: style.upColor ?? theme.upColor, downColor: style.downColor ?? theme.downColor,
-        }, c);
+        emitColumns(b, items, priceToY, barSpacing, dpr, withUpDown(style, theme), c);
         break;
       case 'histogram':
-        emitHistogram(b, items, priceToY, barSpacing, dpr, style.color ?? '#3a4666', style.base ?? 0, c);
+        emitHistogram(b, items, priceToY, barSpacing, dpr, style.color ?? DEFAULT_HISTOGRAM_STYLE.color, style.base ?? 0, c);
         break;
     }
   }

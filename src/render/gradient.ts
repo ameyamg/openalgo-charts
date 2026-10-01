@@ -8,8 +8,8 @@ import { parseColor } from './pill';
 
 /**
  * Re-exported, not reimplemented: one import path covers an indicator's colour
- * work, while the only colour parser in the engine stays in `pill.ts`. A second
- * copy here would cost base bytes and drift out of step with the first.
+ * work, while the colour parsing stays in `pill.ts`. A copy of it elsewhere in
+ * the base costs bytes and drifts out of step with it.
  */
 export { withAlpha } from './pill';
 

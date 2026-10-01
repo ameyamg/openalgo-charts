@@ -1,14 +1,16 @@
 /**
  * Position marker (ARCHITECTURE.md §9.1). A line at the average entry price
- * with a broker-style segmented pill group — [LONG|SHORT][qty][P&L (pct)][✕] —
- * a compact avg-price tag on the axis, and a shaded entry→LTP band colored by
- * P&L sign. Updates cheaply on every LTP tick. The ✕ hit-tests as
+ * with a broker-style segmented pill group ([LONG|SHORT][qty][P&L (pct)][close]),
+ * a compact avg-price tag on the axis, and a shaded entry-to-LTP band colored by
+ * P&L sign. Updates cheaply on every LTP tick. The close segment hit-tests as
  * `position:<symbol>::close` (wire it to your square-off flow).
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from 'openalgo-charts';
 import type { Position } from './types';
 import { unrealizedPnl, unrealizedPnlPercent } from './pnl';
 import { withAlpha, shade, contrastText, drawPillGroup } from '../render/pill';
+// The one axis tag routine, which price lines and levels draw with too: a pure function, by path.
+import { drawAxisTag } from '../primitives/axis-tag';
 
 const TAG_H = 18;
 const GAP = 2;
@@ -84,14 +86,10 @@ export class PositionMarker implements IPrimitive {
     const padX = 6 * dpr;
     const r = 3 * dpr;
 
-    // compact right-axis tag: avg entry price, colored by P&L sign
-    const px = rc.priceScale.format(this._position.avgPrice);
-    ctx.fillStyle = pnlColor;
-    ctx.fillRect(xEnd + 1, entryY - boxH / 2, ctx.measureText(px).width + padX * 2, boxH);
-    ctx.fillStyle = contrastText(pnlColor);
-    ctx.fillText(px, xEnd + 1 + padX, entryY);
+    // compact axis tag: avg entry price, colored by P&L sign
+    drawAxisTag(ctx, rc, entryY, rc.priceScale.format(this._position.avgPrice), pnlColor, contrastText(pnlColor), boxH, false);
 
-    // segmented pill group: [LONG|SHORT][qty][±pnl (±pct)][✕]
+    // segmented pill group: [LONG|SHORT][qty][±pnl (±pct)][close]
     const surface = rc.theme.background === 'transparent' ? withAlpha(sideColor, 0.14) : rc.theme.background;
     const surfaceText = rc.theme.background === 'transparent' ? rc.theme.axisText : contrastText(rc.theme.background);
     const border = withAlpha(rc.theme.axisText, active ? 0.75 : 0.5);

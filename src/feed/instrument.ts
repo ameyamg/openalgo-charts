@@ -1,8 +1,10 @@
 import type { Chart } from '../core/chart';
+import type { ChartDataContext } from '../model/indicator-registry';
 import { tryResolveInterval } from './intervals';
 import { isValidTimezone, parseSessionSpec, utcSecondsToZonedParts, zonedWallClockToUtcSeconds, type SessionSpec } from './time';
 import { TickSchedule, type TickBand } from './tick-schedule';
 import { partitionPhases, statusOf, type MarketStatus, type PhaseWindow, type SessionPhase, type SessionPhaseSpan } from './market-status';
+import type { LooseOptional } from '../helpers/types';
 
 export interface InstrumentCalendar {
   /** HHMM-HHMM[:days], with opening weekdays 1 (Sunday) through 7. */
@@ -304,7 +306,8 @@ class SessionHours {
     return partitionPhases(from, to, out);
   }
 
-  public phaseAt(utcSeconds: number): SessionPhase { return this.spans(utcSeconds, utcSeconds + 1)[0].phase; }
+  // `spans` fails a range that is not ascending, and lays one out over any other.
+  public phaseAt(utcSeconds: number): SessionPhase { return this.spans(utcSeconds, utcSeconds + 1)[0]!.phase; }
 }
 
 /**
@@ -448,8 +451,9 @@ export class Instrument {
     series.priceScale().setOptions({ minMove: m.priceTick });
     series.priceScale().setPriceFormatter(value => this.formatPrice(value));
     // The variant is the host's choice of provider series, not instrument metadata, so it stays.
+    // An undefined `hasOpenInterest` is the unknown capability, which the chart reads as absent.
     chart.setDataContext({ symbol: m.symbol, exchange: m.exchange, interval, hasOpenInterest: m.hasOpenInterest,
-      ...(previous?.variant === undefined ? {} : { variant: previous.variant }) });
+      ...(previous?.variant === undefined ? {} : { variant: previous.variant }) } satisfies LooseOptional<ChartDataContext> as ChartDataContext);
     // Times past the last bar follow this instrument's sessions, so a drawing
     // placed there after a close lands on the next opening. Another
     // instrument replaces them, and a context moved to another symbol drops

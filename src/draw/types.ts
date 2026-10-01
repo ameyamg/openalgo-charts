@@ -31,7 +31,6 @@
  * interval there and lose its range on the next save.
  */
 import type { PrimitiveRenderContext, AlertDrawingValue, AlertDrawingLevel } from 'openalgo-charts';
-import type { SettingsSchema } from './schema';
 
 /** One anchor, in data space. */
 export interface DrawingPoint {
@@ -395,6 +394,48 @@ export interface DrawingValueContext {
   fromY(y: number): number | null;
 }
 
+// The settings schema a tool declares (`DrawingTool.settings`). schema.ts
+// builds and reads it and re-exports these names.
+
+/**
+ * The control a field wants. `interval` is a chart interval code, which the
+ * host offers from its own interval list (the engine has none), with an
+ * empty choice for no limit.
+ */
+export type FieldKind = 'color' | 'number' | 'select' | 'lineStyle' | 'boolean' | 'text' | 'opacity' | 'levels' | 'interval';
+
+/** The section a host groups a field under. */
+export type FieldGroup = 'line' | 'fill' | 'text' | 'levels' | 'behavior' | 'visibility';
+
+export interface SettingsField {
+  /**
+   * Dot path into the drawing. Two segments under `style`, `text`, `props`
+   * or `intervals` (`style.lineWidth`, `intervals.to`), or one of the
+   * top-level fields `locked`, `visible`, `zIndex`, `space`.
+   */
+  path: string;
+  label: string;
+  kind: FieldKind;
+  min?: number;
+  max?: number;
+  step?: number;
+  /** For `select` and `lineStyle`: the values a host may offer. */
+  options?: ReadonlyArray<{ value: string; label: string }>;
+  group?: FieldGroup;
+  /** Value displayed when the drawing has not overridden this setting. */
+  defaultValue?: string | number | boolean;
+}
+
+export interface SettingsSchema {
+  fields: SettingsField[];
+  /**
+   * The text *is* the drawing (a note, a callout, the text tool) rather than a
+   * label on a shape, so a host should ask for it the moment the tool is
+   * placed instead of waiting for a settings dialog.
+   */
+  textIsContent?: boolean;
+}
+
 export interface DrawingTool {
   id: string;
   name: string;
@@ -491,3 +532,42 @@ export interface DrawingTool {
    */
   distance(x: number, y: number, c: HitContext): number | null;
 }
+
+/**
+ * A list of at least `N` items: a tuple of `N`, then any number more. A count
+ * of plain `number`, one not known where the tool is written, promises none.
+ * Internal to the tier, like the two types below; the public contract stays
+ * {@link DrawingTool}.
+ */
+export type AtLeast<T, N extends number, A extends T[] = []> =
+  number extends N ? T[] : A['length'] extends N ? [...A, ...T[]] : AtLeast<T, N, [...A, T]>;
+
+/**
+ * The anchors a built-in tool that declares `points: N` is handed. The layer
+ * paints and hit-tests a drawing only once it holds `max(1, points)` anchors
+ * in its own space (layer.ts, `anchorCount`), and runs `expand` only on that
+ * many clicks, so the first `N` screen anchors are there, and in data space
+ * the first `N` points. A tool that can be pinned (`V` true) is promised the
+ * screen anchors only: its `drawing.points` is empty in the viewport.
+ */
+export type ToolAnchors<N extends number, V extends boolean = false> =
+  { pts: AtLeast<ScreenPoint, N extends 0 ? 1 : N> }
+  & (V extends true ? unknown : { drawing: Drawing & { points: AtLeast<DrawingPoint, N extends 0 ? 1 : N> } });
+
+/**
+ * A built-in tool written against {@link ToolAnchors}. `satisfies` ties the
+ * anchors its body reads to the `points` it declares, and since `draw` and
+ * `distance` are methods of {@link DrawingTool}, the tool is still one. It
+ * costs nothing at run time: the guarantee is the layer's, stated here once.
+ * `bounds` is promised the full set too: it is asked only of a complete
+ * anchor set (layer.ts, `toolBounds`).
+ */
+export type AnchoredTool<N extends number, V extends boolean = false> =
+  Omit<DrawingTool, 'points' | 'viewport' | 'expand' | 'bounds' | 'draw' | 'distance'> & {
+    points: N;
+    viewport?: V;
+    expand?(clicked: AtLeast<DrawingPoint, N>, ctx: ExpandContext): DrawingPoint[];
+    bounds?(pts: ToolAnchors<N, V>['pts'], drawing: Drawing): { x0: number; y0: number; x1: number; y1: number };
+    draw(c: DrawContext & ToolAnchors<N, V>): void;
+    distance(x: number, y: number, c: HitContext & ToolAnchors<N, V>): number | null;
+  };

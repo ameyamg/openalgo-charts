@@ -146,22 +146,21 @@ export interface DataContextTarget {
 /**
  * Give a chart a data context whose variant counts as part of its source.
  *
- * `Chart.setDataContext` treats a change of symbol, exchange or interval as a
- * new source: it aborts requested bars, restarts source revisions and tells
- * studies to read the context again. It does not yet compare the variant, so
- * a context that differs only there would be ignored and the chart would go
- * on reporting the old one. This sets the context and, when the chart kept
- * the old variant, passes through a context with a different interval first,
- * which the chart does treat as a source change, then sets the real one. The
- * instrument never changes on the way, so event markers, linked drawings and
- * news stay with it. A chart that already compares variants takes the first
- * call and the detour never runs.
+ * `Chart.setDataContext` treats a change of symbol, exchange, interval or
+ * variant as a new source: it aborts requested bars, restarts source revisions
+ * and tells studies to read the context again. For a `Chart` this is therefore
+ * `setDataContext` with the variant normalized, and `data:context` fires once.
  *
- * On the detour the chart emits `data:context` twice: once for the passing
- * context, whose interval is cleared, then for the real one. That context is
- * marked, and the library's requested studies, Tier 2 studies and alert
- * controller wait for the real one rather than fetch, report or save for it.
- * A host's own listener sees both.
+ * A target that does not compare the variant, such as a host's own
+ * `DataContextTarget`, would ignore a context that differs only there and go
+ * on reporting the old one. For it this passes through a context with a
+ * different interval first, which the target does treat as a source change,
+ * then sets the real one. The instrument never changes on the way, so event
+ * markers, linked drawings and news stay with it. On that detour
+ * `data:context` fires twice: once for the passing context, whose interval is
+ * cleared, then for the real one. That context is marked, and the library's
+ * requested studies, Tier 2 studies and alert controller wait for the real one
+ * rather than fetch, report or save for it. A host's own listener sees both.
  */
 export function publishDataContext(chart: DataContextTarget, context: ChartDataContext | undefined): void {
   const variant = normalizeDataVariant(context?.variant);

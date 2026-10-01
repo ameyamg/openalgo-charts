@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { alignToDevicePixels, bitmapSize, CanvasLayer, hairlineHeight, snapToDevicePixel } from '../src/core/canvas';
+import { alignToDevicePixels, CanvasLayer, hairlineHeight } from '../src/core/canvas';
+import { bitmapSize, snapToDevicePixel } from '../src/helpers/math';
 import { fakeDocument } from './helpers/fake-dom';
 
 /** Stacked boxes of the given heights, top to bottom. */
@@ -13,7 +14,7 @@ const onDevicePixel = (media: number, dpr: number): boolean => Math.abs(media * 
 describe('HiDPI bitmap sizing', () => {
   // Validates "renders correctly at DPR 1 / 1.5 / 2 / 3" at the math level
   // (actual pixel-diff rendering is covered by the browser harness in Phase 2-3).
-  it('scales media → integer device pixels across DPRs', () => {
+  it('scales media to integer device pixels across DPRs', () => {
     expect(bitmapSize(800, 600, 1)).toEqual({ width: 800, height: 600 });
     expect(bitmapSize(800, 600, 2)).toEqual({ width: 1600, height: 1200 });
     expect(bitmapSize(800, 600, 3)).toEqual({ width: 2400, height: 1800 });
@@ -28,8 +29,8 @@ describe('HiDPI bitmap sizing', () => {
 
   it('snaps coordinates to crisp device-pixel edges', () => {
     expect(snapToDevicePixel(10.4, 1)).toBe(10);
-    expect(snapToDevicePixel(10.2, 2)).toBe(10); // 20.4 → 20 → /2
-    expect(snapToDevicePixel(10.3, 2)).toBe(10.5); // 20.6 → 21 → /2
+    expect(snapToDevicePixel(10.2, 2)).toBe(10); // 20.4 rounds to 20, then /2
+    expect(snapToDevicePixel(10.3, 2)).toBe(10.5); // 20.6 rounds to 21, then /2
   });
 });
 

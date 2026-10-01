@@ -13,14 +13,9 @@
  * `session: 'composite'`. Pure and deterministic.
  */
 import type { Bar } from '../model/bar';
-import { priceBuckets } from './profile-model';
-import {
-  DEFAULT_TIMEZONE,
-  IST_OFFSET_SECONDS,
-  utcSecondsToIstParts,
-  utcSecondsToZonedParts,
-  zonedDayIndex,
-} from '../feed/time';
+import { priceBuckets, valueArea } from './profile-model';
+import { sessionKey } from './profile-calendar';
+import { DEFAULT_TIMEZONE } from '../feed/time';
 
 export type VolumeProfileSession = 'composite' | 'day' | 'week' | 'month';
 
@@ -77,42 +72,17 @@ export interface VolumeProfileFamilyResult {
   options: VolumeProfileFamilyOptions;
 }
 
-const DAY_SECONDS = 86400;
-
-/**
- * Session group key for the chosen mode, on `zone`'s calendar.
- *
- * An identity, not a timestamp: bars sharing a key share a profile and nothing
- * outside this module reads the value, so a day index is both cheaper than a
- * midnight and immune to the 169-hour week a DST changeover produces.
- *
- * The default keeps the fixed-offset arithmetic, because this runs once per bar
- * over a whole history and Intl costs roughly 25x it. IST is a fixed offset, so
- * the branch cannot change an answer, and tests/profile-timezone.test.ts pins
- * the two paths together rather than assuming they agree.
- */
-function sessionKey(utcSeconds: number, mode: VolumeProfileSession, zone: string): number {
-  if (mode === 'composite') return 0;
-  if (mode === 'month') {
-    const p = zone === DEFAULT_TIMEZONE
-      ? utcSecondsToIstParts(utcSeconds)
-      : utcSecondsToZonedParts(utcSeconds, zone);
-    return p.year * 12 + (p.month - 1);
-  }
-  const dayIndex = zone === DEFAULT_TIMEZONE
-    ? Math.floor((utcSeconds + IST_OFFSET_SECONDS) / DAY_SECONDS)
-    : zonedDayIndex(utcSeconds, zone);
-  if (mode === 'day') return dayIndex;
-  // Monday-start weeks. 1970-01-01 was a Thursday, hence the +3 before the divide.
-  return Math.floor((dayIndex + 3) / 7);
-}
-
 interface Acc {
   volume: number;
   buy: number;
   sell: number;
 }
 
+/**
+ * Volume profiles for `bars`, one per session. Out-of-range options are
+ * repaired rather than refused: a `tickSize` not above 0 falls back to the
+ * default, and `valueAreaPercent` is clamped to 0..1.
+ */
 export function computeVolumeProfileSessions(
   bars: readonly Bar[],
   options: Partial<VolumeProfileFamilyOptions> = {},
@@ -168,27 +138,17 @@ export function computeVolumeProfileSessions(
 
     if (levels.length === 0) continue;
 
-    // POC + value-area expansion by volume.
-    let pocIdx = 0;
-    for (let i = 1; i < levels.length; i++) if (levels[i].volume > levels[pocIdx].volume) pocIdx = i;
-    let upper = pocIdx;
-    let lower = pocIdx;
-    let acc = levels[pocIdx].volume;
-    const target = totalVolume * vaPct;
-    while (acc < target && (upper > 0 || lower < levels.length - 1)) {
-      const up = upper > 0 ? levels[upper - 1].volume : -1;
-      const down = lower < levels.length - 1 ? levels[lower + 1].volume : -1;
-      if (up >= down) { upper -= 1; acc += levels[upper].volume; }
-      else { lower += 1; acc += levels[lower].volume; }
-    }
-
+    // POC + value area by volume, against the session's traded volume.
+    // Neither levels nor the session's bars are empty, so the indices
+    // `valueArea` hands back are rows of `levels`.
+    const va = valueArea(levels.map((l) => l.volume), totalVolume * vaPct);
     sessions.push({
-      startTime: g[0].time,
-      endTime: g[g.length - 1].time,
+      startTime: g[0]!.time,
+      endTime: g[g.length - 1]!.time,
       levels,
-      poc: levels[pocIdx].price,
-      vah: levels[upper].price,
-      val: levels[lower].price,
+      poc: levels[va.poc]!.price,
+      vah: levels[va.upper]!.price,
+      val: levels[va.lower]!.price,
       totalVolume,
       buyVolume,
       sellVolume,

@@ -29,10 +29,10 @@ export function groupMark(doc: Document, group: Pick<ChartGridLinkGroup, 'letter
   return mark;
 }
 
-export type GridDirection = 'left' | 'right' | 'up' | 'down';
+type GridDirection = 'left' | 'right' | 'up' | 'down';
 
 /** The slice of a cell the moves read. */
-export interface PlacedCell {
+interface PlacedCell {
   readonly element: HTMLElement;
   readonly widget: { readonly root: HTMLElement };
   row: number;
@@ -63,7 +63,7 @@ export function neighbour<C extends PlacedCell>(cells: readonly C[], cell: C, di
   return cells.filter(c => c !== cell && meets(c) && overlaps(c)).sort((a, b) => start(a) - start(b))[0];
 }
 
-export interface GridKeysHost {
+interface GridKeysHost {
   readonly keymap: Keymap;
   readonly text: WidgetTranslationOptions;
   /** Maximize or restore this chart; false declines the chord. */
@@ -113,7 +113,7 @@ export function installGridKeys(host: GridKeysHost): Array<() => void> {
   return offs;
 }
 
-export interface HeaderDragHost<C extends PlacedCell> {
+interface HeaderDragHost<C extends PlacedCell> {
   readonly doc: Document;
   /** The cells area, which hears the press. */
   readonly body: HTMLElement;

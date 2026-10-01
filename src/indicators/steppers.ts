@@ -12,6 +12,9 @@
  * A kernel still warming up keeps the run of values its seed will average,
  * never more than one window of them, so a checkpoint taken mid-warmup resumes
  * without reaching back into bars it no longer holds.
+ *
+ * A step that takes `bars` and `i` is driven by a machine (./tail), which
+ * hands it the index of a bar it holds.
  */
 import type { Bar } from 'openalgo-charts';
 import { finiteAverage } from './calc';
@@ -34,7 +37,7 @@ export function smooth(st: Seeded, x: number, period: number, exponential: boole
     if (recent.length > period) recent.shift();
     if (++st.run < period) return NaN;
     let sum = 0;
-    for (let k = 0; k < recent.length; k++) sum += recent[k];
+    for (let k = 0; k < recent.length; k++) sum += recent[k]!;
     const mean = sum / period;
     if (!Number.isFinite(mean)) return NaN;
     st.value = mean === 0 ? 0 : mean;
@@ -48,7 +51,7 @@ export function smooth(st: Seeded, x: number, period: number, exponential: boole
 }
 
 /** `observedSmoothing` in ./calc under the propagate policy, as `smaSeededEma` runs it on a study output. */
-export interface Observed { count: number; seed: number[]; value: number }
+interface Observed { count: number; seed: number[]; value: number }
 
 export const observed = (): Observed => ({ count: 0, seed: [], value: NaN });
 
@@ -70,14 +73,14 @@ export function observedStep(st: Observed, x: number, period: number): number {
 
 /** `trueRange` in the base bundle, at one bar: the first bar is its own high-low. */
 export function trueRangeAt(bars: readonly Bar[], i: number): number {
-  const b = bars[i];
+  const b = bars[i]!;
   if (i === 0) return b.high - b.low;
-  const close = bars[i - 1].close;
+  const close = bars[i - 1]!.close;
   return Math.max(b.high - b.low, Math.abs(b.high - close), Math.abs(b.low - close));
 }
 
 /** `atr` in the base bundle: Wilder's average, seeded on `period` consecutive finite true ranges. */
-export interface Wilder { a: number; run: number; recent: number[] }
+interface Wilder { a: number; run: number; recent: number[] }
 
 export const wilder = (): Wilder => ({ a: NaN, run: 0, recent: [] });
 
@@ -97,7 +100,7 @@ export function atrStep(st: Wilder, t: number, period: number): number {
     if (recent.length > period) recent.shift();
     if (st.run >= period) {
       let sum = 0;
-      for (let k = 0; k < recent.length; k++) sum += recent[k];
+      for (let k = 0; k < recent.length; k++) sum += recent[k]!;
       if (Number.isFinite(sum / period)) {
         st.a = sum / period;
         recent.length = 0;
@@ -108,7 +111,7 @@ export function atrStep(st: Wilder, t: number, period: number): number {
 }
 
 /** `rsi` in the base bundle: Wilder gains and losses, each leg seeded on its own. */
-export interface Rsi {
+interface Rsi {
   primed: boolean; last: number; gain: number; loss: number;
   gainSeeded: boolean; lossSeeded: boolean; run: number; recent: number[];
 }
@@ -142,7 +145,7 @@ export function rsiStep(st: Rsi, x: number, period: number): number {
       let gain = 0;
       let loss = 0;
       for (let k = 0; k < recent.length; k++) {
-        const change = recent[k];
+        const change = recent[k]!;
         if (change >= 0) gain += change;
         else loss -= change;
       }
@@ -164,7 +167,7 @@ export function rsiStep(st: Rsi, x: number, period: number): number {
 }
 
 /** `supertrend` in the base bundle: the band a bar ends on, and which side it is. */
-export interface Supertrend { atr: Wilder; upper: number; lower: number; st: number; close: number; started: boolean }
+interface Supertrend { atr: Wilder; upper: number; lower: number; st: number; close: number; started: boolean }
 
 export const supertrendState = (): Supertrend => ({
   atr: wilder(), upper: NaN, lower: NaN, st: NaN, close: NaN, started: false,
@@ -175,7 +178,7 @@ export function supertrendStep(
   st: Supertrend, bars: readonly Bar[], i: number, period: number, multiplier: number, out: { direction: -1 | 1 },
 ): number {
   const a = atrStep(st.atr, trueRangeAt(bars, i), period);
-  const bar = bars[i];
+  const bar = bars[i]!;
   const close = bar.close;
   if (!Number.isFinite(a) || !Number.isFinite(close)) return NaN;
   const hl2 = (bar.high + bar.low) / 2;
@@ -198,7 +201,7 @@ export function supertrendStep(
 }
 
 /** The parabolic stop and reverse in ./trend, one complete bar at a time. */
-export interface Sar {
+interface Sar {
   prev: Bar | null; prev2: Bar | null; rising: boolean; sar: number; ep: number; af: number;
 }
 

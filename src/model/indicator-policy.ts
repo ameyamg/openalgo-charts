@@ -22,6 +22,17 @@ export interface IndicatorPolicy {
   listed?: boolean;
 }
 
+/**
+ * Whether a study is its host's rather than the user's: one the user may not
+ * remove, or cannot see. A template never holds such a study, and a template
+ * that replaces the studies keeps it. The one statement of the rule: the
+ * workspace tier's parser and planners and the widget's templates menu take it
+ * by path, since this module is pure; the base itself never calls it.
+ */
+export function hostOwnedStudy(policy: Readonly<IndicatorPolicy> | undefined): boolean {
+  return policy?.removable === false || policy?.listed === false;
+}
+
 /** `force: true` marks a call as the owning host's, which a study's policy does not restrict. */
 export interface IndicatorEditOptions {
   force?: boolean;

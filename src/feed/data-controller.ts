@@ -1,8 +1,10 @@
 import type { Bar } from '../model/bar';
-import type { BarsRequest, DataFeed, LiveBarMeta, UnsubscribeFn } from './types';
+import type { BarSubscriptionOptions, BarsRequest, DataFeed, LiveBarMeta, UnsubscribeFn } from './types';
 import { type HistoryRequestPool, sharedHistoryRequests, withHistoryDeadline } from './request-pool';
 import { tryResolveInterval } from './intervals';
+import { widenBar } from './candle-builder';
 import { dataVariantError, normalizeDataVariant, unsupportedDataVariant, type DataVariantDimension } from './data-variant';
+import type { LooseOptional } from '../helpers/types';
 
 /** `unsupported`: the provider does not declare the requested variant, so nothing was fetched. */
 export type DataLoadingStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'refreshing' | 'stale' | 'error' | 'unsupported';
@@ -64,12 +66,16 @@ export interface DataLoadingOptions {
   now?: () => number;
 }
 
+/** A patch clears an error by writing undefined, which a snapshot reads as none. */
+type SnapshotPatch = Partial<Omit<DataLoadingSnapshot, 'error' | 'historyError'>>
+  & { readonly error?: Error | undefined; readonly historyError?: Error | undefined };
+
 /** What a stream-triggered repair is for, so the refresh can size its window and check its reply. */
 interface Repair {
   /** Oldest time the window must reach, for a gap the stream skipped. */
-  from?: number;
+  from?: number | undefined;
   /** The bar that just closed; a reply that stops short of it is retried. */
-  expect?: number;
+  expect?: number | undefined;
 }
 
 const BAR_CLOSE_DEFAULTS = { delayMs: 2500, retries: 2, retryDelayMs: 5000 };
@@ -181,7 +187,7 @@ export class DataLoadingController {
     this._provisionalTime = null;
     const found = tryResolveInterval(req.interval);
     this._seconds = found?.bucketing.mode === 'interval' ? found.bucketing.seconds : null;
-    const request: BarsRequest = { ...req, signal: undefined, timeoutMs: req.timeoutMs ?? this._options.timeoutMs };
+    const request = { ...req, signal: undefined, timeoutMs: req.timeoutMs ?? this._options.timeoutMs } satisfies LooseOptional<BarsRequest> as BarsRequest;
     // The default variant is no variant at all, so a request naming `{}` keys,
     // shares and fetches exactly like one that names nothing. A malformed one
     // is left for `_load` to report.
@@ -237,9 +243,10 @@ export class DataLoadingController {
         this._bars = cached;
         this._publish('cache', { status: 'refreshing' });
       }
-      const from = cached?.length && req.from !== undefined && cached[0].time <= req.from
-        ? Math.max(req.from, cached[Math.max(0, cached.length - 2)].time) : req.from;
-      const fresh = await this._pool.getBars({ ...req, from, signal: scope.signal, noCache: req.noCache || !!this._feed.getCachedBars }, 10);
+      // `cached` holds a bar whenever it is read here.
+      const from = cached?.length && req.from !== undefined && cached[0]!.time <= req.from
+        ? Math.max(req.from, cached[Math.max(0, cached.length - 2)]!.time) : req.from;
+      const fresh = await this._pool.getBars({ ...req, from, signal: scope.signal, noCache: req.noCache || !!this._feed.getCachedBars } satisfies LooseOptional<BarsRequest> as BarsRequest, 10);
       if (!this._current(generation)) return this._bars;
       this._bars = this._replaceWindow(normalize(fresh), from, req.to);
       this._limit();
@@ -278,63 +285,14 @@ export class DataLoadingController {
     this._clearPoll();
     this._buffer ??= new Map();
     const original = this._state.request;
-    const to = Math.max(original.to ?? 0, (this._options.now ?? (() => Date.now() / 1000))());
-    const width = original.from !== undefined && original.to !== undefined ? original.to - original.from : undefined;
     const held = this._bars[this._bars.length - 1];
-    let from = width === undefined ? original.from : to - width;
-    // A tail window asks history only for the bars a repair can change. A gap
-    // reaches back to the last bar the stream delivered before it.
-    if (this._options.refreshWindowBars !== undefined && this._seconds !== null && held) {
-      from = held.time - this._options.refreshWindowBars * this._seconds;
-      if (repair?.from !== undefined) from = Math.min(from, repair.from);
-    }
+    const { from, to } = this._refreshWindow(original, held, repair);
     this._publish('state', { status: 'refreshing', error: undefined });
     try {
-      const fresh = await this._pool.getBars({ ...original, from, to, noCache: true, signal: abort.signal }, 5);
+      const fresh = await this._pool.getBars({ ...original, from, to, noCache: true, signal: abort.signal } satisfies LooseOptional<BarsRequest> as BarsRequest, 5);
       if (!this._current(generation) || id !== this._refreshId) return this._bars;
       if (fresh.length === 0 && this._bars.length) throw new Error('History refresh returned no bars');
-      const arrived = normalize(fresh);
-      // REST is authoritative for the bars it returned and for nothing past
-      // them. The bar the stream just completed is routinely a few seconds
-      // ahead of a broker's history endpoint, and a refresh that fires inside
-      // that gap would otherwise delete it: on screen the current candle
-      // becomes the previous one, vanishes, and backfills on a later poll. So
-      // the window handed over to REST ends at the newest bar REST actually
-      // has, and anything the stream built beyond it is kept. Bars inside the
-      // window are still REST's to correct.
-      let newest = -Infinity;
-      for (const value of arrived) if (value.time > newest) newest = value.time;
-      const authoritativeTo = arrived.length ? Math.min(to, newest) : to;
-      const updated = this._replaceWindow(arrived, from, authoritativeTo);
-      const byTime = new Map(updated.map(bar => [bar.time, bar]));
-      // The bar that was forming when the request went out is the one bar both
-      // sides observed at once. Its extremes are the union, since each side saw
-      // real prices, and its volume the larger, since volume only grows. Its
-      // open and close are REST's: the open because a builder that opened the
-      // bucket mid-way only saw its first tick, the close because a live push
-      // during the request (below) is the only proof the stream is fresher.
-      const forming = held && held.time === newest ? byTime.get(held.time) : undefined;
-      if (held && forming) {
-        byTime.set(held.time, { ...forming,
-          high: Math.max(forming.high, held.high), low: Math.min(forming.low, held.low),
-          volume: forming.volume === undefined && held.volume === undefined ? undefined : Math.max(forming.volume ?? 0, held.volume ?? 0),
-        });
-      }
-      if (this._provisionalTime !== null && byTime.has(this._provisionalTime) && this._provisionalTime <= authoritativeTo) {
-        this._provisionalTime = null;
-      }
-      for (const live of this._buffer?.values() ?? []) {
-        const historical = byTime.get(live.time);
-        // Whole-bar observations cannot reveal their overlap with a REST snapshot.
-        // Preserve observed live extrema/close without adding the volumes twice.
-        byTime.set(live.time, historical ? { ...historical,
-          high: Math.max(historical.high, live.high), low: Math.min(historical.low, live.low), close: live.close,
-          volume: historical.volume === undefined && live.volume === undefined ? undefined : Math.max(historical.volume ?? 0, live.volume ?? 0),
-          // Absence on the newer observation must not inherit an older level.
-          oi: live.oi,
-        } : live);
-      }
-      this._bars = normalize([...byTime.values()]);
+      const newest = this._mergeRefresh(fresh, from, to, held);
       this._buffer = null;
       this._limit();
       this._publish('refresh', { status: this._bars.length ? 'ready' : 'empty', error: undefined });
@@ -363,6 +321,62 @@ export class DataLoadingController {
     return this._bars;
   }
 
+  /** The span a refresh asks history for: the request's own width ending now, or a tail window. */
+  private _refreshWindow(original: BarsRequest, held: Bar | undefined, repair: Repair | undefined): { from: number | undefined; to: number } {
+    const to = Math.max(original.to ?? 0, (this._options.now ?? (() => Date.now() / 1000))());
+    const width = original.from !== undefined && original.to !== undefined ? original.to - original.from : undefined;
+    let from = width === undefined ? original.from : to - width;
+    // A tail window asks history only for the bars a repair can change. A gap
+    // reaches back to the last bar the stream delivered before it.
+    if (this._options.refreshWindowBars !== undefined && this._seconds !== null && held) {
+      from = held.time - this._options.refreshWindowBars * this._seconds;
+      if (repair?.from !== undefined) from = Math.min(from, repair.from);
+    }
+    return { from, to };
+  }
+
+  /**
+   * Put a refresh's answer in place of the window it covers, keep what the
+   * stream built past it, and fold in what arrived meanwhile. Returns the
+   * newest bar time the answer held.
+   */
+  private _mergeRefresh(fresh: Bar[], from: number | undefined, to: number, held: Bar | undefined): number {
+    const arrived = normalize(fresh);
+    // REST is authoritative for the bars it returned and for nothing past
+    // them. The bar the stream just completed is routinely a few seconds
+    // ahead of a broker's history endpoint, and a refresh that fires inside
+    // that gap would otherwise delete it: on screen the current candle
+    // becomes the previous one, vanishes, and backfills on a later poll. So
+    // the window handed over to REST ends at the newest bar REST actually
+    // has, and anything the stream built beyond it is kept. Bars inside the
+    // window are still REST's to correct.
+    let newest = -Infinity;
+    for (const value of arrived) if (value.time > newest) newest = value.time;
+    const authoritativeTo = arrived.length ? Math.min(to, newest) : to;
+    const updated = this._replaceWindow(arrived, from, authoritativeTo);
+    const byTime = new Map(updated.map(bar => [bar.time, bar]));
+    // The bar that was forming when the request went out is the one bar both
+    // sides observed at once. Its extremes are the union, since each side saw
+    // real prices, and its volume the larger, since volume only grows. Its
+    // open and close are REST's: the open because a builder that opened the
+    // bucket mid-way only saw its first tick, the close because a live push
+    // during the request (below) is the only proof the stream is fresher.
+    const forming = held && held.time === newest ? byTime.get(held.time) : undefined;
+    if (held && forming) byTime.set(held.time, widenBar(forming, held));
+    if (this._provisionalTime !== null && byTime.has(this._provisionalTime) && this._provisionalTime <= authoritativeTo) {
+      this._provisionalTime = null;
+    }
+    for (const live of this._buffer?.values() ?? []) {
+      const historical = byTime.get(live.time);
+      // Whole-bar observations cannot reveal their overlap with a REST snapshot.
+      // Preserve observed live extrema/close without adding the volumes twice.
+      // Absence on the newer observation must not inherit an older open interest.
+      byTime.set(live.time, historical ? { ...widenBar(historical, live), close: live.close, oi: live.oi } satisfies LooseOptional<Bar> as Bar : live);
+    }
+    this._bars = normalize([...byTime.values()]);
+    return newest;
+  }
+
   /**
    * Supply bars from an existing host subscription instead of subscribing twice.
    *
@@ -375,7 +389,7 @@ export class DataLoadingController {
   public pushBar(value: Bar, meta?: LiveBarMeta): void {
     if (this._destroyed || !this._state.request || this._state.status === 'unsupported') return;
     let bar: Bar;
-    try { bar = normalize([value])[0]; } catch (error) {
+    try { bar = normalize([value])[0]!; } catch (error) { // one valid bar in is one out; an invalid one throws
       this._publish('state', { status: this._bars.length ? 'stale' : 'error', error: asError(error) });
       return;
     }
@@ -386,15 +400,14 @@ export class DataLoadingController {
     if (rollover) {
       if (provisional) this._provisionalTime = bar.time;
     } else if (provisional && this._provisionalTime !== bar.time) {
-      bar = { ...bar, open: tail.open, high: Math.max(tail.high, bar.high), low: Math.min(tail.low, bar.low),
-        volume: tail.volume === undefined && bar.volume === undefined ? undefined : Math.max(tail.volume ?? 0, bar.volume ?? 0) };
+      bar = { ...widenBar(bar, tail), open: tail.open };
     }
     if (this._buffer) {
       this._buffer.set(bar.time, bar);
       while (this._buffer.size > this._options.maxBars!) this._buffer.delete(this._buffer.keys().next().value!);
     }
     const next = this._bars.slice();
-    if (tail?.time === bar.time) next[next.length - 1] = { ...bar, volume: bar.volume ?? tail.volume };
+    if (tail?.time === bar.time) next[next.length - 1] = { ...bar, volume: bar.volume ?? tail.volume } satisfies LooseOptional<Bar> as Bar;
     else next.push(bar);
     this._bars = next;
     this._limit();
@@ -534,9 +547,9 @@ export class DataLoadingController {
   private _limit(): void {
     if (this._bars.length > this._options.maxBars!) this._bars = this._bars.slice(-this._options.maxBars!);
   }
-  private _publish(reason: DataUpdateReason, patch: Partial<DataLoadingSnapshot> = {}): void {
+  private _publish(reason: DataUpdateReason, patch: SnapshotPatch = {}): void {
     if (this._destroyed) return;
-    this._state = { ...this._state, ...patch, reason, bars: this._state.paused || this._buffer ? this._state.bars : this._bars };
+    this._state = { ...this._state, ...patch, reason, bars: this._state.paused || this._buffer ? this._state.bars : this._bars } satisfies LooseOptional<DataLoadingSnapshot> as DataLoadingSnapshot;
     const snapshot = this._state;
     for (const listener of [...this._listeners]) {
       if (this._destroyed || this._state !== snapshot) break;
@@ -555,7 +568,7 @@ export class DataLoadingController {
         if (this._current(generation) && stream === this._stream) this.pushBar(bar, meta);
       }, { seedFrom: this._bars[this._bars.length - 1], onResync: () => {
         if (this._current(generation) && stream === this._stream) void this.refresh();
-      } });
+      } } satisfies LooseOptional<BarSubscriptionOptions> as BarSubscriptionOptions);
       if (this._current(generation) && stream === this._stream) this._unsubscribe = unsubscribe;
       else this._release(unsubscribe);
       // Acquire before releasing so ref-counted feeds retain the underlying topic.

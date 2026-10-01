@@ -12,7 +12,7 @@ describe('CandleBuilder bucketing', () => {
     expect(b.isNew).toBe(false);
     expect(b.bar).toMatchObject({ open: 10, high: 12, low: 10, close: 12, volume: 8 });
 
-    const c = cb.onTick({ time: 60, price: 9, ltq: 2 })!; // bucket 60 → new bar
+    const c = cb.onTick({ time: 60, price: 9, ltq: 2 })!; // bucket 60: new bar
     expect(c.isNew).toBe(true);
     expect(c.bar).toMatchObject({ time: 60, open: 9, high: 9, low: 9, close: 9, volume: 2 });
   });

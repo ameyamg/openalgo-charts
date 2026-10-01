@@ -40,7 +40,7 @@ export function ProfileDemo() {
     <div className="oac-profile-demo">
       <div className="oac-profile-demo__head">
         <span>Six synthetic sessions · 2-point rows</span>
-        <a href={src} target="_blank" rel="noreferrer">Open full-size demo ↗</a>
+        <a href={src} target="_blank" rel="noreferrer">Open full-size demo</a>
       </div>
       {/* Mounted only once the theme is known, so it loads once, in the right palette. */}
       {scheme
@@ -55,7 +55,7 @@ export function OrderflowDemo() {
   const src = `${ORDERFLOW_DEMO}${ORDERFLOW_QUERY[scheme ?? 'light']}`;
   return (
     <>
-      <p><a href={src} target="_blank" rel="noreferrer">Open full-size order-flow demo ↗</a></p>
+      <p><a href={src} target="_blank" rel="noreferrer">Open full-size order-flow demo</a></p>
       {scheme
         ? <iframe key={scheme} className="oac-orderflow-demo" src={src} loading="lazy"
             title="Interactive footprint chart with profile, cluster ladder and heatmap styles" />
@@ -75,7 +75,7 @@ export function ProfileThemeGallery() {
           <figcaption>
             <strong>{theme.name}</strong>
             <p>{theme.description}</p>
-            <a href={`${DEMO}?theme=${theme.id}`} target="_blank" rel="noreferrer">Try {theme.name} ↗</a>
+            <a href={`${DEMO}?theme=${theme.id}`} target="_blank" rel="noreferrer">Try {theme.name}</a>
           </figcaption>
         </figure>
       ))}

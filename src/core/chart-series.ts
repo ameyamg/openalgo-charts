@@ -1,8 +1,13 @@
 /**
  * Series creation and the data behind a series handle: making a series and
- * the handle a host holds, changing its renderer, the price format and
- * precision it pushes onto its scale, and the replace, prepend and live-update
- * paths its `setData`, `prependData` and `update` run.
+ * the handle a host holds, changing its renderer or its transform, the price
+ * format and precision it pushes onto its scale, and the replace, prepend and
+ * live-update paths its `setData`, `prependData` and `update` run.
+ *
+ * A transformed series (`setSeriesTransform`) keeps the host's bars in its
+ * transform run and the run's elements in the data layer: every path below
+ * reads the bars it is handed in the host's terms and writes what the chart
+ * draws, so its handle, `getData` included, still speaks the host's bars.
  *
  * Its own module because a series handle is where data enters the chart, and
  * its closures reach nothing of the chart beyond what `SeriesHost` names. The
@@ -11,9 +16,9 @@
  * the source's stacking slot stay on Chart, because the studies, the stacking
  * and the frame read them too. `addSeries` and `setSeriesType` stay public on
  * Chart as delegates and carry the documented contract. Members the chart
- * calls are public on this internal class; no entry point exports the class
- * and the chart holds it in a private field, so none of it reaches the
- * published declarations.
+ * and chart-series-transform.ts call are public on this internal class; no
+ * entry point exports the class and the chart holds it in a private field, so
+ * none of it reaches the published declarations.
  */
 import { InvalidationLevel } from './invalidate-mask';
 import type { Chart } from './chart';
@@ -24,6 +29,9 @@ import type { PriceScale } from '../scale/price-scale';
 import { createSeriesRecord, type SeriesApi, type BarConfirmationOptions, type SeriesUpdateOptions } from '../model/series';
 import { bindSeriesProvenance, SeriesProvenance, validateSeriesOptions } from '../model/series-provenance';
 import { getChartType, type SeriesType } from '../model/chart-type-registry';
+import {
+  getSeriesTransform, type SeriesTransformRun, type SeriesTransformSpec,
+} from '../model/series-transform';
 import type { SeriesStyle } from '../render/series-style';
 import type { Bar, SeriesDataItem } from '../model/bar';
 import { toBar } from '../model/bar';
@@ -67,11 +75,39 @@ export interface SeriesHost {
   _updateAccessibleSummary: Chart['_updateAccessibleSummary'];
   seriesType: Chart['seriesType'];
   invalidate: Chart['invalidate'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
+}
+
+/** A transformed series: the choice as set, and the run holding its source bars. */
+interface Transformed { readonly spec: SeriesTransformSpec; readonly run: SeriesTransformRun }
+
+const copySpec = (spec: SeriesTransformSpec): SeriesTransformSpec =>
+  spec.options === undefined ? { type: spec.type } : { type: spec.type, options: { ...spec.options } };
+
+/**
+ * The chart's side of a series transform: turning one on or off, and forming
+ * the elements again on a tick (chart-series-transform.ts). The first
+ * `registerSeriesTransform` installs it, and until something is registered no
+ * series can hold a transform, so a chart-only import, which registers
+ * nothing, carries none of it.
+ */
+interface TransformRuns {
+  set(series: ChartSeries, api: SeriesApi, spec: SeriesTransformSpec | null, notify: boolean): boolean;
+  tick(series: ChartSeries, dataId: number, run: SeriesTransformRun, bar: Bar, options: SeriesUpdateOptions | undefined,
+    owner: { readonly pane: Pane }): void;
+}
+
+let transformRuns: TransformRuns | null = null;
+
+/** Called by `registerSeriesTransform`. */
+export function installTransformRuns(runs: TransformRuns): void {
+  transformRuns = runs;
 }
 
 export class ChartSeries {
-  private readonly _host: SeriesHost;
+  public readonly _host: SeriesHost;
+  /** Transformed series by data id. */
+  public readonly _transforms = new Map<number, Transformed>();
 
   public constructor(host: SeriesHost) {
     this._host = host;
@@ -101,8 +137,46 @@ export class ChartSeries {
       if (record.style.precision === undefined) this._applySeriesPriceFormat(scale, owner.priceFormat);
     }
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
-    if (notify) this._host.emit('objects:change', {});
+    if (notify) this._host._emit('objects:change', {});
     return true;
+  }
+
+  /** The work of `Chart.setSeriesTransform`, which carries the documented contract. */
+  public _setSeriesTransform(series: SeriesApi, spec: SeriesTransformSpec | null, notify: boolean): boolean {
+    if (this._host.seriesType(series) === null) return false;
+    if (transformRuns !== null) return transformRuns.set(this, series, spec, notify);
+    // Nothing is registered, so no series holds a transform and `_newTransform` refuses any spec.
+    if (spec !== null) this._newTransform(spec);
+    return false;
+  }
+
+  /** The transform a live series was given, as a detached spec; null for none or a handle not on this chart. */
+  public _seriesTransform(series: SeriesApi): SeriesTransformSpec | null {
+    const spec = this._host.seriesType(series) === null ? undefined : this._transforms.get(this._host._seriesRecords.get(series)!.dataId)?.spec;
+    return spec === undefined ? null : copySpec(spec);
+  }
+
+  /** A data id's transform spec, for the saved state. */
+  public _transformOf(dataId: number): SeriesTransformSpec | undefined {
+    const spec = this._transforms.get(dataId)?.spec;
+    return spec === undefined ? undefined : copySpec(spec);
+  }
+
+  /**
+   * The host's bars behind a transformed series and the source bar each drawn
+   * element was completed on (null when they are one to one), or null for a
+   * series drawn as given. What a study on the underlying bars computes on.
+   */
+  public _underlying(dataId: number | null): { bars: readonly Bar[]; sourceIndex: readonly number[] | null } | null {
+    const run = dataId === null ? undefined : this._transforms.get(dataId)?.run;
+    return run === undefined ? null : { bars: run.source(), sourceIndex: run.sourceIndex() };
+  }
+
+  /** A run for a spec, and a detached copy of it to keep. The transform refuses an option it does not take. */
+  public _newTransform(spec: SeriesTransformSpec): Transformed {
+    const options = { ...spec.options };
+    const run = getSeriesTransform(spec.type).create(options);
+    return { spec: Object.keys(options).length > 0 ? { type: spec.type, options } : { type: spec.type }, run };
   }
 
   /**
@@ -112,24 +186,29 @@ export class ChartSeries {
    */
   public _createSeries(type: SeriesType, options: AddSeriesOptions, claimPrimary: boolean,
     preservedFormats?: PreservedScaleFormats): SeriesApi {
-    const dataId = this._host._dataLayer.createSeries();
-    const provenance = new SeriesProvenance(dataId);
-    this._host._seriesProvenance.set(dataId, provenance);
+    // Built first, so an invalid transform throws before the series exists.
+    const transform = options.transform === undefined ? undefined : this._newTransform(options.transform);
+    // The pane next, so an index that names no slot throws before the series exists too.
+    // Past this line the slot holds a pane, so each read of it below finds one.
     const paneIndex = options.paneIndex ?? this._host._primaryIndex();
     this._host._layout._ensurePane(paneIndex);
+    const dataId = this._host._dataLayer.createSeries();
+    if (transform !== undefined) this._transforms.set(dataId, transform);
+    const provenance = new SeriesProvenance(dataId);
+    this._host._seriesProvenance.set(dataId, provenance);
     const record = createSeriesRecord(dataId, type, options.style, options.priceScaleId ?? 'right');
     // A pane starts quoting the instrument the moment the host plots a price on
     // it, which is how a second symbol on a pane of its own keeps a tick-sized
     // axis. Indicator plots come through here with `claimPrimary` false, so an
     // oscillator can never promote the pane it draws in.
-    if (claimPrimary && getChartType(type).isPriceSeries) this._host._scales._claimPricePane(this._host._panes[paneIndex]);
+    if (claimPrimary && getChartType(type).isPriceSeries) this._host._scales._claimPricePane(this._host._panes[paneIndex]!);
     // The first price-type series drives the magnet crosshair + OHLC legend.
     const isPrimary = claimPrimary && this._host._firstDataId.value === null && getChartType(type).isPriceSeries;
     if (isPrimary) {
       this._host._firstDataId.value = dataId;
-      this._host._firstPane = this._host._panes[paneIndex];
+      this._host._firstPane = this._host._panes[paneIndex]!;
     }
-    this._host._panes[paneIndex].addSeries(record);
+    this._host._panes[paneIndex]!.addSeries(record);
     this._host._layout._recomputeAxisColumns(); // reserve/free the axis columns
     /**
      * The pane this series lives on, held BY IDENTITY rather than by the index
@@ -154,17 +233,22 @@ export class ChartSeries {
      */
     const inheritedStyle = { ...getChartType(type).defaultStyle };
     for (const key of Object.keys(options.style ?? {}) as (keyof SeriesStyle)[]) delete inheritedStyle[key];
-    const owner = { pane: this._host._panes[paneIndex], priceFormat: options.priceFormat, inheritedStyle, indicatorOwned: !claimPrimary };
+    const owner = { pane: this._host._panes[paneIndex]!, priceFormat: options.priceFormat, inheritedStyle, indicatorOwned: !claimPrimary };
     const scale = owner.pane.scaleOf(record);
     const preserveFormat = preservedFormats?.get(owner.pane)?.has(record.scaleId) === true;
     this._applySeriesPriceFormat(scale, options.priceFormat, preserveFormat);
     if (!preserveFormat && record.style.precision !== undefined) this._applyPrecision(scale, record.style.precision);
 
     const api: SeriesApi = {
-      setData: (bars: readonly SeriesDataItem[], metadata?: BarConfirmationOptions): void => this._setData(dataId, bars.map(toBar), metadata, owner),
+      setData: (bars: readonly SeriesDataItem[], metadata?: BarConfirmationOptions): void => {
+        const run = this._transforms.get(dataId)?.run;
+        run?.setData(bars.map(toBar));
+        this._setData(dataId, run?.elements() ?? bars.map(toBar), metadata, owner);
+      },
       prependData: (bars: readonly SeriesDataItem[]): void => this._prependData(dataId, bars.map(toBar)),
       update: (bar: SeriesDataItem, metadata?: SeriesUpdateOptions): void => this._updateBar(dataId, toBar(bar), metadata, owner),
-      getData: (): Bar[] => this._host._dataLayer.indexedBars(dataId).map((ib) => ib.bar),
+      getData: (): Bar[] => this._transforms.get(dataId)?.run.source().slice()
+        ?? this._host._dataLayer.indexedBars(dataId).map((ib) => ib.bar),
       applyOptions: (patch: Partial<SeriesStyle>): void => {
         for (const key of Object.keys(patch) as (keyof SeriesStyle)[]) delete owner.inheritedStyle[key];
         Object.assign(record.style, patch);
@@ -173,13 +257,14 @@ export class ChartSeries {
         // "Default", which is the key present and undefined).
         if ('precision' in patch) this._applyPrecision(owner.pane.scaleOf(record), patch.precision);
         this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
-        if (this._host._primary?.record === record) this._host.emit('objects:change', {});
+        if (this._host._primary?.record === record) this._host._emit('objects:change', {});
       },
       remove: (): void => {
         const primary = this._host._primary?.record === record;
         owner.pane.removeSeries(record);
         this._host._dataLayer.removeSeries(dataId);
         this._host._seriesProvenance.delete(dataId);
+        this._transforms.delete(dataId);
         if (this._host._firstDataId.value === dataId) this._host._firstDataId.value = null;
         if (this._host._primary?.record === record) { this._host._primary = null; owner.pane.setSourceSeries(null); }
         if (!owner.indicatorOwned) this._host._studies._reconcileIndicatorRanges();
@@ -187,8 +272,8 @@ export class ChartSeries {
         this._host._layout._recomputeAxisColumns();
         this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
         if (primary) {
-          this._host.emit('data:update', { kind: 'reset' });
-          this._host.emit('objects:change', {});
+          this._host._emit('data:update', { kind: 'reset' });
+          this._host._emit('objects:change', {});
         }
       },
       priceScale: (): PriceScale => owner.pane.scaleOf(record),
@@ -206,10 +291,10 @@ export class ChartSeries {
     if (!owner.indicatorOwned) this._host._studies._reconcileIndicatorRanges();
     if (isPrimary) {
       this._host._primary = { api, record };
-      this._host._panes[paneIndex].setSourceSeries(record);
+      this._host._panes[paneIndex]!.setSourceSeries(record);
       // A source added after a layout placed it goes where the layout says.
       if (this._host._sourceAbove !== undefined) this._host._primitives._placeSource();
-      this._host.emit('objects:change', {});
+      this._host._emit('objects:change', {});
     }
     return api;
   }
@@ -303,6 +388,9 @@ export class ChartSeries {
   /** Apply one live bar; auto-scroll only on a genuine right-edge append. */
   private _updateBar(dataId: number, bar: Bar, options: SeriesUpdateOptions | undefined, owner: { readonly pane: Pane }): void {
     validateSeriesOptions(options, true);
+    const run = this._transforms.get(dataId)?.run;
+    // A run exists only once a transform was registered, which installed the runs.
+    if (run !== undefined) { transformRuns!.tick(this, dataId, run, bar, options, owner); return; }
     const before = this._sharedAxis();
     const bars = this._host._dataLayer.seriesBars(dataId);
     const tailTime = bars[bars.length - 1]?.time;
@@ -322,10 +410,10 @@ export class ChartSeries {
     if (dataId === this._host._firstDataId.value) this._host._studies._invalidateIndicators();
     this._invalidateWrite([owner.pane], before);
     this._host._updateAccessibleSummary();
-    if (dataId === this._host._firstDataId.value) this._host.emit('data:update', { kind: 'update', time: bar.time });
+    if (dataId === this._host._firstDataId.value) this._host._emit('data:update', { kind: 'update', time: bar.time });
   }
 
-  private _setData(dataId: number, bars: readonly Bar[], options: BarConfirmationOptions | undefined,
+  public _setData(dataId: number, bars: readonly Bar[], options: BarConfirmationOptions | undefined,
     owner: { readonly pane: Pane; readonly indicatorOwned: boolean }): void {
     validateSeriesOptions(options);
     const before = this._sharedAxis();
@@ -363,12 +451,15 @@ export class ChartSeries {
     if (owner.indicatorOwned) this._invalidateWrite([owner.pane], before);
     else this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
     this._host._updateAccessibleSummary();
-    if (dataId === this._host._firstDataId.value) this._host.emit('data:update', { kind: 'reset' });
+    if (dataId === this._host._firstDataId.value) this._host._emit('data:update', { kind: 'reset' });
   }
 
   /** History paging: merge older bars, preserving the viewport (§4.2). */
   private _prependData(dataId: number, bars: readonly Bar[]): void {
-    this._host._dataLayer.addBars(dataId, bars);
+    const run = this._transforms.get(dataId)?.run;
+    run?.prepend(bars);
+    if (run === undefined) this._host._dataLayer.addBars(dataId, bars);
+    else this._host._dataLayer.setSeriesData(dataId, run.elements());
     const sorted = this._host._dataLayer.seriesBars(dataId);
     this._host._seriesProvenance.get(dataId)?.record('prepend', sorted[sorted.length - 1]?.time);
     // baseIndex shifts up by the inserted count; updating it keeps the same
@@ -377,6 +468,6 @@ export class ChartSeries {
     if (dataId === this._host._firstDataId.value) this._host._studies._invalidateIndicators();
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
     this._host._updateAccessibleSummary();
-    if (dataId === this._host._firstDataId.value) this._host.emit('data:update', { kind: 'prepend' });
+    if (dataId === this._host._firstDataId.value) this._host._emit('data:update', { kind: 'prepend' });
   }
 }

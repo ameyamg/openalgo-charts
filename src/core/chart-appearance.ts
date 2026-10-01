@@ -18,7 +18,7 @@
  */
 import { InvalidationLevel } from './invalidate-mask';
 import type { PaneRenderContext } from './pane';
-import type { ChartWatermarkOptions, ExportSvgOptions } from './chart-types';
+import type { ChartApplyOptions, ChartWatermarkOptions, ExportSvgOptions } from './chart-types';
 import type { Chart } from './chart';
 import { SvgContext } from '../render/svg-export';
 import { LogoWatermark, type LogoWatermarkOptions } from '../primitives/watermark';
@@ -63,7 +63,7 @@ export interface AppearanceHost {
   setTimeFormatter: Chart['setTimeFormatter'];
   setTimezone: Chart['setTimezone'];
   invalidate: Chart['invalidate'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
 }
 
 export class ChartAppearance {
@@ -92,7 +92,7 @@ export class ChartAppearance {
       this._host.addPrimitive(this._host._branding, { anchor: 'chart-bottom' });
     }
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Light));
-    this._host.emit('branding:changed', this._host.brandingOptions());
+    this._host._emit('branding:changed', this._host.brandingOptions());
   }
 
   public setWatermarkOptions(options: boolean | ChartWatermarkOptions): void {
@@ -138,7 +138,7 @@ export class ChartAppearance {
     for (let i = 0; i < this._host._panes.length; i++) {
       if (this._host._layout._layoutWeight(i) <= 0) continue;
       const y = Math.round((layout[i]?.top ?? 0) * dpr);
-      for (const layer of [this._host._panes[i].base, this._host._panes[i].top]) {
+      for (const layer of [this._host._panes[i]!.base, this._host._panes[i]!.top]) {
         // Hidden or unmeasured buffers are invalid Canvas2D image sources.
         if (layer.element.width > 0 && layer.element.height > 0) g.drawImage(layer.element, 0, y);
       }
@@ -183,7 +183,7 @@ export class ChartAppearance {
       const topPane = this._host._layout._topPaneIndex();
       for (let i = 0; i < this._host._panes.length; i++) {
         if (this._host._layout._layoutWeight(i) <= 0) continue; // hidden behind a maximized pane
-        const pane = this._host._panes[i];
+        const pane = this._host._panes[i]!; // `i` walks the panes, and the layout has a box for each
         const ctx: PaneRenderContext = {
           ...this._host._renderContext(i),
           dpr: 1, hoverId: null, hoverKey: null, dragId: null, paintBackground: background,
@@ -193,11 +193,11 @@ export class ChartAppearance {
         // overflow clip. The export reproduces that box exactly, or the second
         // pane would sit one pixel higher than it does on screen.
         const first = i === topPane;
-        const top = layout[i].top + (first ? 0 : 1);
-        const paneHeight = layout[i].height - (first ? 0 : 1);
+        const top = layout[i]!.top + (first ? 0 : 1);
+        const paneHeight = layout[i]!.height - (first ? 0 : 1);
         if (!first) {
           svg.fillStyle = this._host._theme.paneSeparator;
-          svg.fillRect(0, layout[i].top, width, 1);
+          svg.fillRect(0, layout[i]!.top, width, 1);
         }
         svg.pushGroup(
           { 'data-pane': i },
@@ -223,7 +223,7 @@ export class ChartAppearance {
     return svg.toString();
   }
 
-  public applyOptions(opts: Parameters<Chart['applyOptions']>[0]): void {
+  public applyOptions(opts: ChartApplyOptions): void {
     this._host._withinLayoutChange(() => {
       if (opts.theme) this._host.setTheme(opts.theme);
       if (opts.grid) this._host.setGridOptions(opts.grid);

@@ -693,6 +693,24 @@ describe('the memory fallback is reachable from the controller', () => {
     draw.destroy();
   });
 
+  it('turns the fallback off through setOptions too, so a refused write cuts nothing', async () => {
+    // setOptions accepted the option and stored it where nothing read it: a
+    // host that turned the backstop off after construction still had a cut
+    // delete a drawing whose write had failed.
+    const chart = makeChart();
+    const draw = new DrawingController(chart, { clipboard: denied() });
+    const d = trendLine(draw, chart);
+
+    draw.setOptions({ clipboardFallbackToMemory: false });
+    expect(await draw.cut([d.id])).toBe(false);
+    expect(draw.toJSON().drawings.map((x) => x.id)).toContain(d.id);
+    // And back on: the in-process clipboard takes the copy again.
+    draw.setOptions({ clipboardFallbackToMemory: true });
+    expect(await draw.cut([d.id])).toBe(true);
+    expect(draw.toJSON().drawings).toHaveLength(0);
+    draw.destroy();
+  });
+
   it('defaults to keeping the fallback on, so a denied browser still copies', async () => {
     const chart = makeChart();
     const draw = new DrawingController(chart, { clipboard: denied() });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Chart } from '../src/core/chart';
+import { Chart, type ChartClickEvent } from '../src/core/chart';
 import { fakeDocument, pointer, type FakeElement } from './helpers/fake-dom';
 
 /**
@@ -7,7 +7,7 @@ import { fakeDocument, pointer, type FakeElement } from './helpers/fake-dom';
  * scrolled the chart instead.
  *
  * A press-drag-release is how every charting UI draws a two-point shape, but the
- * chart's click branch only fires when the pointer never moved — so the gesture
+ * chart's click branch only fires when the pointer never moved, so the gesture
  * produced no anchors at all, while the pan path happily consumed it. Placement
  * mode makes the chart treat the gesture as anchor placement: no pan, and the
  * press and release points are reported as two clicks.
@@ -38,8 +38,8 @@ function mount() {
     { time: 1120, open: 12, high: 14, low: 10, close: 13 },
   ]);
 
-  const clicks: Record<string, unknown>[] = [];
-  chart.on('click', (p) => clicks.push(p as Record<string, unknown>));
+  const clicks: ChartClickEvent[] = [];
+  chart.on('click', (p) => clicks.push(p));
 
   const el = container as unknown as FakeElement;
   const drag = (from: [number, number], to: [number, number]) => {
@@ -68,9 +68,9 @@ describe('placement mode', () => {
     expect(clicks).toHaveLength(2);
     expect(clicks[0].viaDrag).toBeUndefined();
     expect(clicks[1].viaDrag).toBe(true);
-    // Distinct anchors — identical ones collapse the shape to nothing.
+    // Distinct anchors: identical ones collapse the shape to nothing.
     expect(clicks[0].point).toEqual({ x: 120, y: 100 });
-    expect((clicks[1].point as { x: number }).x).toBe(400);
+    expect(clicks[1].point.x).toBe(400);
     expect(clicks[0].price).not.toBe(clicks[1].price);
     expect(clicks[0].time).not.toBe(clicks[1].time);
   });

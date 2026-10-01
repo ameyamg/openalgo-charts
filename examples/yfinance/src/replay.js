@@ -191,7 +191,15 @@ export const lastBar = () => {
  */
 export function replayStartIndex(total) {
   let from = 0;
-  try { from = Math.round(owner().chart.timeScale.getVisibleLogicalRange().from); } catch (_) { from = 0; }
+  try {
+    const target = owner();
+    from = Math.round(target.chart.timeScale.getVisibleLogicalRange().from);
+    // A transformed chart's view counts elements: start from the bar the leftmost one formed on.
+    if (transformed(target)) {
+      const element = target.chart.primaryBars()[Math.max(0, from)];
+      from = element ? lastWhere(target.series.getData(), t => t <= element.time) : 0;
+    }
+  } catch (_) { from = 0; }
   const floor = Math.min(20, total - 1);
   return Math.max(floor, Math.min(total - 1, from));
 }
@@ -228,6 +236,27 @@ export function enterReplay() {
 }
 
 /**
+ * Whether the chart transforms the bars replay walks. Its own index then
+ * counts the elements it draws (bricks, columns), not those bars, so a pick
+ * and a cut cross between the two by time.
+ */
+function transformed(target) {
+  const primary = target.chart.primarySeries?.();
+  return Boolean(primary && target.chart.seriesTransform?.(primary));
+}
+
+/** The last index in a time-ordered list whose time passes `test`, or -1. */
+function lastWhere(list, test) {
+  let from = 0, to = list.length;
+  while (from < to) {
+    const mid = (from + to) >>> 1;
+    if (test(list[mid].time)) from = mid + 1;
+    else to = mid;
+  }
+  return from - 1;
+}
+
+/**
  * Move (or raise, or clear) the veil on every pane.
  *
  * Built lazily and per pane because a pane can appear while the picker is
@@ -254,16 +283,25 @@ export function setShadeIndex(index) {
     let cut = null;
     if (active) {
       const bars = target.series.getData(), end = replayBarEndTime(target.request.interval, target.timezone);
-      if (target === owner) cut = index;
-      else {
+      // The last bar closed when the picked one did: on its own chart, the picked bar.
+      let closed = index;
+      if (target !== owner) {
         let from = 0, to = bars.length;
         while (from < to) {
           const mid = (from + to) >>> 1;
           if (end(bars[mid]) <= time) from = mid + 1;
           else to = mid;
         }
-        cut = from - 1;
+        closed = from - 1;
       }
+      // A transformed chart is cut after the last element those bars formed.
+      // Elements are dated at the bar they form on (a second apart when one bar
+      // forms several), so the next bar's time bounds them. Comparing an
+      // element's own time with the picked close instead would leave in view what
+      // a longer bar, still open at that close, had formed.
+      const next = bars[closed + 1];
+      if (!transformed(target)) cut = closed;
+      else cut = next ? lastWhere(target.chart.primaryBars(), t => t < next.time) : target.chart.primaryBars().length - 1;
     }
     for (const shade of target.shades) shade.setOptions({ index: cut });
   }
@@ -274,9 +312,14 @@ export function movePick(index, chart = app.replayTarget?.chart) {
   if (!app.replayPicking || index === null || index === undefined) return;
   const target = app.replayTarget;
   if (!target || target.chart !== chart) return;
-  const total = target.series.getData().length;
+  const bars = target.series.getData();
+  const total = bars.length;
   if (total === 0) return;
-  const clamped = Math.max(0, Math.min(total - 1, Math.round(index)));
+  // Over a transformed chart the crosshair is on an element: replay starts from the bar it formed on.
+  const shown = transformed(target) ? target.chart.primaryBars() : null;
+  const element = shown?.[Math.max(0, Math.min(shown.length - 1, Math.round(index)))];
+  const at = shown ? (element ? lastWhere(bars, t => t <= element.time) : -1) : Math.round(index);
+  const clamped = Math.max(0, Math.min(total - 1, at));
   if (clamped === app.replayPickIndex) return;
   app.replayPickIndex = clamped;
   setShadeIndex(clamped);
@@ -414,9 +457,8 @@ export async function loadReplaySubBars(target = owner()) {
   const key = requestKey(req) + ':' + target.timezone;
   const finer = REPLAY_SUB_INTERVAL[req.interval];
   if (!finer) return null;
-  // Derived candles are already transformed. Raw finer OHLC cannot replace
-  // their forming values without applying that same transform to each frame.
-  if (target.chartType?.startsWith('t:')) return null;
+  // A transformed chart takes the finer bars too: the chart applies its
+  // transform to every frame, so its bricks form as the finer bars land.
   if (replaySubBars.has(key)) return replaySubBars.get(key);
   const revision = replayLoadRevision;
   try {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Chart } from '../src/core/chart';
 import { mountWatchlistPanel, type WatchlistPanelOptions } from '../src/widget/watchlist-panel';
-import { createOverlayStack, WidgetStorage, type WidgetContext } from '../src/widget/context';
+import { createOverlayStack, WidgetBus, WidgetStorage, type WidgetContext } from '../src/widget/context';
 import {
   WatchlistRepository, WatchlistConflictError, createMemoryWatchlistStorage, type WatchlistStore, type WatchlistStorage,
 } from '../src/workspace/index';
@@ -46,7 +46,7 @@ afterEach(() => { for (const chart of charts.splice(0)) chart.destroy(); FakeObs
 
 async function rig(options: {
   store?: WatchlistStore; storage?: WatchlistStorage; quotes?: QuoteFeed | null; observer?: boolean; lists?: Array<[string, InstrumentKey[]]>;
-  panel?: Partial<WatchlistPanelOptions>;
+  panel?: Partial<WatchlistPanelOptions>; search?: WidgetContext['symbolSearch']; translate?: WidgetContext['translate'];
 } = {}) {
   const doc = fakeWidgetDocument();
   if (options.observer) (doc as unknown as { defaultView: unknown }).defaultView = { IntersectionObserver: FakeObserver };
@@ -60,7 +60,7 @@ async function rig(options: {
   const stack = createOverlayStack(root as unknown as HTMLElement, doc as unknown as Document);
   const ctx = {
     chart, document: doc, root, locale: 'en-US', overlays: stack, openOverlay: stack.open, storage: new WidgetStorage('t', null),
-    tips: { attach: () => () => {} },
+    tips: { attach: () => () => {} }, bus: new WidgetBus(), symbolSearch: options.search, translate: options.translate,
     symbol: () => ({ symbol: chart.getDataContext()?.symbol ?? '', exchange: chart.getDataContext()?.exchange ?? '' }),
   } as unknown as WidgetContext;
   let n = 0;
@@ -100,6 +100,17 @@ describe('watchlist panel', () => {
     r.quotes!.streams.get('TCS@NSE')!.onQuote({ symbol: 'TCS', exchange: 'NSE', last: 3500, previousClose: 3400, time: 1700000000 });
     await flush();
     expect(r.cell(r.rows()[1], 'last').title).toBe('Live 3:43:20 AM');
+    r.panel.destroy();
+  });
+
+  it('names its rows and empty prices in the host language', async () => {
+    const words: Record<string, string> = {
+      'schema.ui.watchlist.entry': '{symbol} en {exchange}', 'schema.ui.watchlist.noQuote': 'sin dato',
+    };
+    const r = await rig({ quotes: null, lists: [['Tech', [nse('INFY')]]], translate: (key, fallback) => words[key] ?? fallback });
+    const row = r.rows()[0]!;
+    expect(r.cell(row, 'last').textContent).toBe('sin dato');
+    expect(row.querySelector('.oac-watchlist__open')?.getAttribute('aria-label')).toBe('INFY en NSE');
     r.panel.destroy();
   });
 
@@ -212,6 +223,22 @@ describe('watchlist panel', () => {
     r.panel.destroy();
   });
 
+  it('waits for a pending lookup before Enter saves the typed text', async () => {
+    vi.useFakeTimers();
+    let answer!: (hits: readonly InstrumentKey[]) => void;
+    const r = await rig({ lists: [['Tech', [nse('TCS')]]], search: () => new Promise(resolve => { answer = resolve; }) });
+    const input = r.host.querySelector('.oac-watchlist__add input') as FakeElement;
+    input.focus(); input.value = 'wip'; fire(input, 'input');
+    fireKey(input, 'Enter'); await flush();
+    await vi.advanceTimersByTimeAsync(150);
+    fireKey(input, 'Enter'); await flush();
+    expect(r.symbols()).toEqual(['TCS']);
+    answer([{ symbol: 'WIPRO', exchange: 'BSE' }]); await flush();
+    fireKey(input, 'Enter'); await flush();
+    expect((await r.store.load()).lists[0]!.entries).toEqual([nse('TCS'), { symbol: 'WIPRO', exchange: 'BSE' }]);
+    r.panel.destroy();
+  });
+
   it('creates, renames and deletes lists through inline forms', async () => {
     const r = await rig({ lists: [['Tech', [nse('TCS')]]] });
     r.button('New list').click();
@@ -285,7 +312,8 @@ describe('watchlist panel', () => {
   });
 
   it('reorders with Alt+Arrow in list order, refusing a move computed from an older revision', async () => {
-    const r = await rig({ lists: [['Order', [nse('A'), nse('B'), nse('C')]]] });
+    const storage = createMemoryWatchlistStorage();
+    const r = await rig({ storage, lists: [['Order', [nse('A'), nse('B'), nse('C')]]] });
     const open = (i: number) => r.rows()[i].querySelector('.oac-watchlist__open') as FakeElement;
     open(0).focus();
     fireKey(open(0), 'ArrowDown', { altKey: true }); await flush();
@@ -294,7 +322,7 @@ describe('watchlist panel', () => {
     fireKey(open(1), 'ArrowDown'); await flush();
     expect(r.doc.activeElement).toBe(open(2));
     // Another session reorders first; the stale move is refused and the saved order shown.
-    await new WatchlistRepository((r.store as unknown as { _storage: WatchlistStorage })._storage, 'user').moveEntry('l1', nse('C'), 0);
+    await new WatchlistRepository(storage, 'user').moveEntry('l1', nse('C'), 0);
     fireKey(open(2), 'ArrowUp', { altKey: true }); await flush();
     expect(r.host.querySelector('.oac-watchlist__message')!.textContent).toContain('changed in another session');
     expect(r.symbols()).toEqual(['C', 'B', 'A']);

@@ -17,14 +17,15 @@
  * transaction on the chart history), so one click is one undo step, and a
  * selection the user may not edit shows its controls greyed with the reason.
  */
-import { applyDrawingSettings, chromeIconSvg, drawingSettingsSchema, getDrawingTool, LINE_STYLE_OPTIONS } from 'openalgo-charts/draw';
-import type { Drawing, DrawingTool, SettingsField } from 'openalgo-charts/draw';
-import { editableIds, type WidgetContext } from './context';
+import { applyDrawingSettings, chromeIconSvg, drawingSettingsSchema, LINE_STYLE_OPTIONS } from 'openalgo-charts/draw';
+import type { Drawing, SettingsField } from 'openalgo-charts/draw';
+import { boxIn, drawingToolOf, editableIds, historyStep, type WidgetContext } from './context';
+import { drawingActionState, runDrawingAction, type DrawingAction } from './drawing-actions';
 import { commandChord } from './keymap';
 import { createColorPicker } from './color-picker';
-import { boxInRoot, button, chromeGlyph, el } from './form';
+import { button, chromeGlyph, el } from './form';
 import { widgetText } from './localization';
-import { openMenu, type MenuRow } from './topbar';
+import { openMenu, type MenuRow } from './menu';
 import { commonSchema, mountDrawingProperties, resolvedDrawingValues } from './dialogs/drawing-properties';
 import { chartContainer } from './dialogs/text-editor';
 import { templateMenuRows, type DrawingTemplates } from './drawing-templates';
@@ -70,16 +71,12 @@ export function valueAcross(drawings: readonly Drawing[], field: SettingsField, 
   let first: unknown;
   let seen = false;
   for (const d of drawings) {
-    const tool = toolOf(d.tool);
+    const tool = drawingToolOf(d.tool);
     const value = resolvedDrawingValues(d, { fields: [field] }, tool, themeLine)[field.path];
     if (!seen) { first = value; seen = true; continue; }
     if (JSON.stringify(value) !== JSON.stringify(first)) return MIXED;
   }
   return seen ? first : undefined;
-}
-
-function toolOf(id: string): DrawingTool | null {
-  try { return getDrawingTool(id); } catch { return null; }
 }
 
 let sequence = 0;
@@ -115,14 +112,12 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
   let dragging = false;
   let destroyed = false;
 
-  /** Run one user action as one step of the chart's history, however many controller calls it makes. */
-  const act = (label: string, run: () => void): void => {
-    if (ctx.history !== undefined && !ctx.history.isDestroyed) ctx.history.transact(run, label);
-    else run();
+  /** One of the shared drawing actions, on the selection or the one a menu opened for. */
+  const run = (action: DrawingAction, targets: readonly string[] = ids): void => {
+    runDrawingAction(ctx, action, targets);
     refresh();
   };
   const writable = (): string[] => editableIds(draw, ids);
-  const readOnly = (): string | null => (live.length > 0 && writable().length === 0 ? widgetText(ctx, 'read-only') : null);
   /** Write one setting to every editable selected drawing whose schema declares it. */
   const setField = (path: string, value: unknown): void => {
     const field = fields.get(path);
@@ -133,7 +128,8 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
       const patch = d === undefined ? {} : applyDrawingSettings(d, { [path]: value }, drawingSettingsSchema(d.tool));
       return Object.keys(patch).length > 0 ? [{ id: target, patch }] : [];
     });
-    act(path, () => { if (patches.length > 0) draw.updateMany(patches); });
+    historyStep(ctx, path, () => { if (patches.length > 0) draw.updateMany(patches); });
+    refresh();
   };
 
   // ── controls ───────────────────────────────────────────────────────────
@@ -151,13 +147,8 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
   style.setAttribute('aria-haspopup', 'menu');
   const styleGlyph = el(doc, 'span', 'oac-glyph oac-glyph--chrome');
   style.appendChild(styleGlyph);
-  const lock = button(doc, { label: widgetText(ctx, 'Lock'), icon: 'lock', iconOnly: true, onClick: () => {
-    const locked = live.every((d) => d.locked === true);
-    act('lock', () => { draw.updateMany(writable().map((target) => ({ id: target, patch: { locked: !locked } }))); });
-  } });
-  const remove = button(doc, { label: widgetText(ctx, 'Delete'), icon: 'trash', iconOnly: true, variant: 'danger', onClick: () => {
-    act('delete', () => { draw.removeMany(writable()); });
-  } });
+  const lock = button(doc, { label: widgetText(ctx, 'Lock'), icon: 'lock', iconOnly: true, onClick: () => { run('lock'); } });
+  const remove = button(doc, { label: widgetText(ctx, 'Delete'), icon: 'trash', iconOnly: true, variant: 'danger', onClick: () => { run('delete'); } });
   const more = button(doc, { label: widgetText(ctx, 'More drawing actions'), icon: 'more', iconOnly: true, onClick: () => openMore() });
   more.setAttribute('aria-haspopup', 'menu');
   const sep = (): HTMLElement => el(doc, 'span', 'oac-sep');
@@ -183,7 +174,7 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
   const go = (index: number): void => {
     const all = controls();
     if (all.length === 0) return;
-    const next = all[((index % all.length) + all.length) % all.length];
+    const next = all[((index % all.length) + all.length) % all.length]!; // a non-empty list, index wrapped into it
     setRoving(next);
     next.focus();
   };
@@ -230,19 +221,17 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
   const styleLabel = (value: string): string => value === 'dashed' ? widgetText(ctx, 'Dashed') : value === 'dotted' ? widgetText(ctx, 'Dotted') : widgetText(ctx, 'Solid');
   function openMore(): void {
     const targets = ids.slice();
-    const hidden = live.length > 0 && live.every((d) => d.visible === false);
-    const why = readOnly();
+    const { hidden, readOnly: why } = drawingActionState(ctx, targets);
     const rows: Array<MenuRow | string> = [
       { label: widgetText(ctx, 'Properties...'), icon: 'settings', onSelect: () => { mountDrawingProperties(ctx, undefined, { ids: targets }); } },
-      { label: widgetText(ctx, 'Duplicate'), icon: 'duplicate', key: commandChord(ctx.keymap, 'duplicate', 'Mod+D'), onSelect: () => act('duplicate', () => { draw.duplicate(targets); }) },
+      { label: widgetText(ctx, 'Duplicate'), icon: 'duplicate', key: commandChord(ctx.keymap, 'duplicate', 'Mod+D'), onSelect: () => { run('duplicate', targets); } },
       { label: hidden ? widgetText(ctx, 'Show') : widgetText(ctx, 'Hide'), icon: hidden ? 'eye-off' : 'eye', disabled: why !== null, sub: why ?? undefined,
-        onSelect: () => act('visibility', () => { draw.updateMany(editableIds(draw, targets).map((target) => ({ id: target, patch: { visible: hidden } }))); }) },
+        onSelect: () => { run('visible', targets); } },
       widgetText(ctx, 'Order'),
-      // The controller moves one drawing at a time; the transaction makes the lot one step.
-      { label: widgetText(ctx, 'Bring to front'), icon: 'front', onSelect: () => act('front', () => { for (const target of targets) draw.bringToFront(target); }) },
-      { label: widgetText(ctx, 'Send to back'), icon: 'back', onSelect: () => act('back', () => { for (const target of targets) draw.sendToBack(target); }) },
-      { label: widgetText(ctx, 'In front of the series'), icon: 'above-series', onSelect: () => act('above', () => { for (const target of targets) draw.bringAboveSeries(target); }) },
-      { label: widgetText(ctx, 'Behind the series'), icon: 'behind-series', onSelect: () => act('behind', () => { for (const target of targets) draw.sendBehindSeries(target); }) },
+      { label: widgetText(ctx, 'Bring to front'), icon: 'front', onSelect: () => { run('front', targets); } },
+      { label: widgetText(ctx, 'Send to back'), icon: 'back', onSelect: () => { run('back', targets); } },
+      { label: widgetText(ctx, 'In front of the series'), icon: 'above-series', onSelect: () => { run('above', targets); } },
+      { label: widgetText(ctx, 'Behind the series'), icon: 'behind-series', onSelect: () => { run('behind', targets); } },
     ];
     if (opts.templates) rows.push(...templateMenuRows(ctx, opts.templates, targets, more));
     menuOf(more, rows, widgetText(ctx, 'More drawing actions'));
@@ -258,7 +247,8 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
   };
 
   function paint(): void {
-    const why = readOnly();
+    const state = drawingActionState(ctx, ids);
+    const why = state.readOnly;
     const theme = ctx.chartTheme.lineColor;
     const colorField = fields.get('style.color');
     color.el.hidden = colorField === undefined;
@@ -267,7 +257,7 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
       color.el.classList.toggle('is-mixed', now === MIXED);
       if (now !== MIXED) color.write(now);
       // Two of the colours in use, split corner to corner: mixed, without a word.
-      const [a, b] = [...new Set(live.map((d) => String(resolvedDrawingValues(d, { fields: [colorField] }, toolOf(d.tool), theme)['style.color'])))];
+      const [a, b] = [...new Set(live.map((d) => String(resolvedDrawingValues(d, { fields: [colorField] }, drawingToolOf(d.tool), theme)['style.color'])))];
       colorTrigger.style.backgroundImage = now === MIXED ? `linear-gradient(135deg, ${a} 0 50%, ${b ?? a} 50% 100%)` : '';
       colorTrigger.setAttribute('aria-label', now === MIXED
         ? widgetText(ctx, 'Color: {value}', { value: widgetText(ctx, 'mixed') })
@@ -299,16 +289,13 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
       style.title = why === null ? widgetText(ctx, 'Line style: {style}', { style: said }) : `${widgetText(ctx, 'Line style')} (${why})`;
     }
     lineSep.hidden = color.el.hidden && width.hidden && style.hidden;
-    const locked = live.filter((d) => d.locked === true).length;
-    const allLocked = live.length > 0 && locked === live.length;
-    lock.replaceChildren(chromeGlyph(doc, allLocked ? 'lock' : 'unlock'));
+    lock.replaceChildren(chromeGlyph(doc, state.locked ? 'lock' : 'unlock'));
     // One name; the pressed state says locked, and a partly locked selection is neither.
     lock.setAttribute('aria-label', widgetText(ctx, 'Lock'));
-    lock.setAttribute('aria-pressed', allLocked ? 'true' : locked > 0 ? 'mixed' : 'false');
+    lock.setAttribute('aria-pressed', state.locked ? 'true' : state.partlyLocked ? 'mixed' : 'false');
     lock.disabled = why !== null;
     lock.title = why === null ? widgetText(ctx, 'Lock') : `${widgetText(ctx, 'Lock')} (${why})`;
-    // Every one locked is the context menu's rule for delete too.
-    const noDelete = why ?? (allLocked ? widgetText(ctx, 'locked') : null);
+    const noDelete = state.noDelete;
     remove.disabled = noDelete !== null;
     // Why it is off, else the chord the user bound: none once Delete has no key.
     const note = noDelete ?? commandChord(ctx.keymap, 'delete', 'Delete');
@@ -320,7 +307,7 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
   function place(): void {
     const box = container();
     if (box === null || bar.hidden) return;
-    const frame = boxInRoot(host, box);
+    const frame = boxIn(host, box);
     let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
     for (const target of ids) {
       for (const p of draw.screenPoints(target) ?? []) {
@@ -369,11 +356,11 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
   const reposition = (): void => { if (!destroyed && !bar.hidden) place(); };
 
   const offs: Array<() => void> = [];
-  for (const event of ['draw:select', 'drawing:select', 'draw:update', 'draw:remove', 'draw:add', 'draw:restore', 'drawing:change', 'draw:tool']) {
+  for (const event of ['draw:select', 'drawing:select', 'draw:update', 'draw:remove', 'draw:add', 'draw:restore', 'drawing:change', 'draw:tool'] as const) {
     offs.push(chart.on(event, refresh));
   }
   // A tick that moves the autoscale, and a scale setter, move the drawing as surely as a pan.
-  for (const event of ['pan', 'zoom', 'resize', 'paneResized', 'paneMoved', 'paneCollapsed', 'paneMaximized', 'paneAdded', 'paneRemoved', 'data:update', 'layout:change']) {
+  for (const event of ['pan', 'zoom', 'resize', 'paneResized', 'paneMoved', 'paneCollapsed', 'paneMaximized', 'paneAdded', 'paneRemoved', 'data:update', 'layout:change'] as const) {
     offs.push(chart.on(event, reposition));
   }
   // Dragging or wheeling a price axis rescales it with no chart event at all.
@@ -391,7 +378,7 @@ export function mountDrawingToolbar(ctx: WidgetContext, host: HTMLElement, opts:
   }
   // A drag moves the drawing under the bar; it comes back where the drawing lands.
   offs.push(chart.on('draw:preview', () => { if (!dragging) { dragging = true; hide(); } }));
-  for (const event of ['draw:preview-clear', 'drag:end', 'drag:cancel']) {
+  for (const event of ['draw:preview-clear', 'drag:end', 'drag:cancel'] as const) {
     offs.push(chart.on(event, () => { if (dragging) { dragging = false; refresh(); } }));
   }
   offs.push(ctx.bus.on('theme', refresh));

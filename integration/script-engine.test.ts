@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DiagnosticBag, check, emit, isError, parse, sourceFile } from 'script-engine-under-test';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { DiagnosticBag, VERSION as ENGINE_VERSION, check, emit, isError, parse, sourceFile } from 'script-engine-under-test';
 import { descriptorFor } from 'script-engine-under-test/adapters/charts';
-import engine from 'script-engine-under-test/package.json';
 import { Chart as PublicChart, registerIndicator as registerPublicIndicator } from 'openalgo-charts';
 import { captureIndicatorTemplate, planIndicatorTemplateState } from 'openalgo-charts/workspace';
+import 'openalgo-charts/transform';
 import { Chart } from '../src/core/chart';
 import { registerIndicator, type IndicatorDescriptor } from '../src/model/indicator-registry';
 import type { Bar } from '../src/model/bar';
@@ -46,12 +46,16 @@ function compile(text: string, extra: Record<string, unknown> = {}): IndicatorDe
   return descriptor;
 }
 
-/** Whether the engine under test is at least `wanted`, read from its own package.json. */
+/**
+ * Whether the engine under test is at least `wanted`, as its build reports it.
+ * Not its package.json: a checkout whose manifest moved on without a rebuild
+ * still runs the older build, and a newer case must skip there, not fail.
+ */
 function engineAtLeast(wanted: string): boolean {
-  const have = engine.version.split(/[-+]/)[0].split('.').map(Number);
+  const have = ENGINE_VERSION.split(/[-+]/)[0].split('.').map(Number);
   const want = wanted.split('.').map(Number);
   for (let i = 0; i < 3; i++) if (have[i] !== want[i]) return have[i] > want[i];
-  return !engine.version.includes('-');
+  return !ENGINE_VERSION.includes('-');
 }
 
 function makeChart(data: Bar[], now: number, updatesOnly = false) {
@@ -260,6 +264,36 @@ plot(close * 3, "Value")
     expect(restored.values().ma).toEqual([null, 6, 12, 21]);
     series.update(bar(240, 11));
     expect(restored.values().ma).toEqual([null, 6, 12, 21, 30]);
+  });
+
+  it('fires a compiled alert on each brick one source bar completes on a Renko chart', () => {
+    const compiled = compile(`version 1
+study("Brick steps", overlay = true)
+if close > close[1]
+    alert("up brick at " + text(close, 2), id = "up", title = "Up brick")
+plot(close, "Close")
+`);
+    registerPublicIndicator(compiled);
+    const document = fakeDocument();
+    const chart = new PublicChart(document.createElement('div'), {
+      document, timezone: 'Etc/UTC', pixelRatio: () => 1, shortcuts: false,
+      raf: { schedule: () => 1, cancel: () => {} },
+    });
+    try {
+      chart.applySize(800, 600);
+      chart.setDataContext({ symbol: 'SAMPLE', interval: '1m' });
+      const series = chart.addSeries('candlestick', { transform: { type: 'renko', options: { boxSize: 1 } } });
+      // Bricks close at 101 and 102; the next bar closes at 104.3 and completes two more.
+      series.setData([100.2, 101.3, 102.4, 102.6].map((close, i) => bar(i * 60, close)));
+      const events: { time: number; message: string }[] = [];
+      chart.on('indicator:alert', payload => events.push(payload as { time: number; message: string }));
+      const indicator = chart.addIndicator(compiled.id);
+      series.update(bar(240, 104.3)); indicator.values();
+      expect(chart.primaryBars().map(brick => brick.close)).toEqual([101, 102, 103, 104]);
+      expect(events.map(event => [event.time, event.message])).toEqual([[240, 'up brick at 103.00'], [241, 'up brick at 104.00']]);
+    } finally {
+      chart.destroy();
+    }
   });
 
   it('evaluates native close alerts from compiled outputs with provider confirmation', () => {
@@ -627,7 +661,7 @@ plot(close, "Close")
   it('draws every declared grid and a band coloured per bar when the host states the chart version', context => {
     // The adapter draws both only from 0.8.0, and refuses such a study before.
     context.skip(!engineAtLeast('0.8.0'),
-      `script engine ${engine.version} is older than 0.8.0, whose adapter first draws several grids and a band colour computed per bar`);
+      `script engine build ${ENGINE_VERSION} is older than 0.8.0, whose adapter first draws several grids and a band colour computed per bar`);
     const descriptor = compile(`version 1
 study("Grids and band", overlay = true)
 upper = plot(close + 1, "Upper")
@@ -671,5 +705,46 @@ cell(second, 0, 1, text(open, 1))
     indicator.remove();
     expect(tables()).toHaveLength(0);
     expect(primitives().some(item => item instanceof IndicatorFill)).toBe(false);
+  });
+
+  it('carries the message of the bar a brick completed on, for a study on the underlying bars', context => {
+    // Before 0.8.1 the adapter read a message at the brick's position in the run.
+    context.skip(!engineAtLeast('0.8.1'),
+      `script engine build ${ENGINE_VERSION} is older than 0.8.1, whose adapter first reads an alert message at the underlying bar`);
+    const descriptor = compile(`version 1
+study("Brick alert", overlay = true)
+if close > open
+    alert("Close " + text(close, 2), id = "up", title = "Up bar")
+plot(close, "Close")
+`);
+    // The public chart, with the transform tier a host imports to have the chart form bricks itself.
+    registerPublicIndicator(descriptor);
+    const candle = (time: number, open: number, close: number): Bar => ({ time, open, high: Math.max(open, close), low: Math.min(open, close), close });
+    // One-point bricks. Bar 0 anchors at 100 and bars 3, 6 and 9 each complete
+    // one, so the live bar below completes brick 3. Bar 3 rose too, so a message
+    // read at the brick's position carries bar 3's close instead of its own.
+    const closes = [100, 100.4, 100.2, 101.1, 101.5, 101.3, 102.2, 102.6, 102.4, 103.3];
+    const history = closes.map((close, i) => candle(60 * (i + 1), i === 0 ? 99.8 : closes[i - 1], close));
+    const document = fakeDocument();
+    const chart = new PublicChart(document.createElement('div'), {
+      document, timezone: 'Etc/UTC', pixelRatio: () => 1, shortcuts: false,
+      raf: { schedule: () => 1, cancel: () => {} },
+    });
+    onTestFinished(() => chart.destroy());
+    chart.applySize(800, 600);
+    chart.setDataContext({ symbol: 'SAMPLE', interval: '1m' });
+    const series = chart.addSeries('candlestick');
+    series.setData(history);
+    expect(chart.setSeriesTransform(series, { type: 'renko', options: { boxSize: 1 } })).toBe(true);
+    const events: { time: number; message: string }[] = [];
+    chart.on('indicator:alert', payload => events.push(payload as { time: number; message: string }));
+    const indicator = chart.addIndicator(descriptor.id, {}, { barSource: 'underlying' });
+    indicator.values();
+    expect(chart.primaryBars()).toHaveLength(3);
+    // A live bar completing one brick, which is a step the chart alerts on.
+    series.update(candle(660, 103.3, 104.1), { confirmation: 'confirmed' });
+    indicator.values();
+    expect(chart.primaryBars()).toHaveLength(4);
+    expect(events.map(event => [event.time, event.message])).toEqual([[660, 'Close 104.10']]);
   });
 });

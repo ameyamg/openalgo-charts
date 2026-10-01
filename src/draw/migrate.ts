@@ -42,36 +42,16 @@
  * Idempotent on a version 2 or 3 document, so a host can call it on every load.
  */
 import type {
-  Drawing, DrawingPoint, DrawingPolicy, DrawingStyle, DrawingText, DrawingsDocument, DrawingGroup, FibLevel,
+  Drawing, DrawingPolicy, DrawingStyle, DrawingText, DrawingsDocument, DrawingGroup, FibLevel,
 } from './types';
 import { cycleColor, levelColor } from './levels';
 import { readViewportPoints } from './viewport';
 import { drawingsDocumentVersion, readIntervalRange } from './intervals';
+import {
+  isNum, isRecord, isString, isUnsafeKey, legacyTextFields, oneOf, readPoints, readText,
+  LINE_STYLES, STYLE_FLAGS, STYLE_NUMBERS, STYLE_STRINGS,
+} from './drawing-fields';
 
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
-
-const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-
-const oneOf = <T extends string>(v: unknown, allowed: readonly T[]): v is T =>
-  typeof v === 'string' && (allowed as readonly string[]).includes(v);
-
-/** A key that would reach Object.prototype through a dynamic assignment. */
-const isUnsafeKey = (key: string): boolean =>
-  key === '__proto__' || key === 'constructor' || key === 'prototype';
-
-const LINE_STYLES = ['solid', 'dashed', 'dotted'] as const;
-const ALIGNS = ['left', 'center', 'right'] as const;
-const VALIGNS = ['top', 'middle', 'bottom'] as const;
-const POSITIONS = ['inside', 'outside'] as const;
-
-const STYLE_STRINGS = ['color', 'fillColor'] as const;
-const STYLE_NUMBERS = ['lineWidth', 'fillOpacity', 'accountSize', 'risk'] as const;
-const STYLE_FLAGS = ['fill', 'extendLeft', 'extendRight', 'showLabels', 'showStats', 'pressure'] as const;
-
-const TEXT_STRINGS = ['color', 'fontFamily', 'backgroundColor', 'borderColor'] as const;
-const TEXT_NUMBERS = ['fontSize', 'wrapWidth', 'backgroundOpacity'] as const;
-const TEXT_FLAGS = ['bold', 'italic', 'wrap', 'background', 'border'] as const;
 const POLICY_FLAGS = ['selectable', 'editable', 'persistent', 'listed'] as const;
 
 /** Deep enough for anything a tool stores in `props`, shallow enough to stop a cycle. */
@@ -143,7 +123,7 @@ function migrateEntry(raw: unknown): Drawing | null {
   if (typeof tool !== 'string' || tool === '') return null;
   const viewport = raw.space === 'viewport' ? readViewportPoints(raw.viewportPoints) : undefined;
   if (viewport === null) return null;
-  const points = viewport === undefined ? migratePoints(raw.points) : [];
+  const points = viewport === undefined ? readPoints(raw.points) : [];
   if (points === null) return null;
   // An absent pane is pane zero; a pane that cannot exist is a drawing that
   // cannot be shown, so that entry goes.
@@ -179,19 +159,6 @@ function migrateEntry(raw: unknown): Drawing | null {
   // else cannot name one, and the drawing paints by its z-index instead.
   if (typeof raw.stackAbove === 'string' && raw.stackAbove !== '') out.stackAbove = raw.stackAbove;
   if (isNum(raw.createdAt)) out.createdAt = raw.createdAt;
-  return out;
-}
-
-function migratePoints(value: unknown): DrawingPoint[] | null {
-  if (!Array.isArray(value) || value.length === 0) return null;
-  const out: DrawingPoint[] = [];
-  for (const p of value) {
-    // One unmappable anchor is a shape that can never be drawn or hit-tested.
-    if (!isRecord(p) || !isNum(p.time) || !isNum(p.price)) return null;
-    const q: DrawingPoint = { time: p.time, price: p.price };
-    if (isNum(p.pressure) && p.pressure >= 0 && p.pressure <= 1) q.pressure = p.pressure;
-    out.push(q);
-  }
   return out;
 }
 
@@ -255,54 +222,16 @@ function migrateLevels(value: unknown, tool: string): FibLevel[] | null {
 /** The text block, closed to the keys {@link DrawingText} declares. */
 function migrateText(value: unknown): DrawingText | null {
   if (!isRecord(value) || typeof value.value !== 'string') return null;
-  return textFrom(value.value, value);
+  return readText(value.value, value, isString);
 }
 
 /**
- * The 1.9.x text fields, each under its new name. `fontWeight` and `fontStyle`
- * were enums whose only non-default value is now a flag, so `'normal'` simply
- * disappears. No `text` means no label, whatever else the bag says: a shape
- * with a font colour and nothing to say has nothing to keep.
+ * The 1.9.x text fields, each under its new name (`legacyTextFields`). No
+ * `text` means no label, whatever else the bag says: a shape with a font
+ * colour and nothing to say has nothing to keep.
  */
 function liftLegacyText(style: Record<string, unknown>): DrawingText | null {
-  if (typeof style.text !== 'string') return null;
-  return textFrom(style.text, {
-    color: style.fontColor,
-    fontSize: style.fontSize,
-    fontFamily: style.fontFamily,
-    bold: style.fontWeight === 'bold' ? true : undefined,
-    italic: style.fontStyle === 'italic' ? true : undefined,
-    align: style.textAlign,
-    valign: style.textVAlign,
-    position: style.textPosition,
-    wrap: style.wrap,
-    wrapWidth: style.wrapWidth,
-    background: style.background,
-    backgroundColor: style.backgroundColor,
-    backgroundOpacity: style.backgroundOpacity,
-    border: style.border,
-    borderColor: style.borderColor,
-  });
-}
-
-function textFrom(value: string, fields: Record<string, unknown>): DrawingText {
-  const t: DrawingText = { value };
-  for (const key of TEXT_STRINGS) {
-    const v = fields[key];
-    if (typeof v === 'string') t[key] = v;
-  }
-  for (const key of TEXT_NUMBERS) {
-    const v = fields[key];
-    if (isNum(v)) t[key] = v;
-  }
-  for (const key of TEXT_FLAGS) {
-    const v = fields[key];
-    if (typeof v === 'boolean') t[key] = v;
-  }
-  if (oneOf(fields.align, ALIGNS)) t.align = fields.align;
-  if (oneOf(fields.valign, VALIGNS)) t.valign = fields.valign;
-  if (oneOf(fields.position, POSITIONS)) t.position = fields.position;
-  return t;
+  return typeof style.text === 'string' ? readText(style.text, legacyTextFields(style), isString) : null;
 }
 
 /**

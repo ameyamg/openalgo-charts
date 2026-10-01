@@ -37,13 +37,13 @@ describe('pill color helpers', () => {
     expect(parseColor('#26a69a80')!.a).toBeCloseTo(0.5, 1);
     expect(parseColor('rgb(1, 2, 3)')).toEqual({ r: 1, g: 2, b: 3, a: 1 });
     expect(parseColor('rgba(1,2,3,0.4)')).toEqual({ r: 1, g: 2, b: 3, a: 0.4 });
-    expect(parseColor('teal')).toBeNull(); // named colors unsupported → caller falls back
+    expect(parseColor('teal')).toBeNull(); // named colors unsupported: caller falls back
   });
 
   it('picks legible text for light and dark fills', () => {
     expect(contrastText('#ffffff')).toBe('#10131a');
     expect(contrastText('#0d0e12')).toBe('#ffffff');
-    expect(contrastText('#26a69a')).toBe('#ffffff'); // buy green → white text
+    expect(contrastText('#26a69a')).toBe('#ffffff'); // buy green: white text
     expect(luminance('#000000')).toBe(0);
   });
 
@@ -98,13 +98,13 @@ describe('PriceLine visual states', () => {
     expect(drag.rec.count('stroke')).toBe(base.rec.count('stroke') + 2);
   });
 
-  it('renders a segment per structured field: [badge][qty][label][✕]', () => {
+  it('renders a segment per structured field: [badge][qty][label][close]', () => {
     const all = makeCtx();
     new PriceLine({ ...opts, badge: 'BUY', qty: 10, leftLabel: 'LIMIT' }).draw(all.ctx, makeRc());
     expect(all.rec.count('roundRect')).toBe(5); // backplate + 4 segments
     const bare = makeCtx();
     new PriceLine({ ...opts, leftLabel: undefined }).draw(bare.ctx, makeRc());
-    expect(bare.rec.count('roundRect')).toBe(2); // backplate + ✕ only
+    expect(bare.rec.count('roundRect')).toBe(2); // backplate + close only
   });
 
   it('fills the cancel button solid when its hit zone is hovered', () => {
@@ -121,12 +121,12 @@ describe('PriceLine visual states', () => {
     expect(closeFill(idle.rec.ops)).toBe(darkTheme.background); // theme background when idle
   });
 
-  it('routes the ✕ segment as a close click and the rest of the group as a drag', () => {
+  it('routes the close segment as a close click and the rest of the group as a drag', () => {
     const rc = makeRc();
-    const pl = new PriceLine({ ...opts }); // extentFromRight 0.3 → group starts at x=420
+    const pl = new PriceLine({ ...opts }); // extentFromRight 0.3: group starts at x=420
     pl.draw(makeCtx().ctx, rc);
     const y = rc.priceScale.priceToY(100);
-    // fake-ctx measureText = 6px/char: label 'BUY 10 LIMIT' 72+12 pad → ✕ spans 506..526
+    // fake-ctx measureText = 6px/char: label 'BUY 10 LIMIT' 72+12 pad, so the close segment spans 506..526
     expect(pl.hitTest(510, y, rc)!.externalId).toBe('ord1::close');
     expect(pl.hitTest(510, y, rc)!.cursor).toBe('pointer');
     expect(pl.hitTest(450, y, rc)!.externalId).toBe('ord1'); // label segment drags
@@ -155,14 +155,14 @@ describe('trade primitives visual states', () => {
     const pm = new PositionMarker({ symbol: 'X', netQty: 10, avgPrice: 100 });
     pm.setLtp(105);
     pm.draw(c.ctx, makeRc());
-    expect(c.rec.count('roundRect')).toBe(5); // backplate + [LONG][10][+50.00 (+5.00%)][✕]
+    expect(c.rec.count('roundRect')).toBe(5); // backplate + [LONG][10][+50.00 (+5.00%)][close]
     const band = c.rec.ops.find((o) => o.type === 'fillRect');
     expect(band!.fillStyle).toBe(withAlpha(darkTheme.profit, 0.1));
-    // ✕ hit-tests as position close once drawn
+    // the close segment hit-tests as position close once drawn
     const rc = makeRc();
     pm.draw(makeCtx().ctx, rc);
     const y = rc.priceScale.priceToY(100);
-    const g = pm.hitTest(80, y, rc); // inside the ✕ segment region
+    const g = pm.hitTest(80, y, rc); // inside the close segment region
     expect(g === null || g.externalId.startsWith('position:X')).toBe(true);
   });
 

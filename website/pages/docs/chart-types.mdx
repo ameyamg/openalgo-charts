@@ -62,5 +62,6 @@ return chart;`} />
 
 <Callout type="info">
 Movement-driven styles - **Heikin Ashi, Renko, Range, Line Break, Point &amp; Figure, Kagi** -
-come from the [transform tier](/docs/transforms).
+come from the [transform tier](/docs/transforms). The chart can apply them itself, live, to
+the bars a series is fed: `chart.setSeriesTransform(series, { type: 'renko' })`.
 </Callout>

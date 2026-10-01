@@ -37,7 +37,7 @@ describe('DataLayer fractional time mapping', () => {
     expect(d.indexToTimeFloat(4)).toBe(1700000240);
   });
 
-  it('interpolates between bars — the positions a gapless axis collapses', () => {
+  it('interpolates between bars: the positions a gapless axis collapses', () => {
     expect(layer().indexToTimeFloat(1.5)).toBe(1700000090);
   });
 
@@ -149,7 +149,7 @@ describe('chart.getState / restoreState', () => {
     expect(b.indicators()[0].values().macd).toHaveLength(60);
   });
 
-  it('is idempotent — restoring twice does not duplicate indicators', () => {
+  it('is idempotent: restoring twice does not duplicate indicators', () => {
     const chart = makeChart();
     chart.addSeries('candlestick').setData(bars(40));
     chart.addIndicator('rsi');
@@ -222,7 +222,7 @@ describe('chart.getState / restoreState', () => {
 
 describe('restoreState never leaves an empty pane', () => {
   // A saved pane exists only to hold an indicator, and restoreState skips an
-  // indicator whose tier was never imported. The pane used to survive anyway —
+  // indicator whose tier was never imported. The pane used to survive anyway:
   // still claiming its weight and still drawing a default 0..100 axis, which
   // reads as a large blank region under the chart.
   it('drops a pane whose indicator could not be recreated', () => {
@@ -235,7 +235,7 @@ describe('restoreState never leaves an empty pane', () => {
         { weight: 1, priceScale: { marginTop: 0.1, marginBottom: 0.1, autoScale: true } },
         { weight: 2, priceScale: { marginTop: 0.1, marginBottom: 0.1, autoScale: true } },
       ],
-      // No such indicator, so restoreState skips it — the same path a state
+      // No such indicator, so restoreState skips it: the same path a state
       // referencing an unloaded tier takes.
       indicators: [{ indicatorId: 'no-such-indicator', settings: {}, paneIndex: 1 }],
       series: [],
@@ -283,7 +283,7 @@ describe('an emptied indicator pane never survives', () => {
     const pane = rsi.paneIndex;
     expect(pane).toBeGreaterThan(0);
 
-    // The host's own UI calls this directly — it used to leave the pane behind.
+    // The host's own UI calls this directly: it used to leave the pane behind.
     chart.removeIndicator(rsi.id);
     expect(chart.panes()).toHaveLength(1);
   });
@@ -305,7 +305,7 @@ describe('an emptied indicator pane never survives', () => {
     const chart = makeChart();
     chart.addSeries('candlestick').setData(bars(40));
     const state = chart.getState() as { panes: unknown[] };
-    // One series, one pane — a second entry here is what produced the gap.
+    // One series, one pane: a second entry here is what produced the gap.
     expect(state.panes).toHaveLength(chart.panes().length);
   });
 });

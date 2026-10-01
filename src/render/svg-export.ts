@@ -49,7 +49,7 @@ export interface SvgContextOptions {
    * that is appended to cannot do; when the export is opaque the honest stand-in
    * is the background colour. Absent, `clearRect` paints nothing.
    */
-  background?: string;
+  background?: string | undefined;
 }
 
 /** A gradient handle: set it as `fillStyle` the way a canvas one is set. */
@@ -145,11 +145,11 @@ function parseFont(font: string): ParsedFont {
   let size = 10;
   let i = 0;
   for (; i < tokens.length; i++) {
-    const t = tokens[i];
+    const t = tokens[i]!;
     // The unit is what tells a size from a numeric weight ('600 11px ...').
     const m = /^(\d+(?:\.\d+)?)(px|pt)(?:\/\S+)?$/.exec(t);
     if (m !== null) {
-      size = parseFloat(m[1]) * (m[2] === 'pt' ? 4 / 3 : 1);
+      size = parseFloat(m[1]!) * (m[2] === 'pt' ? 4 / 3 : 1); // both groups take part in every match
       i++;
       break;
     }
@@ -242,7 +242,7 @@ export class SvgContext {
 
   public restore(): void {
     let i = this._frames.length - 1;
-    while (i >= 0 && this._frames[i].kind !== 'save') i--;
+    while (i >= 0 && this._frames[i]!.kind !== 'save') i--; // i counts down from the last frame
     if (i < 0) return; // a canvas ignores a restore with nothing saved
     if (i !== this._frames.length - 1 && this._strict) {
       throw new Error('SvgContext: restore() reached across an open pushGroup()');
@@ -274,7 +274,7 @@ export class SvgContext {
 
   public popGroup(): void {
     let i = this._frames.length - 1;
-    while (i >= 0 && this._frames[i].kind !== 'group') i--;
+    while (i >= 0 && this._frames[i]!.kind !== 'group') i--; // i counts down from the last frame
     if (i < 0) {
       if (this._strict) throw new Error('SvgContext: popGroup() without a pushGroup()');
       return;
@@ -505,16 +505,17 @@ export class SvgContext {
     const nh = natural.naturalHeight ?? (typeof natural.height === 'number' ? natural.height : 0);
     const op = this._opacity();
     if (args.length >= 8) {
-      const [sx, sy, sw, sh, dx, dy, dw, dh] = args;
+      const [sx, sy, sw, sh, dx, dy, dw, dh] = args as [number, number, number, number, number, number, number, number];
       this._out.push(
         `<svg x="${num(dx)}" y="${num(dy)}" width="${num(dw)}" height="${num(dh)}" viewBox="${num(sx)} ${num(sy)} ${num(sw)} ${num(sh)}" preserveAspectRatio="none">` +
         `<image href="${esc(href)}" width="${num(nw)}" height="${num(nh)}" preserveAspectRatio="none"${op}/></svg>`,
       );
       return;
     }
-    const [dx, dy] = args;
-    const dw = args.length >= 4 ? args[2] : nw;
-    const dh = args.length >= 4 ? args[3] : nh;
+    // Every canvas form passes dx and dy (and `num` writes 0 for a missing one).
+    const [dx, dy] = args as [number, number];
+    const dw = args.length >= 4 ? args[2]! : nw;
+    const dh = args.length >= 4 ? args[3]! : nh;
     this._out.push(`<image href="${esc(href)}" x="${num(dx)}" y="${num(dy)}" width="${num(dw)}" height="${num(dh)}" preserveAspectRatio="none"${op}/>`);
   }
 
@@ -552,7 +553,7 @@ export class SvgContext {
       defs += '</linearGradient>';
     }
     let close = '';
-    for (let i = this._frames.length - 1; i >= 0; i--) close += '</g>'.repeat(this._frames[i].open);
+    for (let i = this._frames.length - 1; i >= 0; i--) close += '</g>'.repeat(this._frames[i]!.open);
     close += '</g>'.repeat(this._rootOpen);
     return (
       `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xml:space="preserve">` +

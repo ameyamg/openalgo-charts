@@ -1,7 +1,7 @@
 /**
- * Time scale (ARCHITECTURE.md §5.1, §5.3). Maps the shared **logical index**
- * ↔ x. Because x is `index × barSpacing` (not timestamp-proportional),
- * non-trading gaps collapse automatically — weekends/holidays/session breaks
+ * Time scale (ARCHITECTURE.md §5.1, §5.3). Maps between the shared **logical index**
+ * and x. Because x is `index × barSpacing` (not timestamp-proportional),
+ * non-trading gaps collapse automatically: weekends/holidays/session breaks
  * have no logical index, so there is no blank space to draw.
  */
 import { clamp } from '../helpers/math';
@@ -84,12 +84,12 @@ export class TimeScale {
     return this._baseIndex + this._rightOffset;
   }
 
-  /** Logical index → x (media px), bar center. */
+  /** Logical index to x (media px), bar center. */
   public indexToX(index: number): number {
     return this._width - (this._rightEdgeIndex() - index) * this._barSpacing;
   }
 
-  /** x (media px) → fractional logical index. */
+  /** x (media px) to fractional logical index. */
   public xToIndex(x: number): number {
     return this._rightEdgeIndex() - (this._width - x) / this._barSpacing;
   }
@@ -152,7 +152,7 @@ export class TimeScale {
     const focusIndex = this.xToIndex(focusX);
     const before = this._barSpacing;
     this._barSpacing = this.constrainBarSpacing(before * factor);
-    if (this._barSpacing === before) return; // clamped — nothing moved
+    if (this._barSpacing === before) return; // clamped: nothing moved
     // Re-anchor: indexToX(focusIndex) must still equal focusX.
     // width - (rightEdge - focusIndex) * bs = focusX
     const rightEdge = focusIndex + (this._width - focusX) / this._barSpacing;

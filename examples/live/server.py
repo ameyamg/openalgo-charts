@@ -6,7 +6,7 @@ running OpenAlgo instance, so the browser demo can call OpenAlgo's REST API from
 the SAME origin (OpenAlgo does not send CORS headers, so a direct cross-origin
 fetch from the demo would be blocked).
 
-The WebSocket feed is NOT proxied — the browser connects straight to OpenAlgo's
+The WebSocket feed is NOT proxied: the browser connects straight to OpenAlgo's
 WS proxy (default ws://127.0.0.1:8765); WebSocket upgrades aren't subject to the
 CORS preflight that blocks the REST calls.
 
@@ -18,7 +18,7 @@ Usage:
 Then open:  http://127.0.0.1:8001/examples/live/index.html
 
 NOTE: your OpenAlgo API key is entered in the page (saved to the browser's
-localStorage) and forwarded in the request body — it is never stored in this repo.
+localStorage) and forwarded in the request body: it is never stored in this repo.
 """
 import os
 import sys

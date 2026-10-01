@@ -1,6 +1,8 @@
 /** Bounded JSON at the persistence boundary; no callbacks or accessors run. */
+import { isPriceScaleId } from '../model/price-axis-layout';
+
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
-export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 
 export class WorkspaceDocumentError extends Error {
   constructor(message: string) { super(message); this.name = 'WorkspaceDocumentError'; }
@@ -76,8 +78,7 @@ export function readJson(input: unknown): Json {
         if (characters > MAX_DOCUMENT_BYTES) throw new WorkspaceDocumentError('Document size limit exceeded');
         const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
         if (!('value' in descriptor)) throw new WorkspaceDocumentError('Document accessors are not allowed');
-        if (plotScales && (typeof descriptor.value !== 'string' ||
-          (descriptor.value !== 'right' && descriptor.value !== 'left' && descriptor.value !== '' && !descriptor.value.startsWith('overlay:')))) {
+        if (plotScales && !isPriceScaleId(descriptor.value)) {
           throw new WorkspaceDocumentError('Invalid indicator plot priceScaleId');
         }
         // Plot names are descriptor-owned keys, including names also used for private

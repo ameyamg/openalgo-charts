@@ -15,14 +15,16 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import {
   NOTE, BALLOON, COMMENT, SIGNPOST, PRICE_NOTE, TABLE,
   ARROW_LEFT, ARROW_RIGHT, ARROW_UP,
-  registeredDrawingTools, registerBuiltinDrawingTools,
-} from '../src/draw/tools';
+} from '../src/draw/annotation-tools';
+import { registerBuiltinDrawingTools } from '../src/draw/tools';
+import { registeredDrawingTools } from '../src/draw/registry';
 import { RecordingContext } from './helpers/fake-ctx';
 import type { DrawingTool, DrawContext, Drawing, DrawingText } from '../src/draw/types';
 
 beforeAll(() => { registerBuiltinDrawingTools(); });
 
-const PANE = { plotWidth: 800, plotHeight: 400, dpr: 1 };
+// The price scale formats the price a price note shows, for its hit test as for its paint.
+const PANE = { plotWidth: 800, plotHeight: 400, dpr: 1, priceScale: { format: (p: number) => p.toFixed(2) } };
 
 function drawingOf(tool: DrawingTool, text?: Partial<DrawingText> | null): Drawing {
   const d: Drawing = {

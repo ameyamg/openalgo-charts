@@ -23,7 +23,8 @@
  */
 import type { Bar, SeriesDataItem } from './bar';
 import type { SeriesApi } from './series';
-import type { IndicatorPlot, IndicatorSettings, IndicatorValues } from './indicator-registry';
+import { plotStyleKeys, type IndicatorPlot, type IndicatorSettings, type IndicatorValues } from './indicator-registry';
+import { parseColor } from '../render/pill';
 
 /**
  * Most points one plot writes in place in a pass. Each is a data-layer update
@@ -31,6 +32,8 @@ import type { IndicatorPlot, IndicatorSettings, IndicatorValues } from './indica
  * points (a study that revises its past) is closer to a new plot than a tick.
  */
 const IN_PLACE = 8;
+
+type List = unknown[];
 
 interface PlotRecord {
   /** The pass that last wrote the series whole or in place. */
@@ -50,6 +53,28 @@ type Settings = Readonly<IndicatorSettings>;
  */
 function same(a: unknown, b: unknown): boolean {
   return a === b ? a !== 0 || 1 / (a as number) === 1 / (b as number) : a !== a && b !== b;
+}
+
+/**
+ * The plot's generated Opacity setting, 100 when unset. The series colour folds
+ * it in (IndicatorInstance._plotStyle); a plot that colours bar by bar paints
+ * over the series colour, so its per-bar colours are faded here too.
+ */
+function opacityOf(plot: IndicatorPlot, settings: Settings): number {
+  const v = settings[plotStyleKeys(plot).opacity];
+  return typeof v === 'number' && Number.isFinite(v) ? v : 100;
+}
+
+/**
+ * A per-bar colour at `opacity` percent of its own alpha. Multiplied rather than
+ * replaced: a study that says something with the alpha of a bar (a weakening
+ * histogram drawn lighter) keeps saying it when the whole plot is faded. What
+ * does not parse as a colour passes through.
+ */
+function faded(color: unknown, opacity: number): unknown {
+  if (typeof color !== 'string' || opacity >= 100) return color;
+  const c = parseColor(color);
+  return c === null ? color : `rgba(${c.r},${c.g},${c.b},${c.a * Math.max(0, opacity) / 100})`;
 }
 
 export class PlotWrites {
@@ -74,14 +99,14 @@ export class PlotWrites {
   public begin(bars: readonly Bar[]): void {
     const times = this._times, m = times.length, n = bars.length;
     let kept = this._ordered && n >= m;
-    for (let i = 0; i < m && kept; i++) kept = bars[i].time === times[i];
+    for (let i = 0; i < m && kept; i++) kept = bars[i]!.time === times[i];
     if (!kept) {
       times.length = 0;
       this._ordered = true;
     }
-    for (let i = times.length; i < n; i++) {
-      const time = bars[i].time;
-      if (i > 0 && !(time > times[i - 1])) this._ordered = false;
+    for (let i = times.length; i < n; i++) { // `times` holds the first `i` of them
+      const time = bars[i]!.time;
+      if (i > 0 && !(time > times[i - 1]!)) this._ordered = false;
       times.push(time);
     }
     this._kept = kept && this._ordered ? m : -1;
@@ -101,8 +126,9 @@ export class PlotWrites {
     const n = bars.length;
     const { colorBy, colorParts } = plot;
     const coloured = colorBy !== undefined || colorParts !== undefined;
+    const opacity = coloured ? opacityOf(plot, settings) : 100;
     const [rec, m] = this._claim(series, 1, 1);
-    const value = rec.cols[0], body = rec.colors[0];
+    const value = rec.cols[0]!, body = rec.colors[0]!; // the one list each that _claim made
     const changed: number[] = [];
     let whole = m < 0;
     for (let i = 0; i < n; i++) {
@@ -112,14 +138,14 @@ export class PlotWrites {
       // border are for the candle plot, see `writeCandles`.
       let paint: unknown;
       if (coloured && Number.isFinite(next)) {
-        paint = colorParts?.({ value: next, index: i, values, settings })?.body ?? colorBy?.({ value: next, index: i, values, settings });
+        paint = faded(colorParts?.({ value: next, index: i, values, settings })?.body ?? colorBy?.({ value: next, index: i, values, settings }), opacity);
       }
       if (!whole && (i >= m || !same(value[i], next) || (coloured && body[i] !== paint)) && changed.push(i) > IN_PLACE) whole = true;
       value[i] = next;
       if (coloured) body[i] = paint;
     }
     const point = (i: number): { time: number; value: number; color?: string } => {
-      const p: { time: number; value: number; color?: string } = { time: bars[i].time, value: value[i] as number };
+      const p: { time: number; value: number; color?: string } = { time: bars[i]!.time, value: value[i] as number };
       if (body[i] !== undefined) p.color = body[i] as string;
       return p;
     };
@@ -144,23 +170,25 @@ export class PlotWrites {
       return col;
     });
     const { colorBy, colorParts } = plot;
+    const opacity = colorBy !== undefined || colorParts !== undefined ? opacityOf(plot, settings) : 100;
     const [rec, m] = this._claim(series, 4, 3);
-    const [open, high, low, close] = rec.cols, [color, wick, border] = rec.colors;
+    const [open, high, low, close] = rec.cols as [List, List, List, List], [color, wick, border] = rec.colors as [List, List, List];
     const changed: number[] = [];
     let whole = m < 0;
-    for (let i = 0; i < n; i++) {
-      const c = cols[3][i];
+    for (let i = 0; i < n; i++) { // four columns of `n` values each, checked above
+      const c = cols[3]![i] as number | null;
       const value = c === null ? NaN : c;
-      const o = cols[0][i] ?? NaN, h = cols[1][i] ?? NaN, l = cols[2][i] ?? NaN;
+      const o = cols[0]![i] ?? NaN, h = cols[1]![i] ?? NaN, l = cols[2]![i] ?? NaN;
       let body: unknown, wickColor: unknown, borderColor: unknown;
       if (Number.isFinite(value)) {
         body = colorBy?.({ value, index: i, values, settings });
         const parts = colorParts?.({ value, index: i, values, settings });
         if (parts !== undefined) {
           if (parts.body !== undefined) body = parts.body;
-          wickColor = parts.wick;
-          borderColor = parts.border;
+          wickColor = faded(parts.wick, opacity);
+          borderColor = faded(parts.border, opacity);
         }
+        body = faded(body, opacity);
       }
       if (!whole && (i >= m || !same(open[i], o) || !same(high[i], h) || !same(low[i], l)
         || !same(close[i], value) || color[i] !== body || wick[i] !== wickColor || border[i] !== borderColor)
@@ -169,7 +197,7 @@ export class PlotWrites {
       color[i] = body; wick[i] = wickColor; border[i] = borderColor;
     }
     const point = (i: number): Bar => {
-      const bar: Bar = { time: bars[i].time, open: open[i] as number, high: high[i] as number, low: low[i] as number, close: close[i] as number };
+      const bar: Bar = { time: bars[i]!.time, open: open[i] as number, high: high[i] as number, low: low[i] as number, close: close[i] as number };
       if (color[i] !== undefined) bar.color = color[i] as string;
       if (wick[i] !== undefined) bar.wickColor = wick[i] as string;
       if (border[i] !== undefined) bar.borderColor = border[i] as string;
@@ -195,6 +223,7 @@ export class PlotWrites {
     return [rec, m];
   }
 
+  // `point` is asked for indices below `n` only, so it reads the pass's bars in range.
   private _commit(series: SeriesApi, rec: PlotRecord, whole: boolean, changed: readonly number[], n: number,
     point: (i: number) => SeriesDataItem): void {
     if (whole) {

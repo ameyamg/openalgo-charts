@@ -7,8 +7,8 @@ generated from the source used by the current website build; the package version
 appears in the page title.
 
 <div class="oac-api-links">
-<a href="/openalgo-charts/docs/getting-started/">Start with the guides →</a>
-<a href="/openalgo-charts/examples/">Try the live examples →</a>
+<a href="/openalgo-charts/docs/getting-started/">Start with the guides</a>
+<a href="/openalgo-charts/examples/">Try the live examples</a>
 </div>
 
 ### Find your starting point

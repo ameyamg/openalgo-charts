@@ -13,7 +13,7 @@
 import type { RafScheduler, RafCanceller } from './render-loop';
 import type { ChartTheme } from '../theme';
 import type { TimeScaleOptions } from '../scale/time-scale';
-import type { PriceScaleOptions, PriceScaleMode } from '../scale/price-scale';
+import type { PriceScaleOptions } from '../scale/price-scale';
 import type { TickMarkType } from '../render/axis';
 import type { CanvasOptions, GridOptions } from '../render/grid';
 import type {
@@ -21,6 +21,7 @@ import type {
 } from '../render/backend';
 import type { PriceScaleId, PriceFormat } from '../model/series';
 import type { SeriesType } from '../model/chart-type-registry';
+import type { SeriesTransformSpec } from '../model/series-transform';
 import type { IndicatorBarsProvider, IndicatorBarsProviderAccess } from '../model/indicator-registry';
 import type { SeriesStyle } from '../render/series-style';
 import type { Bar } from '../model/bar';
@@ -31,6 +32,8 @@ import type { LegendStatusLineOptions } from '../primitives/pane-legend';
 import type { TimeNavigatorOptions } from '../primitives/time-navigator';
 import type { LogoWatermarkOptions } from '../primitives/watermark';
 import type { TextWatermarkOptions } from '../primitives/text-watermark';
+import type { IndicatorPolicy } from '../model/indicator-policy';
+import type { IndicatorBarSource } from '../model/indicator-bar-source';
 
 /** What a wheel zoom holds still. */
 export type ZoomAnchor = 'cursor' | 'right';
@@ -196,7 +199,11 @@ export interface ChartOptions {
    * draws the axes it always drew.
    */
   axisChrome?: AxisChromeOptions;
-  /** Time source for kinetic animation (defaults to performance.now). */
+  /**
+   * Time source for kinetic animation (defaults to performance.now).
+   * `WidgetOptions.now` is a different clock (the widget's wall clock, epoch
+   * milliseconds) and is not passed to a widget's chart.
+   */
   now?: () => number;
   /**
    * Ease a wheel zoom over a few frames instead of landing the whole step on
@@ -315,7 +322,7 @@ export interface ChartOptions {
   barsProvider?: IndicatorBarsProvider | IndicatorBarsProviderAccess;
   /**
    * Custom time-axis and crosshair label formatter (receives UTC seconds). When
-   * omitted, labels use IST (Indian market default). e.g. for UTC:
+   * omitted, labels follow `timezone`, which is IST unless set. e.g. for UTC:
    * `(s) => new Date(s * 1000).toISOString().slice(11, 16)`.
    */
   timeFormatter?: (utcSeconds: number, tickMark?: TickMarkType) => string;
@@ -363,21 +370,53 @@ export interface ChartOptions {
   movablePrimaryPane?: boolean;
 }
 
+/** Where `chart.addIndicator` puts a study, and how the host holds it. */
+export interface AddIndicatorOptions {
+  /** The pane: an existing one, or `panes().length` for a new one. Default: the price pane for an overlay, a new pane otherwise. */
+  paneIndex?: number;
+  /** The scale the study's plots map to on that pane. */
+  priceScaleId?: PriceScaleId;
+  /** A scale per plot key, for a study whose plots belong on different scales. */
+  plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>;
+  /** What the user may do with the study; see `IndicatorPolicy`. */
+  policy?: IndicatorPolicy;
+  /** The id to give the study, to bring a removed one back under its own identity. */
+  instanceId?: string;
+  /** On a transformed chart, `'underlying'` computes on the host's bars instead of the elements drawn. */
+  barSource?: IndicatorBarSource;
+}
+
+/** The chart options `chart.applyOptions` changes at runtime, without recreating the chart. */
+export interface ChartApplyOptions {
+  theme?: ChartTheme;
+  grid?: Partial<GridOptions>;
+  canvas?: CanvasOptions;
+  statusLine?: LegendStatusLineOptions;
+  legendIconSize?: number;
+  priceScale?: Partial<PriceScaleOptions>;
+  priceFormatter?: ((price: number) => string) | null;
+  timeFormatter?: ((utcSeconds: number, tickMark?: TickMarkType) => string) | undefined;
+  timezone?: string;
+  crosshairMode?: CrosshairMode;
+  crosshairSnapToBar?: boolean;
+}
+
 export interface AddSeriesOptions {
   /**
    * Target pane index. Omitted means the primary price pane wherever it sits
    * (slot 0 until something moves it, see `Chart.primaryPaneIndex`). Higher
-   * panes are created on demand.
+   * panes are created on demand. An index that is not a whole number of 0 or
+   * more throws a `RangeError` and adds nothing.
    */
   paneIndex?: number;
   /** Style overrides merged onto the chart type's defaults. */
-  style?: SeriesStyle;
+  style?: SeriesStyle | undefined;
   /**
    * Which price axis this series maps to. 'right' (default) and 'left' each draw
    * an axis and autoscale independently; '' is a hidden overlay scale (no axis)
    * for a volume histogram inside the price pane.
    */
-  priceScaleId?: PriceScaleId;
+  priceScaleId?: PriceScaleId | undefined;
   /**
    * Value formatting applied to this series' price scale (axis + crosshair tag):
    * `price` (tick-size precision), `volume` (compact 1.2K / 3.4M / 5.6B),
@@ -388,7 +427,14 @@ export interface AddSeriesOptions {
    * fraction reads `0.62%`. Multiplying here would put the axis and the plotted
    * value into disagreement, which is the one thing a formatter must never do.
    */
-  priceFormat?: PriceFormat;
+  priceFormat?: PriceFormat | undefined;
+  /**
+   * Have the chart apply a price-driven transform to the bars this series is
+   * given, as `Chart.setSeriesTransform` does. The series draws with `type`,
+   * so a host passes the transform's own renderer (`getSeriesTransform(type).renderer`)
+   * unless it wants another. An unknown type or invalid option throws.
+   */
+  transform?: SeriesTransformSpec;
 }
 
 /** Compact volume/number formatter (1.2K / 3.4M / 5.6B). */
@@ -543,9 +589,8 @@ export interface ContextMenuTarget {
   scaleId?: PriceScaleId;
 }
 
-/** The four price-scale modes, in the order a menu lists them. */
-export const PRICE_SCALE_MODES: readonly PriceScaleMode[] =
-  ['linear', 'logarithmic', 'percentage', 'indexed-to-100'];
+// Declared beside PriceScaleMode; published from here, where it always was.
+export { PRICE_SCALE_MODES } from '../scale/price-scale';
 
 /**
  * The setters that change what `getState` saves without an event of their
@@ -554,7 +599,8 @@ export const PRICE_SCALE_MODES: readonly PriceScaleMode[] =
 export type LayoutSetter =
   | 'setPaneWeight' | 'setPriceAxisOptions' | 'setPriceAxisAutoFit' | 'setPriceAxisLockRatio'
   | 'setPriceScaleOptions' | 'setAutoScale' | 'setGridOptions' | 'setCanvasOptions' | 'setStatusLineOptions'
-  | 'setWatermarkOptions' | 'setTradingSettings' | 'setAxisChromeOptions' | 'setEventOptions' | 'applyOptions';
+  | 'setWatermarkOptions' | 'setTradingSettings' | 'setAxisChromeOptions' | 'setEventOptions' | 'applyOptions'
+  | 'setNavigationOptions';
 
 /**
  * Payload of the `layout:change` event (`chart.on('layout:change', ...)`):

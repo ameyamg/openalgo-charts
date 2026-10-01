@@ -1,8 +1,11 @@
 /**
  * Series transform pipeline (ARCHITECTURE.md §6A, Family B). A transform
  * re-buckets raw OHLC into a derived element series driven by price movement,
- * not the clock. Transforms are incremental (streaming) so live ticks extend
- * the series without recomputing history.
+ * not the clock. A transform is incremental: `push` takes each source bar
+ * once, in time order, and never recomputes what came before. Every push moves
+ * the state, so a bar that is still forming is not pushed on each tick (that
+ * counts it again every time); a live chart pushes it through a `clone` of
+ * the state instead and pushes it for good once it has closed (see ./live).
  *
  * Each derived element is a Bar carrying its source formation time. Because the
  * time scale is index-based, derived elements get uniform spacing automatically
@@ -20,6 +23,22 @@ export interface ISeriesTransform {
   push(bar: Bar): Bar[];
   /** Optional: emit any in-progress element at end of data. */
   flush?(): Bar[];
+  /**
+   * Optional: an independent copy of the state, for a live chart to push the
+   * forming bar through. `push` changes state on every call, so the bar that
+   * is still forming is pushed into a copy on each tick and into the transform
+   * itself only once it has closed. The built-in transforms all have one.
+   */
+  clone?(): ISeriesTransform;
+}
+
+/**
+ * A shallow copy of a transform: its prototype and every field. A field that
+ * holds an object is shared, so a transform whose state has one copies it
+ * after this.
+ */
+export function copyState<T extends object>(transform: T): T {
+  return Object.assign(Object.create(Object.getPrototypeOf(transform) as object) as T, transform);
 }
 
 /**

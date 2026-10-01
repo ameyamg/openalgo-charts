@@ -19,8 +19,32 @@ import { makeCtx, type RecordingContext } from './helpers/fake-ctx';
 const bar = (time: number, o: number, h: number, l: number, c: number, v: number): Bar => ({ time, open: o, high: h, low: l, close: c, volume: v });
 
 describe('priceBuckets', () => {
-  it('spans inclusive low→high on the tick grid', () => {
+  it('spans inclusive low to high on the tick grid', () => {
     expect(priceBuckets(100, 100.2, 0.05)).toEqual([100, 100.05, 100.1, 100.15, 100.2]);
+  });
+
+  // A negative step walked the loop away from its end, growing the array
+  // until memory ran out; zero and NaN already returned no buckets.
+  it('returns no buckets for a step that is not a positive finite number', () => {
+    for (const step of [-1, -0.05, 0, NaN, Infinity, -Infinity]) expect(priceBuckets(100, 105, step)).toEqual([]);
+  });
+
+  // A walk from low to high by step never ended when the step no longer moved
+  // a price that large, or a price ran past the largest number.
+  it('returns no buckets for a range the numbers cannot step through, instead of walking forever', () => {
+    expect(priceBuckets(1e17, 1e17 + 1000, 1)).toEqual([]);
+    expect(priceBuckets(-1e17 - 1000, -1e17, 1)).toEqual([]);
+    expect(priceBuckets(100, Infinity, 0.05)).toEqual([]);
+    expect(priceBuckets(1.7e308, Number.MAX_VALUE, 1e307)).toEqual([]);
+    expect(priceBuckets(NaN, 105, 0.05)).toEqual([]);
+    // A reversed range has no buckets, as before.
+    expect(priceBuckets(105, 100, 0.05)).toEqual([]);
+  });
+
+  it('leaves the two positional profiles empty on such a tick size instead of hanging', () => {
+    const bars = [bar(0, 100, 101, 99, 100.5, 1000), bar(60, 100.5, 102, 100, 101.5, 800)];
+    expect(computeVolumeProfile(bars, -0.5)).toEqual({ buckets: [], poc: 0, vah: 0, val: 0, totalVolume: 0 });
+    expect(computeTpo(bars, 1, -0.5)).toEqual({ buckets: [], poc: 0, vah: 0, val: 0, ib: { high: 0, low: 0 } });
   });
 });
 
@@ -41,6 +65,14 @@ describe('Volume Profile', () => {
     expect(vaVol).toBeGreaterThanOrEqual(vp.totalVolume * 0.7 - 1e-6);
   });
 
+  // What the documentation says of an unclamped fraction, case by case.
+  it('takes every row above 1, stops at all the volume at 1, and has the POC alone without volume', () => {
+    const bars = [bar(0, 100, 100, 100, 100, 10), bar(60, 99, 101, 99, 100, 0)];
+    expect(computeVolumeProfile(bars, 1, 70)).toMatchObject({ poc: 100, vah: 101, val: 99 });
+    expect(computeVolumeProfile(bars, 1, 1)).toMatchObject({ poc: 100, vah: 100, val: 100 });
+    expect(computeVolumeProfile([bar(0, 99, 101, 99, 100, 0)], 1, 70)).toMatchObject({ poc: 101, vah: 101, val: 101, totalVolume: 0 });
+  });
+
   it('handles empty input', () => {
     const vp = computeVolumeProfile([], 0.05);
     expect(vp.buckets).toHaveLength(0);
@@ -57,7 +89,7 @@ describe('TPO / Market Profile', () => {
     ];
     const tpo = computeTpo(bars, 2, 0.5, 0.7, 2); // 2 bars/period, IB = first 2 periods
     expect(tpo.buckets.length).toBeGreaterThan(0);
-    // prices around 100 are touched by 2 periods → higher count than 103 band
+    // prices around 100 are touched by 2 periods, so a higher count than the 103 band
     expect(tpo.poc).toBeGreaterThanOrEqual(99.5);
     expect(tpo.poc).toBeLessThanOrEqual(101);
     // IB spans the first two periods' combined range (99 .. 101)
@@ -84,7 +116,7 @@ describe('Footprint & order flow', () => {
   });
 
   it('detects diagonal imbalances by ratio', () => {
-    // strong ask at 100.05 vs bid at 100.0 → buy imbalance
+    // strong ask at 100.05 vs bid at 100.0: buy imbalance
     const fp = computeFootprint(1, trades, 0.05);
     const imb = diagonalImbalances(fp.cells, 3);
     expect(imb.some((i) => i.side === 'buy')).toBe(true);
@@ -166,7 +198,7 @@ describe('profile primitives render', () => {
     const b = makeCtx();
     hot.draw(b.ctx, r);
 
-    // Same geometry either way — an outline would have added strokeRect calls.
+    // Same geometry either way: an outline would have added strokeRect calls.
     expect(b.rec.count('strokeRect')).toBe(0);
     expect(b.rec.count('roundRect')).toBe(a.rec.count('roundRect'));
     // ...but the imbalanced cell is painted a different (saturated) colour.

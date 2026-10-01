@@ -10,6 +10,9 @@ import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, ZOrder } from '
 import { PriceLine, type PriceLineOptions } from '../primitives/price-line';
 import type { TickSchedule } from '../feed/tick-schedule';
 import { contrastText, roundRectPath } from '../render/pill';
+import { dispatch } from '../helpers/dispatch';
+import type { ChartEventMap } from './chart-events';
+import type { LooseOptional } from '../helpers/types';
 
 export type PositionSide = 'long' | 'short';
 export type TradingOrderSide = 'buy' | 'sell';
@@ -64,6 +67,20 @@ export interface TradingSyncPayload {
   trades?: TradingTrade[];
 }
 
+/** Payload of `trading:order_modify`: an order line was dragged and released. */
+export interface TradingOrderModifyEvent {
+  orderId: string;
+  newPrice: number;
+  previousPrice: number;
+}
+
+/** Payload of `trading:bracket_modify`: a take-profit or stop-loss leg was dragged and released. */
+export interface TradingBracketModifyEvent {
+  parentId: string | undefined;
+  bracketRole: 'tp' | 'sl';
+  newPrice: number;
+}
+
 export interface TradingColors {
   long: string;
   short: string;
@@ -95,8 +112,8 @@ export interface TradingHost {
   /**
    * Optional: the instrument's tick schedule when the layer is built. The
    * layer is built on first use, often after the instrument was applied, and
-   * applying one cannot build the layer early: its click and drag
-   * subscriptions would replace the host's own.
+   * applying one does not build it early: building it subscribes to drags,
+   * which makes every `ns-resize` price line on the chart draggable.
    */
   tickSchedule?(): TickSchedule | null;
 }
@@ -255,9 +272,10 @@ export class TradingController {
     this._listeners.get(event)?.delete(cb);
   }
 
-  private _emit(event: string, payload: unknown): void {
-    const set = this._listeners.get(event);
-    if (set !== undefined) for (const cb of set) cb(payload);
+  private _emit<K extends keyof ChartEventMap & `trading:${string}`>(event: K, payload: ChartEventMap[K]): void {
+    // A throwing listener runs out its turn here too: this is called from the
+    // chart's pointer handling, and the mirror below is how `chart.on` hears it.
+    dispatch(this._listeners.get(event), payload);
     // Mirror onto the chart's unified bus so `chart.on('trading:...')` works too.
     this._host.emit?.(event, payload);
   }
@@ -328,12 +346,30 @@ export class TradingController {
     if (payload.trades !== undefined) this.setTrades(payload.trades);
   }
 
-  public updatePositionPnl(id: string, unrealizedPnl: number, pnlText?: string, pnlPercent?: string): void {
+  /**
+   * Refresh a position's P&L pill in place, without recreating its line: the
+   * pill reads `pnlText`, then `pnlPercent` in brackets. Either one left out
+   * keeps what the pill showed. The host formats both, since only it knows
+   * the account's currency and how it rounds.
+   */
+  public updatePositionPnl(id: string, pnlText?: string, pnlPercent?: string): void;
+  /**
+   * The form that also takes the P&L as a number, which nothing ever read:
+   * the pill shows `pnlText` and `pnlPercent` only.
+   *
+   * @deprecated Removed in 3.0.0. Leave the number out: `updatePositionPnl(id, pnlText, pnlPercent)` (since
+   * 2.6.0) sets the same pill.
+   */
+  public updatePositionPnl(id: string, unrealizedPnl: number, pnlText?: string, pnlPercent?: string): void;
+  public updatePositionPnl(id: string, ...args: (string | number | undefined)[]): void {
     const cur = this._positions.get(id);
     if (cur === undefined) return;
-    if (pnlText !== undefined) cur.entity.pnlText = pnlText;
-    if (pnlPercent !== undefined) cur.entity.pnlPercent = pnlPercent;
-    void unrealizedPnl;
+    // A text is a string. Anything else first is the unread number of the
+    // deprecated form, including the undefined or null a script host passes
+    // before it has one, and the texts follow it.
+    const [pnlText, pnlPercent] = typeof args[0] === 'string' ? args : args.slice(1);
+    if (typeof pnlText === 'string') cur.entity.pnlText = pnlText;
+    if (typeof pnlPercent === 'string') cur.entity.pnlPercent = pnlPercent;
     cur.line.setLeftLabel(this._positionPill(cur.entity));
   }
 
@@ -407,7 +443,7 @@ export class TradingController {
       leftLabel: lineOnly ? undefined : this._positionPill(p),
       closeButton: !lineOnly && p.readOnly !== true,
       extentFromRight: 0.3,
-    };
+    } satisfies LooseOptional<PriceLineOptions> as PriceLineOptions; // a line-only position leaves its badge, size and pill undefined, which the line reads as absent
   }
 
   private _orderOpts(o: TradingOrder): PriceLineOptions {
@@ -428,7 +464,7 @@ export class TradingController {
       closeButton: !lineOnly && o.readOnly !== true,
       extentFromRight: 0.3,
       cursor: draggable ? 'ns-resize' : undefined,
-    };
+    } satisfies LooseOptional<PriceLineOptions> as PriceLineOptions; // undefined parts read as absent, as for a position
   }
 
   // ── interaction ─────────────────────────────────────────────────────────────

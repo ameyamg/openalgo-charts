@@ -115,7 +115,9 @@ function tokenize(src: string): Tok[] {
   const out: Tok[] = [];
   let i = 0;
   while (i < src.length) {
-    const c = src[i];
+    // Each read of src[i] or src[j] here sits inside a loop that tests the
+    // index against src.length.
+    const c = src[i]!;
     if (c === ' ' || c === '\t' || c === '\n' || c === '\r') { i++; continue; }
 
     if (c === "'" || c === '"') {
@@ -132,7 +134,7 @@ function tokenize(src: string): Tok[] {
     // deliberately absent: `1e3` would be indistinguishable from a ticker.
     if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(src[i + 1] ?? ''))) {
       let j = i;
-      while (j < src.length && /[0-9.]/.test(src[j])) j++;
+      while (j < src.length && /[0-9.]/.test(src[j]!)) j++;
       const raw = src.slice(i, j);
       const v = Number(raw);
       if (!Number.isFinite(v)) throw new ExpressionError(`"${raw}" is not a number`, i);
@@ -143,7 +145,7 @@ function tokenize(src: string): Tok[] {
 
     if (SYM_START.test(c)) {
       let j = i;
-      while (j < src.length && SYM_BODY.test(src[j])) j++;
+      while (j < src.length && SYM_BODY.test(src[j]!)) j++;
       // A trailing ':' is an exchange prefix the user has not finished typing.
       let name = src.slice(i, j);
       while (name.endsWith(':')) { name = name.slice(0, -1); j--; }
@@ -219,7 +221,7 @@ function parse(toks: Tok[], src: string): ExpressionNode {
     for (;;) {
       const t = peek();
       if (t === undefined || t.t !== 'op' || !(t.v in BP)) break;
-      const bp = BP[t.v];
+      const bp = BP[t.v]!; // t.v is in BP, checked just above
       if (bp < min) break;
       p++;
       // `^` binds tighter to its right, so it recurses at the same power
@@ -231,7 +233,8 @@ function parse(toks: Tok[], src: string): ExpressionNode {
   }
 
   const out = expr(0);
-  if (p < toks.length) throw new ExpressionError(`unexpected "${toks[p].v}"`, toks[p].i);
+  const extra = toks[p];
+  if (extra !== undefined) throw new ExpressionError(`unexpected "${extra.v}"`, extra.i);
   return out;
 }
 
@@ -337,7 +340,9 @@ function evalNode(n: ExpressionNode, leg: (s: string) => Iv | null): Iv {
     case 'fn': {
       const xs = n.args.map((x) => evalNode(x, leg));
       if (xs.some(bad)) return NA;
-      const [a, b] = xs;
+      // The parser checked each call's argument count against FN_ARITY, so
+      // a is always there and b is for the two-argument functions.
+      const [a, b] = xs as [Iv, Iv];
       switch (n.name) {
         case 'abs': return absIv(a);
         case 'sqrt': return a.lo < 0 ? NA : mono(a, Math.sqrt);
@@ -377,7 +382,8 @@ export function evaluateExpression(
   options: EvaluateOptions = {},
 ): Bar[] {
   const wantRange = options.ohlc === 'interval';
-  const primaryName = options.primary ?? expr.symbols[0];
+  // parseExpression refuses an expression that names no symbol.
+  const primaryName = options.primary ?? expr.symbols[0]!;
   const grid = legs[primaryName];
   if (grid === undefined || grid.length === 0) return [];
 

@@ -1,14 +1,10 @@
 import type { Bar } from '../model/bar';
 import type { BarsRequest, BarSubscriptionOptions, DataFeed, UnsubscribeFn } from './types';
 import { dataVariantError, unsupportedDataVariant } from './data-variant';
+import { repeat } from '../helpers/timers';
 
 /** Schedules a repeating callback and returns an unsubscribe. Inject in tests. */
 export type FeedScheduler = (cb: () => void, intervalMs: number) => UnsubscribeFn;
-
-const defaultScheduler: FeedScheduler = (cb, ms) => {
-  const id = setInterval(cb, ms);
-  return () => clearInterval(id);
-};
 
 /**
  * The feed has one series per instrument and declares no variants, so any
@@ -30,7 +26,7 @@ export class FakeDataFeed implements DataFeed {
   private readonly intervalSec: number;
   private readonly _schedule: FeedScheduler;
 
-  constructor(intervalSec = 60, scheduler: FeedScheduler = defaultScheduler) {
+  constructor(intervalSec = 60, scheduler: FeedScheduler = repeat) {
     this.intervalSec = intervalSec;
     this._schedule = scheduler;
   }
@@ -71,13 +67,13 @@ export class FakeDataFeed implements DataFeed {
   }
 }
 
-/** Pure, seeded synthetic bar generator (deterministic — no global randomness). */
+/** Pure, seeded synthetic bar generator (deterministic: no global randomness). */
 export function generateBars(startTime: number, count: number, intervalSec: number): Bar[] {
   const bars: Bar[] = [];
   let price = 100;
   let seed = 0x9e3779b9 >>> 0;
   const next = (): number => {
-    // xorshift32 — deterministic pseudo-random in [0, 1)
+    // xorshift32: deterministic pseudo-random in [0, 1)
     seed ^= seed << 13; seed >>>= 0;
     seed ^= seed >> 17;
     seed ^= seed << 5; seed >>>= 0;

@@ -47,10 +47,10 @@ state do not belong in portable layout files.
 ## Deprecated APIs
 
 Each entry keeps working until the release in the "Removed in" column. The
-`depth_level` wire key, the widget message keys and the `priceAxisMoved` event
-have no declaration a tag can sit on (a key the feed sends on the wire, members
-of a string union, and a name `chart.on` takes as a string), so this table is
-where they are recorded.
+`depth_level` wire key and the widget message keys have no declaration a tag can
+sit on (a key the feed sends on the wire, and members of a string union), and an
+event name reaches a host as a string, which an editor never strikes through, so
+this table is where they are recorded.
 
 | Deprecated | Declared in | Replacement since | Removed in | Use instead |
 | --- | --- | --- | --- | --- |
@@ -71,13 +71,23 @@ where they are recorded.
 | Widget message key "History is stale for {symbol} {interval}. Reload to retry." | `src/widget/localization.ts`, a union member | 2.5.10 | 3.0.0 | "History is stale for {symbol} {interval}", beside the Retry button |
 | Widget message keys "Magnet weak: snaps when O/H/L/C is within a few pixels", "Magnet strong: every anchor lands on the nearest O/H/L/C", "Click for weak: snaps when O/H/L/C is within a few pixels" and "Click for strong: every anchor lands on the nearest O/H/L/C" | `src/widget/localization.ts`, each a union member | 2.5.10 | 3.0.0 | The same keys with "a bar or study value" for "O/H/L/C", since the magnet snaps to study values too |
 | Widget message keys "Ratio" and "Remove level" | `src/widget/localization.ts`, each a union member | 2.5.10 | 3.0.0 | "Level {level} ratio" and "Remove level {level}", which name the row |
+| Widget message keys "From (UTC seconds)", "To (UTC seconds)" and "Enter finite UTC seconds or leave the bound blank" | `src/widget/localization.ts`, each a union member | 2.6.0 | 3.0.0 | "From", "To" and "Enter a date and a time on the chart clock": the chart data dialog asks for its bounds as a date and a time on the chart's clock |
 | `ChartClickEvent` flags `shiftKey`, `ctrlKey` and `metaKey` | `src/core/chart.ts` | 2.0.0 | 3.0.0 | `modifiers.shift`, `modifiers.ctrl` and `modifiers.meta`, the same state, beside `alt` |
 | `Chart.renderer` | `src/core/chart.ts` | 2.0.0 | 3.0.0 | `Chart.rendererKind`, the same value under its settled name |
 | `Chart.movePriceAxis` | `src/core/chart.ts` | 2.5.4 | 3.0.0 | `Chart.setPriceAxisPlacement`, which moves the column and keeps the scale's id |
 | `PriceAxisState.movable` | `src/core/chart.ts` | 2.5.4 | 3.0.0 | Nothing: `setPriceAxisPlacement` needs no such check |
-| `priceAxisMoved` event | `src/core/chart.ts` (emitted by `movePriceAxis` alone), an event name | 2.5.4 | 3.0.0 | `priceAxisPlacementChanged`, which `setPriceAxisPlacement` emits with the pane, the scale id and its new side |
+| `priceAxisMoved` event | `src/core/chart-events.ts` (its `ChartEventMap` key; `movePriceAxis` in `src/core/chart.ts` alone emits it), an event name | 2.5.4 | 3.0.0 | `priceAxisPlacementChanged`, which `setPriceAxisPlacement` emits with the pane, the scale id and its new side |
+| `Chart.on`, `Chart.once` and `Chart.off` given a name outside `ChartEventMap` (the `string` overload) | `src/core/chart.ts` | 2.6.0 | 3.0.0 | The same calls with a `ChartEventMap` name, which types the listener's payload; declare an event of your own by merging it into `ChartEventMap` |
+| `TimeScaleOp`, `InvalidateMask.addTimeScaleOp` and `InvalidateMask.timeScaleOps` | `src/core/invalidate-mask.ts` | 2.5.8 | 3.0.0 | Nothing to queue: since 2.5.8 the frame reads no queued operation. Change the time scale directly with `chart.timeScale`, `chart.fitContent` or `chart.setVisibleLogicalRange` |
+| `TradingController.updatePositionPnl` given the number first (`updatePositionPnl(id, unrealizedPnl, pnlText?, pnlPercent?)`) | `src/core/trading-controller.ts` | 2.6.0 | 3.0.0 | `updatePositionPnl(id, pnlText?, pnlPercent?)`, the same call without the number, which the pill never showed |
+| `SeriesStyle.hollow` | `src/render/series-style.ts` | 1.0.2 | 3.0.0 | The `'hollow-candle'` series type, which draws up candles as outlines and down candles filled; the field itself never had an effect |
+| `InvalidateMask.merge` | `src/core/invalidate-mask.ts` | 2.5.8 | 3.0.0 | Nothing: the chart raises one mask per frame, and a host raises levels on the mask `chart.invalidate` hands it |
+| `Chart.emit` | `src/core/chart.ts` | 2.5.10 | 3.0.0 | `setDataContext` to announce an instrument, `LinkGroup.setSymbol`, `setInterval` and `setChartType` to drive a link group, and an emitter of your own for events of your own |
+| `VolumeProfileOptions` | `src/profile/volume-profile.ts` | 1.0.1 | 3.0.0 | Nothing takes this type: pass `computeVolumeProfile(bars, tickSize, valueAreaPercent)` its arguments as before, or use `computeVolumeProfileSessions` with `VolumeProfileFamilyOptions` for an options object |
+| `TradeFeed` | `src/feed/types.ts` | 1.0.0 | 3.0.0 | `OrderFeed` from `openalgo-charts/trade`, which `OrderEngine` writes through and `OpenAlgoTradeFeed` implements; nothing in the library ever called a `TradeFeed`, so hand the book to the chart with `chart.trading.syncState` |
+| `PlaceOrder` | `src/feed/types.ts` | 1.0.0 | 3.0.0 | `PlaceRequest` from `openalgo-charts/trade`, the order `OrderEngine` and `OrderFeed.place` take |
 
-Migration, for the four a host is most likely to hold:
+Migration, for the five a host is most likely to hold:
 
 ```ts
 // before
@@ -100,7 +110,19 @@ chart.on('click', (e) => { if (e.modifiers.shift || e.modifiers.ctrl) addToSelec
 if (chart.priceAxisState(0, 'right')?.movable) chart.movePriceAxis(0, 'right', 'left');
 // after: the scale keeps the id 'right' and draws in the left column
 chart.setPriceAxisPlacement(0, 'right', 'left');
+
+// an event of the host's own, before: any string, an unknown payload
+chart.on('myapp:signal', (p) => mark((p as { price: number }).price));
+// after: declared once, then typed everywhere
+declare module 'openalgo-charts' {
+  interface ChartEventMap { 'myapp:signal': { price: number } }
+}
+chart.on('myapp:signal', ({ price }) => mark(price));
 ```
+
+The host-emitted names a link group follows (`symbol`, `interval`,
+`chartType`) are in `ChartEventMap` already. Until 3.0.0, `chart.emit` still
+puts any of these on the bus.
 
 ### Kept on purpose
 
@@ -128,6 +150,19 @@ remove them:
   the symbol and exchange from the frame first and falls back to `topic`, the
   form an older proxy sends. A reader of a wire format stays while a server can
   still send it.
+- **The `draw:*` events beside `drawing:*`.** They are two granularities of one
+  model, not an old and a new form. `draw:add`, `draw:update` and `draw:remove`
+  fire once per drawing and carry it; `drawing:change` fires once per mutation,
+  after them, and lists the ids. `draw:select` names the primary selection and
+  `drawing:select` the whole of it; both fire together, only when the selection
+  changed. A host showing one drawing's properties listens to the first family,
+  one refreshing a list or an undo control to the second.
+- **The event names that predate the naming rule.** New names are
+  `namespace:action`, lower case, hyphen-joined, in the present tense. The
+  camelCase pane and indicator events, the single words, the snake case of
+  `trading:*` and the past tense of `branding:changed`, `timezone:changed`,
+  `alerts:changed` and `alerts:restored` keep their spelling: a rename breaks
+  every listener on the old name, and the names cost nothing as they are.
 - **Readers of older saved documents**: a 1.9.x drawings array given to
   `fromJSON` or `migrateDrawings`, a version 1 clipboard body, an unversioned
   alert list, a cache entry without a version and a partial pane state. A
@@ -136,17 +171,40 @@ remove them:
 
 ### Not decided yet
 
-- **The `draw:*` events beside `drawing:select` and `drawing:change`.** The
-  draw tier emits both. `draw:select` carries one id where `drawing:select`
-  carries the whole selection, and `draw:add`, `draw:update` and `draw:remove`
-  carry one drawing each where `drawing:change` lists every id. Whether the
-  one-id names are deprecated is decided with the typed event map planned later
-  in this release series; until then both are emitted and both are supported.
+- **What the tiers' structural hosts require once `Chart.emit` goes.**
+  `AlertChartHost`, `ReplayChartHost`, `DrawingChartHost`, `PickHost`,
+  `TradingHost` and `IndicatorHost` each name `emit(event: string, payload:
+  unknown)`, which a `Chart` satisfies with the deprecated method. They keep that
+  member through 2.x. 3.0.0 changes it, to a member typed by `ChartEventMap` or
+  to a dispatch the base exports for its tiers, and a host that implements one
+  of them for an object that is not a `Chart` will change with it.
+
+### Planned for 3.0.0
+
+- **Visibility option names.** A switch that shows or hides part of the chart
+  is named two ways: `xVisible` in the style bags that mirror a series property
+  (`bodyVisible`, `wickVisible`, `borderVisible`, `priceLineVisible`,
+  `lastValueVisible`, a primitive's `lineVisible`) and `showX` in the profile
+  primitives (`showPoc`, `showValueArea`, `showLastPrice`, the footprint's
+  `showCandle`) and in `PaneOptions` (`showTimeAxis`, `showVertGrid`). Both
+  forms are public and saved in chart settings, so 2.x renames neither. Until
+  3.0.0 settles on one, with the other kept as a deprecated alias, a new option
+  follows its neighbours: `xVisible` in a style bag that mirrors a series
+  property, `showX` on a primitive or profile toggle.
 
 ## Runtime boundary
 
-The published package is ESM with a standalone browser bundle and no runtime
-dependencies. The build toolchain requires Node.js 20 or later, as declared in
+The published package is ESM, with a script-tag build of every tier for a page
+that loads no modules, and no runtime dependencies. The script-tag build is one
+`OpenAlgoCharts` global with a key per tier; the global's name, its tier keys and
+the names under them are public in the same way as the export entries they mirror,
+and `npm run check:exports` holds them to the declarations.
+
+There is no CommonJS build: a second copy of the code would carry a second set of
+registries. Each export's `default` condition resolves `require()` to the same ESM
+file instead, so Node.js 20.19 or later and 22.12 or later return from `require()` the
+module `import` returns. Earlier Node.js versions throw `ERR_REQUIRE_ESM` and load the
+package with `import()`. The build toolchain requires Node.js 20 or later, as declared in
 `package.json`. Construct charts only where the required browser canvas/DOM APIs
 exist; rendering on a server needs a host-owned environment and is not implied by
 successful server-side module resolution.
@@ -183,6 +241,14 @@ drawings/studies, replay, OI gaps and all enabled trading routes. Keep the prior
 application deployment available for rollback; never replace an immutable package
 version with different files. Downgrading does not guarantee that newer saved
 documents can be read by an older host.
+
+Every release is checked against the previous release and the version OpenAlgo
+pins, before it is tagged: `npm run check:compat` fails a public name removed or a
+type narrowed in any tier unless the table under [Deprecated APIs](#deprecated-apis)
+lists it for the next major, and `tests/saved-documents.test.ts` loads the chart
+states, drawings, widget layouts, workspaces and alert lists those releases saved and
+saves them again, naming every field that changes. [CONTRIBUTING.md](CONTRIBUTING.md)
+describes both.
 
 Release evidence separates unit tests, deterministic adapter/browser fixtures,
 endurance workloads and connected-provider observations. A synthetic feed passing

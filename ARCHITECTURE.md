@@ -4,7 +4,9 @@
 > Historical pre-implementation target: **< 50 KB Brotli** for the full package (engine + trade overlay), no runtime dependencies. *(Brotli is the size metric we hold the budget against - see §11. Gzip runs ~10-15% larger.)*
 > Goal: professional-grade interactive financial-chart rendering + advanced on-chart trading & trade management.
 
-> **Current release: 2.5.10.** Persistence, saved layouts and the chart grid. The widget keeps its saved state in IndexedDB through an asynchronous store (`AsyncStorageLike`, `widget.ready`), reopens named layouts and indicator templates over a `WorkspaceStore` with revision checks, and lets a user move any shortcut from the ? panel. A bottom bar carries preset ranges sized in trading sessions, Go to, the market status and a clock with a timezone menu. Calendars know pre-open, post-close and extended hours (`phaseAt`, `marketStatusAt`), and `attachSessionShading` washes those bars in the price pane. The chart grid lays out one to sixteen charts with maximize, swap and up to sixteen named link groups, whose channels now include the chart type and drawings. UI a plain widget never opens loads on first use from hashed part files beside the widget tier, and text markers take lanes so neighbouring labels no longer overlap. The 2.5.10 build measures **134.69 kB** base, **151.38 kB** base + trade and **409.13 kB** for all tiers (decimal Brotli sizes).
+> **Current release: 2.6.0.** Analysis depth and a stricter API. A chart applies Heikin Ashi, Renko, range bars, line break, point and figure and Kagi to the bars a host feeds, live (`setSeriesTransform`, with the runs installed by `registerSeriesTransform` when the transform tier is imported), and each study computes on the elements drawn or on the underlying bars (`setBarSource`). Seven built-ins are new, 112 in all, and 29 take a `timeframe` input that folds the chart's bars into a higher interval without repainting. The OpenAlgo feed searches symbols (`DataFeed.searchSymbols`), and event markers carry rich details with host actions. `ChartEventMap` types every event on the chart's bus, every tier ships as a classic script on the `OpenAlgoCharts` global, `require()` resolves to the ESM files, and all of `src` compiles under `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. The 2.6.0 build measures 137.53 kB base, 154.41 kB base + trade and 419.05 kB for all tiers (decimal Brotli sizes).
+
+> **2.5.10.** Persistence, saved layouts and the chart grid. The widget keeps its saved state in IndexedDB through an asynchronous store (`AsyncStorageLike`, `widget.ready`), reopens named layouts and indicator templates over a `WorkspaceStore` with revision checks, and lets a user move any shortcut from the ? panel. A bottom bar carries preset ranges sized in trading sessions, Go to, the market status and a clock with a timezone menu. Calendars know pre-open, post-close and extended hours (`phaseAt`, `marketStatusAt`), and `attachSessionShading` washes those bars in the price pane. The chart grid lays out one to sixteen charts with maximize, swap and up to sixteen named link groups, whose channels now include the chart type and drawings. UI a plain widget never opens loads on first use from hashed part files beside the widget tier, and text markers take lanes so neighbouring labels no longer overlap. The 2.5.10 build measures **134.69 kB** base, **151.38 kB** base + trade and **409.13 kB** for all tiers (decimal Brotli sizes).
 
 > **2.5.9.** Drawing interaction and replay. Drawings belong to the instrument they were drawn on (`InstrumentDrawings`, the widget's default), and the drawing controller gains the magnet on every pane and in every drag, box select, drag to copy, an eraser, a temporary measure and visibility per interval (drawings document version 3 when a drawing carries a range). A drawing layer keeps a hit box per drawing, so a hover asks only the drawings near the pointer. Replay holds its forming bar inside the bar it closes on and can form a bar with no finer data over simulated steps. Line-family series draw the segment that crosses each edge of the view (`connectsBars`), and the price axis keeps edge labels whole and value tags over level tags. The 2.5.9 build measured **131.68 kB** base, **148.36 kB** base + trade and **381.78 kB** for all tiers (decimal Brotli sizes).
 >
@@ -30,7 +32,7 @@ notifications. Pipeline arrows show data flow, not package dependencies.
 
 ## Current integration map
 
-For 2.5.10 integrations, start with these current guides and implementation
+For 2.6.0 integrations, start with these current guides and implementation
 boundaries. The numbered design sections below retain historical plans and
 explicitly labeled estimates; use the current API types for implementation.
 
@@ -61,7 +63,7 @@ explicitly labeled estimates; use the current API types for implementation.
 | Study inputs | `visibleWhen`, `activeWhen` and `inline` on `IndicatorInput`; paired `timeKey` point inputs with an optional on-pane anchor; presentation only, `calc` sees every setting | [Indicators](https://marketcalls.github.io/openalgo-charts/docs/indicators/) |
 | Chart export | Loaded or revealed bars, study values and comparison closes; host delivers the CSV | [Chart data](docs/chart-data-export.md) |
 | Custom studies | Descriptor registry in base; optional built-ins and external-data helpers | [Indicators](https://marketcalls.github.io/openalgo-charts/docs/indicators/) |
-| Rendering cost | Level of detail on by default (`conflate`), plot writes in place on a tick, `calcTail` on sixteen built-ins, repaint scoped to the panes a write changes, optional `IPrimitive.hitBounds`, and render-bench budgets per bar count | [Performance and operations](https://marketcalls.github.io/openalgo-charts/docs/performance-and-operations/) |
+| Rendering cost | Level of detail on by default (`conflate`), plot writes in place on a tick, `calcTail` of their own on twenty-three built-ins, repaint scoped to the panes a write changes, optional `IPrimitive.hitBounds`, and render-bench budgets per bar count | [Performance and operations](https://marketcalls.github.io/openalgo-charts/docs/performance-and-operations/) |
 | Host interface | Canvas containers in base; toolbar, Data/Objects dock, rich symbol search, dialogs and translated controls in the widget | [Widget](docs/widget.md) |
 
 ## Chart internals
@@ -78,6 +80,7 @@ forwarding object is built.
 | File | Holds |
 |---|---|
 | `chart-types.ts` | The public option, event and payload types, re-exported from `chart.ts` |
+| `chart-events.ts` | `ChartEventMap`, every name on the bus with its payload (the draw tier merges its own in from `src/draw/events.ts`), and the listener registry behind `on`, `once`, `off` and the engine's typed `_emit` |
 | `chart-series.ts` | Series creation, series type changes, price formats and the data writes behind a series handle |
 | `chart-studies.ts` | The study host: adding, moving and removing studies, the `IndicatorHost` they run against, bar colours and the recompute queue |
 | `chart-panes.ts` | The pane stack and its layout: creating, removing, moving, maximizing and folding panes, axis columns and divider hits |
@@ -95,7 +98,9 @@ compatibility inventory now names the file three moved comments live in), and th
 render-parity spec painted the same pixels as 2.5.6 at every zoom. Private members stay private, so the published declarations show
 only `private` names for the collaborators. `scripts/line-caps.json` holds every source file
 to 1,500 lines through ESLint, with the few older files over the limit capped at their
-size so that they can only shrink.
+size so that they can only shrink. `scripts/function-caps.json` does the same for
+functions at 150 lines (`tests/function-caps.test.ts`), since a file cap does not bound
+a module that is one long mount closure.
 
 ## 0. Why from scratch (and the principles we follow)
 
@@ -355,7 +360,7 @@ What the chart does with it:
 - **A write that moves the shared index or the time scale repaints every pane.** An appended bar grows the index, and with the view at the right edge it scrolls every pane by a bar, so every pane and the time axis repaint. A host's own `setData` and `prependData` repaint every pane as well, and so does a study that opens a pane, because making room resizes every pane's canvases.
 - **`autoScale` flag per pane**: separates "rescale this pane's price axis" from "repaint at current scale". A `Full` level autoscales every pane it reaches, all of them when it is global.
 - **Glides step inside the frame.** Kinetic scroll and the eased wheel zoom schedule no animation frames of their own (`input/kinetic.ts` and `input/zoom-glide.ts` hold the maths). The frame steps them (`ChartMotion._step`) before it takes the mask, so each frame paints the step it made, and a glide asks for one animation frame per frame.
-- **No time-scale operation queue.** Fit, bar spacing, right offset, scroll-to-realtime and both glides change the time scale directly, and the repaint goes through the ordinary invalidation. The public mask keeps `addTimeScaleOp` and `timeScaleOps` for compatibility, but `addTimeScaleOp` has no caller in the chart and the frame never reads the queue.
+- **No time-scale operation queue.** Fit, bar spacing, right offset, scroll-to-realtime and both glides change the time scale directly, and the repaint goes through the ordinary invalidation. The public mask keeps `addTimeScaleOp` and `timeScaleOps` for compatibility, deprecated and removed in 3.0.0, but `addTimeScaleOp` has no caller in the chart and the frame never reads the queue.
 - `chart.invalidate(mask)` merges into the pending mask and schedules one rAF; multiple calls per frame coalesce. What the frame's own first steps invalidate, a glide step or a study recompute, lands in that frame's mask and asks for no frame after it.
 
 ```
@@ -518,7 +523,7 @@ yToPrice(y) = min + (1 - y/height) * (max - min)
 
 Log uses `log10(p)`; percentage normalizes to the first visible bar. **Autoscale**: each frame (on Full or a pane `autoScale` flag), gather min/max `low`/`high` over the visible logical range from each series **plus each primitive's `autoscaleInfo`** (so order/SL/TP lines and indicator bands are never clipped), add top/bottom margins, and snap the range to nice tick boundaries via `scale/ticks.ts`.
 
-`ticks.ts` implements the classic "nice number" algorithm (round step to 1/2/2.5/5 × 10ⁿ) shared by both axes.
+`ticks.ts` implements the classic "nice number" algorithm (round step to 1/2/2.5/5 × 10ⁿ) for the price axis; the time axis picks its labels from calendar boundaries instead.
 
 #### 5.2.1 Price-scale features & edge cases (review point 9)
 
@@ -609,7 +614,7 @@ Renko, Range bars, Point & Figure, Kagi, Line Break. These **re-bucket** raw dat
 1. A **transform pipeline** stage sits between the raw `DataStore` and the renderer:
    ```ts
    interface ISeriesTransform {
-     // streaming: feed raw bars/ticks in order, emit derived elements
+     // incremental: feed each raw bar once, in order, emit derived elements
      reset(params): void
      push(bar: Bar): DerivedElement[]   // 0..n new elements (bricks/columns/lines)
      // each DerivedElement carries the source time it formed at, for axis labels
@@ -627,7 +632,14 @@ Renko, Range bars, Point & Figure, Kagi, Line Break. These **re-bucket** raw dat
 | **Kagi** | single line; flips between thick and thin on a reversal beyond threshold; direction changes at shoulders/waists | variable-width polyline, ordinal |
 | **Line Break** | new line only if close breaks the high/low of the prior N lines | rect series, ordinal |
 
-Transforms must be **incremental/streaming** so live ticks extend the last element (or spawn new bricks) without recomputing history, same `series.update` hot-path discipline as Family A (§4.2). This is the part that makes live Renko/Range bars work.
+Transforms must be **incremental**: `push` takes each source bar once and never recomputes history, the same `series.update` hot-path discipline as Family A (§4.2). Every push moves the state, so a bar that is still forming is not pushed tick by tick; it goes through a copy of the state (the run below), which is the part that makes live Renko and range bars work.
+
+**In-chart transforms.** The chart applies a Family B transform itself: `Chart.setSeriesTransform(series, spec)` (or `AddSeriesOptions.transform`). The pieces, and where each lives:
+
+- **Registry (base, `model/series-transform.ts`).** `registerSeriesTransform` holds a `SeriesTransformDefinition` per id: its renderer, its options as `IndicatorInput`s, and `create(options)`, which returns the `SeriesTransformRun` the chart drives. The transform tier fills it on import, so the base never loads a transform, the same inversion as the chart-type registry.
+- **Run (transform tier, `transform/live.ts`).** Holds the host's bars and the transform's state as of the last closed bar. The newest bar is forming: each tick pushes it through a copy of that state (`ISeriesTransform.clone`), so its elements are provisional and never baked into the state (CLAUDE.md, never cache the forming bar); a newer bar commits it. Elements get the same one-second bumps `runTransform` gives, so a run's elements are always the batch transform of its bars. Sizes a spec leaves at 0 are resolved from the history on each load, never per tick, and kept through a history page.
+- **Routing (base, `core/chart-series.ts`).** A transformed series keeps the run beside its data id. `setData`, `update` and `prependData` feed the run the host's bars and write its elements to the DataLayer; `getData` returns the run's bars, so replay and a feed's live path see what they wrote. A tick writes only the tail that moved: in place through the DataLayer's live path when it grew or was replaced, whole otherwise, recorded as a correction so a study never splices a tail onto an element that is gone. The one rewrite that stays live is the element still forming dated forward at its index by a newer source bar (a Kagi vertex, a range bar it extends): the same element revised, recorded as a replace or an append. That tick and the switch into or out of a transform live in `core/chart-series-transform.ts`, which `registerSeriesTransform` installs: no series can hold a transform before something is registered, so a chart-only import, which registers nothing, carries neither.
+- **Studies (base, `model/indicator-bar-source.ts`).** A study computes on the elements (`'chart'`, the default) or on the host's bars (`'underlying'`), whose values are then read at the source bar each element was completed on, so its points stay on the elements' times and the shared axis stays the elements'.
 
 ### Family C: Profile & order-flow (price × {volume | time | bid-ask}): **Tier 3 `profile/`**
 
@@ -792,10 +804,12 @@ Drawings are pane primitives (a `DrawingLayer` per pane, implementing `IPrimitiv
 
 - **Paint order is a field, not a side effect of creation.** `zIndex` below zero paints under the series, at or above zero over it, with ties broken by list order; two layers per pane (`'bottom'` and `'top'`) are what lets a drawing sit behind the candles at all. The default of 0 reproduces 1.9.2 pixel for pixel, which the render-parity harness enforces at zero differing pixels, so "add an ordering" could not quietly move anything. A drawing can also sit inside the series band, directly above the price source or one study (`stackAbove`): the controller keeps one `'series'` layer per entry it is placed on, and the pane paints a primitive placed with `chart.setPrimitiveStackAbove` right after that entry's last series, flushing a batching backend first. Only orders the bands can paint are offered (`ChartObjects.place` refuses the rest), and the front layer answers hits for every layer of its pane front to back, so the pointer takes what is painted on top.
 - **Text is its own block.** Seven text keys had accumulated on `DrawingStyle`, where every trend line carried them and no host could tell a label colour from a stroke colour without knowing the tool. `drawing.text` is closed to the `DrawingText` keys; `style` stays what a stroke needs.
-- **A tool declares which of its fields a host may show** (`schema.ts`, `drawingSettingsSchema`), as dot paths with a control kind, and only fields its `draw` reads. A schema is not a wish list: a control backed by nothing is a defect (see CLAUDE.md). The registry lookup lives in `tools.ts`, not `schema.ts`, because `tools.ts` reads the field constants at module-evaluation time and the reverse import would throw on the temporal dead zone.
+- **A tool declares which of its fields a host may show** (`schema.ts`, `drawingSettingsSchema`), as dot paths with a control kind, and only fields its `draw` reads. A schema is not a wish list: a control backed by nothing is a defect (see CLAUDE.md). The registry lookup lives in `registry.ts`, not `schema.ts`, because `registry.ts` reads the field constants at module-evaluation time and the reverse import would throw on the temporal dead zone.
 - **Load is lenient, paste is strict.** `migrate.ts` upgrades any 1.9.x array or v2 document and keeps whatever it can render, dropping a malformed optional field on its own rather than the drawing; the clipboard sanitiser rejects a body all-or-nothing. A saved layout is the user's own work and deserves the benefit of the doubt; a paste is foreign input.
 
 The level palette (`levels.ts`) is the one statement of the conventional colour per Fibonacci ratio. Before it, each ladder tool restated those colours, and restated colours drift.
+
+**Where the code lives.** The registry is `registry.ts`, and what the built-in tools paint with (stroke, fill, text face, readout plates, text layout) is `tool-paint.ts`. The tools come in families: `tools.ts` (lines, shapes, curves, freehand, cycles, and `BUILTIN_DRAWING_TOOLS` in registration order), `fib-tools.ts`, `measure-tools.ts`, `annotation-tools.ts`, `advanced-lines.ts`, `advanced-geometry.ts`, `pattern-tools.ts` and `analysis-tools.ts`. `DrawingController` is a facade the way `Chart` is (see Chart internals): it keeps every public method with its documentation, and three collaborators hold the rest, each reaching it through a host interface typed from its own members: `drawing-history.ts` (the undo and redo branches, the step being recorded and the host's own edits), `drawing-drag.ts` (a drag from its start to its end or cancel) and `pane-layers.ts` (each pane's layers, the preview and the magnet ring). `screen.ts` (every conversion between data space and the screen) and `gestures.ts` (the measure, box select and eraser) predate them.
 
 **Interaction feel (2.0).** The second half of the rebuild is about how a drawing behaves under the hand, and each piece was placed where it was for a cost reason:
 
@@ -1004,7 +1018,7 @@ interface TradeFeed {
 ## 11. Build, tooling, size enforcement & testing
 
 - **Language**: TypeScript, `const enum` for zero-cost enums, strict mode.
-- **Bundler**: Rollup + `@rollup/plugin-terser`. Output: ESM (primary) + IIFE standalone (for `<script>` drop-in / CDN). One entry point per tier, nine in all (§2), so they tree-shake and lazy-load independently. The IIFE standalone build carries the base tier only.
+- **Bundler**: Rollup + `@rollup/plugin-terser`. Output: ESM (primary), one entry point per tier, nine in all (§2), so they tree-shake and lazy-load independently; and a script-tag build of the same nine entries as classic scripts (IIFE) for a page that loads no modules. `openalgo-charts.standalone.js` defines the `OpenAlgoCharts` global and each `openalgo-charts.<tier>.standalone.js` adds itself to it under the tier's name. A tier's script leaves the base (and, for the widget, the draw tier) external exactly as its ESM file does and reads it from the global, so every tier registers into the one base on the page; a banner stops a file loaded before what it reads. The widget's script carries its first-use parts, since a classic script cannot share a split chunk. `npm run check:exports` holds each global key set to its tier's `.d.ts`. There is no CommonJS build for the same reason: a second copy of the code would hold a second set of registries (chart types, indicators, drawing tools, render backends, widget dialogs) that `createChart` never reads. Each export's `default` condition resolves `require()` to the ESM files (Node 20.19+ and 22.12+ load them synchronously, as the same instance `import` gets).
 - **Size CI**: `size-limit` with **Brotli** targets per tier. Since we have zero runtime dependencies, nothing is excluded from the measurement. PRs exceeding a limit fail CI. The planned hard ceilings of 30 KB Brotli for the engine and 50 KB for base + trade were pre-implementation targets and were never enforced; the enforced ceilings are the per-tier rows in `.size-limit.json`, quoted in the README size budget.
 - **Performance is budgeted per bar count.** `tests/e2e/render-bench.perf.ts` (`npm run bench:render`, a CI job of its own) holds pan, full zoom-out and ten-study tick frames at 10,000, 50,000 and 200,000 bars, on `canvas2d` and WebGL2, to the budgets in `scripts/render-bench-budgets.mjs`, and `docs/performance-notes.md` records the measurements. `npm run bench` holds indicator calculation to CI budgets and fails unless a burst of ticks recomputes each study once per frame. `scripts/browser-endurance.mjs` records frame, pointer, memory and teardown gates for a declared Chromium workload, run nightly with the soak (§1, `docs/browser-endurance.md`).
 - **No dependencies**: HiDPI sizing, resize observation, and event handling are hand-rolled (~50 lines total).
@@ -1102,12 +1116,12 @@ reader of that version sees. Three rules fell out of getting this wrong:
 
 ## 13a. Deferred / not-yet-implemented (honest status)
 
-The current implementation keeps these boundaries in 2.5.10:
+The current implementation keeps these boundaries in 2.6.0:
 
 - **Separate price/time axis-widget canvases** - axes draw within the pane
   canvas by design (small-engine simplification).
 - **The time-scale operation queue** - `InvalidateMask` keeps
-  `addTimeScaleOp` for compatibility, and nothing in the chart queues an
+  `addTimeScaleOp` for compatibility (deprecated, removed in 3.0.0), and nothing in the chart queues an
   operation or reads the queue; the time scale is changed directly (§3.2).
 - **A tick that does not grow with the history** - the render bench enforces
   frame budgets per bar count (`npm run bench:render`,

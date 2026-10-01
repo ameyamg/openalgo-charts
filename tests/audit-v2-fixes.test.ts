@@ -15,7 +15,7 @@ function captureFeed() {
   return { calls, feed: new OpenAlgoTradeFeed({ baseUrl: 'http://x', apiKey: 'k', fetchImpl }) };
 }
 
-describe('V2-H1 — trade adapter matches OpenAlgo order contract', () => {
+describe('V2-H1: trade adapter matches OpenAlgo order contract', () => {
   it('place sends the mandatory product + strategy fields', async () => {
     const { calls, feed } = captureFeed();
     await feed.place({ symbol: 'SBIN', exchange: 'NSE', side: 'BUY', type: 'LIMIT', qty: 10, price: 16, product: 'CNC', mode: 'live' });
@@ -52,7 +52,7 @@ describe('V2-H1 — trade adapter matches OpenAlgo order contract', () => {
   });
 });
 
-describe('V2-H2 — WS schema + pre-auth gating', () => {
+describe('V2-H2: WS schema + pre-auth gating', () => {
   it('uses the documented per-symbol subscribe schema (numeric mode)', () => {
     const msg = JSON.parse(formatSubscribe('LTP', 'SBIN', 'NSE'));
     expect(msg).toEqual({ action: 'subscribe', symbol: 'SBIN', exchange: 'NSE', mode: 1 });
@@ -75,9 +75,9 @@ describe('V2-H2 — WS schema + pre-auth gating', () => {
       socketFactory: () => { sock = { send: (d) => sent.push(d), close: () => {}, onopen: null, onclose: null, onmessage: null, readyState: 0 }; return sock; },
     });
     feed.connect();
-    feed.subscribe('LTP', 'SBIN', 'NSE'); // before open → recorded, not sent
+    feed.subscribe('LTP', 'SBIN', 'NSE'); // before open: recorded, not sent
     expect(sent).toHaveLength(0);
-    sock.onopen?.(); // transport open → the handshake, and nothing else
+    sock.onopen?.(); // transport open: the handshake, and nothing else
     expect(sent).toHaveLength(1);
     expect(JSON.parse(sent[0])).toEqual({ action: 'authenticate', api_key: 'k' });
     expect(feed.isReady()).toBe(false);
@@ -85,12 +85,12 @@ describe('V2-H2 — WS schema + pre-auth gating', () => {
     expect(feed.isReady()).toBe(true);
     expect(sent).toHaveLength(2);
     expect(JSON.parse(sent[1])).toMatchObject({ action: 'subscribe', symbol: 'SBIN', mode: 1 });
-    feed.subscribe('LTP', 'RELIANCE', 'NSE'); // after the ack → immediate
+    feed.subscribe('LTP', 'RELIANCE', 'NSE'); // after the ack: immediate
     expect(sent).toHaveLength(3);
   });
 });
 
-describe('V2-M1 — interval parsing for the live feed', () => {
+describe('V2-M1: interval parsing for the live feed', () => {
   it('maps interval tokens to seconds', () => {
     expect(intervalToSeconds('1m')).toBe(60);
     expect(intervalToSeconds('5m')).toBe(300);
@@ -101,7 +101,7 @@ describe('V2-M1 — interval parsing for the live feed', () => {
   });
 });
 
-describe('V2-M3 — destroy detaches primitives', () => {
+describe('V2-M3: destroy detaches primitives', () => {
   it('Pane.destroy calls detached() on every attached primitive', () => {
     const pane = new Pane(fakeDocument());
     let detached = 0;

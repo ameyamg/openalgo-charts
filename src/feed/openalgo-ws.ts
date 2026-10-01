@@ -1,5 +1,5 @@
 /**
- * OpenAlgo WebSocket adapter (ARCHITECTURE.md §10, C2). Speaks the documented
+ * OpenAlgo WebSocket adapter (ARCHITECTURE.md §10). Speaks the documented
  * OpenAlgo WS proxy protocol (default port 8765, or wss://host/ws in production):
  *
  *   1. authenticate: { action:'authenticate', api_key }
@@ -23,6 +23,9 @@
  */
 import type { MarketDepth } from './types';
 import { epochMsToUtcSeconds } from './time';
+import type { LooseOptional } from '../helpers/types';
+import { later } from '../helpers/timers';
+import { dispatch } from '../helpers/dispatch';
 
 export type WsMode = 'LTP' | 'Quote' | 'Depth';
 
@@ -58,7 +61,7 @@ export interface WsClientWarning extends WsControlMessage {
   message: string;
 }
 
-/** OpenAlgo numeric data modes (websockets-format.md §Data Modes). */
+/** The number the OpenAlgo proxy expects in a subscribe frame's `mode` field for each data mode. */
 const MODE_NUMBER: Record<WsMode, number> = { LTP: 1, Quote: 2, Depth: 3 };
 
 /** Minimal socket surface (the browser WebSocket satisfies this). */
@@ -78,7 +81,7 @@ export type SocketFactory = (url: string) => SocketLike;
 export interface OpenAlgoWsConfig {
   url: string; // e.g. ws://127.0.0.1:8765 (or wss://host/ws)
   apiKey: string;
-  socketFactory?: SocketFactory;
+  socketFactory?: SocketFactory | undefined;
   /**
    * Auto-reconnect after an unexpected close: re-authenticate and resubscribe
    * every active subscription, with jittered exponential backoff. Enabled by
@@ -93,7 +96,7 @@ export interface OpenAlgoWsConfig {
     jitter?: boolean;
     /** Injectable [0,1) source, so a test pins the delay instead of guessing it. */
     random?: () => number;
-  };
+  } | undefined;
   /** Handshake gating. Data frames wait for the server's answer to `authenticate`. */
   auth?: {
     /**
@@ -106,14 +109,14 @@ export interface OpenAlgoWsConfig {
     requireAck?: boolean;
     /** Wait for the acknowledgement this long before failing the connection (default 5000). */
     ackTimeoutMs?: number;
-  };
+  } | undefined;
   /**
    * Liveness watchdog. After `timeoutMs` with no inbound frame the client asks
    * the far end a direct question and gives it `probeMs` to answer; only
    * silence to that counts as death, and the socket is then reconnected
    * (defaults 45000 and 5000; a `timeoutMs` of 0 disables the watchdog).
    */
-  heartbeat?: { timeoutMs?: number; probeMs?: number };
+  heartbeat?: { timeoutMs?: number; probeMs?: number } | undefined;
 }
 
 export interface LtpEvent {
@@ -121,27 +124,27 @@ export interface LtpEvent {
   exchange: string;
   ltp: number;
   ltq?: number;
-  /** Cumulative day volume (Quote mode) — feeds the candle builder's day-delta mode. */
+  /** Cumulative day volume (Quote mode): feeds the candle builder's day-delta mode. */
   volume?: number;
   timeSec: number;
 }
 
 /** Pure: the auth handshake message that must precede any subscription. */
-export function formatAuthenticate(apiKey: string): string {
+function formatAuthenticate(apiKey: string): string {
   return JSON.stringify({ action: 'authenticate', api_key: apiKey });
 }
 
 /** Pure: subscribe to the account-level order-update stream (no symbols/modes). */
-export function formatSubscribeOrders(): string {
+function formatSubscribeOrders(): string {
   return JSON.stringify({ action: 'subscribe_orders' });
 }
 
-export function formatUnsubscribeOrders(): string {
+function formatUnsubscribeOrders(): string {
   return JSON.stringify({ action: 'unsubscribe_orders' });
 }
 
 /**
- * Real-time order lifecycle event from the `subscribe_orders` stream — fills,
+ * Real-time order lifecycle event from the `subscribe_orders` stream: fills,
  * partial fills, rejections, cancellations, pushed by the broker (or by the
  * sandbox engine in analyze mode).
  */
@@ -179,6 +182,7 @@ export function parseOrderUpdate(raw: unknown): OrderUpdateEvent | null {
   };
   const str = (v: unknown): string => (typeof v === 'string' ? v : '');
   const trig = num(m.trigger_price);
+  // No trigger is an undefined `triggerPrice`, which the event reads as absent.
   return {
     orderId: str(m.orderid),
     symbol: str(m.symbol),
@@ -195,11 +199,11 @@ export function parseOrderUpdate(raw: unknown): OrderUpdateEvent | null {
     averagePrice: num(m.average_price),
     rejectionReason: str(m.rejection_reason),
     mode: str(m.mode),
-  };
+  } satisfies LooseOptional<OrderUpdateEvent> as OrderUpdateEvent;
 }
 
 /**
- * Pure: build a subscribe message — `{ action, symbol, exchange, mode }`, where
+ * Pure: build a subscribe message, `{ action, symbol, exchange, mode }`, where
  * `mode` is the numeric OpenAlgo data mode. Depth subscriptions may request a
  * book depth (broker-dependent: 5/20/30/50).
  *
@@ -269,7 +273,7 @@ function marketTimeSec(data: RawData): number {
 }
 
 /** True if the inbound frame is a heartbeat ping (plain "ping" or { type:'ping' }). */
-export function isPing(raw: unknown): boolean {
+function isPing(raw: unknown): boolean {
   if (raw === 'ping') return true;
   return typeof raw === 'object' && raw !== null && (raw as { type?: string }).type === 'ping';
 }
@@ -285,13 +289,13 @@ export function parseTopic(topic: unknown): { symbol: string; exchange: string }
   if (typeof topic !== 'string') return null;
   const parts = topic.split('.');
   if (parts.length !== 2) return null;
-  const [symbol, exchange] = parts;
+  const [symbol, exchange] = parts as [string, string];
   if (symbol === '' || exchange === '') return null;
   return { symbol, exchange };
 }
 
 /**
- * Pure: classify the server's answer to the handshake — 'ok', 'failed', or
+ * Pure: classify the server's answer to the handshake as 'ok', 'failed', or
  * null for a frame that is not about authentication at all.
  *
  * Absence of an error is never an acknowledgement, so 'ok' is only ever
@@ -385,7 +389,8 @@ export function parseMessage(raw: unknown): { kind: 'ltp'; event: LtpEvent } | {
   }
   const price = d.ltp ?? d.last_price;
   if (typeof price === 'number') {
-    return { kind: 'ltp', event: { symbol, exchange, ltp: price, ltq: d.last_trade_quantity ?? d.ltq, volume: d.volume, timeSec: marketTimeSec(d) } };
+    // A quantity the frame lacks stays undefined, which the event reads as absent.
+    return { kind: 'ltp', event: { symbol, exchange, ltp: price, ltq: d.last_trade_quantity ?? d.ltq, volume: d.volume, timeSec: marketTimeSec(d) } satisfies LooseOptional<LtpEvent> as LtpEvent };
   }
   return null;
 }
@@ -422,7 +427,7 @@ export class OpenAlgoWsFeed {
    * and grows without bound during a long outage, while desired state is
    * inherently deduplicated and bounded by the number of subscriptions.
    */
-  private readonly _subs = new Map<string, { mode: WsMode; symbol: string; exchange: string; depthLevel?: number }>();
+  private readonly _subs = new Map<string, { mode: WsMode; symbol: string; exchange: string; depthLevel?: number | undefined }>();
   /** Last sequence seen per topic. Only ever populated by a server that numbers frames. */
   private readonly _seq = new Map<string, number>();
   private _userClosed = false;
@@ -461,7 +466,7 @@ export class OpenAlgoWsFeed {
   /**
    * Open the socket. Also the deliberate way back from a refused key or an
    * earlier `close()`: both are user-intent states, and only user intent clears
-   * them (design §5.2, FATAL -> CONNECTING on an explicit connect).
+   * them, so this is the one way out of the fatal state back to connecting.
    */
   public connect(): void {
     if (this._sock !== null) return;
@@ -498,30 +503,25 @@ export class OpenAlgoWsFeed {
     return () => this._stateCbs.delete(cb);
   }
 
-  /** Subscribe to control frames — auth / subscribe acks, server errors, client warnings. */
+  /** Subscribe to control frames: auth / subscribe acks, server errors, client warnings. */
   public onControl(cb: (msg: WsControlMessage) => void): () => void {
     this._controlCbs.add(cb);
     return () => this._controlCbs.delete(cb);
   }
 
+  // Every host callback goes through `dispatch`, as on the chart bus: a throw
+  // reaches neither the other listeners nor the state change that emitted.
   private _emitState(s: WsState): void {
-    for (const cb of this._stateCbs) cb(s);
+    dispatch(this._stateCbs, s);
   }
 
   private _emitControl(msg: WsControlMessage): void {
-    for (const cb of this._controlCbs) cb(msg);
+    dispatch(this._controlCbs, msg);
   }
 
   private _warn(code: string, message: string): void {
     const w: WsClientWarning = { type: 'client_warning', code, message };
     this._emitControl(w);
-  }
-
-  /** A timer that never holds a Node event loop open. `unref` is absent in browsers. */
-  private _later(fn: () => void, ms: number): ReturnType<typeof setTimeout> {
-    const t = setTimeout(fn, ms);
-    (t as unknown as { unref?: () => void }).unref?.();
-    return t;
   }
 
   /**
@@ -541,7 +541,7 @@ export class OpenAlgoWsFeed {
       this._onAuthenticated();
       return;
     }
-    this._authTimer = this._later(
+    this._authTimer = later(
       () => this._failConnection('AUTH_TIMEOUT', `no auth acknowledgement within ${this._auth.ackTimeoutMs}ms`),
       this._auth.ackTimeoutMs,
     );
@@ -629,7 +629,7 @@ export class OpenAlgoWsFeed {
     const delay = backoffDelayMs(n, this._rc, this._rc.random);
     this._phase = 'backoff';
     this._emitState('reconnecting');
-    this._reconnectTimer = this._later(() => {
+    this._reconnectTimer = later(() => {
       this._reconnectTimer = null;
       this._sock = null;
       this._openSocket();
@@ -655,7 +655,7 @@ export class OpenAlgoWsFeed {
   private _armLiveness(): void {
     if (this._hbTimeoutMs <= 0 || this._phase !== 'ready') return;
     this._clearTimer('live');
-    this._liveTimer = this._later(() => this._probeLiveness(), this._hbTimeoutMs);
+    this._liveTimer = later(() => this._probeLiveness(), this._hbTimeoutMs);
   }
 
   /**
@@ -674,7 +674,7 @@ export class OpenAlgoWsFeed {
   private _probeLiveness(): void {
     if (this._phase !== 'ready' || this._sock === null) return;
     this._sock.send(JSON.stringify({ action: 'ping' }));
-    this._liveTimer = this._later(
+    this._liveTimer = later(
       () => this._failConnection('HEARTBEAT_DEAD', `no answer to a liveness ping within ${this._hbProbeMs}ms`),
       this._hbProbeMs,
     );
@@ -794,22 +794,23 @@ export class OpenAlgoWsFeed {
     const orderUpdate = parseOrderUpdate(raw);
     if (orderUpdate !== null) {
       if (!this._sequenceOk('orders', raw)) return;
-      for (const cb of this._orderCbs) cb(orderUpdate);
+      dispatch(this._orderCbs, orderUpdate);
       return;
     }
     const parsed = parseMessage(raw);
     if (parsed === null) {
-      // Non-market-data frame (auth / subscribe ack, or a server error) → surface it.
+      // Non-market-data frame (auth / subscribe ack, or a server error): surface it.
       if (typeof raw === 'object' && raw !== null) this._emitControl(raw as WsControlMessage);
       return;
     }
     const rawTopic = (raw as RawMsg).topic;
     if (parsed.kind === 'ltp') {
       if (!this._sequenceOk(rawTopic ?? `ltp:${parsed.event.symbol}.${parsed.event.exchange}`, raw)) return;
-      for (const cb of this._ltpCbs) cb(parsed.event);
+      dispatch(this._ltpCbs, parsed.event);
     } else {
       if (!this._sequenceOk(rawTopic ?? `depth:${parsed.symbol}.${parsed.exchange}`, raw)) return;
-      for (const cb of this._depthCbs) cb(parsed.symbol, parsed.exchange, parsed.depth);
+      const { symbol, exchange, depth } = parsed;
+      dispatch([...this._depthCbs].map(cb => () => cb(symbol, exchange, depth)), undefined);
     }
   }
 }

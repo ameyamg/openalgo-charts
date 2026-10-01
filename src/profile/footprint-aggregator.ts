@@ -1,7 +1,7 @@
 /**
  * Streaming footprint aggregator (ARCHITECTURE.md §6A, §9.4). Ingests classified
  * trade ticks (price, qty, bid/ask) and aggregates them into footprint bars on a
- * timeframe (interval / tick-count / volume) — the live orderflow pipeline.
+ * timeframe (interval / tick-count / volume): the live orderflow pipeline.
  * Incremental: the current bar updates per tick; a new bar opens at the boundary.
  *
  * Requires classified bid/ask trade ticks. OpenAlgo doesn't store these by
@@ -39,7 +39,7 @@ export class FootprintAggregator {
   private _close = 0;
 
   /**
-   * `rowTicks` widens each brick to `tickSize * rowTicks` — the same multiplier
+   * `rowTicks` widens each brick to `tickSize * rowTicks`: the same multiplier
    * the market profile uses, so an instrument's real tick stays honest while the
    * ladder stays readable. Nifty at 0.1 with 2-point bricks is `(tf, 0.1, 20)`.
    */

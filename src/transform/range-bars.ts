@@ -4,9 +4,10 @@
  * candlestick renderer. Incremental: the in-progress bar is emitted by flush().
  */
 import type { Bar } from '../model/bar';
-import type { ISeriesTransform } from './transform';
+import { copyState, type ISeriesTransform } from './transform';
 
 export interface RangeOptions {
+  /** High-to-low span that closes a bar. The constructor throws unless it is above 0. */
   range: number;
 }
 
@@ -21,6 +22,13 @@ export class RangeBarsTransform implements ISeriesTransform {
 
   public reset(): void {
     this._cur = null;
+  }
+
+  public clone(): RangeBarsTransform {
+    const copy = copyState(this);
+    // The bar in progress is extended in place, so the copy needs its own.
+    copy._cur = this._cur === null ? null : { ...this._cur };
+    return copy;
   }
 
   public push(bar: Bar): Bar[] {

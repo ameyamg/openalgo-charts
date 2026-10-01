@@ -16,10 +16,10 @@ export interface TradingCapabilities {
 export interface TradingCapabilityRequest {
   readonly operation: TradingOperation;
   readonly symbol?: string;
-  readonly exchange?: string;
-  readonly orderId?: string;
-  readonly type?: OrderType;
-  readonly mode?: 'live' | 'analyzer';
+  readonly exchange?: string | undefined;
+  readonly orderId?: string | undefined;
+  readonly type?: OrderType | undefined;
+  readonly mode?: 'live' | 'analyzer' | undefined;
 }
 
 /** A configured provider returning undefined declares that support is unavailable. */
@@ -33,7 +33,7 @@ export type TradingCapabilityResult = { supported: true } | { supported: false; 
 const OPERATION_WORDS: Record<TradingOperation, string> = { place: 'placing orders', modify: 'modifying orders', cancel: 'cancelling orders' };
 const TYPE_WORDS: Record<OrderType, string> = { MARKET: 'Market orders', LIMIT: 'Limit orders', SL: 'Stop-loss orders', 'SL-M': 'Stop-loss market orders' };
 const MODE_WORDS = { live: 'Live trading', analyzer: 'Analyzer mode' } as const;
-const capital = (words: string): string => words[0].toUpperCase() + words.slice(1);
+const capital = (words: string): string => words[0]!.toUpperCase() + words.slice(1); // only ever handed a word
 
 /** Shared by host controls and the write boundary. Never grants broker authority. */
 export function checkTradingCapability(

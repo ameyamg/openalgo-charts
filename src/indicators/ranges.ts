@@ -20,29 +20,15 @@
  * Relative Volatility Index feeds its two averages.
  */
 import { rsi, sourceValues } from 'openalgo-charts';
-import type { IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
+import type { IndicatorDescriptor } from 'openalgo-charts';
 import {
   sma, stdev, highest, lowest, nulls,
   change, roc, rollingSum, swma, stoch, cci,
 } from './calc';
-import { fromFirstValue, smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** the reference `input.int` is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Readonly<Record<string, unknown>>, k: string, d: number, min = 1): number =>
-  Math.max(min, Math.round(num(s, k, d)));
-/** An offset is a displacement, so it is the one integer setting that may be negative. */
-const offsetOf = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.round(num(s, k, d));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
+import { fromFirstValue, smoothingBlock, smoothingInputs, smoothingPlots, smoothingFill } from './smoothing';
+import { withTimeframe } from './timeframe';
+import { int, offsetOf, str, src } from './settings';
+import { shift, zip } from './series';
 
 /**
  * the reference `ema`, written the way the reference manual defines it:
@@ -72,10 +58,11 @@ function seededEma(values: readonly number[], period: number, holdFrom: number):
   const seed = sma(values, period);
   const k = 2 / (period + 1);
   let prev = NaN;
+  // `seed` holds one value per input.
   for (let i = 0; i < n; i++) {
-    const v = values[i];
+    const v = values[i]!;
     if (!Number.isFinite(prev)) {
-      prev = seed[i];
+      prev = seed[i]!;
     } else if (Number.isFinite(v)) {
       prev = v * k + prev * (1 - k);
     } else if (i < holdFrom) {
@@ -89,25 +76,7 @@ function seededEma(values: readonly number[], period: number, holdFrom: number):
 }
 
 /**
- * the reference `plot(..., offset = n)` draws bar `i`'s value `n` bars to the right.
- * Plots here have no offset of their own, so the displacement is folded into the
- * column: index `i` holds whatever the chart should paint at bar `i`. Values
- * pushed past either end of the series are dropped, which is why an offset
- * shortens the visible line.
- */
-function shifted(values: readonly (number | null)[], offset: number): (number | null)[] {
-  if (offset === 0) return values.slice();
-  const n = values.length;
-  const out = new Array<number | null>(n).fill(null);
-  for (let i = 0; i < n; i++) {
-    const at = i + offset;
-    if (at >= 0 && at < n) out[at] = values[i];
-  }
-  return out;
-}
-
-/**
- * Stochastic RSI — where RSI sits inside its own recent range, which turns a
+ * Stochastic RSI: where RSI sits inside its own recent range, which turns a
  * slow-moving oscillator into a fast one.
  *
  * The reference passes `rsi1` in as all three arguments of `stoch`, so the window
@@ -116,7 +85,7 @@ function shifted(values: readonly (number | null)[], offset: number): (number | 
  * full of real RSI values, then two SMAs. First `K` lands at index 29 on the
  * defaults and `D` two bars later.
  */
-export const STOCHASTIC_RSI: IndicatorDescriptor = {
+export const STOCHASTIC_RSI: IndicatorDescriptor = withTimeframe({
   id: 'stochastic-rsi',
   name: 'Stochastic RSI',
   category: 'Momentum',
@@ -156,15 +125,15 @@ export const STOCHASTIC_RSI: IndicatorDescriptor = {
   },
   levels: () => [
     { price: 80, color: '#787b86', title: 'Upper Band' },
-    // `color.new(#787B86, 50)` — the middle band is deliberately the quiet one.
+    // `color.new(#787B86, 50)`: the middle band is deliberately the quiet one.
     { price: 50, color: '#5a6b8c', title: 'Middle Band' },
     { price: 20, color: '#787b86', title: 'Lower Band' },
   ],
   range: () => ({ min: 0, max: 100 }),
-};
+});
 
 /**
- * Williams Percent Range — the distance from the window's high down to the
+ * Williams Percent Range: the distance from the window's high down to the
  * close, as a percentage of the window. The sign convention is the whole point:
  * a close at a fresh window high is exactly 0 and one at the window low is
  * exactly -100, so the scale runs -100..0 rather than 0..100.
@@ -173,7 +142,7 @@ export const STOCHASTIC_RSI: IndicatorDescriptor = {
  * `highest`/`lowest`), while the numerator reads the `source` input, so
  * the three do not have to agree.
  */
-export const WILLIAMS_PERCENT_R: IndicatorDescriptor = {
+export const WILLIAMS_PERCENT_R: IndicatorDescriptor = withTimeframe({
   id: 'williams-percent-r',
   name: 'Williams Percent Range',
   category: 'Momentum',
@@ -194,10 +163,11 @@ export const WILLIAMS_PERCENT_R: IndicatorDescriptor = {
     const values = sourceValues(bars, src(s));
     const hi = highest(bars.map((b) => b.high), length);
     const lo = lowest(bars.map((b) => b.low), length);
+    // Both extremes hold one value per bar.
     const out = values.map((v, i) => {
-      const span = hi[i] - lo[i];
+      const span = hi[i]! - lo[i]!;
       // A window with no range at all is 0/0, which the reference draws as a gap.
-      return span === 0 ? NaN : (100 * (v - hi[i])) / span;
+      return span === 0 ? NaN : (100 * (v - hi[i]!)) / span;
     });
     // Never null, warmup included: the background is drawn across the pane, so
     // its edges have to exist on bars where the study prints nothing.
@@ -213,16 +183,16 @@ export const WILLIAMS_PERCENT_R: IndicatorDescriptor = {
     { price: -80, color: '#787b86', title: 'Lower Band' },
   ],
   range: () => ({ min: -100, max: 0 }),
-};
+});
 
 /**
- * Ultimate Oscillator — buying pressure over true range, measured across three
+ * Ultimate Oscillator: buying pressure over true range, measured across three
  * horizons at once and weighted 4:2:1 so the fast window leads without the
  * slower two losing their vote.
  *
  * `high_`/`low_` reach back to the previous close, so bar 0 has no value: the reference
  * `max(high, na)` is `na`, and that bar contributes to neither sum. Summing
- * from bar 1 is what keeps it out — `rollingSum` keeps a running total, and one
+ * from bar 1 is what keeps it out: `rollingSum` keeps a running total, and one
  * NaN in a running total never comes back out. With the default 28-bar window
  * the first print is therefore at index 28, not 27.
  */
@@ -243,32 +213,33 @@ export const ULTIMATE_OSCILLATOR: IndicatorDescriptor = {
     const m = Math.max(0, n - 1);
     const bp = new Array<number>(m);
     const tr = new Array<number>(m);
+    // The terms and their averages hold n - 1 values, one per bar from bar 1.
     for (let i = 1; i < n; i++) {
-      const prevClose = bars[i - 1].close;
-      const hi = Math.max(bars[i].high, prevClose);
-      const lo = Math.min(bars[i].low, prevClose);
-      bp[i - 1] = bars[i].close - lo;
+      const prevClose = bars[i - 1]!.close;
+      const hi = Math.max(bars[i]!.high, prevClose);
+      const lo = Math.min(bars[i]!.low, prevClose);
+      bp[i - 1] = bars[i]!.close - lo;
       tr[i - 1] = hi - lo;
     }
     const avg = (length: number): number[] => {
       const sumBp = rollingSum(bp, length);
       const sumTr = rollingSum(tr, length);
       // A run of doji bars sums to zero range, which is `na` rather than 0/0.
-      return sumBp.map((v, i) => (sumTr[i] === 0 ? NaN : v / sumTr[i]));
+      return zip(sumBp, sumTr, (v, tr) => (tr === 0 ? NaN : v / tr));
     };
     const fast = avg(int(s, 'length1', 7));
     const middle = avg(int(s, 'length2', 14));
     const slow = avg(int(s, 'length3', 28));
     const out = new Array<number>(n).fill(NaN);
     for (let i = 0; i < m; i++) {
-      out[i + 1] = (100 * (4 * fast[i] + 2 * middle[i] + slow[i])) / 7;
+      out[i + 1] = (100 * (4 * fast[i]! + 2 * middle[i]! + slow[i]!)) / 7;
     }
     return { uo: nulls(out) };
   },
 };
 
 /**
- * Relative Vigor Index — the bar's body over its range, on the theory that a
+ * Relative Vigor Index: the bar's body over its range, on the theory that a
  * rising market closes near its high. Both halves are smoothed by `swma`
  * (the fixed 4-bar 1/2/2/1 kernel) before being summed, so a single wide bar
  * cannot swing the reading on its own.
@@ -277,7 +248,7 @@ export const ULTIMATE_OSCILLATOR: IndicatorDescriptor = {
  * the defaults), then 3 more for the signal's own `swma`.
  *
  * The reference `offset` input displaces both plots. The library has no per-plot
- * offset, so it is a real shift of the columns instead — see `shifted`.
+ * offset, so it is a real shift of the columns instead: see `shifted`.
  */
 export const RELATIVE_VIGOR_INDEX: IndicatorDescriptor = {
   id: 'relative-vigor-index',
@@ -300,18 +271,18 @@ export const RELATIVE_VIGOR_INDEX: IndicatorDescriptor = {
     const range = swma(bars.map((b) => b.high - b.low));
     const numerator = fromFirstValue(body, (t) => rollingSum(t, length));
     const denominator = fromFirstValue(range, (t) => rollingSum(t, length));
-    const rvgi = numerator.map((v, i) => (denominator[i] === 0 ? NaN : v / denominator[i]));
+    const rvgi = zip(numerator, denominator, (v, den) => (den === 0 ? NaN : v / den));
     const signal = fromFirstValue(rvgi, (t) => swma(t));
     const offset = offsetOf(s, 'offset', 0);
     return {
-      rvgi: shifted(nulls(rvgi), offset),
-      signal: shifted(nulls(signal), offset),
+      rvgi: nulls(shift(rvgi, offset)),
+      signal: nulls(shift(signal, offset)),
     };
   },
 };
 
 /**
- * Relative Volatility Index — RSI's arithmetic applied to volatility instead of
+ * Relative Volatility Index: RSI's arithmetic applied to volatility instead of
  * price: how much of the recent standard deviation arrived on up bars.
  *
  * Two details are easy to get wrong. The `length` input is the standard
@@ -332,29 +303,14 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
     { key: 'offset', type: 'number', label: 'Offset', default: 0, min: -500, max: 500, step: 1 },
     { key: 'color', type: 'color', label: 'RVI', default: '#7e57c2' },
     { key: 'fillColor', type: 'color', label: 'Background', default: '#7e57c2' },
-    {
-      key: 'maType', type: 'select', label: 'Type', default: 'SMA',
-      options: SMOOTHING_MA_TYPES, group: 'Smoothing',
-    },
-    { key: 'maLength', type: 'number', label: 'Length', default: 14, min: 1, max: 500, step: 1, group: 'Smoothing' },
-    { key: 'bbMult', type: 'number', label: 'BB StdDev', default: 2, min: 0.001, max: 50, step: 0.5, group: 'Smoothing' },
-    { key: 'maColor', type: 'color', label: 'RVI-based MA', default: '#ffeb3b', group: 'Smoothing' },
-    { key: 'bbUpperColor', type: 'color', label: 'Upper Bollinger Band', default: '#4caf50', group: 'Smoothing' },
-    { key: 'bbLowerColor', type: 'color', label: 'Lower Bollinger Band', default: '#4caf50', group: 'Smoothing' },
+    ...smoothingInputs('RVI', 'SMA', 14),
   ],
   plots: [
     { key: 'rvi', type: 'line', title: 'RVI', colorKey: 'color', style: { lineWidth: 1.5 } },
-    { key: 'ma', type: 'line', title: 'RVI-based MA', colorKey: 'maColor', style: { lineWidth: 1.5 } },
-    { key: 'bbUpper', type: 'line', title: 'Upper Bollinger Band', colorKey: 'bbUpperColor', style: { lineWidth: 1 } },
-    { key: 'bbLower', type: 'line', title: 'Lower Bollinger Band', colorKey: 'bbLowerColor', style: { lineWidth: 1 } },
+    ...smoothingPlots('RVI'),
   ],
   fills: [
-    {
-      between: ['bbUpper', 'bbLower'],
-      colorUpKey: 'bbUpperColor',
-      colorDownKey: 'bbUpperColor',
-      opacity: 0.1,
-    },
+    smoothingFill(),
     // The 80/20 shading spans two reference lines rather than two series, so its
     // edges are constant columns with no plot of their own. One colour on both
     // sides: a level band has no up or down side to tell apart.
@@ -370,13 +326,14 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
     const emaLength = 14;
     const upSource = new Array<number>(n);
     const downSource = new Array<number>(n);
+    // Every series here holds one value per bar.
     for (let i = 0; i < n; i++) {
-      const d = delta[i];
+      const d = delta[i]!;
       // Bar 0 has no change, and in the reference both `na <= 0` and `na > 0` are false,
-      // so it takes the `stddev` branch of both ternaries — where the value is
+      // so it takes the `stddev` branch of both ternaries, where the value is
       // itself `na`.
-      upSource[i] = Number.isFinite(d) && d <= 0 ? 0 : sd[i];
-      downSource[i] = Number.isFinite(d) && d > 0 ? 0 : sd[i];
+      upSource[i] = Number.isFinite(d) && d <= 0 ? 0 : sd[i]!;
+      downSource[i] = Number.isFinite(d) && d > 0 ? 0 : sd[i]!;
     }
     // A missing close after the deviation's first reading leaves the sources
     // absent for a stretch; the averages hold across it. Inside the warmup
@@ -387,30 +344,15 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
     const lower = seededEma(downSource, emaLength, holdFrom);
     const rvi = new Array<number>(n).fill(NaN);
     for (let i = 0; i < n; i++) {
-      const total = upper[i] + lower[i];
-      rvi[i] = total === 0 ? NaN : (upper[i] / total) * 100;
+      const total = upper[i]! + lower[i]!;
+      rvi[i] = total === 0 ? NaN : (upper[i]! / total) * 100;
     }
 
-    const maType = str(s, 'maType', 'SMA');
-    const maLength = int(s, 'maLength', 14);
-    const mult = num(s, 'bbMult', 2);
-    const isBB = maType === BOLLINGER_MA;
-    const ma = maType === 'None'
-      ? new Array<number>(n).fill(NaN)
-      : smoothingMa(maType, rvi, bars.map((b) => b.volume ?? 0), maLength);
-    // `smoothingStDev` is `na` unless the bands are on, and `ma + na` is `na`,
-    // so the two band columns switch themselves off exactly as the reference
-    // `display` guards do.
-    const band = isBB
-      ? fromFirstValue(rvi, (t) => stdev(t, maLength)).map((v) => v * mult)
-      : new Array<number>(n).fill(NaN);
-
-    const offset = offsetOf(s, 'offset', 0);
     return {
-      rvi: shifted(nulls(rvi), offset),
-      ma: nulls(ma),
-      bbUpper: nulls(ma.map((v, i) => v + band[i])),
-      bbLower: nulls(ma.map((v, i) => v - band[i])),
+      rvi: nulls(shift(rvi, offsetOf(s, 'offset', 0))),
+      // The offset moves the RVI line only; the block reads the unshifted
+      // values and stays where it is.
+      ...smoothingBlock(rvi, bars.map((b) => b.volume ?? 0), s, 'SMA', 14),
       // Never null and never shifted: reference lines stay put when the plot is
       // offset, and the shading covers the pane through the study's warmup.
       bandHigh: new Array<number>(n).fill(80),
@@ -425,13 +367,13 @@ export const RELATIVE_VOLATILITY_INDEX: IndicatorDescriptor = {
 };
 
 /**
- * Woodies CCI — a 14-bar CCI drawn twice, as a colour-coded histogram and as a
+ * Woodies CCI: a 14-bar CCI drawn twice, as a colour-coded histogram and as a
  * line, with a fast "turbo" CCI over the top. The pair is the method: the turbo
  * line crossing the slow one is the trigger, and the histogram's colour says
  * whether the trend is established enough to take it.
  *
- * The colour is a five-bar state, not a level — `cci14[5] .. cci14[1]` all on
- * one side of zero — so it belongs to `colorBy` rather than to a second plot.
+ * The colour is a five-bar state, not a level (`cci14[5] .. cci14[1]` all on
+ * one side of zero), so it belongs to `colorBy` rather than to a second plot.
  * Note the fallback branch: with no established run, the reference paints a negative
  * reading teal and a positive one red, which is the opposite of the run colours.
  * That is what the built-in ships, and parity beats tidiness here.
@@ -555,7 +497,7 @@ export const SPECIAL_K: IndicatorDescriptor = {
       const smoothed = fromFirstValue(roc(source, term.roc), (t) => sma(t, term.smooth));
       // NaN in any term makes the total NaN and keeps it there, which is the reference
       // `na` propagation through the sum.
-      for (let i = 0; i < n; i++) out[i] += term.weight * smoothed[i];
+      for (let i = 0; i < n; i++) out[i]! += term.weight * smoothed[i]!;
     }
     const once = fromFirstValue(out, (t) => sma(t, int(s, 'length1', 100)));
     const signal = fromFirstValue(once, (t) => sma(t, int(s, 'length2', 100)));

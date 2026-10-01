@@ -1,6 +1,7 @@
 import { widgetText } from './localization';
 import { chartTypeIcon, chromeIconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
-import { h, glyph, editableIds, historyPress, historyReady, type WidgetContext } from './context';
+import { h, glyph, historyPress, historyReady, type WidgetContext } from './context';
+import { drawingActionState, runDrawingAction } from './drawing-actions';
 import type { RailHandle } from './rail';
 import {
   chartTypeChoices, chartTypeLabel, intervalLabel,
@@ -48,14 +49,14 @@ export function resolveMobileMode(mode: MobileMode, width: number, height: numbe
 }
 
 export interface MobileOptions {
-  mode?: MobileMode;
+  mode?: MobileMode | undefined;
   container: HTMLElement;
   intervals: readonly string[];
   topbar: boolean;
   rail: RailHandle | null;
-  tools?: readonly string[];
+  tools?: readonly string[] | undefined;
   indicators: boolean;
-  search?: SymbolSearch;
+  search?: SymbolSearch | undefined;
   state(): TopbarState;
   onSymbol(symbol: string, exchange?: string): void;
   onInterval(code: string): void;
@@ -80,7 +81,7 @@ export interface MobileOptions {
    * sheet lists them instead: the market status and the clock, the preset
    * ranges, the price scale toggles and the timezone.
    */
-  bottombar?: BottombarControls;
+  bottombar?: BottombarControls | undefined;
 }
 
 export interface MobileHandle {
@@ -250,7 +251,8 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
     symbolInput.addEventListener('keydown', (event) => {
       if ((event as KeyboardEvent).key === 'Enter') {
         event.preventDefault();
-        commitSymbol(symbolInput?.value ?? '');
+        // As in the top bar: a search still running decides what Enter picks.
+        if (picker === null || picker.canCommitRaw()) commitSymbol(symbolInput?.value ?? '');
       }
     });
     header.append(symbolInput, intervalButton);
@@ -264,14 +266,13 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
   let deleteButton: HTMLButtonElement | null = null;
   if (opts.rail !== null) {
     propertiesButton = makeAction('properties', widgetText(ctx, 'Properties'), (anchor) => { opts.onProperties(anchor); });
+    // The rules every drawing surface keeps (drawing-actions.ts).
     lockButton = makeAction('lock', widgetText(ctx, 'Lock'), () => {
-      const ids = ctx.draw.selection();
-      const lock = !ids.every((id) => ctx.draw.get(id)?.locked === true);
-      for (const id of ids) ctx.draw.update(id, { locked: lock });
+      runDrawingAction(ctx, 'lock', ctx.draw.selection());
       refresh();
     });
     deleteButton = makeAction('delete', widgetText(ctx, 'Delete'), () => {
-      ctx.draw.removeMany(ctx.draw.selection());
+      runDrawingAction(ctx, 'delete', ctx.draw.selection());
       refresh();
     });
     selection.append(propertiesButton, lockButton, deleteButton);
@@ -476,16 +477,15 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
     if (selection.parentNode !== null) {
       const ids = ctx.draw.selection();
       selection.hidden = ids.length === 0;
-      // Lock and delete have nothing to act on in a read-only selection.
-      const fixed = String(editableIds(ctx.draw, ids).length === 0);
+      // Lock has nothing to act on in a read-only selection, and delete keeps a locked one too.
+      const state = drawingActionState(ctx, ids);
       if (ids.length > 0 && lockButton !== null) {
-        const locked = ids.every((id) => ctx.draw.get(id)?.locked === true);
         // One name; the pressed state says locked.
-        lockButton.setAttribute('aria-pressed', String(locked));
-        lockButton.setAttribute('aria-disabled', fixed);
+        lockButton.setAttribute('aria-pressed', String(state.locked));
+        lockButton.setAttribute('aria-disabled', String(state.editable.length === 0));
       }
       if (propertiesButton !== null) propertiesButton.setAttribute('aria-disabled', String(ids.length === 0));
-      if (deleteButton !== null) deleteButton.setAttribute('aria-disabled', fixed);
+      if (deleteButton !== null) deleteButton.setAttribute('aria-disabled', String(state.noDelete !== null || state.editable.length === 0));
     }
     sheet?.repaint();
   }
@@ -550,7 +550,7 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
     }
   }
 
-  for (const event of ['draw:tool', 'draw:select', 'drawing:select', 'drawing:change', 'draw:add', 'draw:remove', 'draw:update']) {
+  for (const event of ['draw:tool', 'draw:select', 'drawing:select', 'drawing:change', 'draw:add', 'draw:remove', 'draw:update'] as const) {
     offs.push(ctx.chart.on(event, refresh));
   }
   if (ctx.history !== undefined) offs.push(ctx.history.subscribe(refresh));

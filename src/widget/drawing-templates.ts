@@ -15,10 +15,10 @@
  * into the placement's own undo step (the controller's `untracked`), so
  * placing a drawing stays one step and its redo brings the default back too.
  */
-import { applyDrawingSettings, drawingSettingsSchema, getDrawingTool, hasDrawingTool, readDrawingSettings } from 'openalgo-charts/draw';
+import { applyDrawingSettings, drawingSettingsSchema, readDrawingSettings } from 'openalgo-charts/draw';
 import type { Drawing, DrawingChangeEvent } from 'openalgo-charts/draw';
 import type { DrawingTemplate, DrawingTemplateCatalog, DrawingTemplateStore, DrawingTemplateValues } from 'openalgo-charts/workspace';
-import { editableIds, type WidgetContext } from './context';
+import { drawingToolOf, editableIds, historyStep, type WidgetContext } from './context';
 import { button, dialogFrame, el, openPanel, type PanelHandle } from './form';
 import { errorText, widgetText } from './localization';
 
@@ -115,7 +115,7 @@ export function createDrawingTemplates(ctx: WidgetContext, store: DrawingTemplat
     placed = null;
     const change = payload as DrawingChangeEvent;
     if (destroyed || change.kind !== 'add' || change.step === undefined || change.linked === true || change.ids.length !== 1) return;
-    const d = draw.get(change.ids[0]);
+    const d = draw.get(change.ids[0]!); // exactly one id, checked above
     if (d === undefined || draw.activeTool() !== d.tool || defaultFor(d.tool) === undefined) return;
     const candidate = d.id;
     placed = candidate;
@@ -152,7 +152,7 @@ export function createDrawingTemplates(ctx: WidgetContext, store: DrawingTemplat
     if (d === undefined) throw new Error(widgetText(ctx, 'Select a drawing first'));
     return d;
   };
-  const toolLabel = (tool: string): string => widgetText(ctx, `schema.drawing.${tool}.name`, {}, hasDrawingTool(tool) ? getDrawingTool(tool).name : tool);
+  const toolLabel = (tool: string): string => widgetText(ctx, `schema.drawing.${tool}.name`, {}, drawingToolOf(tool)?.name ?? tool);
 
   return {
     store,
@@ -192,7 +192,7 @@ export function createDrawingTemplates(ctx: WidgetContext, store: DrawingTemplat
 /** One row of a template menu, in the shape `openMenu` takes. */
 export interface TemplateMenuRow {
   label: string;
-  sub?: string;
+  sub?: string | undefined;
   on?: boolean;
   disabled?: boolean;
   danger?: boolean;
@@ -210,7 +210,7 @@ export function templateMenuRows(
 ): Array<TemplateMenuRow | string> {
   const drawings = ids.map((id) => ctx.draw.get(id)).filter((d): d is Drawing => d !== undefined);
   const tools = new Set(drawings.map((d) => d.tool));
-  const tool = tools.size === 1 ? drawings[0].tool : null;
+  const tool = tools.size === 1 ? drawings[0]!.tool : null; // one tool means at least one drawing
   const primary = drawings[0];
   const editable = editableIds(ctx.draw, ids).length > 0;
   const rows: Array<TemplateMenuRow | string> = [widgetText(ctx, 'Templates')];
@@ -238,10 +238,7 @@ export function templateMenuRows(
       label: widgetText(ctx, 'Apply {name}', { name: item.name }),
       disabled: !editable,
       sub: editable ? undefined : widgetText(ctx, 'read-only'),
-      onSelect: () => {
-        const run = (): number => templates.apply(ids, item.values);
-        if (ctx.history !== undefined) ctx.history.transact(run, 'template'); else run();
-      },
+      onSelect: () => { historyStep(ctx, 'template', () => templates.apply(ids, item.values)); },
     });
   }
   return rows;

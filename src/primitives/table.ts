@@ -132,6 +132,36 @@ function widestLine(ctx: CanvasRenderingContext2D, lines: readonly string[]): nu
   return widest;
 }
 
+/**
+ * The bitmap font size a cell's text is drawn at, leaving `ctx` in the last
+ * font it tried. `room` is the width inside the cell's padding.
+ */
+function cellFontSize(ctx: CanvasRenderingContext2D, cell: TableCell, lines: readonly string[], rowH: number,
+  room: number, o: ChartTableOptions, dpr: number): number {
+  const px = (v: number): number => Math.round(v * dpr);
+  // Shrink the type when a stretched row is shorter than the declared
+  // font, so a tall grid in a short pane stays legible instead of
+  // overlapping into its neighbours.
+  const rowMax = maximumFontSize(rowH, lines.length, dpr);
+  let size: number;
+  if (cell.fontSize === undefined && o.fontSize === 'auto') {
+    // Fit: as large as the row allows, then shrunk until the text also
+    // fits its column, so one long label sizes only itself down.
+    const singleLine = lines.length === 1;
+    const floor = singleLine ? px(6) : Math.min(px(6), rowMax);
+    size = singleLine ? Math.max(floor, rowMax) : rowMax;
+    ctx.font = cellFont(cell, size);
+    const step = singleLine ? Math.max(1, px(1)) : 1;
+    while (size > floor && widestLine(ctx, lines) > room) {
+      size = singleLine ? size - step : Math.max(floor, size - step);
+      ctx.font = cellFont(cell, size);
+    }
+  } else {
+    size = clampedFontSize(cell.fontSize ?? (o.fontSize === 'auto' ? 11 : o.fontSize), rowH, dpr, lines.length);
+  }
+  return size;
+}
+
 interface PositionedCell {
   cell: TableCell;
   row: number;
@@ -149,8 +179,8 @@ function positionCells(rows: readonly (readonly TableCell[])[]): { cols: number;
   const covered = new Map<number, { from: number; to: number }[]>();
   const cells: PositionedCell[] = [];
   for (let r = 0; r < rows.length; r++) {
-    for (let c = 0; c < rows[r].length; c++) {
-      const cell = rows[r][c];
+    for (let c = 0; c < rows[r]!.length; c++) { // both loops stay inside the rows as given
+      const cell = rows[r]![c]!;
       if (cell.tooltip !== undefined && typeof cell.tooltip !== 'string') throw new TypeError('Table tooltip must be text');
       const rowSpan = cell.rowSpan === undefined ? 1 : cell.rowSpan;
       const colSpan = cell.colSpan === undefined ? 1 : cell.colSpan;
@@ -203,19 +233,21 @@ function measuredColumns(
     ctx.font = cellFont(cell, size);
     return widestLine(ctx, lines) / dpr + padding;
   };
+  // cellHeights holds one height per cell, and every cell's columns lie inside the
+  // grid: positionCells refuses a span past it.
   for (let i = 0; i < cells.length; i++) {
-    const entry = cells[i];
-    if (entry.colSpan === 1) widths[entry.col] = Math.max(widths[entry.col], widthOf(entry, cellHeights[i]));
+    const entry = cells[i]!;
+    if (entry.colSpan === 1) widths[entry.col] = Math.max(widths[entry.col]!, widthOf(entry, cellHeights[i]!));
   }
   // A merged heading should enlarge only the columns it covers, after their
   // ordinary content has established the column proportions.
   for (let i = 0; i < cells.length; i++) {
-    const entry = cells[i];
+    const entry = cells[i]!;
     if (entry.colSpan === 1) continue;
     let current = 0;
-    for (let c = entry.col; c < entry.col + entry.colSpan; c++) current += widths[c];
-    const extra = Math.max(0, widthOf(entry, cellHeights[i]) - current) / entry.colSpan;
-    for (let c = entry.col; c < entry.col + entry.colSpan; c++) widths[c] += extra;
+    for (let c = entry.col; c < entry.col + entry.colSpan; c++) current += widths[c]!;
+    const extra = Math.max(0, widthOf(entry, cellHeights[i]!) - current) / entry.colSpan;
+    for (let c = entry.col; c < entry.col + entry.colSpan; c++) widths[c]! += extra;
   }
   return widths;
 }
@@ -256,7 +288,7 @@ function tooltipLines(ctx: CanvasRenderingContext2D, text: string, width: number
       }
       let count = Math.max(1, lo);
       if (start + count < chars.length) {
-        for (let i = count - 1; i > 0; i--) if (/\s/.test(chars[start + i])) { count = i + 1; break; }
+        for (let i = count - 1; i > 0; i--) if (/\s/.test(chars[start + i]!)) { count = i + 1; break; } // before start + count
       }
       lines.push(chars.slice(start, start + count).join(''));
       start += count;
@@ -337,11 +369,13 @@ export class ChartTable implements IPrimitive {
       h = (rc.plotHeight * o.heightPercent) / 100;
       unit = h / weightTotal;
     }
+    // weights, rowY and rowHeights hold one entry per row, and every cell sits in one;
+    // only the edge below the last row needs its fallback.
     const rowY: number[] = [];
-    for (let r = 0, acc = 0; r < rows.length; r++) { rowY.push(acc); acc += unit * weights[r]; }
+    for (let r = 0, acc = 0; r < rows.length; r++) { rowY.push(acc); acc += unit * weights[r]!; }
     const rowHeights = weights.map((weight) => Math.round(unit * weight * dpr));
-    const cellHeights = cells.map(entry => entry.rowSpan === 1 ? rowHeights[entry.row]
-      : Math.round((rowY[entry.row + entry.rowSpan] ?? h) * dpr) - Math.round(rowY[entry.row] * dpr));
+    const cellHeights = cells.map(entry => entry.rowSpan === 1 ? rowHeights[entry.row]!
+      : Math.round((rowY[entry.row + entry.rowSpan] ?? h) * dpr) - Math.round(rowY[entry.row]! * dpr));
     ctx.save();
     const edges = columnEdges(
       o.cellWidth === 'auto' ? measuredColumns(ctx, cells, cols, cellHeights, o, dpr) : o.cellWidth,
@@ -371,13 +405,15 @@ export class ChartTable implements IPrimitive {
     }
 
     ctx.textBaseline = 'middle';
+    // One height per cell and one edge per column: only the edge after the last
+    // column needs its fallback.
     for (let i = 0; i < cells.length; i++) {
-      const { cell, row: r, col: c, colSpan } = cells[i];
-      const cellTop = oy + px(rowY[r]);
-      const rowH = cellHeights[i];
-      const cellLeft = ox + px(colX[c]);
+      const { cell, row: r, col: c, colSpan } = cells[i]!;
+      const cellTop = oy + px(rowY[r]!);
+      const rowH = cellHeights[i]!;
+      const cellLeft = ox + px(colX[c]!);
       const endX = colX[c + colSpan] ?? w;
-      const cellW = colSpan === 1 ? px(endX - colX[c]) : px(endX) - px(colX[c]);
+      const cellW = colSpan === 1 ? px(endX - colX[c]!) : px(endX) - px(colX[c]!);
 
       if (cell.tooltip) {
         const x = Math.max(0, cellLeft / dpr), y = Math.max(0, cellTop / dpr);
@@ -411,27 +447,7 @@ export class ChartTable implements IPrimitive {
       ctx.rect(cellLeft, cellTop, cellW, rowH);
       ctx.clip();
       const lines = textLines(cell);
-      // Shrink the type when a stretched row is shorter than the declared
-      // font, so a tall grid in a short pane stays legible instead of
-      // overlapping into its neighbours.
-      const rowMax = maximumFontSize(rowH, lines.length, dpr);
-      let size: number;
-      if (cell.fontSize === undefined && o.fontSize === 'auto') {
-        // Fit: as large as the row allows, then shrunk until the text also
-        // fits its column, so one long label sizes only itself down.
-        const singleLine = lines.length === 1;
-        const floor = singleLine ? px(6) : Math.min(px(6), rowMax);
-        size = singleLine ? Math.max(floor, rowMax) : rowMax;
-        ctx.font = cellFont(cell, size);
-        const room = cellW - pad * 2;
-        const step = singleLine ? Math.max(1, px(1)) : 1;
-        while (size > floor && widestLine(ctx, lines) > room) {
-          size = singleLine ? size - step : Math.max(floor, size - step);
-          ctx.font = cellFont(cell, size);
-        }
-      } else {
-        size = clampedFontSize(cell.fontSize ?? (o.fontSize === 'auto' ? 11 : o.fontSize), rowH, dpr, lines.length);
-      }
+      const size = cellFontSize(ctx, cell, lines, rowH, cellW - pad * 2, o, dpr);
       if (size <= 0) { ctx.restore(); continue; }
       ctx.font = cellFont(cell, size);
       // A cell with a fill picks its own readable ink; one without falls back
@@ -449,7 +465,7 @@ export class ChartTable implements IPrimitive {
       const firstY = cell.verticalAlign === 'top' ? cellTop + inset + lineHeight / 2
         : cell.verticalAlign === 'bottom' ? cellTop + rowH - inset - blockHeight + lineHeight / 2
         : cellTop + rowH / 2 - (lines.length - 1) * lineHeight / 2;
-      for (let line = 0; line < lines.length; line++) ctx.fillText(lines[line], tx, firstY + line * lineHeight);
+      for (let line = 0; line < lines.length; line++) ctx.fillText(lines[line]!, tx, firstY + line * lineHeight);
       ctx.restore();
     }
     if (o.frameColor !== undefined && (o.frameWidth ?? 1) > 0) {
@@ -479,7 +495,7 @@ export class ChartTable implements IPrimitive {
     ctx.beginPath(); roundRectPath(ctx, x, y, w, h, Math.min(3 * d, w / 2, h / 2));
     ctx.fillStyle = rc.theme.axisText; ctx.fill();
     ctx.fillStyle = contrastText(rc.theme.axisText);
-    for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], x + padX, y + padY + (i + 0.5) * lineHeight);
+    for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i]!, x + padX, y + padY + (i + 0.5) * lineHeight);
     ctx.restore();
   }
 

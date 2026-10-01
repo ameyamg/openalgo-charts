@@ -14,15 +14,8 @@ import { change, cumulative, nulls, rollingSum, sma } from './calc';
 // A `change` series has no value on bar 0, so its smoothing starts later too:
 // the shared gapped EMA aligns it with the first finite input.
 import { emaOfGapped } from './smoothing';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-
-/** the reference `nz(volume)`: a bar the feed gave no volume for traded nothing. */
-const vol = (b: Bar): number =>
-  typeof b.volume === 'number' && Number.isFinite(b.volume) ? b.volume : 0;
+import { num, int } from './settings';
+import { volumeOf } from './series';
 
 /**
  * The Accumulation/Distribution money-flow term, shared by Chaikin Money Flow
@@ -35,15 +28,15 @@ const vol = (b: Bar): number =>
 function moneyFlow(bars: readonly Bar[]): number[] {
   const out = new Array<number>(bars.length);
   for (let i = 0; i < bars.length; i++) {
-    const b = bars[i];
+    const b = bars[i]!;
     const degenerate = (b.close === b.high && b.close === b.low) || b.high === b.low;
-    out[i] = degenerate ? 0 : ((2 * b.close - b.low - b.high) / (b.high - b.low)) * vol(b);
+    out[i] = degenerate ? 0 : ((2 * b.close - b.low - b.high) / (b.high - b.low)) * volumeOf(b);
   }
   return out;
 }
 
 /**
- * Chaikin Money Flow — the money-flow term summed over the window and
+ * Chaikin Money Flow: the money-flow term summed over the window and
  * normalised by the volume traded in that same window, so the reading is a
  * bounded -1..+1 share of participation rather than a raw quantity.
  */
@@ -58,14 +51,15 @@ export const CHAIKIN_MONEY_FLOW: IndicatorDescriptor = {
   ],
   plots: [{ key: 'cmf', type: 'line', title: 'CMF', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
-    const length = num(s, 'length', 20);
+    const length = int(s, 'length', 20);
     const flow = rollingSum(moneyFlow(bars), length);
-    const traded = rollingSum(bars.map(vol), length);
+    const traded = rollingSum(bars.map(volumeOf), length);
     const out = new Array<number>(bars.length).fill(NaN);
+    // Both sums hold one value per bar.
     for (let i = 0; i < bars.length; i++) {
       // A window that traded nothing has no flow to express as a share of it;
       // the reference division by zero yields na, so this stays a gap.
-      if (traded[i] > 0) out[i] = flow[i] / traded[i];
+      if (traded[i]! > 0) out[i] = flow[i]! / traded[i]!;
     }
     return { cmf: nulls(out) };
   },
@@ -73,7 +67,7 @@ export const CHAIKIN_MONEY_FLOW: IndicatorDescriptor = {
 };
 
 /**
- * Chaikin Oscillator — a MACD of the A/D line.
+ * Chaikin Oscillator: a MACD of the A/D line.
  *
  * The two EMAs run over the *running total* of the money-flow term (the reference
  * `accdist`), not the per-bar term, so what the oscillator measures is
@@ -92,17 +86,17 @@ export const CHAIKIN_OSCILLATOR: IndicatorDescriptor = {
   plots: [{ key: 'osc', type: 'line', title: 'Chaikin Oscillator', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
     const accdist = cumulative(moneyFlow(bars));
-    const fast = emaOfGapped(accdist, num(s, 'short', 3));
-    const slow = emaOfGapped(accdist, num(s, 'long', 10));
+    const fast = emaOfGapped(accdist, int(s, 'short', 3));
+    const slow = emaOfGapped(accdist, int(s, 'long', 10));
     const out = new Array<number>(bars.length);
-    for (let i = 0; i < bars.length; i++) out[i] = fast[i] - slow[i];
+    for (let i = 0; i < bars.length; i++) out[i] = fast[i]! - slow[i]!;
     return { osc: nulls(out) };
   },
   levels: () => [{ price: 0, color: '#787b86', title: 'Zero', dashed: true }],
 };
 
 /**
- * Ease of Movement — how far the midpoint travelled per unit of volume, scaled
+ * Ease of Movement: how far the midpoint travelled per unit of volume, scaled
  * by the bar's range and by a divisor that only exists to bring the number into
  * a readable magnitude.
  */
@@ -121,20 +115,21 @@ export const EASE_OF_MOVEMENT: IndicatorDescriptor = {
     const divisor = num(s, 'divisor', 10000);
     const move = change(bars.map((b) => (b.high + b.low) / 2));
     const term = new Array<number>(bars.length);
+    // `move` holds one value per bar.
     for (let i = 0; i < bars.length; i++) {
-      const b = bars[i];
-      const v = vol(b);
+      const b = bars[i]!;
+      const v = volumeOf(b);
       // No volume means no measure of how easily price moved. the reference divides by
       // zero and gets na; NaN here says the same thing, and `sma` refuses to
       // average a window holding one, which is exactly the reference platform's gap.
-      term[i] = v === 0 ? NaN : (divisor * move[i] * (b.high - b.low)) / v;
+      term[i] = v === 0 ? NaN : (divisor * move[i]! * (b.high - b.low)) / v;
     }
-    return { eom: nulls(sma(term, num(s, 'length', 14))) };
+    return { eom: nulls(sma(term, int(s, 'length', 14))) };
   },
 };
 
 /**
- * Elder Force Index — the bar's price change weighted by the volume behind it,
+ * Elder Force Index: the bar's price change weighted by the volume behind it,
  * smoothed. Direction and conviction in one number: a large move on thin
  * volume scores less than a small move the whole market took part in.
  */
@@ -151,8 +146,8 @@ export const ELDER_FORCE_INDEX: IndicatorDescriptor = {
   calc: (bars, s) => {
     const moved = change(bars.map((b) => b.close));
     const force = new Array<number>(bars.length);
-    for (let i = 0; i < bars.length; i++) force[i] = moved[i] * vol(bars[i]);
-    return { efi: nulls(emaOfGapped(force, num(s, 'length', 13))) };
+    for (let i = 0; i < bars.length; i++) force[i] = moved[i]! * volumeOf(bars[i]!);
+    return { efi: nulls(emaOfGapped(force, int(s, 'length', 13))) };
   },
   levels: () => [{ price: 0, color: '#787b86', title: 'Zero', dashed: true }],
 };
@@ -175,8 +170,8 @@ export const NET_VOLUME: IndicatorDescriptor = {
   calc: (bars) => {
     const out = new Array<number>(bars.length).fill(0);
     for (let i = 1; i < bars.length; i++) {
-      const moved = bars[i].close - bars[i - 1].close;
-      out[i] = moved > 0 ? vol(bars[i]) : moved < 0 ? -vol(bars[i]) : 0;
+      const moved = bars[i]!.close - bars[i - 1]!.close;
+      out[i] = moved > 0 ? volumeOf(bars[i]!) : moved < 0 ? -volumeOf(bars[i]!) : 0;
     }
     return { net: nulls(out) };
   },

@@ -41,6 +41,9 @@ test('touch drawing controls work in portrait and remain available in landscape'
   expect(await page.evaluate(() => (window as any).__widget.draw.drawings()[0].points.length)).toBe(2);
   await page.locator('[data-mobile-action=lock]').tap();
   expect(await page.evaluate(() => (window as any).__widget.draw.drawings()[0].locked)).toBe(true);
+  // A locked drawing stays, as on the desktop: Delete is off until it is unlocked.
+  await expect(page.locator('[data-mobile-action=delete]')).toHaveAttribute('aria-disabled', 'true');
+  await page.locator('[data-mobile-action=lock]').tap();
   await page.locator('[data-mobile-action=delete]').tap();
   expect(await page.evaluate(() => (window as any).__widget.draw.drawings().length)).toBe(0);
   await page.setViewportSize({ width: 740, height: 390 });

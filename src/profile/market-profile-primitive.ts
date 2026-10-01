@@ -5,7 +5,7 @@
  * highs / lows, the developing POC-VA track, naked prior levels, day / open type
  * labels and an optional volume sub-profile.
  *
- * A pane primitive — it overlays the price range rather than driving it (though
+ * A pane primitive: it overlays the price range rather than driving it (though
  * `autoscaleInfo` reports its extent so a profile-only chart still frames).
  *
  * **Letters degrade to bricks automatically.** A TPO row is only as tall as the
@@ -19,6 +19,7 @@ import type { IPrimitive, PrimitiveHit, PrimitiveHost, PrimitiveRenderContext, Z
 import type { MarketProfileResult, MarketProfileSessionResult, MarketProfileLevel } from './market-profile';
 import { nakedLevels, profileSessionIdentity, rowOf } from './market-profile';
 import { drawCompactText } from './compact-text';
+import { sessionsPriceRange } from './profile-model';
 
 /**
  * `auto` crossfades letters into bricks as rows get short (the default).
@@ -29,14 +30,14 @@ export type MpBlockDisplay = 'auto' | 'compact' | 'blocks+letters' | 'letters' |
 
 /**
  * What drives a block's colour.
- * `period` — one hue per TPO period, so the session's shape over time is visible.
- * `valueArea` — inside vs outside the value area.
- * `count` / `volume` — heat by TPO count or traded volume at that row.
- * `uniform` — a single colour.
+ * `period`: one hue per TPO period, so the session's shape over time is visible.
+ * `valueArea`: inside vs outside the value area.
+ * `count` / `volume`: heat by TPO count or traded volume at that row.
+ * `uniform`: a single colour.
  */
 export type MpColorMode = 'period' | 'valueArea' | 'count' | 'volume' | 'uniform';
 
-/** Default period palette — 12 hues that stay distinct on a dark background. */
+/** Default period palette: 12 hues that stay distinct on a dark background. */
 export const TPO_PERIOD_COLORS: readonly string[] = [
   '#e05555', '#e08a3c', '#d9c341', '#8cc44a', '#3fb96b', '#38b2a3',
   '#3b9fd1', '#5a7fe0', '#8a68d9', '#c05fc4', '#d1508f', '#9b7b5a',
@@ -222,15 +223,7 @@ export class MarketProfile implements IPrimitive {
   public options(): MarketProfilePrimitiveOptions { return this._opts; }
 
   public autoscaleInfo(): { min: number; max: number } | null {
-    if (this._result === null) return null;
-    let min = Infinity;
-    let max = -Infinity;
-    for (const s of this._result.sessions) {
-      if (s.levels.length === 0) continue;
-      max = Math.max(max, s.levels[0].price);
-      min = Math.min(min, s.levels[s.levels.length - 1].price);
-    }
-    return Number.isFinite(min) ? { min, max } : null;
+    return this._result === null ? null : sessionsPriceRange(this._result.sessions);
   }
 
   public setData(result: MarketProfileResult): void {
@@ -320,7 +313,7 @@ export class MarketProfile implements IPrimitive {
       ctx.clip();
     }
     for (let i = 0; i < this._result.sessions.length; i++) {
-      this._drawSession(ctx, rc, this._result.sessions[i], row, i);
+      this._drawSession(ctx, rc, this._result.sessions[i]!, row, i);
     }
     if (this._opts.showNakedLevels) this._drawNaked(ctx, rc);
     if (compact) ctx.restore();
@@ -341,11 +334,22 @@ export class MarketProfile implements IPrimitive {
 
   private _blockColor(l: MarketProfileLevel, periodIdx: number, s: MarketProfileSessionResult): string {
     const o = this._opts;
-    if (o.colorMode === 'period') return o.periodColors[periodIdx % o.periodColors.length];
+    // An empty palette has no colour for any period, so the base colour stands in.
+    if (o.colorMode === 'period') return o.periodColors[periodIdx % o.periodColors.length] ?? o.color;
     if (o.colorMode === 'valueArea') return l.price <= s.vah && l.price >= s.val ? o.vaColor : o.color;
     return o.color;
   }
 
+  /**
+   * One session's paint. The layers go down in this order, and the order is
+   * what decides what covers what: the value-area wash, the volume bars
+   * (`_drawVolume`), the TPO blocks and their letters, the counts, the single
+   * prints, tails and initial balance along the left edge, the value-area,
+   * POC and poor high or low lines, the developing track (`_drawDeveloping`),
+   * the open and last price markers (`_drawPriceMarker`), and the header.
+   * Kept as one method on purpose: per-layer methods cost bytes in the tier,
+   * since method names and the fields they would share survive minification.
+   */
   private _drawSession(
     ctx: CanvasRenderingContext2D,
     rc: PrimitiveRenderContext,
@@ -367,7 +371,7 @@ export class MarketProfile implements IPrimitive {
     this._boxes.push({ index, x0: x0 / dpr, x1: x1 / dpr });
 
     const yOf = (p: number): number => rc.priceScale.priceToY(p) * dpr;
-    // Row height straight off the price scale — this decides letters vs bricks.
+    // Row height straight off the price scale: this decides letters vs bricks.
     const rowH = Math.max(1, Math.abs(rc.priceScale.priceToY(s.poc) - rc.priceScale.priceToY(s.poc + row)) * dpr);
     this._rowH = rowH / dpr;
     const smallText = compact && rowH < 12 * dpr;
@@ -424,11 +428,11 @@ export class MarketProfile implements IPrimitive {
       for (let j = 0; j < l.periods.length; j++) {
         // `split` gives each period its own column slot, so a gap shows which
         // periods never traded that row; packed mode closes the gaps up.
-        const slot = split ? l.periods[j] : j;
+        const slot = split ? l.periods[j]! : j;
         const bx = x0 + slot * lw;
         if (bx > x1) break;
         if (compact && (bx + lw > x1 || bx + lw < 0 || bx > rc.plotWidth * dpr)) continue;
-        const color = this._blockColor(l, l.periods[j], s);
+        const color = this._blockColor(l, l.periods[j]!, s);
         if (drawBlock) {
           ctx.globalAlpha = baseAlpha;
           ctx.fillStyle = color;

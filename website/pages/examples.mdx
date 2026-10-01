@@ -758,8 +758,8 @@ const noise = n => {
 };
 const exchange = {
   previousClose: symbol => 40 + seed(symbol) % 160,
-  last(symbol) {
-    const step = Math.floor(Date.now() / 700);
+  last(symbol, now = Date.now()) {
+    const step = Math.floor(now / 700);
     let walk = 0;
     for (let k = 0; k < 30; k++) walk += noise(seed(symbol) * 100003 + step - k);
     const move = (seed(symbol) % 7 - 3) / 100 + walk * 0.004;
@@ -775,14 +775,22 @@ const bars = (symbol, interval) => {
   return series.map(bar => ({ ...bar, open: round(bar.open * scale), high: round(bar.high * scale),
     low: round(bar.low * scale), close: round(bar.close * scale) }));
 };
-const quote = item => ({ ...item, last: exchange.last(item.symbol), previousClose: exchange.previousClose(item.symbol) });
+// One clock drives the quote source and the forming bar, so a row and the chart
+// read the same step of the exchange at the same moment.
+const ticks = new Set();
+let clock = 0;
+const onTick = fn => {
+  ticks.add(fn);
+  if (!clock) clock = setInterval(() => { const now = Date.now(); ticks.forEach(f => f(now)); }, 700);
+  return () => { ticks.delete(fn); if (!ticks.size) { clearInterval(clock); clock = 0; } };
+};
+const quote = (item, now) => ({ ...item, last: exchange.last(item.symbol, now), previousClose: exchange.previousClose(item.symbol) });
 const quotes = {
-  getQuotes: async ({ instruments }) => instruments.map(quote),
+  getQuotes: async ({ instruments }) => instruments.map(item => quote(item)),
   subscribeQuotes(instruments, { onQuote, onStatus }) {
     const [item] = instruments;
     if (onStatus) onStatus('live');
-    const timer = setInterval(() => onQuote(quote(item)), 700);
-    return () => clearInterval(timer);
+    return onTick(now => onQuote(quote(item, now)));
   },
 };
 const news = {
@@ -807,14 +815,13 @@ const widget = lib.createWidget(el, {
     subscribeBars(request, onBar) {
       const history = bars(request.symbol, request.interval);
       const forming = { ...history[history.length - 1] };
-      const timer = setInterval(() => {
-        const price = exchange.last(request.symbol);
+      return onTick(now => {
+        const price = exchange.last(request.symbol, now);
         forming.close = price;
         forming.high = Math.max(forming.high, price);
         forming.low = Math.min(forming.low, price);
         onBar({ ...forming });
-      }, 700);
-      return () => clearInterval(timer);
+      });
     },
   },
   watchlist: { store, quotes },
@@ -1006,7 +1013,7 @@ helper stays out of the readings. See the [indicator guide](/docs/indicators#sou
 
 ### A descriptor with several outputs
 
-The 105 built-ins are not special-cased. Each is a descriptor - inputs, plots and a
+The 112 built-ins are not special-cased. Each is a descriptor - inputs, plots and a
 `calc` - and anything you register with `registerIndicator` uses the same contract,
 so it gets generated settings, a legend entry and state persistence for free.
 
@@ -1325,6 +1332,24 @@ const chart = lib.createChart(el, { timezone: 'Etc/UTC' });
 const bars = lib.generateBars(1700002800, 240, 300);
 chart.addSeries('candlestick').setData(bars);
 chart.addIndicator('demo-requested-mean');
+chart.fitContent();
+return chart;`} />
+
+### A built-in study on a higher timeframe
+
+Two sessions of one-minute bars from the 09:15 open. The grey line is EMA 20 on the chart's
+own bars; the orange steps are EMA 9 with `timeframe: '15m'`, folded from the same bars.
+Each 15-minute value appears once its bucket has closed and holds until the next one does,
+and the buckets start at 09:15.
+
+<RunnableExample height={360} tiers={['indicators']} caption="Simulated one-minute prices over two sessions." code={`${STOCK_BARS_SOURCE}
+const chart = lib.createChart(el);
+const open = 1788752700; // 2026-09-07 09:15 IST
+const first = stockBars(open, 375, 60, 1840, 20260930, 0.0006, 4000);
+const second = stockBars(open + 86400, 375, 60, first[first.length - 1].close, 20261001, 0.0006, 4000);
+chart.addSeries('candlestick').setData([...first, ...second]);
+chart.addIndicator('ema', { length: 20, color: '#8a93a6' });
+chart.addIndicator('ema', { length: 9, timeframe: '15m', color: '#e8a23a', 'ma:type': 'step', 'ma:width': 2 });
 chart.fitContent();
 return chart;`} />
 

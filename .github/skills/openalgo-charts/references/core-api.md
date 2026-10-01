@@ -77,7 +77,7 @@ does not need to be loaded again.
 | `priceOnlyAutoScale` | `boolean` | `false` | Fit the primary series' actual scale using only that series. Does not enable auto-fit. |
 | `indicatorLegendCollapsed` | `boolean` | `false` | Suppress study legend rows while retaining plots and a count toggle. |
 | `crosshairMode` | `'normal' \| 'magnet'` | `'normal'` | `magnet` snaps to O/H/L/C, price pane only, wherever it sits. |
-| `now` | `() => number` | `performance.now` | Time source for kinetic pan / navigator fade. |
+| `now` | `() => number` | `performance.now` | Time source for kinetic pan / navigator fade. `WidgetOptions.now` is a different clock (the widget's wall clock, epoch milliseconds) and is not passed to the widget's chart. |
 | `animZoom` | `boolean` | `true` | Ease a wheel zoom over a few frames (`ZoomGlide`, in log space) instead of landing the whole step on one. The first frame's step is applied on the event itself, so `barSpacing` has moved by the time anything reads it synchronously, and the glide lands on exactly the single-frame result. **On by default**, which a 1.9.x host sees as a change; `false` restores the single-frame step. Not re-appliable. |
 | `animAutoscale` | `boolean` | value of `animZoom` | Ease automatic price-range changes while navigation reveals new extrema. Manual and fixed scales remain authoritative. Programmatic viewport replacement, primary data replacement, reset and destruction cancel pending navigation motion. Not re-appliable. |
 | `zoomAnchor` | `'cursor' \| 'right'` | `'cursor'` | What a wheel zoom holds still: the bar under the cursor, or the right edge (the latest bar), which a live chart usually wants. Not re-appliable. |
@@ -180,8 +180,17 @@ series to a line removes the stepping while an explicit step style survives.
 It repaints and emits `objects:change` without replacing data or recalculating
 indicators. It returns false for the same type, foreign or removed handles, and
 destroyed charts. An unknown type on a live owned series throws without mutation.
-Transform renderers still require host-prepared bars; changing type performs no
-data transformation.
+It never transforms data: `point-figure` and `kagi` draw the bars they are
+given, which keeps a host that prepares its own elements working.
+
+`chart.setSeriesTransform(series, spec | null): boolean` has the
+chart apply a transform itself (Heikin Ashi, Renko, range bars, line break, point
+and figure, Kagi, once `openalgo-charts/transform` is imported): the series
+keeps taking the host's bars through `setData`, `update` and `prependData`,
+`getData` returns them, and the chart draws the elements, formed again on every
+tick. A new transform type selects its renderer. `chart.seriesTransform(series)`
+reads the spec; `AddSeriesOptions.transform` sets one at creation. See
+[transforms](transforms.md#in-chart-transforms).
 
 `chart.seriesType(series): SeriesType | null` reads the current renderer for a
 live owned series, including one that is not primary. It returns null for foreign
@@ -300,7 +309,7 @@ and legacy template parsing retain structurally valid maps for later validation.
 - `chart.destroy()`: the only teardown method. **There is no `chart.remove()`.** It stops the render loop and kinetic animation, removes every indicator, disconnects the `ResizeObserver`, unbinds all pointer/wheel/keyboard listeners, destroys every pane, and clears the container's cursor hint.
 - `chart.applySize(width, height)`: media px; no-ops when unchanged. A `ResizeObserver` on the container calls it automatically, so manual calls are only needed in hosts without `ResizeObserver`. The chart paints inside that observer's callback, which runs after the frame's animation callbacks and before the browser paints, so a resize never shows a cleared canvas for a frame.
 - **Device pixels.** Pane boundaries land on whole device pixels: every boundary between panes is rounded onto one (within half a device pixel of its weighted share; the outer edge stays the container's), at the ratio the panes were laid out at, so each canvas covers whole device pixels, and where the browser reports a canvas's `devicePixelContentBoxSize` (Chromium, Firefox) the backing store takes exactly that size. At a whole-number ratio (1, 2, 3) the separator between panes is the pane's 1 px top border, the canvases starting under it, as in every earlier release; a chart whose panes share the height in whole pixels is laid out and painted exactly as before. At a fractional ratio (1.25, 1.5) it is a box one device pixel tall laid over the lower pane's first row, the canvases starting at the pane's own top. A pane's height can differ from its exact weighted share by up to one device pixel. `exportSVG` lays panes out at ratio 1 on every screen.
-- `chart.applyOptions(opts)` takes a runtime subset only: `theme`, `grid`, `canvas`, `statusLine`, `priceScale`, `priceFormatter`, `timeFormatter`, `timezone`, `crosshairMode`. Nothing else from `ChartOptions` is re-appliable.
+- `chart.applyOptions(opts: ChartApplyOptions)` takes a runtime subset only: `theme`, `grid`, `canvas`, `statusLine`, `legendIconSize`, `priceScale`, `priceFormatter`, `timeFormatter`, `timezone`, `crosshairMode`, `crosshairSnapToBar`. Nothing else from `ChartOptions` is re-appliable. `ChartApplyOptions` is the exported name of that shape (since 2.6.0).
 
 ## Object inventory and management
 
@@ -525,7 +534,7 @@ chart.subscribeDrag(
 );
 ```
 
-**The `subscribe*` helpers store exactly one callback each and return `void`.** A second call replaces the first and there is no unsubscribe. For multiple listeners or teardown use the bus: `chart.on(name, cb)` returns an unsubscribe function; `chart.once`, `chart.off(name, cb?)` and `chart.emit(name, payload)` are also public.
+**The `subscribe*` helpers take several subscribers and each call returns its unsubscribe** (since 2.6.0; before, each stored one callback, a second call replaced the first, and they returned `void`). The bus is the other surface: `chart.on(name, cb)` returns an unsubscribe function and types `cb`'s payload by the name (`ChartEventMap`); `chart.once` and `chart.off(name, cb?)` are also public, and `chart.emit(name, payload)` is deprecated (removed in 3.0.0). See [events-and-state](events-and-state.md).
 
 Core event names: `ready`, `crosshair:move`, `click`, `hover`, `drag`, `drag:end`, `pan`, `zoom`, `resize`, `dblclick`, `contextmenu`, `lazy-load`, `paneResized`, `paneMoved`, `paneMaximized`, `paneCollapsed`, `paneRemoved`, `indicatorRemoved`, `indicatorSettings`. `ReplayController` adds `replay:start|frame|play|pause|end|stop`, and the trading tier routes `trading:*` through the same bus. See [events-and-state](events-and-state.md).
 

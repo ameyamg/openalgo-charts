@@ -136,7 +136,10 @@ and you leave the pane rebased with nothing on it. Use `setBars` and `remove`.
 
 ## The controller
 
-One controller per chart, created on first use. Reach it for chart-wide operations:
+One controller per chart, created on first use. Reach it for chart-wide operations. A
+later `comparisonController(chart, options)` returns the same controller and applies the
+`mode` and `baseline` it passes (since 2.6.0; before, a call after the controller existed
+ignored them):
 
 ```ts
 import { comparisonController } from 'openalgo-charts';
@@ -159,8 +162,8 @@ already log and you want it kept that way.
 
 The default `baseline: 'first-visible'` preserves existing integrations: each source
 uses its own first visible close. For performance comparisons across different calendars,
-choose `comparisonController(chart, { baseline: 'common' })` before adding sources, or
-call `cc.setBaseline('common')` on an existing controller.
+choose `comparisonController(chart, { baseline: 'common' })`, before or after adding
+sources, or call `cc.setBaseline('common')` on the controller you hold.
 
 Common mode selects the first visible timestamp with a positive finite close on the
 primary and every visible comparison. Hidden sources do not constrain the start. Pan,

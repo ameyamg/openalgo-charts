@@ -28,6 +28,9 @@
  * with the key fields, so every rule is testable without a browser.
  */
 import { isReservedCombo, normalizeCombo, type ShortcutListItem } from 'openalgo-charts';
+// The engine's own platform test, so its key hints and the widget's never
+// disagree on Cmd or Ctrl. A pure helper, so the path inlines just it.
+import { detectMac } from '../input/shortcuts';
 import { inTextField, type WidgetContext } from './context';
 import { lazyPart, partFailed, usePart, type PartSlot } from './lazy';
 import { widgetText } from './localization';
@@ -69,18 +72,18 @@ export interface KeyBindingOptions {
   /** Section of the shortcuts panel. Default `Widget`. */
   group?: string;
   /** Gate read at key time; a false skips the binding without declining for others. */
-  when?: () => boolean;
+  when?: (() => boolean) | undefined;
   /** Fire even when the focus is in a text field. Default false. */
   inText?: boolean;
   /** Keep out of the shortcuts panel (a binding that only exists to layer under another). */
-  hidden?: boolean;
+  hidden?: boolean | undefined;
   /**
    * Declares that this binding shares its chord on purpose: it declines when
    * it does not apply, so an earlier widget binding or the engine's own
    * command on the same chord still fires. Without it a second registration
    * on a chord, or one on a chord the engine binds, is recorded as a conflict.
    */
-  layered?: boolean;
+  layered?: boolean | undefined;
   /**
    * The stable name of what the binding does (`undo`, `tool:trend-line`),
    * unique among live bindings. `rebind`, `reset` and a saved override name
@@ -115,7 +118,7 @@ export interface KeyBinding {
   /** Shares its chord deliberately; see `KeyBindingOptions.layered`. */
   readonly layered: boolean;
   readonly action: KeyAction;
-  readonly when?: () => boolean;
+  readonly when?: (() => boolean) | undefined;
 }
 
 export interface KeyConflict {
@@ -221,7 +224,7 @@ export function parseKeyCombo(spec: string): string {
     modParts = s.slice(0, -2).split('+').map((p) => p.trim());
   } else {
     const parts = s.split('+').map((p) => p.trim());
-    key = parts[parts.length - 1];
+    key = parts[parts.length - 1]!; // a split always returns at least one part
     modParts = parts.slice(0, -1);
   }
   // A bare modifier is not a chord: nothing is pressed with it.
@@ -267,17 +270,12 @@ const DISPLAY_KEYS: Readonly<Record<string, string>> = {
   Escape: 'Esc', Delete: 'Del', ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down',
 };
 
-function detectMac(): boolean {
-  const nav = (globalThis as { navigator?: { platform?: string; userAgent?: string } }).navigator;
-  return nav !== undefined && /mac|iphone|ipad/i.test(nav.platform ?? nav.userAgent ?? '');
-}
-
 /** A chord as a user reads it: `Ctrl+Shift+Z`, or `Cmd+Shift+Z` on a Mac. */
 export function formatKeyCombo(combo: string, isMac: boolean = detectMac()): string {
   const c = parseKeyCombo(combo);
   if (c === '') return '';
   const parts = c.split('+');
-  const key = parts[parts.length - 1];
+  const key = parts[parts.length - 1]!; // a split always returns at least one part
   const mods = parts.slice(0, -1).map((m) => (m === 'Mod' ? (isMac ? 'Cmd' : 'Ctrl') : m === 'Alt' ? (isMac ? 'Opt' : 'Alt') : 'Shift'));
   const shown = DISPLAY_KEYS[key] ?? (key.length === 1 ? key.toUpperCase() : key);
   return [...mods, shown].join('+');
@@ -304,14 +302,15 @@ const US_CODES: Readonly<Record<string, string>> = {
 export function fromChartCombo(combo: string): string {
   const parts = combo.split('+').map((p) => p.trim()).filter((p) => p !== '');
   if (parts.length === 0) return '';
-  const code = parts[parts.length - 1];
+  // parts is not empty, and each match's one group is not optional.
+  const code = parts[parts.length - 1]!;
   const mods = parts.slice(0, -1).map((m) => (m === 'Alt' ? 'Alt' : m === 'Shift' ? 'Shift' : 'Mod'));
   let key: string;
   const letter = /^Key([A-Z])$/.exec(code);
   const pad = /^Numpad([0-9])$/.exec(code);
-  if (letter !== null) key = letter[1].toLowerCase();
-  else if (pad !== null) key = pad[1];
-  else if (US_CODES[code] !== undefined) key = US_CODES[code][mods.includes('Shift') ? 1 : 0];
+  if (letter !== null) key = letter[1]!.toLowerCase();
+  else if (pad !== null) key = pad[1]!;
+  else if (US_CODES[code] !== undefined) key = US_CODES[code][mods.includes('Shift') ? 1 : 0]!; // every entry is two characters
   else if (code === 'NumpadEnter') key = 'Enter';
   else key = code;
   return parseKeyCombo([...mods, key].join('+'));
@@ -460,7 +459,7 @@ export class Keymap {
     // Registration order decides which binding on a chord is tried first,
     // and a rebound one keeps its place rather than jumping the queue.
     let at = list.length;
-    while (at > 0 && list[at - 1].id > entry.id) at--;
+    while (at > 0 && list[at - 1]!.id > entry.id) at--; // at - 1 is inside the list while at > 0
     list.splice(at, 0, entry);
     this._byCombo.set(entry.combo, list);
   }
@@ -684,7 +683,7 @@ export class Keymap {
     if (command.startsWith(CHART)) {
       const item = this._chart?.list().find((i) => CHART + i.command === command);
       if (item === undefined) return null;
-      return item.isDisabled || item.combos.length === 0 ? '' : fromChartCombo(item.combos[0]);
+      return item.isDisabled || item.combos.length === 0 ? '' : fromChartCombo(item.combos[0]!); // not empty past the length test
     }
     const entry = this._bindings.find((b) => b.command === command);
     return entry === undefined ? null : entry.combo;
@@ -801,7 +800,7 @@ export class Keymap {
       next = '';
       if (combo !== null && combo !== undefined) {
         const one = typeof combo === 'string' ? [combo] : combo;
-        next = one.length === 1 ? parseKeyCombo(one[0]) : '';
+        next = one.length === 1 ? parseKeyCombo(one[0]!) : ''; // the one chord
         if (next === '') return fail('invalid');
         if (reservedKey(next)) return fail('reserved');
       }
@@ -915,7 +914,7 @@ export class Keymap {
   private _chartDefault(command: string, now: readonly string[]): string {
     const base = this._chartBaseline?.get(command);
     const list = base === undefined ? now : (base ?? []);
-    return list.length === 0 ? '' : fromChartCombo(list[0]);
+    return list.length === 0 ? '' : fromChartCombo(list[0]!); // not empty past the length test
   }
 
   /**
@@ -948,7 +947,7 @@ export class Keymap {
       for (const item of this._chart.list()) {
         const mine = this._chartOverrides.has(item.command);
         if ((item.isDisabled || item.combos.length === 0) && !mine) continue;
-        const combo = item.isDisabled || item.combos.length === 0 ? '' : fromChartCombo(item.combos[0]);
+        const combo = item.isDisabled || item.combos.length === 0 ? '' : fromChartCombo(item.combos[0]!); // not empty past the length test
         const row: KeymapRow = { label: item.label, combo, display: this.format(combo), command: CHART + item.command, rebindable: editable,
           defaultCombo: this._chartDefault(item.command, item.combos), changed: mine };
         const by = shadow.get(item.label + '|' + combo);

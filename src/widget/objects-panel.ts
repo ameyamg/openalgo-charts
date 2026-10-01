@@ -1,5 +1,5 @@
 import { widgetText } from './localization';
-import type { Chart, ChartObjects, ChartObjectSnapshot, IndicatorApi } from 'openalgo-charts';
+import type { Chart, ChartObjects, ChartObjectSnapshot } from 'openalgo-charts';
 import type { WidgetContext } from './context';
 import { chromeIconSvg } from 'openalgo-charts/draw';
 import { button, dialogFrame, el, openPanel, type PanelHandle } from './form';
@@ -21,8 +21,8 @@ interface ObjectRow {
   actions: HTMLElement;
   selectable: boolean;
   buttons: Map<string, HTMLButtonElement>;
-  move?: HTMLSelectElement;
-  members?: HTMLElement;
+  move?: HTMLSelectElement | undefined;
+  members?: HTMLElement | undefined;
 }
 
 const KINDS = { source: 'Source', indicator: 'Indicator', drawing: 'Drawing', profile: 'Profile', group: 'Group' };
@@ -59,7 +59,7 @@ export function numberedNames<T extends { readonly id: string }>(items: readonly
 
 /** The chart's studies named apart, as `numberedNames` says. */
 export const studyNames = (chart: Chart): Map<string, string> => numberedNames(chart.indicators(), study => study.name,
-  study => (study as Partial<IndicatorApi>).policy?.().listed !== false);
+  study => study.policy().listed !== false);
 
 export interface ObjectsPanelContent {
   element: HTMLElement;
@@ -78,10 +78,6 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
     ? widgetText(ctx, 'Price pane') : widgetText(ctx, 'Pane {number}', { number: pane + 1 });
   const paneLabel = (row: ChartObjectSnapshot): string => paneName(row.paneIndex);
   const kindLabel = (row: ChartObjectSnapshot): string => widgetText(ctx, `schema.object.kind.${row.kind}`, {}, KINDS[row.kind]);
-  // A host's own inventory may predate the stack; its rows then keep their list order.
-  const stackOf = (pane: number): readonly ChartObjectSnapshot[] => typeof objects.stack === 'function' ? objects.stack(pane) : [];
-  const canPlace = (id: string, target: string, where: 'above' | 'below'): boolean =>
-    typeof objects.canPlace === 'function' && objects.canPlace(id, target, where);
   const doc = ctx.document;
   let closed = false;
   let all: readonly ChartObjectSnapshot[] = [];
@@ -108,7 +104,6 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
   count.setAttribute('role', 'status');
   // How the list reads and how to change it, once, rather than on every row.
   const hint = el(doc, 'p', 'oac-objects__hint', text('orderHint', 'Each pane lists back to front. Drag a row, or press Alt with an arrow key, to move it.'));
-  hint.hidden = typeof objects.stack !== 'function';
   content.append(search, hint, list, empty, count);
   const groupName = el(doc, 'input', 'oac-objects__group-name');
   groupName.type = 'text';
@@ -122,7 +117,7 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
     paint();
   } });
   groupButton.dataset.action = 'group';
-  if (objects.canGroup?.()) {
+  if (objects.canGroup()) {
     const grouping = el(doc, 'div', 'oac-objects__grouping');
     grouping.append(groupName, groupButton);
     content.insertBefore(grouping, list);
@@ -149,7 +144,7 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
   function dropSide(node: HTMLElement, event: DragEvent, id: string): 'above' | 'below' {
     const box = node.getBoundingClientRect();
     if (box.height > 0) return event.clientY < box.top + box.height / 2 ? 'below' : 'above';
-    const stack = stackOf(objects.get(id)?.paneIndex ?? -1);
+    const stack = objects.stack(objects.get(id)?.paneIndex ?? -1);
     return stack.findIndex(item => item.id === draggedId) > stack.findIndex(item => item.id === id) ? 'below' : 'above';
   }
 
@@ -165,7 +160,7 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
     const target = objects.get(id);
     if (!source || !target) return;
     if (source.paneIndex !== target.paneIndex && !(source.capabilities.move && objects.move(source.id, target.paneIndex))) return;
-    if (canPlace(source.id, target.id, where)) {
+    if (objects.canPlace(source.id, target.id, where)) {
       if (!objects.place(source.id, target.id, where)) ctx.toast(text('reorderFailed', 'Could not reorder object'), 'error');
       return;
     }
@@ -187,7 +182,7 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
    * next slot or under the previous one, taking what is placed on it along.
    */
   function step(item: ChartObjectSnapshot, direction: -1 | 1): { target: string; where: 'above' | 'below' } | null {
-    const stack = stackOf(item.paneIndex);
+    const stack = objects.stack(item.paneIndex);
     const at = stack.findIndex(row => row.id === item.id);
     if (at < 0) return null;
     if (item.kind === 'drawing') {
@@ -195,17 +190,18 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
       return next ? { target: next.id, where: direction === 1 ? 'above' : 'below' } : null;
     }
     const entry = (row: ChartObjectSnapshot | undefined): boolean => row !== undefined && row.kind !== 'drawing';
+    // Each `!` below reads an index the loop bounds or `entry` has just found a row at.
     if (direction === -1) {
       let i = at - 1;
-      while (i >= 0 && !entry(stack[i]) && stack[i].band === 'series') i--;
-      return entry(stack[i]) ? { target: stack[i].id, where: 'below' } : null;
+      while (i >= 0 && !entry(stack[i]) && stack[i]!.band === 'series') i--;
+      return entry(stack[i]) ? { target: stack[i]!.id, where: 'below' } : null;
     }
     let i = at + 1;
-    while (i < stack.length && stack[i].band === 'series' && !entry(stack[i])) i++;
+    while (i < stack.length && stack[i]!.band === 'series' && !entry(stack[i])) i++;
     if (!entry(stack[i])) return null;
     let top = i;
     while (stack[top + 1]?.band === 'series' && !entry(stack[top + 1])) top++;
-    return { target: stack[top].id, where: 'above' };
+    return { target: stack[top]!.id, where: 'above' };
   }
 
   function act(action: Action, id: string, event?: MouseEvent): void {
@@ -249,7 +245,7 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
       if (draggedId === null || draggedId === item.id) return;
       const source = objects.get(draggedId), where = dropSide(node, event, item.id);
       const allowed = source !== undefined && (source.paneIndex !== item.paneIndex ? source.capabilities.move === true
-        : canPlace(source.id, item.id, where) || (source.band === undefined && source.kind === item.kind && source.capabilities.reorder === true));
+        : objects.canPlace(source.id, item.id, where) || (source.band === undefined && source.kind === item.kind && source.capabilities.reorder === true));
       clearDropMarks();
       if (!allowed) return;
       event.preventDefault();
@@ -341,7 +337,7 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
       if (row.actions.children[index] !== control) row.actions.insertBefore(control, row.actions.children[index] ?? null);
       index++;
     }
-    if (item.kind === 'drawing' && item.id === 'drawing:' + item.sourceId && objects.canGroup?.()) {
+    if (item.kind === 'drawing' && item.id === 'drawing:' + item.sourceId && objects.canGroup()) {
       let control = row.buttons.get('add-selection');
       if (!control) {
         control = button(doc, { label: '', variant: 'ghost', onClick: () => {
@@ -377,8 +373,8 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
       control.textContent = text(action, direction === -1 ? 'Earlier' : 'Later');
       control.setAttribute('aria-label', text(action + 'Label', direction === -1 ? 'Move {name} earlier' : 'Move {name} later', { name: item.name }));
       const move = item.band !== undefined ? step(item, direction) : null;
-      control.disabled = item.band !== undefined ? move === null || !canPlace(item.id, move.target, move.where)
-        : objects.canReorder ? !objects.canReorder(item.id, direction) : false;
+      control.disabled = item.band !== undefined ? move === null || !objects.canPlace(item.id, move.target, move.where)
+        : !objects.canReorder(item.id, direction);
       if (row.actions.children[index] !== control) row.actions.insertBefore(control, row.actions.children[index] ?? null);
       index++;
     }
@@ -453,7 +449,7 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
     // Each pane lists its stack in draw order, back to front, a group where its
     // first member paints; rows outside the stack follow in inventory order.
     const order = new Map<string, number>();
-    for (const pane of paneIndices) stackOf(pane).forEach((item, index) => order.set(item.id, index));
+    for (const pane of paneIndices) objects.stack(pane).forEach((item, index) => order.set(item.id, index));
     const rank = (item: ChartObjectSnapshot): number => {
       if (order.has(item.id)) return order.get(item.id)!;
       const members = all.filter(member => member.groupId === item.id && order.has(member.id)).map(member => order.get(member.id)!);
@@ -521,9 +517,7 @@ export function createObjectsPanelContent(ctx: WidgetContext, opts: ObjectsPanel
 /** Open the object tree in the existing popup interface. */
 export function mountObjectsPanel(ctx: WidgetContext, anchor?: HTMLElement, opts: ObjectsPanelOptions = {}): PanelHandle {
   const content = createObjectsPanelContent(ctx, opts);
-  const frame = dialogFrame(ctx.document, { translate: ctx.translate, title: widgetText(ctx, 'Objects'), className: 'oac-objects', onClose: () => handle.close() });
-  frame.closeButton.textContent = widgetText(ctx, 'Close');
-  frame.closeButton.classList.remove('oac-btn--icon');
+  const frame = dialogFrame(ctx.document, { translate: ctx.translate, title: widgetText(ctx, 'Objects'), className: 'oac-objects', onClose: () => handle.close(), closeText: true });
   frame.body.appendChild(content.element);
   frame.actions.appendChild(button(ctx.document, { label: widgetText(ctx, 'Done'), variant: 'primary', onClick: () => handle.close() }));
   const handle = openPanel(ctx, frame.el, {

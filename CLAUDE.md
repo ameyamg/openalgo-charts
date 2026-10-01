@@ -271,11 +271,19 @@ turning each into a script is the preferred fix whenever one of them is missed.
   unless it is a deliberate deprecation for the next major. Saved chart state,
   workspaces and layouts written by those versions load and round-trip in tests.
 - **Warnings.** Zero lint warnings and zero typedoc warnings.
-- **Structure.** No import cycles between modules (checked at release); a module has one
-  job and its index is its only door; `scripts/line-caps.json` caps only ever go down, so
-  a file that outgrows its cap is split, never given a larger cap.
-- **Surface.** No unused exports (checked at release); `npm run skills:coverage` at 100
-  percent; every `@deprecated` names its removal version.
+- **Structure.** No import cycles between modules (`scripts/check-cycles.mjs`, in
+  `verify`): no runtime cycle at all (an import whose names are all inline `type`
+  counts, since it still loads its module), and the cycles that type imports close
+  may not grow: their sizes, largest first, are held in `scripts/import-cycles.json`,
+  which is lowered as they shrink. A module has one job and its index is its only
+  door; `scripts/line-caps.json` and `scripts/function-caps.json` caps only ever go
+  down, so a file or function that outgrows its cap is split, never given a larger cap.
+- **Surface.** No unused exports (`scripts/check-unused-exports.mjs`, in `verify`): an
+  export of a module under `src` that is not a tier's public export, and that nothing
+  in `src` or the tests uses, fails. A test counts as a use; an export used only in its
+  own file passes and is counted. `scripts/unused-exports.json` lists the ones the tree
+  had when the gate arrived and only shrinks. `npm run skills:coverage` at 100 percent;
+  every `@deprecated` names its removal version.
 - **Tests.** No skipped test without a written reason beside it (checked at release), and
   a flaky test is fixed or reported with its failure rate, never retried into green.
 - **Readability.** Comments say why; names match the vocabulary already in the tier; the

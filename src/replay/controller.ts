@@ -9,9 +9,9 @@
  *
  * The mechanic is deliberately boring. Replay feeds the chart a **prefix** of
  * the full bar array through the ordinary `series.setData` path, and that is
- * what makes indicators free: `Chart._setData` calls `_recomputeIndicators` for
- * the primary series, and `IndicatorInstance.recompute` re-reads the whole
- * history from `sourceBars()`. Shorten that history and every indicator, level,
+ * what makes indicators free: for the primary series that path invalidates and
+ * recomputes every study at once (`ChartSeries._setData`), and
+ * `IndicatorInstance.recompute` re-reads the whole history from `sourceBars()`. Shorten that history and every indicator, level,
  * fill, marker and legend reconstructs itself as it was at that bar, with no
  * replay-aware code anywhere in the indicator tier.
  */
@@ -22,21 +22,17 @@ import { seriesConfirmation } from '../model/series-provenance';
 import { clamp } from '../helpers/math';
 import { setReplayWindow } from '../model/replay-window';
 import { ReplayTimeline, type ReplayTiming } from './timeline';
+import { monotonicNow, repeat } from '../helpers/timers';
 
 /** Schedules a repeating callback and returns its canceller. Inject in tests. */
 export type ReplayScheduler = (cb: () => void, intervalMs: number) => () => void;
-
-const defaultScheduler: ReplayScheduler = (cb, ms) => {
-  const id = setInterval(cb, ms);
-  return () => clearInterval(id);
-};
 
 /**
  * Most bars a single timer tick may consume. A backgrounded tab throttles its
  * timers to about one call a second, so without a ceiling the first tick after
  * the user comes back would fast-forward minutes of the session in one frame.
  */
-const CATCH_UP_LIMIT = 10;
+export const CATCH_UP_LIMIT = 10;
 
 /**
  * The slice of the time scale replay saves and restores. Declared structurally
@@ -63,6 +59,12 @@ export interface ReplayChartHost {
    * may be omitted and replay drives that one.
    */
   primarySeries?(): SeriesApi | null;
+  /**
+   * Optional. When the chart reports its own end, replay listens for it while
+   * it owns the chart's data: a chart destroyed mid-session stops the playback
+   * timer and is written to no more, and nothing is restored to it.
+   */
+  on?(event: 'destroy', callback: () => void): () => void;
 }
 
 /** Everything a transport bar and a clock need, in one object. */
@@ -170,10 +172,13 @@ export interface ReplayOptions {
   /** Initial speed multiplier. Default 1. */
   speed?: number;
   /** Called on every playhead move, after the chart has been updated. */
-  onFrame?: (state: ReplayState) => void;
+  onFrame?: ((state: ReplayState) => void) | undefined;
   /** Playback clock. Default `performance.now`. */
   now?: () => number;
-  /** Playback timer. Default `setInterval`. */
+  /**
+   * Playback timer. Default `setInterval`, with the interval held from 1 ms to
+   * 2^31 - 1 ms, the longest a platform timer waits (a longer one fires at once).
+   */
   scheduler?: ReplayScheduler;
 }
 
@@ -183,7 +188,7 @@ function countUpTo(bars: readonly Bar[], cutoff: number): number {
   let hi = bars.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (bars[mid].time <= cutoff) lo = mid + 1;
+    if (bars[mid]!.time <= cutoff) lo = mid + 1; // lo <= mid < hi <= length
     else hi = mid;
   }
   return lo;
@@ -199,8 +204,9 @@ function countUpTo(bars: readonly Bar[], cutoff: number): number {
  * partial as a new bar every step instead of replacing the forming one.
  */
 function mergeSubBars(subs: readonly Bar[], from: number, to: number, final: Bar): Bar {
-  const raw = startFiner(subs[from], final.time);
-  for (let i = from + 1; i <= to; i++) foldFiner(raw, subs[i]);
+  // `from..to` lies inside the sub-bars of one bucket.
+  const raw = startFiner(subs[from]!, final.time);
+  for (let i = from + 1; i <= to; i++) foldFiner(raw, subs[i]!);
   return formingWithin(raw, final);
 }
 
@@ -257,6 +263,8 @@ export class ReplayController {
   private _interval = 0;
   /** Clock reading the last advance was charged to; keeps playback drift-free. */
   private _lastAdvance = 0;
+  /** Stops listening for the chart's end; held only while replay owns its data. */
+  private _release: (() => void) | undefined;
 
   /**
    * Constructing the controller **enters replay**: it snapshots the chart's data
@@ -280,7 +288,7 @@ export class ReplayController {
     this._series = list;
     this._restore = list.map((s) => s.getData());
     this._restoreConfirmation = list.map(seriesConfirmation);
-    this._bars = options.bars ?? this._restore[0];
+    this._bars = options.bars ?? this._restore[0]!; // `list` holds a series by now
     this._view = { barSpacing: chart.timeScale.barSpacing, rightOffset: chart.timeScale.rightOffset };
     this._subBars = options.subBars ?? [];
     this._simSteps = simulationSteps(options.simulate);
@@ -302,8 +310,8 @@ export class ReplayController {
     const speed = options.speed ?? 1;
     this._speed = speed > 0 ? speed : 1;
     this._onFrame = options.onFrame ?? null;
-    this._now = options.now ?? (() => (typeof performance !== 'undefined' ? performance.now() : 0));
-    this._schedule = options.scheduler ?? defaultScheduler;
+    this._now = options.now ?? monotonicNow;
+    this._schedule = options.scheduler ?? repeat;
     // Opening on a half-formed candle is not a position anyone asked for, so
     // entering replay lands on the last step of `startIndex`, the same place a
     // `seek` there would.
@@ -330,22 +338,25 @@ export class ReplayController {
     const subs = this._subBars;
     let d = -1;
     for (let i = 0; i < subs.length; i++) {
-      const t = subs[i].time;
+      const t = subs[i]!.time;
       // Advance to the last displayed bar that opens at or before this sub-bar.
-      while (d + 1 < n && this._bars[d + 1].time <= t) {
+      while (d + 1 < n && this._bars[d + 1]!.time <= t) {
         d++;
         start[d] = i;
       }
-      if (d >= 0) count[d]++;
+      if (d >= 0) count[d]!++; // `count` holds one entry per displayed bar, `d` among them
     }
     return { start, count };
   }
+
+  // Below, `index` is a displayed bar's, and `_subCount` and `_subStart` hold one entry
+  // per displayed bar: intra-bar replay needs bars, and `_apply` and `seek` clamp to them.
 
   /** How many steps the bar at `index` takes. At least one, always. */
   private _steps(index: number): number {
     if (this._timeline) return this._timeline.steps[index] ?? 1;
     if (!this._intra) return 1;
-    const covered = this._subCount[index];
+    const covered = this._subCount[index]!;
     return covered > 0 ? covered : Math.max(1, this._simSteps);
   }
 
@@ -357,9 +368,9 @@ export class ReplayController {
 
   /** The bar shown at step `sub` of `index`, for a step before its last. */
   private _formingAt(index: number, sub: number): Bar {
-    const final = this._bars[index];
-    if (this._subCount[index] > 0) {
-      const from = this._subStart[index];
+    const final = this._bars[index]!;
+    if (this._subCount[index]! > 0) {
+      const from = this._subStart[index]!;
       return mergeSubBars(this._subBars, from, from + sub, final);
     }
     return simulatedForming(final, sub, this._simSteps, this._bars[index - 1]?.oi);
@@ -512,6 +523,8 @@ export class ReplayController {
     this._playing = false;
     this._stopTimer();
     if (!this._active) return;
+    this._release?.();
+    this._release = undefined;
     const transition = ++this._transition;
     this._active = false;
     this._index = this._startIndex;
@@ -525,8 +538,9 @@ export class ReplayController {
     }
     setReplayWindow(this._chart);
     if (transition !== this._transition) return;
+    // `_restore` and `_restoreConfirmation` hold one entry per series.
     for (let i = 0; i < this._series.length; i++) {
-      this._series[i].setData(this._restore[i], this._restoreConfirmation[i]);
+      this._series[i]!.setData(this._restore[i]!, this._restoreConfirmation[i]);
       if (transition !== this._transition) return;
     }
     // Bar spacing and right offset *are* the viewport: the visible logical
@@ -547,7 +561,7 @@ export class ReplayController {
     if (this._timeline) {
       bar = this._timeline.points[this._pointIndex]?.bar ?? null;
     } else if (total > 0) {
-      bar = this._bars[this._index];
+      bar = this._bars[this._index]!; // without a timeline the index is always a bar's
       if (this._intra && this._sub < steps - 1) bar = this._formingAt(this._index, this._sub);
     }
     return {
@@ -593,6 +607,7 @@ export class ReplayController {
 
   private _write(shown: Bar[], forming: boolean, first: boolean): void {
     const transition = ++this._transition;
+    if (first) this._release = this._chart.on?.('destroy', this._gone);
     // Other data owners must know the boundary before the primary write can
     // paint or notify a host. A comparison added later reads the same boundary.
     const lastTime = shown[shown.length - 1]?.time ?? Number.NEGATIVE_INFINITY;
@@ -600,7 +615,7 @@ export class ReplayController {
       ...(this._timeline && this._time !== null ? { asOf: this._time } : {}) });
     // A boundary listener can stop or seek again before the first series write.
     if (transition !== this._transition) return;
-    this._series[0].setData(shown);
+    this._series[0]!.setData(shown); // replay drives at least one series
     if (transition !== this._transition) return;
     // Followers cut by time, not by count: a volume series may be shorter than
     // the price series, or start later. Under intra-bar replay they stop at the
@@ -612,8 +627,8 @@ export class ReplayController {
       ? (shown[shown.length - 2]?.time ?? Number.NEGATIVE_INFINITY)
       : lastTime;
     for (let i = 1; i < this._series.length; i++) {
-      const snap = this._restore[i];
-      this._series[i].setData(snap.slice(0, countUpTo(snap, cutoff)));
+      const snap = this._restore[i]!;
+      this._series[i]!.setData(snap.slice(0, countUpTo(snap, cutoff)));
       if (transition !== this._transition) return;
     }
     if (first) this._chart.emit('replay:start', this.state());
@@ -642,6 +657,19 @@ export class ReplayController {
     }
     this._advance(due);
     if (this._atEnd()) this._end();
+  };
+
+  /**
+   * The chart is gone: there is nothing to restore to and nothing to draw on,
+   * so the clock stops and the controller leaves replay without writing. A
+   * write in progress sees the transition move and goes no further.
+   */
+  private readonly _gone = (): void => {
+    this._transition++;
+    this._playing = false;
+    this._stopTimer();
+    this._active = false;
+    this._release = undefined;
   };
 
   /** True on the last step of the last bar, which is where playback stops. */

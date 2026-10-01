@@ -19,6 +19,11 @@
  * rebuilds it once by walking the history from bar 0. Every later tick costs a
  * step or two.
  *
+ * A variant of the second places a value on a bar only once later bars confirm
+ * it (the ZigZag in ./swings). It resumes its walk from the same checkpoint and,
+ * in place of the check below, compares the few earlier bars that walk can
+ * still rewrite with what the runtime holds.
+ *
  * Either way the tail also recomputes the bar before it and compares that with
  * the result the runtime still holds. A disagreement means the held result is
  * not this study's own (a descriptor that copied a built-in's tail and reshaped
@@ -39,10 +44,10 @@ export type Tail = NonNullable<IndicatorDescriptor['calcTail']>;
 export type Cell = number | null;
 
 /** The state after bar `index`, and the outputs that bar produced. */
-export interface Checkpoint { key: string; index: number; time: number; state: unknown; row: Cell[] }
+interface Checkpoint { key: string; index: number; time: number; state: unknown; row: Cell[] }
 
 /** Which full `calc` last ran on an instance's store, and where its tail stands. */
-export interface Claim { owner: Calc; misses: number; at?: Checkpoint }
+interface Claim { owner: Calc; misses: number; at?: Checkpoint }
 
 // Keyed by the store, which the runtime keeps for the instance's lifetime, so
 // nothing is written into the store itself and a descriptor that reads its own
@@ -137,17 +142,21 @@ function copy<T>(value: T): T {
 function agrees(previous: IndicatorValues, keys: readonly string[], row: readonly Cell[], from: number): boolean {
   if (from === 0) return true;
   for (let k = 0; k < keys.length; k++) {
-    const held = previous[keys[k]];
+    const held = previous[keys[k]!];
     if (held === undefined || held.length < from || !Object.is(held[from - 1] ?? null, row[k])) return false;
   }
   return true;
 }
 
-/** The checkpoint a tail from `from` resumes, when the last tail left it exactly there. */
-function resumable(claim: Claim, key: string, bars: readonly Bar[], from: number): Checkpoint | undefined {
+/**
+ * The checkpoint a tail from `from` resumes, when the last tail left it
+ * exactly there. `from` has passed `claimOf`, so it indexes a bar, and so does
+ * the one before it when it is above zero.
+ */
+export function resumable(claim: Claim, key: string, bars: readonly Bar[], from: number): Checkpoint | undefined {
   const at = claim.at;
   return at !== undefined && at.key === key && at.index === from - 1 &&
-    (from === 0 || at.time === bars[from - 1].time) ? at : undefined;
+    (from === 0 || at.time === bars[from - 1]!.time) ? at : undefined;
 }
 
 /**
@@ -157,7 +166,7 @@ function resumable(claim: Claim, key: string, bars: readonly Bar[], from: number
 export function settle(claim: Claim, part: IndicatorValues, at: number, previous: IndicatorValues, from: number): IndicatorValues | null {
   const out: Record<string, Cell[]> = {};
   for (const key of Object.keys(part)) {
-    const col = part[key];
+    const col = part[key]!;
     if (from > 0) {
       const held = previous[key];
       if (held === undefined || held.length < from || !Object.is(held[from - 1] ?? null, col[at - 1] ?? null)) return miss(claim);
@@ -189,7 +198,11 @@ export interface Machine<S> {
   keys: readonly string[];
   /** The state before bar 0. */
   start(): S;
-  /** Advance over bar `i`, writing that bar's outputs into `row`. */
+  /**
+   * Advance over bar `i`, writing that bar's outputs into `row`. `i` always
+   * indexes a bar: `machineTail` walks its bars, and `stepAll` is given their
+   * count.
+   */
   step(state: S, i: number, row: Cell[]): void;
   /**
    * Called once the state stands at the bar before the tail. False declines
@@ -226,13 +239,33 @@ export function machineTail<S>(
   if (machine.ready?.(state) === false) return null;
   const n = bars.length;
   const cols = machine.keys.map(() => new Array<Cell>(n - from));
+  // `row` and `cols` hold one entry per key, and `i` indexes a bar.
   for (let i = from; i < n; i++) {
-    if (i === n - 1) claim.at = { key, index: i - 1, time: i > 0 ? bars[i - 1].time : NaN, state: copy(state), row: row.slice() };
+    if (i === n - 1) claim.at = { key, index: i - 1, time: i > 0 ? bars[i - 1]!.time : NaN, state: copy(state), row: row.slice() };
     machine.step(state, i, row);
-    for (let k = 0; k < cols.length; k++) cols[k][i - from] = row[k];
+    for (let k = 0; k < cols.length; k++) cols[k]![i - from] = row[k] as Cell;
   }
   claim.misses = 0;
   const out: Record<string, Cell[]> = {};
-  machine.keys.forEach((k, j) => { out[k] = cols[j]; });
+  machine.keys.forEach((k, j) => { out[k] = cols[j]!; });
+  return out;
+}
+
+/**
+ * The full result of a study written only as a machine: every bar stepped from
+ * bar 0. Its `calc` and its tail then walk one piece of arithmetic, so the two
+ * cannot drift apart the way a batch kernel and its stepper copy can.
+ */
+export function stepAll<S>(machine: Machine<S>, n: number): IndicatorValues {
+  const state = machine.start();
+  const row: Cell[] = machine.keys.map(() => null);
+  const cols = machine.keys.map(() => new Array<Cell>(n));
+  // As in `machineTail`, `row` and `cols` hold one entry per key.
+  for (let i = 0; i < n; i++) {
+    machine.step(state, i, row);
+    for (let k = 0; k < cols.length; k++) cols[k]![i] = row[k] as Cell;
+  }
+  const out: Record<string, Cell[]> = {};
+  machine.keys.forEach((k, j) => { out[k] = cols[j]!; });
   return out;
 }

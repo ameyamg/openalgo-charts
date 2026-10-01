@@ -26,6 +26,7 @@ import { layoutName } from './grid-text';
 import { groupMark } from './grid-cells';
 import { layoutNeedsAttention } from './layouts-widget';
 import { widgetText, type WidgetTranslationOptions } from './localization';
+import { rovingIndex } from './roving';
 import { addWidgetStyles } from './styles';
 
 // The desk's saved layouts load with the bar that shows them (grid-saved.ts).
@@ -64,7 +65,7 @@ export interface GridBarHost {
     canCopy(): boolean;
   };
   /** The desk's saved layouts, when the grid keeps them: the bar then has a Layouts control. */
-  readonly saved?: Pick<GridSaved, 'controller' | 'open' | 'status'>;
+  readonly saved?: Pick<GridSaved, 'controller' | 'open' | 'status'> | undefined;
   /** Open one of the bar's menus under `anchor` (grid-menus.ts, loaded on first use). */
   openMenu(which: 'layouts' | 'link' | 'capture', anchor: HTMLElement): void;
 }
@@ -185,12 +186,11 @@ export function mountGridBar(host: GridBarHost, el: HTMLElement): GridBarHandle 
   const controls = [layout, max, link, capture, saved].filter((control): control is HTMLButtonElement => control !== null && !control.hidden);
   el.addEventListener('keydown', e => {
     const at = controls.indexOf(doc.activeElement as HTMLButtonElement);
-    const to = at < 0 ? -1 : e.key === 'ArrowRight' ? (at + 1) % controls.length : e.key === 'ArrowLeft' ? (at + controls.length - 1) % controls.length
-      : e.key === 'Home' ? 0 : e.key === 'End' ? controls.length - 1 : -1;
+    const to = rovingIndex(e.key, at, controls.length, ['ArrowLeft', 'ArrowRight']);
     if (to < 0) return;
     e.preventDefault();
     e.stopPropagation();
-    controls[to].focus();
+    controls[to]!.focus(); // the focus is on a control, so to is one of them
   });
 
   const refresh = (): void => {

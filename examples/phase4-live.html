@@ -35,7 +35,7 @@
     price.setData(history);
     volume.setData(history.map((b) => ({ time: b.time, open: 0, high: b.volume, low: 0, close: b.volume })));
 
-    // Live tick simulator → candle builder → series.update.
+    // Live tick simulator, then candle builder, then series.update.
     const builder = new CandleBuilder({ intervalSec: INTERVAL, volumeMode: 'ltq-sum' });
     const last = history[history.length - 1];
     builder.seed(last);

@@ -8,7 +8,7 @@ import type { IPrimitive, PrimitiveHit } from '../src/primitives/primitive';
  * the previous left-click. `_onPointerDown` ignores non-primary buttons, so the
  * cached down-position never refreshes; without a matching guard on pointerup,
  * the right-click's pointerup re-hit-tests at the stale position and re-fires
- * the click callback — e.g. placing a phantom order from a Buy/Sell button.
+ * the click callback, e.g. placing a phantom order from a Buy/Sell button.
  */
 
 // Document that only needs to mint canvases (with a fake 2D context) and divs.
@@ -62,7 +62,7 @@ function captureContainer(doc: Document) {
   return { el: el as unknown as HTMLElement, dispatch };
 }
 
-// A clickable overlay region at plot px x∈[100,200], y∈[20,40] → 'trade:buy'.
+// A clickable overlay region at plot px x∈[100,200], y∈[20,40] gives 'trade:buy'.
 // Independent of any draw() so the test targets pointer routing, not geometry.
 const buyButton: IPrimitive = {
   zOrder: () => 'top',
@@ -110,17 +110,17 @@ describe('pointer button guard (right-click must not replay a click)', () => {
     vi.stubGlobal('window', {});
     const { dispatch, clicks } = mountChart();
 
-    // 1) left-click the buy button — arms the cached down-position + fires once
+    // 1) left-click the buy button: arms the cached down-position + fires once
     dispatch('pointerdown', ev(0, 150, 30));
     dispatch('pointerup', ev(0, 150, 30));
     expect(clicks).toEqual(['trade:buy']);
 
-    // 2) right-click far away — its pointerdown is ignored (button !== 0), so the
+    // 2) right-click far away: its pointerdown is ignored (button !== 0), so the
     //    cached position is stale. The guarded pointerup must swallow it.
     dispatch('pointerdown', ev(2, 400, 300));
     dispatch('pointerup', ev(2, 400, 300));
 
-    expect(clicks).toEqual(['trade:buy']); // still just one — no phantom replay
+    expect(clicks).toEqual(['trade:buy']); // still just one: no phantom replay
   });
 
   it('middle-click is likewise ignored', () => {

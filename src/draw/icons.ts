@@ -815,7 +815,8 @@ export function layoutIconPath(rows: number, columns: number, slots?: readonly L
     }
     for (let r = s.row; r < s.row + rs; r++) {
       for (let c = s.column; c < s.column + cs; c++) {
-        if (owner[r * columns + c] >= 0) throw new RangeError(`openalgo-charts: layout slot ${k} overlaps slot ${owner[r * columns + c]}`);
+        // Inside the grid, checked above.
+        if (owner[r * columns + c]! >= 0) throw new RangeError(`openalgo-charts: layout slot ${k} overlaps slot ${owner[r * columns + c]}`);
         owner[r * columns + c] = k;
       }
     }

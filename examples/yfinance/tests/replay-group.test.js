@@ -7,7 +7,7 @@ vi.mock('../src/hover.js', () => ({ attachTip: vi.fn() }));
 vi.mock('../src/volume.js', () => ({ setLegend: vi.fn() }));
 import { fetchBars, abortFetch } from '../src/feed.js';
 import { initReplay, attachReplay, enterReplay, startReplayAt, exitReplay,
-  setReplayScope, replayBarEndTime, lastBar } from '../src/replay.js';
+  setReplayScope, setShadeIndex, replayBarEndTime, lastBar } from '../src/replay.js';
 
 const T = Date.UTC(2024, 0, 2) / 1000;
 const history = (seconds, count, start = T) => Array.from({ length: count }, (_, i) => flatBar(start + i * seconds, 100 + i, 10));
@@ -204,6 +204,21 @@ describe('reference shared replay', () => {
     expect(app.chart2.primaryBars()).toEqual([]);
     app.replay.seekTime(T + 900);
     expect(app.chart2.primaryBars()).toEqual([{ ...flatBar(T, 100, 10), oi: 500 }]);
+  });
+
+  it('leaves visible only what the closed bars of a transformed chart formed, whatever its interval', () => {
+    // Chart 2 draws two bricks on each hourly bar, the second dated a second later.
+    const bricks = history(3600, 4).flatMap(bar => [bar, { ...bar, time: bar.time + 1 }]);
+    app.chart2.primaryBars = () => bricks;
+    app.chart2.seriesTransform = () => ({ type: 'renko' });
+    enterReplay(); setReplayScope('all');
+    const shade = app.chart2.addPrimitive.mock.calls[0][0], set = vi.spyOn(shade, 'setOptions');
+    const cut = index => { setShadeIndex(index); return set.mock.lastCall[0].index; };
+    // Picked 5-minute bars close at 10 and 55 minutes: the first hourly bar is still open, so none of its bricks shows.
+    expect(cut(1)).toBe(-1);
+    expect(cut(10)).toBe(-1);
+    // At the hour it has closed, and both bricks it formed are in view.
+    expect(cut(11)).toBe(1);
   });
 
   it('ends an active group when a captured source context changes', async () => {

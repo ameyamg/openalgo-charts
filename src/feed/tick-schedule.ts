@@ -67,7 +67,7 @@ export class TickSchedule {
         continue;
       }
       if (typeof from !== 'number' || !Number.isFinite(from)) fail(`${name}.from must be a finite number`);
-      const previous = out[i - 1];
+      const previous = out[i - 1]!; // every earlier band pushed one entry or failed
       if (previous.from !== undefined && from <= previous.from) fail(`${name}.from ${from} must be above bands[${i - 1}].from ${previous.from}; bounds are strictly ascending`);
       if (!onGrid(from, tick)) fail(`${name}.from ${from} is not a multiple of ${name}.tick ${tick}`);
       if (!onGrid(from, previous.tick)) fail(`${name}.from ${from} is not a multiple of bands[${i - 1}].tick ${previous.tick}`);
@@ -82,22 +82,25 @@ export class TickSchedule {
     this.minMove = +(units.reduce(gcd) / scale).toFixed(Math.max(...digits));
   }
 
+  // Every band index below comes from `_band`, which stays inside `bands`, a list the
+  // constructor proved non-empty; `_digits` runs beside it, one entry per band.
+
   /** The band a price falls in; an exact boundary belongs to the band it starts. */
   private _band(price: number): number {
     let i = this.bands.length - 1;
-    while (i > 0 && price < this.bands[i].from!) i--;
+    while (i > 0 && price < this.bands[i]!.from!) i--;
     return i;
   }
 
   // Exact decimals rather than 10.050000000000001. The string round trip also
   // drops the sign of a zero, which would otherwise print as "-0.00".
   private _at(units: number, band: number): number {
-    return +(units * this.bands[band].tick).toFixed(this._digits[band]);
+    return +(units * this.bands[band]!.tick).toFixed(this._digits[band]);
   }
 
   /** The tick at `price`, NaN when it is not finite. */
   public tickAt(price: number): number {
-    return Number.isFinite(price) ? this.bands[this._band(price)].tick : NaN;
+    return Number.isFinite(price) ? this.bands[this._band(price)]!.tick : NaN;
   }
 
   /**
@@ -107,7 +110,7 @@ export class TickSchedule {
    */
   public round(price: number): number {
     if (!Number.isFinite(price)) return NaN;
-    const band = this._band(price), { tick } = this.bands[band];
+    const band = this._band(price), { tick } = this.bands[band]!;
     // The midpoint is itself a decimal with one more digit than the tick, so
     // it is parsed from that decimal: 10.025 then compares equal to a typed
     // 10.025, which binary stores a hair below itself. Any allowance for that
@@ -115,7 +118,7 @@ export class TickSchedule {
     // Near a whole tick the quotient may floor to either neighbour; the price
     // is then half a tick from that midpoint and still goes to the one it is on.
     const below = Math.floor(price / tick);
-    const middle = +((below + 0.5) * tick).toFixed(this._digits[band] + 1);
+    const middle = +((below + 0.5) * tick).toFixed(this._digits[band]! + 1);
     return this._at(price < middle ? below : below + 1, band);
   }
 
@@ -129,9 +132,9 @@ export class TickSchedule {
     while (left && Number.isFinite(p)) {
       const up = left > 0;
       let band = this._band(p);
-      if (!up && band && p === this.bands[band].from) band--;
-      const { tick } = this.bands[band];
-      const edge = up ? this.bands[band + 1]?.from : this.bands[band].from;
+      if (!up && band && p === this.bands[band]!.from) band--;
+      const { tick } = this.bands[band]!;
+      const edge = up ? this.bands[band + 1]?.from : this.bands[band]!.from;
       // Whole bands are crossed in one jump, so a large count is not a long loop.
       const room = edge === undefined ? Infinity : Math.max(1, Math.round(Math.abs(edge - p) / tick));
       const n = Math.min(Math.abs(left), room);

@@ -302,6 +302,18 @@ describe('chart grid capture rows', () => {
     expect(menu(root)!.querySelector('.oac-grid__note')?.textContent).toBe('The grid shows one chart at a time at this width');
   });
 
+  it('moves from the menu itself to the first row on ArrowDown and to the last on ArrowUp', () => {
+    const { root, doc } = makeGrid({ preset: '1x2', toolbar: true });
+    const label = (): string | null | undefined => (doc.activeElement as FakeElement).querySelector('.oac-menu__label')?.textContent;
+    for (const [key, want] of [['ArrowDown', 'Download PNG of every chart'], ['ArrowUp', 'Copy image of every chart']] as const) {
+      open(root, '.oac-grid__capture');
+      menu(root)!.focus();
+      fireKey(menu(root)!, key);
+      expect(label()).toBe(want);
+      fireKey(doc.activeElement, 'Escape');
+    }
+  });
+
   it('writes no note and keeps every row live while every chart shows', () => {
     const { root } = makeGrid({ preset: '1x2', toolbar: true });
     open(root, '.oac-grid__capture');

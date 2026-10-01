@@ -12,7 +12,7 @@ with no runtime dependencies.
 [![npm version](https://img.shields.io/npm/v/openalgo-charts.svg?color=cb3837&label=npm)](https://www.npmjs.com/package/openalgo-charts)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 [![npm downloads](https://img.shields.io/npm/dm/openalgo-charts.svg?color=0ea5e9&label=npm%20downloads)](https://www.npmjs.com/package/openalgo-charts)
-[![tests](https://img.shields.io/badge/engine%20tests-11118%20passing-brightgreen.svg)](#develop)
+[![tests](https://img.shields.io/badge/engine%20tests-11591%20passing-brightgreen.svg)](#develop)
 [![dependencies](https://img.shields.io/badge/runtime%20deps-0-brightgreen.svg)](#principles)
 
 [**Documentation**](https://marketcalls.github.io/openalgo-charts/) &nbsp;·&nbsp; [**Live examples**](https://marketcalls.github.io/openalgo-charts/examples) &nbsp;·&nbsp; [**Getting started**](./docs/getting-started.md) &nbsp;·&nbsp; [**Migrating to 2.0**](./docs/migrating-to-2.md) &nbsp;·&nbsp; [**Architecture**](./ARCHITECTURE.md)
@@ -25,7 +25,7 @@ with no runtime dependencies.
 npm install openalgo-charts
 ```
 
-Current version: **2.5.10**, persistence, saved layouts and the chart grid: the widget keeps its state in IndexedDB and says when it has landed (`widget.ready`), saves and reopens named layouts and indicator templates, and lets a user move any shortcut from the ? panel; a bottom bar carries preset ranges sized in trading sessions, Go to, the market status and a clock; calendars know pre-open, post-close and extended hours, and a chart can shade them; the chart grid lays out one to sixteen charts with a grid bar, maximize and swap, and named link groups that can share the chart type and drawings; and a label pass makes every control say what it is. 2.5.9 was the drawing interaction and replay release.
+Current version: **2.6.0**, analysis depth and a stricter API: the chart applies Heikin Ashi, Renko, range bars, line break, point and figure and Kagi to the bars you feed, live, with each study on the elements or the underlying bars; seven new built-ins and a timeframe input on 29 of them; symbol search through the OpenAlgo feed; rich event details with host actions; a typed event map for `chart.on`; a classic-script build of every tier and `require()` of the ESM files; and declarations that hold for a host compiling with both strict flags. 2.5.10 was the persistence, saved layouts and chart grid release.
 See the [changelog](./CHANGELOG.md) for release notes.
 
 ## Quick start
@@ -66,7 +66,7 @@ Firefox and WebKit. In Vue, hold the chart in a `shallowRef`, never in `ref()` o
 
 ## Architecture
 
-<a href="docs/architecture-diagram.svg"><img src="docs/architecture-diagram.svg" alt="OpenAlgo Charts 2.5.10 architecture: host responsibilities, the base data-to-rendering pipeline with alerts and shared replay, and eight optional tiers including workspace storage, trading tools and the widget" width="920" /></a>
+<a href="docs/architecture-diagram.svg"><img src="docs/architecture-diagram.svg" alt="OpenAlgo Charts 2.6.0 architecture: host responsibilities, the base data-to-rendering pipeline with alerts and shared replay, and eight optional tiers including workspace storage, trading tools and the widget" width="920" /></a>
 
 How data reaches the chart, what your app owns, and which features you can import.
 [Open the full-size diagram](docs/architecture-diagram.svg).
@@ -117,7 +117,7 @@ You can also load the library from a CDN in a plain HTML page:
 ```html
 <div id="chart" style="width:100vw;height:100vh"></div>
 <script type="module">
-  import { createChart, generateBars } from 'https://unpkg.com/openalgo-charts@2.5.10/dist/openalgo-charts.mjs';
+  import { createChart, generateBars } from 'https://unpkg.com/openalgo-charts@2.6.0/dist/openalgo-charts.mjs';
   const chart = createChart(document.getElementById('chart'), { timezone: 'Asia/Kolkata' });
   chart.addSeries('candlestick').setData(generateBars(1700000000, 200, 3600));
   chart.fitContent();
@@ -125,7 +125,7 @@ You can also load the library from a CDN in a plain HTML page:
 ```
 
 Each optional tier has its own file. For example,
-`openalgo-charts.indicators.mjs` registers all 105 built-in indicators. Pin the
+`openalgo-charts.indicators.mjs` registers all 112 built-in indicators. Pin the
 version in production. The base chart needs no stylesheet; the widget adds its
 own styles. See
 [Use from a CDN](https://marketcalls.github.io/openalgo-charts/docs/cdn).
@@ -179,17 +179,17 @@ Unused optional tiers stay out of the base chart download.
 
 | Import | Contents | Brotli |
 |---|---|---|
-| `openalgo-charts` | Engine, 13 chart types, panes and scales, custom indicator registry, primitives, alerts, replay, comparisons, chart linking, state, feeds, bar cache, trading overlays, CSV and SVG export | 134.69 kB |
-| `openalgo-charts/indicators` | 105 built-in indicators, calculation helpers and helpers for studies that use external data | 40.43 kB |
-| `openalgo-charts/draw` | 87 drawing tools + a headless drawing controller, clipboard, settings schema, level palette, freehand geometry and SVG icons | 57.98 kB |
-| `openalgo-charts/transform` | Heikin Ashi, Renko, Range bars, Line Break, Point &amp; Figure, Kagi, and symbol arithmetic (`AAPL/MSFT`) | 4.55 kB |
-| `openalgo-charts/profile` | Volume Profile, Market Profile (TPO) with compact pixel letters, Footprint, order flow | 14.97 kB |
-| `openalgo-charts/trade` | Order, position and bracket tools, account state, order preview and position commands, plus a depth-of-market ladder | 16.69 kB |
-| `openalgo-charts/webgl` | GPU drawing for supported series, with Canvas 2D fallback | 6.93 kB |
-| `openalgo-charts/widget` | `createWidget`: toolbar, bottom bar, Data, Objects, Watchlist and News dock, account summary, symbol search, dialogs, mobile controls, a shortcuts editor, saved layouts, the chart grid (`createChartGrid`) and optional persistence in IndexedDB | 121.36 kB |
-| `openalgo-charts/workspace` | Validated workspace and indicator-template documents, named watchlists, named catalogs with revision checks, asynchronous storage and an IndexedDB adapter; no DOM | 11.53 kB |
+| `openalgo-charts` | Engine, 13 chart types, panes and scales, custom indicator registry, primitives, alerts, replay, comparisons, chart linking, state, feeds, bar cache, trading overlays, CSV and SVG export | 137.53 kB |
+| `openalgo-charts/indicators` | 112 built-in indicators, calculation helpers and helpers for studies that use external data | 43.02 kB |
+| `openalgo-charts/draw` | 87 drawing tools + a headless drawing controller, clipboard, settings schema, level palette, freehand geometry and SVG icons | 58.36 kB |
+| `openalgo-charts/transform` | Heikin Ashi, Renko, Range bars, Line Break, Point &amp; Figure, Kagi, and symbol arithmetic (`AAPL/MSFT`) | 6.07 kB |
+| `openalgo-charts/profile` | Volume Profile, Market Profile (TPO) with compact pixel letters, Footprint, order flow | 14.94 kB |
+| `openalgo-charts/trade` | Order, position and bracket tools, account state, order preview and position commands, plus a depth-of-market ladder | 16.88 kB |
+| `openalgo-charts/webgl` | GPU drawing for supported series, with Canvas 2D fallback | 6.97 kB |
+| `openalgo-charts/widget` | `createWidget`: toolbar, bottom bar, Data, Objects, Watchlist and News dock, account summary, symbol search, dialogs, mobile controls, a shortcuts editor, saved layouts, the chart grid (`createChartGrid`) and optional persistence in IndexedDB | 123.57 kB |
+| `openalgo-charts/workspace` | Validated workspace and indicator-template documents, named watchlists, named catalogs with revision checks, asynchronous storage and an IndexedDB adapter; no DOM | 11.73 kB |
 
-Everything together is **409.13 kB Brotli**; a widget terminal with built-in indicators (base + draw + indicators + widget) is 354.46 kB. The widget's seven first-use parts (the shortcuts editor, the Layouts menu, the templates list, the chart data dialog, the grid bar and its menus, and the IndexedDB store) add 18.19 kB in files of their own, fetched only when a widget first uses one. Figures are measured from the 2.5.10 release build. The trade tier is 16.69 kB on its own; base + trade costs 151.38 kB. Sizes use decimal kB.
+Everything together is **419.05 kB Brotli**; a widget terminal with built-in indicators (base + draw + indicators + widget) is 362.48 kB. The widget's seven first-use parts (the shortcuts editor, the Layouts menu, the templates list, the chart data dialog, the grid bar and its menus, and the IndexedDB store) add 18.24 kB in files of their own, fetched only when a widget first uses one. The nine classic-script files together are 430.90 kB. Figures are measured from the 2.6.0 release build. The trade tier is 16.88 kB on its own; base + trade costs 154.41 kB. Sizes use decimal kB.
 
 ## What's built
 
@@ -206,7 +206,7 @@ const macd = chart.addIndicator('macd', { fastPeriod: 8 });   // gets its own pa
 macd.setSettings({ 'macd:width': 2, 'macd:lineStyle': 'dashed' });
 ```
 
-105 built-ins across Trend, Momentum, Volatility and Volume, from the everyday (SMA, EMA, WMA, VWAP, Bollinger Bands, RSI, MACD, Stochastic, ADX/DMI, ATR) through Supertrend, HalfTrend, Ichimoku, Keltner, Donchian, Chandelier Exit and CPR with floor pivots to Connors RSI, Fisher Transform, Woodies CCI, Klinger, Vortex, WaveTrend Pro, Chop Zone and Williams Fractals, with a least-squares family (Least Squares Moving Average, Linear Regression Slope, Standard Error, Standard Error Bands) and a Smoothed Moving Average alongside them, joined in 1.8.3 by the T3 average, the Hull Suite (Hma / Ehma / Thma with a displaced band) and Consolidation and Breakout, which tracks inside-bar ranges and marks the bar that leaves one. Twenty-eight of them draw shaded bands, six emit named buy/sell markers, two recolour the price candles, and Seasonality draws a monthly return heatmap as a table over the chart. The full catalogue with ids and defaults is in the docs.
+112 built-ins across Trend, Momentum, Volatility and Volume, from the everyday (SMA, EMA, WMA, VWAP, Bollinger Bands, RSI, MACD, Stochastic, ADX/DMI, ATR) through Supertrend, HalfTrend, Ichimoku, Keltner, Donchian, Chandelier Exit and CPR with floor pivots to Connors RSI, Fisher Transform, Woodies CCI, Klinger, Vortex, WaveTrend Pro, Chop Zone and Williams Fractals, with a least-squares family (Least Squares Moving Average, Linear Regression Slope, Standard Error, Standard Error Bands) and a Smoothed Moving Average alongside them, joined in 1.8.3 by the T3 average, the Hull Suite (Hma / Ehma / Thma with a displaced band) and Consolidation and Breakout, which tracks inside-bar ranges and marks the bar that leaves one. Version 2.6.0 adds ZigZag, 52 Week High/Low, Zero Lag EMA, Variable Index Dynamic Average, Elder-Ray Index, Schaff Trend Cycle and Volatility Squeeze. Twenty-eight of them draw shaded bands, six emit named buy/sell markers, three recolour the price candles, and Seasonality draws a monthly return heatmap as a table over the chart. The full catalogue with ids and defaults is in the docs.
 
 Since 2.4.0 a study can fold the chart's own bars up to a higher timeframe with `securitySeries` (as the bucket stood at each bar, or the last completed one, or with lookahead when reproducing a source that repaints), paint a plot displaced by a number of bars, colour a candle's wick and border apart from its body, pin a marker to the pane edge, put a tooltip on a drawn zone, compute an alert message from the bar that fired, and ask the host for another instrument's bars through `chart.setBarsProvider`. A calculation that throws once it is on the chart is reported on that study's data status rather than thrown into the render loop.
 
@@ -515,18 +515,19 @@ Enforced in CI by [`size-limit`](./.size-limit.json). Nothing is excluded, becau
 
 | Bundle | Limit | Actual |
 |---|---|---|
-| Base engine | 134.69 kB | 134.69 kB |
-| Base + trade | 151.38 kB | 151.38 kB |
-| Indicators tier | 40.43 kB | 40.43 kB |
-| Draw tier | 57.99 kB | 57.98 kB |
-| Transform tier | 4.56 kB | 4.55 kB |
-| Profile tier | 14.98 kB | 14.97 kB |
-| WebGL2 tier | 6.94 kB | 6.93 kB |
-| Widget tier | 121.36 kB | 121.36 kB |
-| Widget first-use parts (seven files beside the widget tier) | 18.19 kB | 18.19 kB |
-| Widget terminal (base + draw + indicators + widget) | 354.46 kB | 354.46 kB |
-| Workspace tier | 11.53 kB | 11.53 kB |
-| **Everything** | 409.14 kB | 409.13 kB |
+| Base engine | 137.54 kB | 137.53 kB |
+| Base + trade | 154.42 kB | 154.41 kB |
+| Indicators tier | 43.02 kB | 43.02 kB |
+| Draw tier | 58.36 kB | 58.36 kB |
+| Transform tier | 6.07 kB | 6.07 kB |
+| Profile tier | 14.94 kB | 14.94 kB |
+| WebGL2 tier | 6.97 kB | 6.97 kB |
+| Widget tier | 123.57 kB | 123.57 kB |
+| Widget first-use parts (seven files beside the widget tier) | 18.24 kB | 18.24 kB |
+| Widget terminal (base + draw + indicators + widget) | 362.48 kB | 362.48 kB |
+| Workspace tier | 11.73 kB | 11.73 kB |
+| Script tags (the nine classic-script files) | 430.91 kB | 430.90 kB |
+| **Everything** | 419.06 kB | 419.05 kB |
 
 ## Documentation
 
@@ -576,15 +577,15 @@ See [Contributing](./CONTRIBUTING.md) for setup, targeted checks, documentation 
 
 ```bash
 npm install        # install dev toolchain
-npm run typecheck  # strict TypeScript check
-npm test           # engine unit tests (Vitest): 11118 across 469 files
-npm run test:demo  # reference-host tests: 683 across 64 files
+npm run typecheck  # TypeScript: src with the stricter flags, then the tests
+npm test           # engine unit tests (Vitest): 11591 across 512 files
+npm run test:demo  # reference-host tests: 689 across 67 files
 npm run test:endurance # node endurance-harness tests: 7 cases
 npm run build      # Rollup -> dist/ (minified ESM per tier + types)
 npm run size       # size-limit (Brotli) against the budget
 npm run e2e        # Playwright Chromium smoke tests
 npm run bench:render # render bench: pan, zoom-out and tick frame budgets per bar count
-npm run verify     # lint + types + unit + endurance harness + build + demo + dts + size + shake
+npm run verify     # lint + types + cycles + unused exports + unit + endurance harness + build + demo + dts + exports + compat + size + shake
 ```
 
 ## Principles
@@ -598,7 +599,7 @@ npm run verify     # lint + types + unit + endurance harness + build + demo + dt
 
 ## Status &amp; limitations
 
-Version **2.5.10**. All engine build phases are implemented. Upgrading a 1.9.x host: [Migrating to 2.0](./docs/migrating-to-2.md).
+Version **2.6.0**. All engine build phases are implemented. Upgrading a 1.9.x host: [Migrating to 2.0](./docs/migrating-to-2.md).
 
 Known gaps, stated plainly:
 

@@ -29,15 +29,17 @@ import {
   type Chart, type PriceAxisState, type PriceScaleId,
 } from 'openalgo-charts';
 import { chromeIconSvg } from 'openalgo-charts/draw';
-import { glyph, h, type OverlayOptions, type TipController, type WidgetContext } from './context';
+import { glyph, h, type OverlayOptions, type TipController } from './context';
 import { timeBuckets, type DateNavigationResult } from './date-navigator';
+import { describeNavigation } from './date-navigation-dialog';
 import { errorText, widgetText, type WidgetTranslationOptions } from './localization';
 import {
   MarketStatusHold, PHASE_GLYPHS, clockText, marketStatusReading, sessionStateShown, utcOffsetLabel,
   type MarketStatusReading,
 } from './bottombar-status';
 import { DEFAULT_RANGES, type WidgetRange } from './ranges';
-import { openMenu, type MenuRow } from './topbar';
+import { openMenu, type MenuRow } from './menu';
+import { token as v } from './tokens';
 
 /** The bar's height in CSS px. */
 export const BOTTOMBAR_HEIGHT = 28;
@@ -51,7 +53,7 @@ export const BOTTOMBAR_HEIGHT = 28;
 export interface BottombarContext extends WidgetTranslationOptions {
   readonly document: Document;
   /** BCP 47 tag for weekday names. Default: the runtime's. */
-  readonly locale?: string;
+  readonly locale?: string | undefined;
   readonly tips: TipController;
   openOverlay(el: HTMLElement, opts?: OverlayOptions): () => void;
   /** Report what a control did, and why a range fell short. */
@@ -81,11 +83,11 @@ export interface BottombarOptions {
    */
   target?: () => BottombarTarget | null;
   /** The range buttons. `[]` leaves them out. Default `DEFAULT_RANGES`. */
-  ranges?: readonly WidgetRange[];
+  ranges?: readonly WidgetRange[] | undefined;
   /** Open the go-to panel from the bar's button. Omit to leave the button out. */
   onGoTo?(anchor: HTMLElement): void | boolean;
   /** Clock for the time and the market status, in milliseconds. Default `Date.now`. */
-  now?: () => number;
+  now?: (() => number) | undefined;
   /** Zones the timezone menu lists first. Default: those the settings dialog offers. */
   timezones?: readonly string[];
   /** Called after the bar moves the chart to another zone, for a host that keeps its own copy. */
@@ -142,7 +144,7 @@ export const SCALE_TOGGLES: ReadonlyArray<{ id: BottombarScaleToggle; icon: stri
 ];
 
 /** The scale the primary series reads from, on the price pane: the one a scale toggle acts on. */
-export function primaryScale(chart: Chart): { pane: number; id: PriceScaleId } | null {
+function primaryScale(chart: Chart): { pane: number; id: PriceScaleId } | null {
   if (chart.isDestroyed) return null;
   const pane = chart.primaryPaneIndex();
   const record = chart.panes()[pane];
@@ -197,7 +199,7 @@ function spanText(ctx: WidgetTranslationOptions, range: WidgetRange): string {
 /** What a range did, for the status line, in the dialog's words where they fit. */
 function describeRange(ctx: BottombarContext, chart: Chart, label: string, result: DateNavigationResult): string {
   const zone = chart.timezone();
-  const intraday = chart.primaryBars().length > 1 && chart.primaryBars()[1].time - chart.primaryBars()[0].time < 86400;
+  const intraday = chart.primaryBars().length > 1 && chart.primaryBars()[1]!.time - chart.primaryBars()[0]!.time < 86400; // length checked first
   let format: Intl.DateTimeFormat;
   try { format = new Intl.DateTimeFormat(ctx.locale, { timeZone: zone, dateStyle: 'medium', ...(intraday ? { timeStyle: 'short' } : {}) }); }
   catch { format = new Intl.DateTimeFormat(undefined, { timeZone: zone, dateStyle: 'medium' }); }
@@ -205,16 +207,9 @@ function describeRange(ctx: BottombarContext, chart: Chart, label: string, resul
   const span = { range: label, from: at(result.from), to: at(result.to) };
   switch (result.status) {
     case 'placed': return widgetText(ctx, 'schema.ui.rangeResult.placed', span, '{range}: {from} to {to}');
-    case 'partial':
-      if (result.clipped) return widgetText(ctx, 'The range is wider than the chart. Showing {from} to {to}', span);
-      if (result.history === 'exhausted') return widgetText(ctx, 'History starts at {date}', { date: span.from });
-      if (result.history === 'limited') return widgetText(ctx, 'The history limit stops at {date}', { date: span.from });
-      if (result.history === 'empty') return widgetText(ctx, 'No older bars were found before {date}', { date: span.from });
-      return widgetText(ctx, 'Older history cannot load now. Showing from {date}', { date: span.from });
     case 'no-data': return widgetText(ctx, 'schema.ui.rangeResult.empty', { range: label }, 'No bars for {range}');
-    case 'unsupported': return widgetText(ctx, 'Go to needs a time-based interval');
-    case 'error': return widgetText(ctx, 'Could not load history: {error}', { error: result.error?.message ?? '' });
-    default: return '';
+    // A range is never typed, so an invalid one has no words of its own here.
+    default: return describeNavigation(ctx, result, span) ?? '';
   }
 }
 
@@ -451,10 +446,7 @@ export function mountBottombar(ctx: BottombarContext, host: HTMLElement, opts: B
     const rest = runtimeZones().filter(zone => !first.includes(zone));
     const rows: Array<MenuRow | string> = [...first.map(row)];
     if (rest.length > 0) rows.push(widgetText(ctx, 'schema.ui.bottombar.allZones', {}, 'All zones'), ...rest.map(row));
-    // openMenu is typed for the widget's context but reads only the document,
-    // the overlay opener and the translations, which every bar context has;
-    // a custom host's context is the rest of a WidgetContext it never needed.
-    closeZones = openMenu(ctx as unknown as WidgetContext, anchor, rows, {
+    closeZones = openMenu(ctx, anchor, rows, {
       find: widgetText(ctx, 'schema.ui.bottombar.findZone', {}, 'Find a zone'),
       ariaLabel: widgetText(ctx, 'schema.ui.bottombar.timezones', {}, 'Timezone'),
     });
@@ -608,7 +600,6 @@ export function mountBottombar(ctx: BottombarContext, host: HTMLElement, opts: B
  * the scale toggles are never cut. The narrowest bar shows the status by its
  * glyph, its reading kept as the status region's name.
  */
-const v = (name: string): string => `var(--oac-${name})`;
 export const BOTTOMBAR_CSS = `
 .oac-widget.has-bottombar { grid-template-rows: auto minmax(0, 1fr) auto auto; }
 .oac-widget.has-bottombar > .oac-bottombar { grid-row: 3; }

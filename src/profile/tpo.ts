@@ -6,8 +6,14 @@
  */
 import type { Bar } from '../model/bar';
 import type { TpoResult } from './profile-model';
-import { priceBuckets } from './profile-model';
+import { priceBuckets, valueArea } from './profile-model';
 
+/**
+ * One TPO profile over all of `bars`, a period every `periodBars` bars. A
+ * `periodBars` below 1 counts as 1; otherwise the arguments are taken as
+ * given: a `tickSize` that is not a positive finite number gives an empty
+ * profile, and `valueAreaPercent` is a fraction that is not clamped.
+ */
 export function computeTpo(
   bars: readonly Bar[],
   periodBars: number,
@@ -40,25 +46,13 @@ export function computeTpo(
   }
 
   const total = buckets.reduce((s, b) => s + b.count, 0);
-  let pocIdx = 0;
-  for (let i = 1; i < buckets.length; i++) if (buckets[i].count > buckets[pocIdx].count) pocIdx = i;
-
-  let upper = pocIdx;
-  let lower = pocIdx;
-  let acc = buckets[pocIdx].count;
-  const target = total * valueAreaPercent;
-  while (acc < target && (upper > 0 || lower < buckets.length - 1)) {
-    const up = upper > 0 ? buckets[upper - 1].count : -1;
-    const down = lower < buckets.length - 1 ? buckets[lower + 1].count : -1;
-    if (up >= down) { upper -= 1; acc += buckets[upper].count; }
-    else { lower += 1; acc += buckets[lower].count; }
-  }
-
+  // `valueArea` hands back indices into `buckets`, which is not empty.
+  const va = valueArea(buckets.map((b) => b.count), total * valueAreaPercent);
   return {
     buckets,
-    poc: buckets[pocIdx].price,
-    vah: buckets[upper].price,
-    val: buckets[lower].price,
+    poc: buckets[va.poc]!.price,
+    vah: buckets[va.upper]!.price,
+    val: buckets[va.lower]!.price,
     ib: { high: ibHigh, low: ibLow },
   };
 }

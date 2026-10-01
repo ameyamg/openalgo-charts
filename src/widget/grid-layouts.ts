@@ -139,6 +139,6 @@ export function focusSlot(spec: ChartGridLayoutSpec): number {
 /** The share of the desk a run of tracks takes, in weight units. */
 const span = (weights: readonly number[], at: number, count: number): number => {
   let sum = 0;
-  for (let i = at; i < at + count; i++) sum += weights[i];
+  for (let i = at; i < at + count; i++) sum += weights[i]!; // a catalogue slot lies inside its layout's tracks
   return sum;
 };

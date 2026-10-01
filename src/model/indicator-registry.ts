@@ -3,7 +3,7 @@
  * registry: that one answers *"how do I paint an array of bars"*, this one
  * answers *"what do I compute, what does it plot, and what can a user tune"*.
  *
- * A descriptor is data, not code-in-the-core — the chart never switches on an
+ * A descriptor is data, not code-in-the-core: the chart never switches on an
  * indicator id. Each `plot` names a registered **chart type**, so indicators
  * ride the existing Family-A renderers and add no drawing code at all.
  *
@@ -23,6 +23,7 @@ import type { IPrimitive } from '../primitives/primitive';
 import type { DataVariant } from '../feed/data-variant';
 import { validateIndicatorInputs } from './indicator-inputs';
 import { IndicatorInputError } from './indicator-input-error';
+import { isPlainObject } from '../helpers/validate';
 export { IndicatorInputError } from './indicator-input-error';
 
 /** Which price a calculation reads from each bar. */
@@ -167,7 +168,7 @@ export function plotStyleKeys(plot: IndicatorPlot): {
   color: string; width: string; lineStyle: string; opacity: string; type: string;
 } {
   return {
-    // A descriptor that already declares a colour input owns that key — a
+    // A descriptor that already declares a colour input owns that key: a
     // generated one would shadow it, and setting the declared key would
     // silently stop working.
     color: plot.colorKey ?? `${plot.key}:color`,
@@ -180,7 +181,7 @@ export function plotStyleKeys(plot: IndicatorPlot): {
 
 /**
  * Per-plot appearance inputs, generated from the descriptor rather than
- * hand-written on each one — every indicator gets colour, opacity, thickness,
+ * hand-written on each one: every indicator gets colour, opacity, thickness,
  * and line style for free, and a settings UI can render them as a "Style" tab
  * beside the descriptor's own `inputs`.
  *
@@ -221,7 +222,7 @@ export function indicatorStyleInputs(descriptor: IndicatorDescriptor): Indicator
 /**
  * Chart types a plot can be re-rendered as. A moving average is a line by
  * default, but the same column of numbers reads better as a histogram or an
- * area depending on what you are looking for — and a descriptor cannot know
+ * area depending on what you are looking for, and a descriptor cannot know
  * which. Restricted to the types that make sense for a single value column.
  */
 export const INDICATOR_PLOT_STYLES: readonly { label: string; value: string }[] = [
@@ -379,7 +380,7 @@ export interface IndicatorPlot {
    */
   ohlc?: { open: string; high: string; low: string; close: string };
   /**
-   * Per-bar colour, for plots whose meaning changes bar to bar — a MACD
+   * Per-bar colour, for plots whose meaning changes bar to bar: a MACD
    * histogram is four colours by sign and direction, a conditional study two.
    * Return `undefined` to fall back to the plot's own colour.
    *
@@ -648,6 +649,12 @@ export interface IndicatorCalcContext {
   interval?: string;
   /** The chart's IANA zone, the calendar its axis is labelled in. */
   timezone: string;
+  /**
+   * True when the bars `calc` receives are a transform's elements (Renko
+   * bricks, Heikin Ashi candles) rather than the bars the host feeds, so their
+   * times do not mark out the clock. Absent otherwise.
+   */
+  transformed?: boolean;
   /** Chart wall clock in UTC seconds, the clock the countdown row reads. */
   now(): number;
   /**
@@ -802,11 +809,11 @@ export interface IndicatorAttachContext {
   setDataRetry?(retry: (() => void) | null): void;
   /** Instance lifetime. Aborted on removal, preserved across style changes. */
   signal?: AbortSignal;
-  /** Current settings (live — read at call time, not captured). */
+  /** Current settings (live: read at call time, not captured). */
   settings(): Readonly<IndicatorSettings>;
-  /** The chart's current source bars. */
+  /** The bars the study computes on now: the chart's, or the underlying bars for a study set to them (`IndicatorApi.setBarSource`). */
   bars(): readonly Bar[];
-  /** Re-run `calc` and repaint — call when external data arrives. */
+  /** Re-run `calc` and repaint: call when external data arrives. */
   requestRecompute(): void;
   /** Scratch this instance owns; the same object `calc` receives. */
   store: IndicatorStore;
@@ -887,7 +894,7 @@ export interface IndicatorDescriptor {
   /** Display name, e.g. `'MACD'`. */
   name: string;
   /** Grouping for a picker UI ('Trend', 'Momentum', 'Volume', 'Volatility'). */
-  category?: string;
+  category?: string | undefined;
   /** `'onchart'` overlays the price pane; `'pane'` gets its own pane. */
   placement: 'onchart' | 'pane';
   /**
@@ -907,7 +914,7 @@ export interface IndicatorDescriptor {
   inputs: readonly IndicatorInput[];
   plots: readonly IndicatorPlot[];
   /**
-   * Shaded bands between pairs of plots — the Ichimoku cloud, a Bollinger
+   * Shaded bands between pairs of plots: the Ichimoku cloud, a Bollinger
    * channel. A pair of lines is not the same picture as a filled region: the
    * fill is what makes "price is above the cloud" readable at a glance, and
    * which side leads is itself the signal, hence the two colours.
@@ -915,11 +922,11 @@ export interface IndicatorDescriptor {
   fills?: readonly IndicatorFillSpec[];
   /**
    * Full recompute over every bar. Must return arrays the same length as
-   * `bars` (use `null` for warmup gaps — the line renderer breaks across them
+   * `bars` (use `null` for warmup gaps: the line renderer breaks across them
    * and autoscale skips them).
    *
    * Tier-1 indicators are pure functions of `(bars, settings)` and ignore
-   * `store`. Tier-2 indicators — the ones with their own data — read the
+   * `store`. Tier-2 indicators (the ones with their own data) read the
    * external series their `attach` lifecycle put in `store`.
    */
   calc(
@@ -933,14 +940,14 @@ export interface IndicatorDescriptor {
    * from the chart's bars (CVD, PCR, an external feed). Called once
    * when the instance is created; return a teardown function.
    *
-   * Fetch into `ctx.store`, then call `ctx.requestRecompute()` — `calc` runs
+   * Fetch into `ctx.store`, then call `ctx.requestRecompute()`: `calc` runs
    * again and reads what you stored.
    */
   attach?(ctx: IndicatorAttachContext): (() => void) | void;
   /**
    * Optional incremental path, called instead of `calc` when only the tail
    * changed (a live tick). Return values for indices `[fromIndex, bars.length)`
-   * — the runtime splices them onto the previous result — or `null` to fall
+   * (the runtime splices them onto the previous result) or `null` to fall
    * back to a full `calc`.
    *
    * Without it every tick costs a full recompute. That is a few hundred
@@ -956,7 +963,7 @@ export interface IndicatorDescriptor {
     ctx?: IndicatorCalcContext,
   ): IndicatorValues | null;
   /**
-   * Optional bar-anchored signal markers — a named "Buy"/"Sell" plate, an arrow
+   * Optional bar-anchored signal markers: a named "Buy"/"Sell" plate, an arrow
    * at a crossover. Runs after every `calc`, so it reads the values it just
    * produced rather than recomputing anything.
    *
@@ -1085,7 +1092,7 @@ export interface IndicatorDescriptor {
   levels?(ctx: IndicatorLevelContext): readonly IndicatorLevel[];
   /**
    * Optional fixed price range for the indicator's own pane (RSI 0..100).
-   * Applied only when the indicator creates its pane — two indicators sharing a
+   * Applied only when the indicator creates its pane: two indicators sharing a
    * pane would otherwise fight over it.
    */
   range?(settings: Readonly<IndicatorSettings>): { min: number; max: number } | null;
@@ -1150,8 +1157,7 @@ export function sourceValues(bars: readonly Bar[], source: IndicatorSource | Ind
 export function sourceValues(bars: readonly Bar[], source: IndicatorSource | IndicatorStudySource,
   context?: Pick<IndicatorCalcContext, 'resolveSource'>): (number | null)[] {
   if (typeof source !== 'string') {
-    if (source === null || typeof source !== 'object' ||
-      (Object.getPrototypeOf(source) !== Object.prototype && Object.getPrototypeOf(source) !== null)) {
+    if (!isPlainObject(source)) {
       throw new IndicatorInputError('Invalid study source reference');
     }
     const fields = Object.getOwnPropertyDescriptors(source);
@@ -1166,6 +1172,6 @@ export function sourceValues(bars: readonly Bar[], source: IndicatorSource | Ind
     return values.slice();
   }
   const out = new Array<number>(bars.length);
-  for (let i = 0; i < bars.length; i++) out[i] = sourceValue(bars[i], source);
+  for (let i = 0; i < bars.length; i++) out[i] = sourceValue(bars[i]!, source);
   return out;
 }

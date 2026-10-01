@@ -28,7 +28,7 @@ describe('theme drives series colors', () => {
     const theme: ChartTheme = { ...darkTheme, upColor: customUp };
     const { ctx, rec } = makeCtx();
     getChartType('candlestick').draw(ctx, [data[0]], toY, 8, 1, {}, rc(theme));
-    // an up candle (close>open) → at least one fillRect uses the themed up color
+    // an up candle (close>open): at least one fillRect uses the themed up color
     expect(rec.ops.some((o) => o.type === 'fillRect' && o.fillStyle === customUp)).toBe(true);
   });
 
@@ -43,7 +43,7 @@ describe('gradient fills', () => {
   it('verticalGradient creates and caches a gradient per context', () => {
     const { ctx, rec } = makeCtx();
     const g1 = verticalGradient(ctx, 400, '#fff', '#0000');
-    const g2 = verticalGradient(ctx, 400, '#fff', '#0000'); // same key → cached
+    const g2 = verticalGradient(ctx, 400, '#fff', '#0000'); // same key: cached
     expect(g1).toBe(g2);
     expect(rec.count('createLinearGradient')).toBe(1); // only created once
   });

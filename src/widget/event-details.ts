@@ -1,10 +1,23 @@
-import type { ChartEvent, ChartEventDetails, EventMarkerDetails } from 'openalgo-charts';
+import { DEFAULT_TIMEZONE } from 'openalgo-charts';
+import type { ChartEvent, ChartEventDetails, EventDetailSpan, EventMarkerDetails } from 'openalgo-charts';
 import { createOverlayStack, h, type OverlayStack } from './context';
+import { widgetText, type WidgetTranslationOptions } from './localization';
+import { safeNewsUrl } from './news-panel';
+// A pure helper: importing it by path inlines the event layer's copy and nothing else of it.
+import { copyEvent } from '../primitives/event-markers';
 
 export type EventDetailsLoader = (
   event: ChartEvent,
   context: { signal: AbortSignal },
 ) => Promise<ChartEventDetails | string | null>;
+
+/** A button under an event's details. */
+export interface EventDetailAction {
+  /** Shown as text. */
+  label: string;
+  /** Called with a copy of the shown event, once the popup has closed. */
+  run(event: ChartEvent): void;
+}
 
 export interface EventDetailsLabels {
   title: string;
@@ -21,9 +34,11 @@ export interface EventDetailsPopupOptions {
   /** Receives the original UTC timestamp in seconds. Defaults to Asia/Kolkata. */
   formatTime?: (time: number) => string;
   labels?: Partial<EventDetailsLabels>;
+  /** The buttons for an event, asked each time one is shown. None by default. */
+  actions?: (event: ChartEvent) => readonly EventDetailAction[];
   /** Pass the widget context's stack to share focus, Escape and shortcut handling. */
   overlays?: OverlayStack;
-  styleNonce?: string;
+  styleNonce?: string | undefined;
   /** Set false when the host already includes EVENT_DETAILS_CSS. */
   injectStyles?: boolean;
 }
@@ -52,23 +67,32 @@ export const EVENT_DETAILS_CSS = `
 .oac-event-details__fields dd{margin:0;text-align:right;white-space:pre-wrap}
 .oac-event-details__status{padding:0 12px 10px}
 .oac-event-details__status:empty{display:none}
+.oac-event-details__subhead{margin:10px 0 0;font-size:12px;font-weight:600}
+.oac-event-details__text,.oac-event-details__list{margin:6px 0 0}
+.oac-event-details__list{padding-left:18px}
+.oac-event-details a{color:var(--oac-acc,#74a7fa)}
+.oac-event-details__actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;padding:0 12px 12px}
+.oac-event-details__actions:empty{display:none}
 `;
 
-const LABELS: EventDetailsLabels = {
-  title: 'Event details', close: 'Close', events: 'Events',
-  loading: 'Loading details...', empty: 'No additional details.', error: 'Unable to load additional details.',
-};
-
-function copyEvent(event: ChartEvent): ChartEvent {
+/**
+ * The popup's words in the host's language. The widget passes its own
+ * translator, so a translated widget shows a translated popup; a host that
+ * mounts the popup itself gets English, or its own `labels`.
+ */
+export function eventDetailsLabels(translation: WidgetTranslationOptions): EventDetailsLabels {
   return {
-    ...event,
-    ...(typeof event.details === 'object' && event.details !== null ? {
-      details: { ...event.details, ...(event.details.fields ? { fields: event.details.fields.map(field => ({ ...field })) } : {}) },
-    } : {}),
+    title: widgetText(translation, 'Event details'), close: widgetText(translation, 'Close'), events: widgetText(translation, 'Events'),
+    loading: widgetText(translation, 'Loading details...'), empty: widgetText(translation, 'No additional details.'),
+    error: widgetText(translation, 'Unable to load additional details.'),
   };
 }
 
-/** A text-only, selectable event popup. Destroy it when its host is disposed. */
+/**
+ * A selectable event popup. Feed content is untrusted: every string becomes
+ * text, and a link opens only an http or https URL. Destroy it when its host
+ * is disposed.
+ */
 export class EventDetailsPopup {
   public readonly element: HTMLElement;
   private readonly _doc: Document;
@@ -84,13 +108,14 @@ export class EventDetailsPopup {
   private _members: HTMLButtonElement[] = [];
   private _content: HTMLElement;
   private _status: HTMLElement;
+  private _actions: HTMLElement;
   private _anchor: { x: number; y: number } | undefined;
 
   public constructor(private readonly _container: HTMLElement, private readonly _options: EventDetailsPopupOptions = {}) {
     this._doc = _container.ownerDocument;
-    this._labels = { ...LABELS, ..._options.labels };
+    this._labels = { ...eventDetailsLabels({}), ..._options.labels };
     const formatter = new Intl.DateTimeFormat(undefined, {
-      timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short',
+      timeZone: DEFAULT_TIMEZONE, dateStyle: 'medium', timeStyle: 'short',
     });
     this._formatTime = _options.formatTime ?? (time => {
       const date = new Date(time * 1000);
@@ -111,6 +136,7 @@ export class EventDetailsPopup {
     }
     this._content = h(this._doc, 'div', 'oac-event-details__content');
     this._status = h(this._doc, 'div', 'oac-event-details__status', { role: 'status', 'aria-live': 'polite' });
+    this._actions = h(this._doc, 'div', 'oac-event-details__actions');
   }
 
   /** Anchor coordinates are CSS pixels relative to the supplied container. */
@@ -140,7 +166,7 @@ export class EventDetailsPopup {
       });
       this.element.appendChild(members);
     }
-    this.element.append(this._content, this._status);
+    this.element.append(this._content, this._status, this._actions);
     this._close = this._overlays.open(this.element, {
       placement: 'below', modal: false, initialFocus: close,
       onClose: () => { this._close = null; this._cancel(); },
@@ -172,9 +198,17 @@ export class EventDetailsPopup {
 
   private _select(index: number): void {
     this._cancel();
-    const event = this._events[index];
+    // 0 of a non-empty list, or the index of a member button built from this list.
+    const event = this._events[index]!;
     this._members.forEach((button, at) => button.setAttribute('aria-pressed', String(at === index)));
     this._render(event, event.details);
+    this._actions.replaceChildren(...(this._options.actions?.(copyEvent(event)) ?? []).map(action => {
+      const button = h(this._doc, 'button', undefined, { type: 'button' });
+      button.textContent = action.label;
+      // Closed first, so whatever the action opens is not closed under it.
+      button.addEventListener('click', () => { const shown = copyEvent(event); this.close(); action.run(shown); });
+      return button;
+    }));
     this._status.textContent = '';
     this.element.removeAttribute('aria-busy');
     const loader = this._options.loadDetails;
@@ -225,12 +259,46 @@ export class EventDetailsPopup {
       }
       this._content.appendChild(list);
     }
-    if (!summary && !fields?.length) {
+    let rich = false;
+    const blocks: unknown[] = typeof details === 'object' && Array.isArray(details.blocks) ? details.blocks : [];
+    for (const block of blocks) {
+      // Checked field by field: a feed can send any shape.
+      const { type, text, items } = (block ?? {}) as { type?: unknown; text?: unknown; items?: unknown };
+      const node = type === 'heading' ? h(this._doc, 'h4', 'oac-event-details__subhead')
+        : type === 'paragraph' ? h(this._doc, 'p', 'oac-event-details__text')
+          : type === 'list' ? h(this._doc, 'ul', 'oac-event-details__list') : null;
+      if (node === null) continue;
+      if (type !== 'list') this._inline(node, text);
+      else if (Array.isArray(items)) for (const item of items) this._inline(node.appendChild(h(this._doc, 'li')), item);
+      // A block that carried no usable text leaves no empty box behind.
+      if (node.textContent) { this._content.appendChild(node); rich = true; }
+    }
+    if (!summary && !fields?.length && !rich) {
       const empty = h(this._doc, 'p', 'oac-event-details__summary');
       empty.textContent = this._labels.empty;
       this._content.appendChild(empty);
     }
     this._position();
+  }
+
+  /** Text only: a feed's string never reaches the page as markup, and a link only as a vetted URL. */
+  private _inline(parent: HTMLElement, text: unknown): void {
+    if (typeof text === 'string') { parent.append(text); return; }
+    if (!Array.isArray(text)) return;
+    for (const span of text as Array<Partial<EventDetailSpan> | null>) {
+      if (typeof span?.text !== 'string') continue;
+      const url = safeNewsUrl(span.href);
+      let node: HTMLElement = url === null ? h(this._doc, 'span')
+        : h(this._doc, 'a', undefined, { href: url, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer' });
+      node.textContent = span.text;
+      for (const tag of ['em', 'strong'] as const) {
+        if (span[tag] !== true) continue;
+        const wrap = h(this._doc, tag);
+        wrap.appendChild(node);
+        node = wrap;
+      }
+      parent.appendChild(node);
+    }
   }
 
   private _position(): void {

@@ -47,6 +47,23 @@ export function layoutStatusText(ctx: WidgetContext, state: LayoutsState): strin
   return state.dirty ? text('dirty', 'Unsaved changes') : text('saved', 'Saved');
 }
 
+/**
+ * Say, once when it starts, that the autosave of a controller the widget or
+ * the chart grid made itself has stopped, or that its layout was changed in
+ * another window: the menu may be closed, and a screen reader hears no mark.
+ * Returns the unsubscribe. Internal, shared with the chart grid.
+ */
+export function sayLayoutFailures(controller: LayoutsController, text: Text, say: (message: string) => void): () => void {
+  let failing = false;
+  return controller.subscribe(state => {
+    const failed = state.autosave === 'failed' && !state.conflict;
+    if (!failing && (failed || state.conflict)) {
+      say(failed ? text('autosaveStopped', 'Autosave stopped: the layout could not be saved') : text('conflictStatus', 'The layout was changed in another window'));
+    }
+    failing = failed || state.conflict;
+  });
+}
+
 /** Whether the top bar should mark the held layout: unsaved, failing or changed elsewhere. */
 export function layoutNeedsAttention(state: LayoutsState): boolean {
   return state.layoutId !== null && (state.conflict || state.autosave === 'failed' || (state.dirty && !state.catalog?.autosave));
@@ -106,7 +123,7 @@ export interface WidgetLayouts {
   destroy(): void;
 }
 
-export interface WidgetLayoutsOptions {
+interface WidgetLayoutsOptions {
   workspaces?: WorkspaceStore;
   layouts?: LayoutsController | false;
 }
@@ -124,14 +141,7 @@ export function attachWidgetLayouts(widget: Widget, options: WidgetLayoutsOption
   const controller = given ?? own;
   const menu: LayoutsMenuSlot = { handle: null, waiting: null };
   let destroyed = false;
-  let failing = false;
-  // An autosave that stops is said once on the status line: the menu may be closed.
-  const offState = own?.subscribe(state => {
-    const failed = state.autosave === 'failed' && !state.conflict;
-    if (failed && !failing) ctx.status(text('autosaveStopped', 'Autosave stopped: the layout could not be saved'), 'error');
-    else if (state.conflict && !failing) ctx.status(text('conflictStatus', 'The layout was changed in another window'), 'error');
-    failing = failed || state.conflict;
-  });
+  const offState = own === null ? undefined : sayLayoutFailures(own, text, message => ctx.status(message, 'error'));
   // A change inside autosave's quiet period is written when the page is hidden:
   // a tab switched away from may be closed without coming back. Best effort on
   // pagehide, since the store's write may not finish before the page goes.

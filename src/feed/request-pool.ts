@@ -1,6 +1,7 @@
 import type { Bar } from '../model/bar';
 import type { BarsPage, BarsPageRequest, BarsRequest, DataFeed } from './types';
 import { dataVariantKey } from './data-variant';
+import { MAX_DELAY } from '../helpers/timers';
 
 /** Limits apply to each pool, whose identity belongs to one data feed. */
 export interface HistoryRequestPoolOptions {
@@ -9,19 +10,19 @@ export interface HistoryRequestPoolOptions {
 }
 
 const DEFAULT_TIMEOUT = 15_000;
-const MAX_TIMER = 2_147_483_647;
 function requestError(name: string, message: string): Error {
   const error = new Error(message);
   error.name = name;
   return error;
 }
+/** A valid timeout, held to the longest a timer can wait: a longer one would fire at once. */
 function deadline(ms: number): number {
   if (!Number.isFinite(ms) || ms <= 0) throw new RangeError('History timeout must be positive and finite');
-  return ms;
+  return Math.min(ms, MAX_DELAY);
 }
 
 /** Also fences adapters that do not honor an aborted fetch or body read. */
-export function withHistoryDeadline<T>(req: Pick<BarsRequest, 'signal' | 'timeoutMs'>, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+export function withHistoryDeadline<T>(req: { signal?: AbortSignal | undefined; timeoutMs?: number | undefined }, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
   if (req.signal?.aborted) return Promise.reject(requestError('AbortError', 'History request cancelled'));
   const timeout = deadline(req.timeoutMs ?? DEFAULT_TIMEOUT);
   return new Promise<T>((resolve, reject) => {
@@ -113,7 +114,7 @@ export class HistoryRequestPool {
     if (!job) {
       // Consumer timers own the deadline. A provider's shorter default must
       // not expire shared work while another consumer still needs it.
-      job = { key, req: { ...req, signal: undefined, timeoutMs: MAX_TIMER }, page, priority,
+      job = { key, req: { ...req, signal: undefined, timeoutMs: MAX_DELAY }, page, priority,
         controller: new AbortController(), consumers: new Set(), running: false, done: false };
       this._jobs.set(key, job);
     }

@@ -1,27 +1,27 @@
 [
   {
     "file": "src/input/shortcuts.ts",
-    "text": "←",
+    "text": "\u2190",
     "reason": "formatCombo, a public export, shows the arrow keys as the arrows printed on them; hosts and tests read that output, and the widget's own chord display uses words."
   },
   {
     "file": "src/input/shortcuts.ts",
-    "text": "→",
+    "text": "\u2192",
     "reason": "formatCombo, a public export, shows the arrow keys as the arrows printed on them; hosts and tests read that output, and the widget's own chord display uses words."
   },
   {
     "file": "src/input/shortcuts.ts",
-    "text": "↑",
+    "text": "\u2191",
     "reason": "formatCombo, a public export, shows the arrow keys as the arrows printed on them; hosts and tests read that output, and the widget's own chord display uses words."
   },
   {
     "file": "src/input/shortcuts.ts",
-    "text": "↓",
+    "text": "\u2193",
     "reason": "formatCombo, a public export, shows the arrow keys as the arrows printed on them; hosts and tests read that output, and the widget's own chord display uses words."
   },
   {
     "file": "src/input/shortcuts.ts",
-    "text": "⇧",
+    "text": "\u21e7",
     "reason": "formatCombo shows the macOS modifiers as the key symbols the platform itself prints (the Shift arrow among them); hosts and tests read that output, and the widget's own chord display uses words."
   },
   {

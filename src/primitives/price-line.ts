@@ -2,14 +2,16 @@
  * Horizontal price line primitive (ARCHITECTURE.md §8). The reusable base for
  * order/SL/TP/alert/indicator-level lines: a line across the plot plus a fixed
  * price-axis tag and an optional broker-style segmented pill group on the
- * line — [badge][qty][label][✕] — with hover / dragging states (the chart
+ * line ([badge][qty][label][close]) with hover / dragging states (the chart
  * passes `hoverId`/`dragId` on the render context) and a drag ghost at the
  * pre-drag price via `setDragGhost`. Interaction semantics are unchanged from
- * the classic tag: the ✕ hit-tests as `${id}::close`, everything else drags.
+ * the classic tag: the close segment hit-tests as `${id}::close`, everything else drags.
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from './primitive';
 import { contrastText, withAlpha, shade, drawPillGroup, type PillSegment } from '../render/pill';
 import { dashPattern, type CanvasLineStyle } from '../render/grid';
+import { drawAxisTag } from './axis-tag';
+import type { LooseOptional } from '../helpers/types';
 
 export interface PriceLineOptions {
   price: number;
@@ -34,7 +36,7 @@ export interface PriceLineOptions {
   badge?: string;
   /** Quantity segment rendered as a neutral box after the badge. */
   qty?: string | number;
-  /** Info text segment (order type, price, P&L ...) — the classic left tag text. */
+  /** Info text segment (order type, price, P&L ...): the classic left tag text. */
   leftLabel?: string;
   /**
    * Fraction of the plot width the line spans, measured from the right (price)
@@ -42,7 +44,7 @@ export interface PriceLineOptions {
    * partial-width order line. Visible scales also carry a price tag.
    */
   extentFromRight?: number;
-  /** Draw a cancel (✕) segment at the end of the pill group; hit-tests as `${id}::close`. */
+  /** Draw a close (cancel) segment at the end of the pill group; hit-tests as `${id}::close`. */
   closeButton?: boolean;
   /** Stable id returned by hit-test (for click/drag routing). */
   id: string;
@@ -92,7 +94,7 @@ export class PriceLine implements IPrimitive {
 
   /**
    * Restyle in place; repaints. `id` is the hit-test handle the chart routes
-   * clicks and drags through, so it is not patchable — swapping it under a
+   * clicks and drags through, so it is not patchable: swapping it under a
    * live drag would strand the gesture.
    *
    * A last-price line is the case this exists for: it has to follow the tick
@@ -161,7 +163,7 @@ export class PriceLine implements IPrimitive {
       }
     }
 
-    // soft emphasis halo while dragging (no shadowBlur — cheap wide stroke)
+    // soft emphasis halo while dragging (no shadowBlur: cheap wide stroke)
     if (dragging) {
       ctx.strokeStyle = withAlpha(color, 0.18);
       ctx.lineWidth = Math.max(5 * dpr, Math.round(lineWidth * dpr) + 4 * dpr);
@@ -191,45 +193,10 @@ export class PriceLine implements IPrimitive {
     const r = 3 * dpr;
 
     // Explicit columns confine only the axis tag; plot furniture stays put.
-    const axisFill = dragging || hovered ? shade(color, 0.12) : color;
-    const label = this._opts.label ?? rc.priceScale.format(this._opts.price);
-    if (rc.priceAxisSide !== 'hidden' && rc.priceAxisWidth > 0) {
-      const left = rc.priceAxisSide === 'left';
-      if (left || rc.priceAxisOffset !== undefined) {
-        const offset = rc.priceAxisOffset ?? 0;
-        const edge = Math.round(offset * dpr);
-        const outer = Math.round((offset + (left ? -rc.priceAxisWidth : rc.priceAxisWidth)) * dpr);
-        const available = (rc.priceAxisOffset === undefined
-          ? Math.round(rc.priceAxisWidth * dpr) : Math.abs(outer - edge)) - 1;
-        if (Number.isFinite(edge) && Number.isFinite(outer) && available > 0 && rc.plotHeight * dpr >= boxH) {
-          ctx.save();
-          if (rc.priceAxisOffset !== undefined) {
-            ctx.beginPath();
-            ctx.rect(Math.min(edge, outer), 0, available + 1, rc.plotHeight * dpr);
-            ctx.clip();
-          }
-          const padding = Math.min(padX, available / 4), textWidth = ctx.measureText(label).width;
-          const width = Math.min(available, textWidth + padding * 2);
-          const x = left ? edge - 1 - width : edge + 1;
-          const tagY = Math.max(boxH / 2, Math.min(rc.plotHeight * dpr - boxH / 2, y));
-          ctx.fillStyle = axisFill;
-          ctx.fillRect(x, tagY - boxH / 2, width, boxH);
-          ctx.fillStyle = contrastText(color);
-          ctx.font = `500 ${11 * dpr * (textWidth > 0 ? Math.min(1, (width - padding * 2) / textWidth) : 1)}px system-ui, sans-serif`;
-          ctx.fillText(label, x + padding, tagY);
-          ctx.restore();
-          ctx.font = `500 ${11 * dpr}px system-ui, sans-serif`;
-        }
-      } else {
-        // Omitted placement retains the original synthetic-context geometry.
-        ctx.fillStyle = axisFill;
-        ctx.fillRect(xEnd + 1, y - boxH / 2, ctx.measureText(label).width + padX * 2, boxH);
-        ctx.fillStyle = contrastText(color);
-        ctx.fillText(label, xEnd + 1 + padX, y);
-      }
-    }
+    drawAxisTag(ctx, rc, y, this._opts.label ?? rc.priceScale.format(this._opts.price),
+      dragging || hovered ? shade(color, 0.12) : color, contrastText(color), boxH, false);
 
-    // segmented pill group on the line: [badge][qty][label][✕]
+    // segmented pill group on the line: [badge][qty][label][close]
     const hasGroup = this._opts.badge !== undefined || this._opts.qty !== undefined ||
       (this._opts.leftLabel !== undefined && this._opts.leftLabel !== '') || this._opts.closeButton === true;
     if (hasGroup) {
@@ -272,16 +239,17 @@ export class PriceLine implements IPrimitive {
     if (x < 0 || x > rc.plotWidth) return null;
     const lineY = rc.priceScale.priceToY(this._opts.price);
     const distance = Math.abs(y - lineY);
+    // An unset cursor goes out as undefined below, which the pane reads as no cursor.
     // Inside the pill group (segment boxes are taller than the 4px line zone):
-    // the ✕ segment routes as a click, the rest of the group drags the line.
+    // the close segment routes as a click, the rest of the group drags the line.
     const g = this._group;
     if (g !== null && distance <= TAG_H / 2 + 1 && x >= g.x0 && x <= g.x1) {
       if (this._opts.closeButton && x >= g.closeX0) {
         return { externalId: `${this._opts.id}::close`, zOrder: 'normal', distance, cursor: 'pointer' };
       }
-      return { externalId: this._opts.id, zOrder: 'normal', distance, cursor: this._opts.cursor };
+      return { externalId: this._opts.id, zOrder: 'normal', distance, cursor: this._opts.cursor } satisfies LooseOptional<PrimitiveHit> as PrimitiveHit;
     }
     if (distance > 4) return null;
-    return { externalId: this._opts.id, zOrder: 'normal', distance, cursor: this._opts.cursor };
+    return { externalId: this._opts.id, zOrder: 'normal', distance, cursor: this._opts.cursor } satisfies LooseOptional<PrimitiveHit> as PrimitiveHit;
   }
 }

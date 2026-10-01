@@ -10,8 +10,11 @@
  * value, wherever the reference would return `na`.
  */
 import { trueRange, sourceValues } from 'openalgo-charts';
-import type { IndicatorDescriptor, IndicatorSource } from 'openalgo-charts';
-import { sma, stdev, highest, lowest, nulls, smaSeededEma, rollingSum, roc } from './calc';
+import type { IndicatorDescriptor } from 'openalgo-charts';
+import { sma, stdev, highest, lowest, nulls, smaSeededEma, rollingSum, roc, linreg, standardError } from './calc';
+import { withTail, windowTail } from './tail';
+import { num, int, offsetOf, str, src } from './settings';
+import { shift } from './series';
 
 /**
  * the reference `color.new(c, t)` transparency, where 0 is opaque and 100 invisible.
@@ -22,19 +25,14 @@ function withAlphaPercent(hex: string, transparency: number): string {
   return `${hex}${a.toString(16).padStart(2, '0')}`;
 }
 
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>): IndicatorSource => (s.source as IndicatorSource) ?? 'close';
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string =>
-  typeof s[k] === 'string' ? (s[k] as string) : d;
-
 /**
  * the reference `bb`: an SMA basis with symmetric `mult` **population** standard
  * deviations either side. Three of the studies below are different readings of
  * the same three numbers, so they share one construction rather than each
  * re-deriving the basis.
+ *
+ * The calc helpers return one value per input, so in this file every series
+ * derived from the bars is read at a bar index alongside the bars themselves.
  */
 function bands(values: readonly number[], length: number, mult: number): {
   middle: number[]; upper: number[]; lower: number[];
@@ -45,23 +43,11 @@ function bands(values: readonly number[], length: number, mult: number): {
   const upper = new Array<number>(n);
   const lower = new Array<number>(n);
   for (let i = 0; i < n; i++) {
-    const d = mult * dev[i];
-    upper[i] = middle[i] + d;
-    lower[i] = middle[i] - d;
+    const d = mult * dev[i]!;
+    upper[i] = middle[i]! + d;
+    lower[i] = middle[i]! - d;
   }
   return { middle, upper, lower };
-}
-
-/** the reference `plot(..., offset = n)`: move the drawn series `n` bars to the right. */
-function shift(values: readonly number[], by: number): number[] {
-  const n = values.length;
-  if (by === 0) return values.slice();
-  const out = new Array<number>(n).fill(NaN);
-  for (let i = 0; i < n; i++) {
-    const j = i + by;
-    if (j >= 0 && j < n) out[j] = values[i];
-  }
-  return out;
 }
 
 /**
@@ -89,13 +75,13 @@ export const BOLLINGER_PERCENT_B: IndicatorDescriptor = {
   fills: [{ between: ['bandHigh', 'bandLow'], colorUpKey: 'fillColor', colorDownKey: 'fillColor', opacity: 0.1 }],
   calc: (bars, s) => {
     const values = sourceValues(bars, src(s));
-    const { upper, lower } = bands(values, num(s, 'length', 20), num(s, 'mult', 2));
+    const { upper, lower } = bands(values, int(s, 'length', 20), num(s, 'mult', 2));
     const out = new Array<number>(values.length);
     for (let i = 0; i < values.length; i++) {
-      const span = upper[i] - lower[i];
+      const span = upper[i]! - lower[i]!;
       // A flat window collapses the bands onto the basis; the reference 0/0 is `na`,
       // and any finite answer we invented here would be a fabricated signal.
-      out[i] = span > 0 ? (values[i] - lower[i]) / span : NaN;
+      out[i] = span > 0 ? (values[i]! - lower[i]!) / span : NaN;
     }
     // Never null, warmup included: the band is drawn across the whole pane, so
     // its edges have to exist on bars where the study prints nothing.
@@ -152,10 +138,10 @@ export const BOLLINGER_BANDWIDTH: IndicatorDescriptor = {
   ],
   calc: (bars, s) => {
     const values = sourceValues(bars, src(s));
-    const { middle, upper, lower } = bands(values, num(s, 'length', 20), num(s, 'mult', 2));
+    const { middle, upper, lower } = bands(values, int(s, 'length', 20), num(s, 'mult', 2));
     const bbw = new Array<number>(values.length);
     for (let i = 0; i < values.length; i++) {
-      bbw[i] = middle[i] === 0 ? NaN : ((upper[i] - lower[i]) / middle[i]) * 100;
+      bbw[i] = middle[i] === 0 ? NaN : ((upper[i]! - lower[i]!) / middle[i]!) * 100;
     }
     // `highest`/`lowest` compare, and a NaN loses every comparison, so the
     // bandwidth's own warmup is skipped rather than poisoning the window: the
@@ -164,8 +150,8 @@ export const BOLLINGER_BANDWIDTH: IndicatorDescriptor = {
     // A window holding nothing finite yields +/-Infinity, which `nulls` gaps.
     return {
       bandwidth: nulls(bbw),
-      expansion: nulls(highest(bbw, num(s, 'expansionLength', 125))),
-      contraction: nulls(lowest(bbw, num(s, 'contractionLength', 125))),
+      expansion: nulls(highest(bbw, int(s, 'expansionLength', 125))),
+      contraction: nulls(lowest(bbw, int(s, 'contractionLength', 125))),
     };
   },
 };
@@ -218,12 +204,12 @@ export const BB_TREND: IndicatorDescriptor = {
   calc: (bars, s) => {
     const closes = bars.map((b) => b.close);
     const mult = num(s, 'stdDevMult', 2);
-    const short = bands(closes, num(s, 'shortLength', 20), mult);
-    const long = bands(closes, num(s, 'longLength', 50), mult);
+    const short = bands(closes, int(s, 'shortLength', 20), mult);
+    const long = bands(closes, int(s, 'longLength', 50), mult);
     const out = new Array<number>(closes.length);
     for (let i = 0; i < closes.length; i++) {
-      const spread = Math.abs(short.lower[i] - long.lower[i]) - Math.abs(short.upper[i] - long.upper[i]);
-      out[i] = short.middle[i] === 0 ? NaN : (spread / short.middle[i]) * 100;
+      const spread = Math.abs(short.lower[i]! - long.lower[i]!) - Math.abs(short.upper[i]! - long.upper[i]!);
+      out[i] = short.middle[i] === 0 ? NaN : (spread / short.middle[i]!) * 100;
     }
     return { bbtrend: nulls(out) };
   },
@@ -257,7 +243,7 @@ export const CHOPPINESS_INDEX: IndicatorDescriptor = {
   // band has no up or down side to distinguish.
   fills: [{ between: ['bandHigh', 'bandLow'], colorUpKey: 'fillColor', colorDownKey: 'fillColor', opacity: 0.1 }],
   calc: (bars, s) => {
-    const length = num(s, 'length', 14);
+    const length = int(s, 'length', 14);
     const high = bars.map((b) => b.high);
     const low = bars.map((b) => b.low);
     const travel = rollingSum(trueRange(high, low, bars.map((b) => b.close)), length);
@@ -269,9 +255,9 @@ export const CHOPPINESS_INDEX: IndicatorDescriptor = {
     const out = new Array<number>(bars.length).fill(NaN);
     if (scale !== 0) {
       for (let i = 0; i < bars.length; i++) {
-        const span = hi[i] - lo[i];
+        const span = hi[i]! - lo[i]!;
         if (!(span > 0)) continue;
-        const ratio = travel[i] / span;
+        const ratio = travel[i]! / span;
         if (!(ratio > 0)) continue;
         out[i] = (100 * Math.log10(ratio)) / scale;
       }
@@ -279,7 +265,7 @@ export const CHOPPINESS_INDEX: IndicatorDescriptor = {
     // The band edges are never null and never shifted: reference lines stay put
     // when the plot is offset, and the shading covers the pane during warmup.
     return {
-      chop: nulls(shift(out, num(s, 'offset', 0))),
+      chop: nulls(shift(out, offsetOf(s, 'offset', 0))),
       bandHigh: new Array<number>(bars.length).fill(61.8),
       bandLow: new Array<number>(bars.length).fill(38.2),
     };
@@ -328,15 +314,15 @@ export const HISTORICAL_VOLATILITY: IndicatorDescriptor = {
     const annual = 365; // the reference hard-codes calendar days, not trading days.
     const returns = new Array<number>(n).fill(NaN);
     for (let i = 1; i < n; i++) {
-      const prev = bars[i - 1].close;
-      const curr = bars[i].close;
+      const prev = bars[i - 1]!.close;
+      const curr = bars[i]!.close;
       returns[i] = prev > 0 && curr > 0 ? Math.log(curr / prev) : NaN;
     }
     // The first return is `na` (no prior close), and `stdev` refuses a window
     // holding one, so the first reading lands at `length`, not `length - 1`:
     // one bar later than a naive rolling window would put it, and where
     // the reference platform puts it.
-    const dev = stdev(returns, num(s, 'length', 10));
+    const dev = stdev(returns, int(s, 'length', 10));
     const factor = per > 0 ? Math.sqrt(annual / per) : NaN;
     return { hv: nulls(dev.map((v) => 100 * v * factor)) };
   },
@@ -358,7 +344,7 @@ export const AVERAGE_DAILY_RANGE: IndicatorDescriptor = {
   ],
   plots: [{ key: 'adr', type: 'line', title: 'ADR', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => ({
-    adr: nulls(sma(bars.map((b) => b.high - b.low), num(s, 'length', 14))),
+    adr: nulls(sma(bars.map((b) => b.high - b.low), int(s, 'length', 14))),
   }),
 };
 
@@ -409,17 +395,16 @@ export const CHOP_ZONE: IndicatorDescriptor = {
       // false.
       colorBy: ({ index, values, settings }) => {
         const a = values.angle?.[index];
-        const pick = (k: string, d: string): string => str(settings, k, d);
-        if (a === null || a === undefined || !Number.isFinite(a)) return pick('yellowColor', '#fdd835');
-        if (a >= 5) return pick('turquoiseColor', '#26c6da');
-        if (a >= 3.57) return pick('darkGreenColor', '#43a047');
-        if (a >= 2.14) return pick('paleGreenColor', '#a5d6a7');
-        if (a >= 0.71) return pick('limeColor', '#009688');
-        if (a <= -5) return pick('darkRedColor', '#d50000');
-        if (a <= -3.57) return pick('redColor', '#e91e63');
-        if (a <= -2.14) return pick('orangeColor', '#ff6d00');
-        if (a <= -0.71) return pick('lightOrangeColor', '#ffb74d');
-        return pick('yellowColor', '#fdd835');
+        if (a === null || a === undefined || !Number.isFinite(a)) return str(settings, 'yellowColor', '#fdd835');
+        if (a >= 5) return str(settings, 'turquoiseColor', '#26c6da');
+        if (a >= 3.57) return str(settings, 'darkGreenColor', '#43a047');
+        if (a >= 2.14) return str(settings, 'paleGreenColor', '#a5d6a7');
+        if (a >= 0.71) return str(settings, 'limeColor', '#009688');
+        if (a <= -5) return str(settings, 'darkRedColor', '#d50000');
+        if (a <= -3.57) return str(settings, 'redColor', '#e91e63');
+        if (a <= -2.14) return str(settings, 'orangeColor', '#ff6d00');
+        if (a <= -0.71) return str(settings, 'lightOrangeColor', '#ffb74d');
+        return str(settings, 'yellowColor', '#fdd835');
       },
     },
   ],
@@ -432,14 +417,14 @@ export const CHOP_ZONE: IndicatorDescriptor = {
     const ema34 = smaSeededEma(bars.map((b) => b.close), CHOP_ZONE_EMA_LENGTH);
     const angle = new Array<number>(n).fill(NaN);
     for (let i = 1; i < n; i++) {
-      const range = hi[i] - lo[i];
-      const avg = (bars[i].high + bars[i].low + bars[i].close) / 3;
+      const range = hi[i]! - lo[i]!;
+      const avg = (bars[i]!.high + bars[i]!.low + bars[i]!.close) / 3;
       if (!(range > 0) || avg === 0) continue;
-      const span = (25 / range) * lo[i];
+      const span = (25 / range) * lo[i]!;
       // One bar wide, so the rise is the whole triangle: dy against dx of 1.
       // the reference measures the drop (previous EMA minus current), which makes an
       // advancing EMA negative here and positive after the sign flip below.
-      const dy = ((ema34[i - 1] - ema34[i]) / avg) * span;
+      const dy = ((ema34[i - 1]! - ema34[i]!) / avg) * span;
       if (!Number.isFinite(dy)) continue;
       const hyp = Math.sqrt(1 + dy * dy);
       const degrees = Math.round((180 * Math.acos(1 / hyp)) / CHOP_ZONE_PI);
@@ -475,7 +460,7 @@ export const CHAIKIN_VOLATILITY: IndicatorDescriptor = {
   plots: [{ key: 'chaikinVolatility', type: 'line', title: 'Chaikin Volatility', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => ({
     chaikinVolatility: nulls(
-      roc(smaSeededEma(bars.map((b) => b.high - b.low), num(s, 'periods', 10)), num(s, 'rocLookback', 10)),
+      roc(smaSeededEma(bars.map((b) => b.high - b.low), int(s, 'periods', 10)), int(s, 'rocLookback', 10)),
     ),
   }),
   levels: () => [{ price: 0, color: '#787b86', title: 'Zero', dashed: true }],
@@ -499,7 +484,7 @@ export const STANDARD_DEVIATION: IndicatorDescriptor = {
   plots: [{ key: 'stdDev', type: 'line', title: 'Standard Deviation', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
     const mult = num(s, 'deviations', 1);
-    return { stdDev: nulls(stdev(bars.map((b) => b.close), num(s, 'periods', 5)).map((v) => v * mult)) };
+    return { stdDev: nulls(stdev(bars.map((b) => b.close), int(s, 'periods', 5)).map((v) => v * mult)) };
   },
 };
 
@@ -520,30 +505,95 @@ export const STANDARD_ERROR: IndicatorDescriptor = {
   ],
   plots: [{ key: 'stdErr', type: 'line', title: 'Standard Error', colorKey: 'color', style: { lineWidth: 1.5 } }],
   calc: (bars, s) => {
-    const len = Math.max(3, Math.trunc(num(s, 'length', 14)));
-    const closes = bars.map((b) => b.close);
-    // x is the same 1..len ladder on every bar, so its spread is a constant and
-    // only the close side has to be re-summed.
-    const xBar = (len + 1) / 2;
-    let sxx = 0;
-    for (let k = 0; k < len; k++) sxx += (xBar - k - 1) ** 2;
-    const out = new Array<number>(closes.length).fill(NaN);
-    for (let i = len - 1; i < closes.length; i++) {
-      let sum = 0;
-      for (let k = 0; k < len; k++) sum += closes[i - k];
-      const mean = sum / len;
-      let syy = 0;
-      let sxy = 0;
-      for (let k = 0; k < len; k++) {
-        const dy = mean - closes[i - k];
-        syy += dy * dy;
-        sxy += (xBar - k - 1) * dy;
-      }
-      out[i] = Math.sqrt((syy - (sxy * sxy) / sxx) / (len - 2));
-    }
-    return { stdErr: nulls(out) };
+    return { stdErr: nulls(standardError(bars.map((b) => b.close), int(s, 'length', 14, 3))) };
   },
 };
+
+/** A length for the squeeze: its momentum fits a line, which needs two points. */
+const squeezeLength = (s: Readonly<Record<string, unknown>>): number => int(s, 'length', 20, 2);
+
+/**
+ * Volatility Squeeze: whether the Bollinger Bands have contracted inside the
+ * Keltner Channel, the quiet stretch that tends to come before a move, and a
+ * momentum histogram that says which way the move is leaning.
+ *
+ *   basis    = sma(close, length)
+ *   bands    = basis +/- bbMult * stdev(close, length)
+ *   channel  = basis +/- kcMult * sma(true range, length)
+ *   on       = lower band > lower channel and upper band < upper channel
+ *   momentum = linreg(close - ((highest(high, length) + lowest(low, length)) / 2 + basis) / 2, length)
+ *
+ * Both envelopes share one basis and one length, so the squeeze is either on
+ * or off; `state` carries it (1 on, 0 off) for the dots on the zero line. The
+ * state needs one window and prints from `length - 1`; the momentum fits a line
+ * to `length` values that each read a window, so it prints from
+ * `2 * length - 2`. The histogram is coloured by sign and by direction against
+ * the previous bar, a missing previous bar reading as zero.
+ */
+export const VOLATILITY_SQUEEZE: IndicatorDescriptor = withTail({
+  id: 'volatility-squeeze',
+  name: 'Volatility Squeeze',
+  category: 'Volatility',
+  placement: 'pane',
+  inputs: [
+    { key: 'length', type: 'number', label: 'Length', default: 20, min: 2, max: 1000, step: 1 },
+    { key: 'bbMult', type: 'number', label: 'BB StdDev', default: 2, min: 0.1, max: 10, step: 0.1 },
+    { key: 'kcMult', type: 'number', label: 'KC Multiplier', default: 1.5, min: 0.1, max: 10, step: 0.1 },
+    { key: 'upColor', type: 'color', label: 'Momentum up', default: '#26a69a' },
+    { key: 'upFadeColor', type: 'color', label: 'Momentum up (weakening)', default: '#a7d8d2' },
+    { key: 'downColor', type: 'color', label: 'Momentum down', default: '#ef5350' },
+    { key: 'downFadeColor', type: 'color', label: 'Momentum down (weakening)', default: '#f5b0ae' },
+    { key: 'onColor', type: 'color', label: 'Squeeze on', default: '#ff9800' },
+    { key: 'offColor', type: 'color', label: 'Squeeze off', default: '#787b86' },
+  ],
+  plots: [
+    {
+      key: 'momentum', type: 'histogram', title: 'Momentum', colorKey: 'upColor',
+      style: { color: '#26a69a', base: 0 },
+      colorBy: ({ value, index, values, settings }) => {
+        const prev = values.momentum?.[index - 1];
+        const before = typeof prev === 'number' && Number.isFinite(prev) ? prev : 0;
+        if (value > 0) return value > before ? str(settings, 'upColor', '#26a69a') : str(settings, 'upFadeColor', '#a7d8d2');
+        return value < before ? str(settings, 'downColor', '#ef5350') : str(settings, 'downFadeColor', '#f5b0ae');
+      },
+    },
+    {
+      key: 'squeeze', type: 'line', title: 'Squeeze', colorKey: 'offColor',
+      style: { color: '#787b86', markersOnly: true, markerRadius: 3 },
+      colorBy: ({ index, values, settings }) =>
+        values.state?.[index] === 1 ? str(settings, 'onColor', '#ff9800') : str(settings, 'offColor', '#787b86'),
+    },
+  ],
+  calc: (bars, s) => {
+    const n = bars.length;
+    const length = squeezeLength(s);
+    const high = bars.map((b) => b.high);
+    const low = bars.map((b) => b.low);
+    const close = bars.map((b) => b.close);
+    const { middle, upper, lower } = bands(close, length, num(s, 'bbMult', 2));
+    const range = sma(trueRange(high, low, close), length);
+    const kcMult = num(s, 'kcMult', 1.5);
+    const hh = highest(high, length);
+    const ll = lowest(low, length);
+    const delta = close.map((c, i) => c - ((hh[i]! + ll[i]!) / 2 + middle[i]!) / 2);
+    const state = new Array<number | null>(n).fill(null);
+    const squeeze = new Array<number | null>(n).fill(null);
+    for (let i = 0; i < n; i++) {
+      const rail = kcMult * range[i]!;
+      const upperKc = middle[i]! + rail;
+      const lowerKc = middle[i]! - rail;
+      if (![upper[i], lower[i], upperKc, lowerKc].every(Number.isFinite)) continue;
+      state[i] = lower[i]! > lowerKc && upper[i]! < upperKc ? 1 : 0;
+      squeeze[i] = 0;
+    }
+    return { momentum: nulls(linreg(delta, length)), squeeze, state };
+  },
+}, (calc) => windowTail(calc, (s) => {
+  // The momentum at a bar fits `length` values that each read `length` bars,
+  // and a slice's first true range has no previous close, so it must fall
+  // outside the last channel window: both hold at 2 * length - 2 for length 2 up.
+  return 2 * squeezeLength(s) - 2;
+}));
 
 export const VOLATILITY_INDICATORS: readonly IndicatorDescriptor[] = [
   BOLLINGER_PERCENT_B,
@@ -556,4 +606,5 @@ export const VOLATILITY_INDICATORS: readonly IndicatorDescriptor[] = [
   CHAIKIN_VOLATILITY,
   STANDARD_DEVIATION,
   STANDARD_ERROR,
+  VOLATILITY_SQUEEZE,
 ];

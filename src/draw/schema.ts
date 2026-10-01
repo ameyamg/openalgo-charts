@@ -10,48 +10,16 @@
  * nothing, which is worse than no control at all.
  *
  * Pure: no DOM, no registry. The registry lookup (`drawingSettingsSchema`)
- * lives in tools.ts so this file has no import that could loop back here.
+ * lives in registry.ts so this file has no import that could loop back here.
  */
-import type { Drawing, DrawingSpace, DrawingText, FibLevel } from './types';
+import type {
+  Drawing, DrawingSpace, DrawingText, FibLevel, SettingsField, SettingsSchema,
+} from './types';
 
-/**
- * The control a field wants. `interval` is a chart interval code, which the
- * host offers from its own interval list (the engine has none), with an
- * empty choice for no limit.
- */
-export type FieldKind = 'color' | 'number' | 'select' | 'lineStyle' | 'boolean' | 'text' | 'opacity' | 'levels' | 'interval';
-
-/** The section a host groups a field under. */
-export type FieldGroup = 'line' | 'fill' | 'text' | 'levels' | 'behavior' | 'visibility';
-
-export interface SettingsField {
-  /**
-   * Dot path into the drawing. Two segments under `style`, `text`, `props`
-   * or `intervals` (`style.lineWidth`, `intervals.to`), or one of the
-   * top-level fields `locked`, `visible`, `zIndex`, `space`.
-   */
-  path: string;
-  label: string;
-  kind: FieldKind;
-  min?: number;
-  max?: number;
-  step?: number;
-  /** For `select` and `lineStyle`: the values a host may offer. */
-  options?: ReadonlyArray<{ value: string; label: string }>;
-  group?: FieldGroup;
-  /** Value displayed when the drawing has not overridden this setting. */
-  defaultValue?: string | number | boolean;
-}
-
-export interface SettingsSchema {
-  fields: SettingsField[];
-  /**
-   * The text *is* the drawing (a note, a callout, the text tool) rather than a
-   * label on a shape, so a host should ask for it the moment the tool is
-   * placed instead of waiting for a settings dialog.
-   */
-  textIsContent?: boolean;
-}
+// The field types live in types.ts, beside the `DrawingTool.settings` that
+// names them, so the two modules do not import each other; the public names
+// are still exported from here.
+export type { FieldKind, FieldGroup, SettingsField, SettingsSchema } from './types';
 
 // ── option lists ──────────────────────────────────────────────────────────
 
@@ -241,9 +209,10 @@ const FLAG_ROOTS: ReadonlySet<string> = new Set<FlagRoot>(['locked', 'visible', 
 /** A path split and checked. `null` for anything the model has no home for. */
 function parsePath(path: string): { root: BagRoot; key: string } | { root: FlagRoot; key: null } | null {
   const parts = path.split('.');
-  if (parts.length === 1 && FLAG_ROOTS.has(parts[0])) return { root: parts[0] as FlagRoot, key: null };
-  if (parts.length === 2 && BAG_ROOTS.has(parts[0]) && parts[1] !== '') {
-    return { root: parts[0] as BagRoot, key: parts[1] };
+  // Each part read below is there by the length it is compared with.
+  if (parts.length === 1 && FLAG_ROOTS.has(parts[0]!)) return { root: parts[0] as FlagRoot, key: null };
+  if (parts.length === 2 && BAG_ROOTS.has(parts[0]!) && parts[1] !== '') {
+    return { root: parts[0] as BagRoot, key: parts[1]! };
   }
   return null;
 }

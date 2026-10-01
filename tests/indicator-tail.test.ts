@@ -8,8 +8,8 @@
  * over random histories with session breaks, weekends, outages, missing prices,
  * missing or unusable volume, ties, zeros and overflowing values.
  *
- * The runtime's splice is reproduced as `splice` below, key for key, because a
- * key the tail leaves out is a key the runtime drops.
+ * Ticks are spliced with the runtime's own `spliceTail`, as a live chart
+ * splices them.
  */
 import { describe, expect, it } from 'vitest';
 import '../src/indicators/index';
@@ -20,6 +20,7 @@ import type {
   IndicatorCalcContext, IndicatorDescriptor, IndicatorSettings, IndicatorStore, IndicatorValues,
 } from '../src/model/indicator-registry';
 import type { Bar } from '../src/model/bar';
+import { spliceTail } from '../src/model/indicator-tail-splice';
 import { sma as smaKernel, rma, smaSeededEma } from '../src/indicators/calc';
 import { rsi } from '../src/indicators/rsi';
 import { atr, trueRange } from '../src/indicators/atr';
@@ -167,21 +168,7 @@ function makeBar(rnd: () => number, f: Flavour, time: number, prev: Bar | undefi
   return bar;
 }
 
-// ── the runtime's splice, and the comparison ────────────────────────────────
-
-function splice(previous: IndicatorValues, tail: IndicatorValues, from: number, n: number): IndicatorValues | null {
-  const out: Record<string, (number | null)[]> = {};
-  for (const key of Object.keys(tail)) {
-    const prev = previous[key];
-    const add = tail[key];
-    if (prev === undefined || add === undefined || add.length !== n - from) return null;
-    const col = new Array<number | null>(n);
-    for (let i = 0; i < from; i++) col[i] = prev[i] ?? null;
-    for (let i = from; i < n; i++) col[i] = add[i - from] ?? null;
-    out[key] = col;
-  }
-  return out;
-}
+// ── the comparison ─────────────────────────────────────────────────────────────
 
 /** The first difference between two results, or null when they agree to the bit. */
 function firstDifference(actual: IndicatorValues, expected: IndicatorValues): string | null {
@@ -227,7 +214,7 @@ function drive(
     else bars[n0 - 1] = makeBar(rnd, f, bars[n0 - 1].time, bars[n0 - 1], true);
     const from = n0 - 1;
     const tail = d.calcTail!(bars, settings, from, held, store, ctx());
-    const spliced = tail === null ? null : splice(held, tail, from, bars.length);
+    const spliced = tail === null ? null : spliceTail(held, tail, from, bars.length);
     if (tail !== null && spliced === null) return { events: e + 1, tails, failure: `event ${e}: the tail did not splice` };
     if (spliced !== null) tails++;
     const expected = d.calc(bars, settings, {}, ctx());
@@ -256,10 +243,11 @@ const FLAVOURS: Flavour[] = [
 
 /** Settings for each built-in: defaults first, then the edges of its inputs. */
 const CASES: Record<string, IndicatorSettings[]> = {
-  sma: [{}, { length: 1 }, { length: 20, source: 'hl2' }, { length: 4, source: 'volume' }],
+  // A fractional length reads as the nearest whole one, in calc and tail alike.
+  sma: [{}, { length: 1 }, { length: 20, source: 'hl2' }, { length: 4, source: 'volume' }, { length: 2.5 }],
   wma: [{}, { length: 1 }, { length: 12, source: 'ohlc4' }],
-  ema: [{}, { length: 1 }, { length: 21, source: 'hlc3' }, { length: 3, source: 'volume' }],
-  rsi: [{}, { length: 1 }, { length: 2, source: 'open' }, { length: 30, overbought: 80, oversold: 20 }],
+  ema: [{}, { length: 1 }, { length: 21, source: 'hlc3' }, { length: 3, source: 'volume' }, { length: 1.5 }],
+  rsi: [{}, { length: 1 }, { length: 2, source: 'open' }, { length: 30, overbought: 80, oversold: 20 }, { length: 7.5 }],
   atr: [{}, { period: 1 }, { period: 3 }],
   adx: [{}, { period: 5, adxPeriod: 3 }, { period: 1, adxPeriod: 1 }],
   macd: [{}, { fastPeriod: 3, slowPeriod: 7, signalPeriod: 2 }, { fastPeriod: 1, slowPeriod: 1, signalPeriod: 1, source: 'ohlc4' }],
@@ -286,15 +274,26 @@ const CASES: Record<string, IndicatorSettings[]> = {
   ],
   donchian: [{}, { length: 5, offset: 3 }, { length: 1 }],
   'parabolic-sar': [{}, { start: 0.1, increment: 0.05, maximum: 0.5 }, { start: 0.2, increment: 0.2, maximum: 0.2 }],
+  zlema: [{}, { length: 1 }, { length: 4, source: 'hl2' }, { length: 9, source: 'volume' }],
+  vidya: [{}, { length: 1, cmoLength: 1 }, { length: 20, cmoLength: 5, source: 'ohlc4' }],
+  'elder-ray': [{}, { length: 1 }, { length: 4 }],
+  'schaff-trend-cycle': [{}, { fastLength: 3, slowLength: 7, cycleLength: 3, factor: 0.3 }, { fastLength: 1, slowLength: 2, cycleLength: 1, factor: 1 }],
+  'volatility-squeeze': [{}, { length: 2, bbMult: 1, kcMult: 1 }, { length: 7, kcMult: 3 }],
+  zigzag: [{}, { deviation: 0.5 }, { deviation: 1.5 }, { deviation: 30 }],
+  'high-low-52-week': [{}, { timezone: 'America/New_York' }, { timezone: 'Europe/London' }],
 };
 
-/** Settings a tail deliberately declines: the full calc must still be what the runtime shows. */
+/**
+ * Settings a tail deliberately declines: the full calc must still be what the
+ * runtime shows. A length past the safe integers is one the stepping kernels
+ * cannot take, so the tail leaves it to the full calc.
+ */
 const DECLINED: Record<string, IndicatorSettings[]> = {
-  sma: [{ length: 2.5 }],
-  ema: [{ length: 1.5 }],
+  sma: [{ length: 2 ** 53 }],
+  ema: [{ length: 2 ** 53 }],
   vwap: [{ offset: 2 }, { offset: -1 }],
   donchian: [{ offset: -2 }],
-  rsi: [{ length: 7.5 }],
+  rsi: [{ length: 2 ** 53 }],
 };
 
 const settingsFor = (d: IndicatorDescriptor, patch: IndicatorSettings): IndicatorSettings => ({ ...indicatorDefaults(d), ...patch });
@@ -540,38 +539,40 @@ describe('what a tail resumes from', () => {
     const store: IndicatorStore = {};
     let held = d.calc(data, s, store);
     data[79] = { ...data[79], close: 90 };
-    held = splice(held, d.calcTail!(data, s, 79, held, store)!, 79, 80)!;
+    held = spliceTail(held, d.calcTail!(data, s, 79, held, store)!, 79, 80)!;
     // A history correction the runtime recomputes in full: every close moves.
     for (let i = 0; i < 80; i++) data[i] = { ...data[i], close: data[i].close + 7, high: data[i].high + 7 };
     held = d.calc(data, s, store);
     data[79] = { ...data[79], close: 95 };
     const tail = d.calcTail!(data, s, 79, held, store);
-    expect(firstDifference(splice(held, tail!, 79, 80)!, d.calc(data, s, {}))).toBeNull();
+    expect(firstDifference(spliceTail(held, tail!, 79, 80)!, d.calc(data, s, {}))).toBeNull();
   });
 });
+
+/** A live chart of thirty one-minute bars, and a tick that moves the last close. */
+const mount = () => {
+  const doc = fakeDocument();
+  const chart = new Chart(doc.createElement('div'), {
+    document: doc, timezone: 'Etc/UTC', pixelRatio: () => 1, shortcuts: false, raf: { schedule: () => 1, cancel: () => {} },
+  });
+  chart.applySize(800, 600);
+  const data: Bar[] = Array.from({ length: 30 }, (_, i) => ({
+    time: i * 60, open: 10 + i, high: 11 + i, low: 9 + i, close: 10 + i, volume: 5,
+  }));
+  const series = chart.addSeries('candlestick');
+  series.setData(data);
+  const tick = (close: number): Bar[] => {
+    data[29] = { ...data[29], high: Math.max(data[29].high, close), close };
+    series.update(data[29]);
+    return data;
+  };
+  return { chart, tick };
+};
 
 describe('a descriptor that spreads a built-in', () => {
   // Before the built-ins had tails, a spread of one recomputed in full on every
   // tick, through its own calc. It still does: the tail is not something a
   // spread copies, so each of these keeps the values its own calc gives.
-  const mount = () => {
-    const doc = fakeDocument();
-    const chart = new Chart(doc.createElement('div'), {
-      document: doc, timezone: 'Etc/UTC', pixelRatio: () => 1, shortcuts: false, raf: { schedule: () => 1, cancel: () => {} },
-    });
-    chart.applySize(800, 600);
-    const data: Bar[] = Array.from({ length: 30 }, (_, i) => ({
-      time: i * 60, open: 10 + i, high: 11 + i, low: 9 + i, close: 10 + i, volume: 5,
-    }));
-    const series = chart.addSeries('candlestick');
-    series.setData(data);
-    const tick = (close: number): Bar[] => {
-      data[29] = { ...data[29], high: Math.max(data[29].high, close), close };
-      series.update(data[29]);
-      return data;
-    };
-    return { chart, tick };
-  };
 
   it('carries no calcTail, and the built-in keeps its own', () => {
     for (const id of Object.keys(CASES)) {
@@ -645,6 +646,41 @@ describe('a descriptor that spreads a built-in', () => {
   });
 });
 
+describe('the runtime splice', () => {
+  // A tail is laid over the result held for the bars before it. One that does
+  // not answer for every column, or a held column that is not as long as the
+  // bars it was computed for, cannot be spliced, so the chart computes in full.
+  it('takes a tail that answers every column of a held result of the right length', () => {
+    expect(spliceTail({ a: [1, 2, 3], b: [4, 5, 6] }, { a: [9], b: [7] }, 2, 3)).toEqual({ a: [1, 2, 9], b: [4, 5, 7] });
+    expect(spliceTail({ a: [1, 2, 3] }, { a: [9, 8] }, 2, 4)).toEqual({ a: [1, 2, 9, 8] });
+  });
+
+  it('refuses a tail that leaves a column out, or a held column of the wrong length', () => {
+    expect(spliceTail({ a: [1, 2, 3], b: [4, 5, 6] }, { a: [9] }, 2, 3)).toBeNull();
+    expect(spliceTail({ a: [1, 2] }, { a: [9] }, 2, 3)).toBeNull();
+    expect(spliceTail({ a: [1, 2, 3, 4] }, { a: [9] }, 2, 3)).toBeNull();
+  });
+
+  it('keeps a column a custom tail leaves out through a tick', () => {
+    const h = mount();
+    let tails = 0;
+    const d: IndicatorDescriptor = {
+      id: 'tail-partial', name: 'partial', placement: 'pane', inputs: [],
+      plots: [{ key: 'close', type: 'line', title: 'close' }, { key: 'double', type: 'line', title: 'double' }],
+      calc: (b) => ({ close: b.map((x) => x.close), double: b.map((x) => x.close * 2) }),
+      // Answers for the first column only.
+      calcTail: (b, _s, from) => { tails++; return { close: b.slice(from).map((x) => x.close) }; },
+    };
+    registerIndicator(d);
+    const api = h.chart.addIndicator(d.id);
+    const data = h.tick(44);
+    // Reading the values runs the tick's recompute, which tries the tail first.
+    expect(firstDifference(api.values(), d.calc(data, api.settings(), {}))).toBeNull();
+    expect(tails).toBe(1);
+    h.chart.destroy();
+  });
+});
+
 describe('what a tick costs', () => {
   // The point of a tail. Once it has resumed, a tick or an appended bar reads a
   // window's or a step's worth of bars, not the history; a tail that quietly
@@ -676,7 +712,7 @@ describe('what a tick costs', () => {
         reads = 0;
         const tail = d.calcTail!(counted, settings, n0 - 1, held, store);
         expect(tail, `${id} event ${e}`).not.toBeNull();
-        held = splice(held, tail!, n0 - 1, bars.length)!;
+        held = spliceTail(held, tail!, n0 - 1, bars.length)!;
         // The first tail after a full calc walks the history once to rebuild.
         if (e === 0) expect(reads, id).toBeGreaterThan(0);
         else after.push(reads);

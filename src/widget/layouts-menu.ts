@@ -423,7 +423,7 @@ export function mountLayoutsMenu(ctx: WidgetContext, controller: LayoutsControll
     const at = rows.indexOf(doc.activeElement as HTMLElement);
     if (rows.length === 0) return;
     event.preventDefault();
-    rows[(at + (key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus();
+    rows[(at + (key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length]!.focus(); // wrapped into a non-empty list
   });
   form.addEventListener('submit', event => { event.preventDefault(); void submit(); });
   input.addEventListener('input', () => { formError.hidden = true; input.removeAttribute('aria-invalid'); });

@@ -1,12 +1,9 @@
 /** Per-bar position levels from the instrument itself, with no external alignment. */
 import type { IndicatorDescriptor } from 'openalgo-charts';
-import { withAlpha } from 'openalgo-charts';
+import { str } from './settings';
 
 const reading = (value: number | undefined): number | null =>
   value !== undefined && Number.isFinite(value) ? value : null;
-
-const color = (settings: Readonly<Record<string, unknown>>, key: string, fallback: string): string =>
-  typeof settings[key] === 'string' && settings[key] !== '' ? settings[key] : fallback;
 
 /** A missing observation breaks the line; it is not an empty position. */
 export const OPEN_INTEREST: IndicatorDescriptor = {
@@ -29,12 +26,8 @@ export const OPEN_INTEREST_CHANGE: IndicatorDescriptor = {
   plots: [{
     key: 'change', type: 'histogram', title: 'OI change', colorKey: 'upColor', style: { base: 0 },
     priceFormat: { type: 'volume' },
-    colorBy: ({ value, settings }) => {
-      const tint = value < 0 ? color(settings, 'downColor', '#ef5350') : color(settings, 'upColor', '#26a69a');
-      const opacity = settings['change:opacity'];
-      return typeof opacity === 'number' && Number.isFinite(opacity) && opacity < 100
-        ? withAlpha(tint, Math.max(0, opacity) / 100) : tint;
-    },
+    // The plot's Opacity setting fades this colour in the plot writer.
+    colorBy: ({ value, settings }) => (value < 0 ? str(settings, 'downColor', '#ef5350') : str(settings, 'upColor', '#26a69a')),
   }],
   calc: bars => ({
     change: bars.map((bar, i) => {
@@ -83,9 +76,10 @@ export const OPEN_INTEREST_BUILDUP: IndicatorDescriptor = {
       return oiChange >= 0 ? priceChange >= 0 ? 1 : 2 : priceChange >= 0 ? 3 : 4;
     }),
   }),
-  barColors: ({ values, settings }) => values.state.map(state => {
+  // `calc` above always writes `state`, and each reading in it is 1 to 4.
+  barColors: ({ values, settings }) => values.state!.map(state => {
     if (state === null) return null;
-    const [key, fallback] = BUILDUP_COLORS[state - 1];
-    return color(settings, key, fallback);
+    const [key, fallback] = BUILDUP_COLORS[state - 1]!;
+    return str(settings, key, fallback);
   }),
 };

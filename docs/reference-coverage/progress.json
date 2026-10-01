@@ -343,13 +343,13 @@
     }
   ],
   "next": [
-    "Publish 2.5.10 through the release workflow, deploy the website and create the GitHub release.",
-    "Charts 90 program Release 6 (2.6.0) follows the plan, then five fresh reviewers rescore every area.",
-    "Validate the removal of the depth_level key against the OpenAlgo server before 3.0.0.",
-    "Defer issue #22."
+    "Publish 2.6.0 through the release workflow, deploy the website and create the GitHub release, then publish OpenScript 0.8.1 to npm and PyPI.",
+    "Move the compatibility baselines to 2.6.0 and generate its saved documents.",
+    "Five fresh reviewers rescore every area against the 90 target; any area below 90 gets a follow-up batch.",
+    "Validate the removal of the depth_level key against the OpenAlgo server before 3.0.0."
   ],
   "release": {
-    "version": "2.5.10",
+    "version": "2.6.0",
     "authorized": true,
     "status": "verified-candidate",
     "steps": [
@@ -361,56 +361,59 @@
       "Create release and verify published artifacts"
     ],
     "companion": {
-      "version": "0.8.0",
+      "version": "0.8.1",
       "authorized": true,
-      "status": "published-and-public-artifacts-verified",
-      "requirement": "Compare all shipped numerical indicators with equivalent calculations in both language engines, fix confirmed deviations and publish both companion packages from one versioned source.",
-      "sourceCommit": "f9ab00e4e9238b442ae0ad3639f52bc5dc45394b",
-      "releaseUrl": "https://github.com/marketcalls/openscript/releases/tag/v0.8.0",
-      "correctivePatch": {
-        "version": "0.7.1",
+      "status": "merged-awaiting-publish",
+      "requirement": "Read an alert message at the bar the chart asks about on the underlying bar source of a transform that is not one element per bar, read a request mode written positionally, and say that a daily read folds by the civil date; npm openalgo-script and PyPI openscript ship 0.8.1 together after openalgo-charts 2.6.0.",
+      "previous": {
+        "version": "0.8.0",
+        "authorized": true,
         "status": "published-and-public-artifacts-verified",
-        "reason": "A new finite-extreme ADX fixture exposes four Python-only differences after a selected directional change overflows. The published 0.7.0 version is immutable; the correction requires a new patch release and renewed package validation.",
-        "releaseUrl": "https://github.com/marketcalls/openscript/releases/tag/v0.7.1",
-        "published": "npm openalgo-script 0.7.1 and PyPI openscript 0.7.1 on 2026-09-25"
-      },
-      "published": "npm openalgo-script 0.8.0 and PyPI openscript 0.8.0 on 2026-09-26: the chart adapter gates the tables hook and per-bar band colours on the chart version (chartVersion), both available from charts 2.5.4. The published 0.8.0 passes the chart repository's script-engine integration checks against 2.5.6, 2.5.7 and 2.5.8."
+        "requirement": "Compare all shipped numerical indicators with equivalent calculations in both language engines, fix confirmed deviations and publish both companion packages from one versioned source.",
+        "sourceCommit": "f9ab00e4e9238b442ae0ad3639f52bc5dc45394b",
+        "releaseUrl": "https://github.com/marketcalls/openscript/releases/tag/v0.8.0",
+        "correctivePatch": {
+          "version": "0.7.1",
+          "status": "published-and-public-artifacts-verified",
+          "reason": "A new finite-extreme ADX fixture exposes four Python-only differences after a selected directional change overflows. The published 0.7.0 version is immutable; the correction requires a new patch release and renewed package validation.",
+          "releaseUrl": "https://github.com/marketcalls/openscript/releases/tag/v0.7.1",
+          "published": "npm openalgo-script 0.7.1 and PyPI openscript 0.7.1 on 2026-09-25"
+        },
+        "published": "npm openalgo-script 0.8.0 and PyPI openscript 0.8.0 on 2026-09-26: the chart adapter gates the tables hook and per-bar band colours on the chart version (chartVersion), both available from charts 2.5.4. The published 0.8.0 passes the chart repository's script-engine integration checks against 2.5.6, 2.5.7 and 2.5.8."
+      }
     },
     "scope": [
-      "Chart grid to sixteen charts with uneven layouts and a layout picker (90 program S1)",
-      "Maximize, restore and swap from the pointer and the keyboard (S2)",
-      "Link controls and up to sixteen named link groups, with new chart type and drawings channels saved in the workspace schema (S3)",
-      "Whole-grid capture (S4)",
-      "Bottom bar: preset ranges in trading sessions, Go to, market status, clock and timezone menu, scale toggles (S5)",
-      "Market phases, market status and session shading from the instrument calendar (S6)",
-      "Tablets keep the desktop chrome: auto mobile mode by container size (S7)",
-      "Saved layouts and indicator templates over a WorkspaceStore, with workspace revisions and conflicts (S8)",
-      "Widget persistence in IndexedDB with widget.ready and grid.ready, and the one-time copy of localStorage layouts (S9)",
-      "Shortcuts editor in the ? panel, saved with persist and shared across a grid (S10)",
-      "Chrome icon registry to 110 glyphs, chart type glyphs and layout tiles (I5)",
-      "Marker lanes, the status line following the latest bar, first-use parts named by content hash, and the label pass"
+      "In-chart series transforms (Heikin Ashi, Renko, range bars, line break, point and figure, Kagi) and studies on the underlying bars (A1)",
+      "Symbol search through the feed, and rich event details with host actions (A2, A6)",
+      "Seven built-ins: ZigZag, 52 Week High/Low, Zero Lag EMA, VIDYA, Elder-Ray, Schaff Trend Cycle, Volatility Squeeze; 112 in the registry (A4)",
+      "A timeframe input on 29 built-ins through withTimeframe (issue #22)",
+      "The typed event map, with the string overloads and Chart.emit deprecated for 3.0.0 (E2)",
+      "A classic script for every tier and require() through the default condition (E6)",
+      "Both strict flags across every tier, and declarations that hold for a strict host (E4)",
+      "The compatibility gate and saved-document round trips; cycle, unused-export and function length gates",
+      "The hygiene wave over every tier, and alerts that judge every element a step appends"
     ],
     "previous": {
-      "version": "2.5.9",
+      "version": "2.5.10",
       "status": "published",
-      "releaseUrl": "https://github.com/marketcalls/openalgo-charts/releases/tag/v2.5.9"
+      "releaseUrl": "https://github.com/marketcalls/openalgo-charts/releases/tag/v2.5.10"
     }
   },
   "validation": {
-    "chartTests": 11118,
-    "chartTestFiles": 469,
+    "chartTests": 11591,
+    "chartTestFiles": 512,
     "compiledProgramTests": 18,
-    "demoTests": 683,
-    "demoTestFiles": 64,
-    "browserEvidence": "The 2.5.10 candidate runs 1980 browser cases across Chromium, Firefox and WebKit with two workers: 1967 pass, none fail or retry, and 13 skip. Twelve skips are checks an engine cannot run (device-pixel changes on a live page, the device-pixel content box); one reference host case skipped in Firefox because its fixture server did not answer the probe under the full run, and it passes three times of three when run alone. Render parity against the v2.5.9 build finds no differing pixel.",
+    "demoTests": 689,
+    "demoTestFiles": 67,
+    "browserEvidence": "The 2.6.0 candidate runs 2091 browser cases across Chromium, Firefox and WebKit with two workers: 2075 pass, 13 skip for engine limits named in their specs, and 3 page loads timed out under that load and pass when run alone; render parity against 2.5.10 finds no differing pixel.",
     "website": "70 static pages built successfully; every CI website check passes locally against the built site, and the API reference generates with zero warnings.",
-    "chartOnlyBrotliKiB": 85.73,
-    "chartOnlyBudgetKiB": 85.73,
-    "baseBrotliKB": 134.69,
-    "indicatorBrotliKB": 40.43,
-    "workspaceBrotliKB": 11.53,
-    "allTiersBrotliKB": 409.13,
-    "budgetChange": "The 2.5.10 build sets every limit to the smallest two-decimal value that passes, the transform, profile and WebGL2 rows included, and adds a row for the widget first-use parts (18.19 kB); the chart-only import measures 87785 bytes (85.73 KiB), under its 85.73 KiB ceiling.",
+    "chartOnlyBrotliKiB": 87.19,
+    "chartOnlyBudgetKiB": 87.19,
+    "baseBrotliKB": 137.53,
+    "indicatorBrotliKB": 43.02,
+    "workspaceBrotliKB": 11.73,
+    "allTiersBrotliKB": 419.05,
+    "budgetChange": "The 2.6.0 build sets every limit to the smallest two-decimal value that passes and adds rows for the nine classic-script files together (430.91 kB) and for the base and widget classic scripts on their own; the chart-only budget is 87.19 KiB.",
     "review": "Independent typed-input review found reentrant destruction, pane-slot replacement and context changes during pick:end. Eight actual-chart regressions failed before capture lifetime fences and now pass. No additional blocker found in scalar validation, exchange defaults, restore preflight or public exports. A final host review reproduced four failures involving constructor and __proto__ exchange keys; safe own-property defaults, patches and staged collection now preserve them through selection, Defaults, Cancel and Apply.",
     "packageVerification": "Full verify passes lint, typecheck, 7826 unit tests, seven endurance checks, build, all 478 example-host tests, declaration identity, measured size budgets and optional-tier removal checks. The installed public companion 0.7.0 passes 18 compiled-program integration checks and public adapter typechecking. API documentation generates without warnings. The separately discovered Python extreme-directional defect is outside those integration fixtures and remains tracked for correction.",
     "latestEngineSourceReview": "Companion source f9ab00e4e9238b442ae0ad3639f52bc5dc45394b passes 2161 JavaScript tests, 956 Python tests and 102 conformance cases, with 19 compiler-only skips. Strict gates pass 6836 cases and 1504908 accepted calls with zero exact-bit, absence, oracle or execution differences. Both public 0.7.0 packages are published. Downloaded public artifacts pass 363 programs across all 116 keys, 124977 exact cells and 6756 independent expected cells. Archived source/build bytes and registry integrity match; attestation digest/source/workflow claims checked without cryptographic signature verification.",

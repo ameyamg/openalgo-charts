@@ -1,7 +1,7 @@
 /**
  * Indicator runtime (ARCHITECTURE.md §8). Turns an `IndicatorDescriptor` into
  * live chart objects: one series per plot, optional reference levels, an
- * optional fixed pane range — and recomputes them when the source data or the
+ * optional fixed pane range, and recomputes them when the source data or the
  * settings change.
  *
  * It adds **no rendering code**. Every plot names a registered chart type, so
@@ -9,13 +9,14 @@
  */
 import type { Bar } from './bar';
 import { runAbortable } from './abortable-request';
-import { IndicatorAlertPolicy } from './indicator-alert-policy';
+import { IndicatorAlertPolicy, alertContext, studyBarTime } from './indicator-alert-policy';
 import { cloneIndicatorSettings, planIndicatorDependencies, type IndicatorDependencyNode } from './indicator-dependencies';
 import { validateIndicatorInputs } from './indicator-inputs';
 import { parseIndicatorPolicy, type IndicatorEditOptions, type IndicatorPolicy } from './indicator-policy';
 import type { PriceFormat, PriceScaleId, SeriesApi, SeriesDataState } from './series';
+import { isPriceScaleId } from './price-axis-layout';
 import type { PriceLine } from '../primitives/price-line';
-import type { PaneLegend, LegendValue } from '../primitives/pane-legend';
+import type { PaneLegend, LegendValue, PaneLegendOptions } from '../primitives/pane-legend';
 import { SeriesMarkers } from '../primitives/markers';
 import type { ChartTable } from '../primitives/table';
 import type { IPrimitive } from '../primitives/primitive';
@@ -24,6 +25,9 @@ import { IndicatorFill as IndicatorFillPrimitive } from '../primitives/indicator
 import { IndicatorDrawings } from '../primitives/indicator-draws';
 import { IndicatorBackground } from '../primitives/indicator-background';
 import { PlotWrites } from './indicator-plot-writes';
+import { spliceTail } from './indicator-tail-splice';
+import { drawnTime, parseIndicatorBarSource, sampleIndicatorValues, type IndicatorBarSource } from './indicator-bar-source';
+import { isPlainObject } from '../helpers/validate';
 
 import { isInvisible, withAlpha } from '../render/pill';
 import { DEFAULT_TIMEZONE } from '../feed/time';
@@ -43,7 +47,7 @@ import {
   type ChartDataContext,
   type IndicatorDataChange,
   type IndicatorDataStatus,
-  type IndicatorCalcContext,
+  type IndicatorCalcContext, type IndicatorAttachContext,
   type IndicatorDescriptor,
   type IndicatorLevelContext,
   type IndicatorLineStyle,
@@ -53,17 +57,13 @@ import {
   type IndicatorStore,
   type IndicatorValues,
 } from './indicator-registry';
+import type { LooseOptional } from '../helpers/types';
 
 const num = (v: unknown, fallback: number): number =>
   (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 
-function isPriceScaleId(value: unknown): value is PriceScaleId {
-  return typeof value === 'string' && (value === 'right' || value === 'left' || value === '' || value.startsWith('overlay:'));
-}
-
 function plotScaleEntries(descriptor: IndicatorDescriptor, input: unknown, clear: boolean): [string, PriceScaleId | null][] {
-  if (!input || typeof input !== 'object' || Array.isArray(input)
-    || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw new TypeError('Invalid indicator plot price scale map');
+  if (!isPlainObject(input)) throw new TypeError('Invalid indicator plot price scale map');
   const keys = new Set(descriptor.plots.map(plot => plot.key));
   return Reflect.ownKeys(input).map(key => {
     const property = Object.getOwnPropertyDescriptor(input, key)!;
@@ -262,8 +262,16 @@ export interface IndicatorHost {
   resourcesChanged?(): void;
   /** A study's policy changed: the chart redraws its legend buttons and the inventory. */
   policyChanged?(): void;
-  /** Bars of the primary price series — the calculation input. */
+  /** Bars of the primary price series: the calculation input. */
   sourceBars(): readonly Bar[];
+  /**
+   * The host's bars under a transformed primary series and the source bar each
+   * of `sourceBars` was completed on (null when they are one to one), or null
+   * when the chart draws its bars as given. Optional; without it a study on the
+   * underlying bars computes on `sourceBars`, and one on the chart's bars is
+   * never told they are transformed (`IndicatorCalcContext.transformed`).
+   */
+  underlyingBars?(): { bars: readonly Bar[]; sourceIndex: readonly number[] | null } | null;
   /** Optional mutation metadata; absent hosts retain the legacy timestamp heuristic. */
   sourceState?(): SeriesDataState | undefined;
   /** Selected candle after native or linked hover; absent means latest. */
@@ -393,7 +401,7 @@ export interface IndicatorApi {
   setSettings(patch: Readonly<IndicatorSettings>, options?: IndicatorEditOptions): boolean;
   /** The series backing one plot key, for direct styling. */
   series(plotKey: string): SeriesApi | undefined;
-  /** Latest computed values (a reference — do not mutate). */
+  /** Latest computed values (a reference: do not mutate). */
   values(): IndicatorValues;
   /** Whether the plots are drawn (the legend's eye toggle). */
   visible(): boolean;
@@ -403,6 +411,16 @@ export interface IndicatorApi {
   legend(): PaneLegend | null;
   /** Refresh the legend readings for a bar index; omit for the latest bar. */
   updateLegendValues(index?: number): void;
+  /** The bars it computes on: the chart's, or on a transformed chart the host's underlying bars. */
+  barSource(): IndicatorBarSource;
+  /**
+   * Compute on the bars the chart draws (`'chart'`, the default) or the bars
+   * the host feeds (`'underlying'`), whose values are then read at the bar
+   * each drawn element was completed on. The two are the same bars on a chart
+   * with no transform. False when unchanged, or for a study that is not
+   * `configurable` unless `options.force` is set; any other value throws.
+   */
+  setBarSource(source: IndicatorBarSource, options?: IndicatorEditOptions): boolean;
   /**
    * Remove every series, level, and legend row this indicator created. False
    * when it is already gone, or is not `removable` and `options.force` is not set.
@@ -492,6 +510,7 @@ export class IndicatorInstance implements IndicatorApi {
    * settings change, a page of older bars) re-fires nothing.
    */
   private _alertTime = 0;
+  private _alertRead = -Infinity; // the bar the study read at the last element judged or seeded (`studyBarTime`)
   private readonly _alertPolicy: IndicatorAlertPolicy;
   private _calculationEpoch = 0;
   /** Set once a tail-only change lands, which is what a live feed looks like. */
@@ -516,6 +535,11 @@ export class IndicatorInstance implements IndicatorApi {
   private _alertNeedsSeed = false;
   private _outputPending = false;
   private _publishedBarColors: readonly (string | null)[] | null = null;
+  private _barSource: IndicatorBarSource;
+  /** Rebuilt by a restore, which brings back a study its inputs refuse on this chart as it was saved. */
+  private readonly _restored: boolean;
+  /** The bars a pass on the underlying bars computed on, while its values are read across onto the drawn ones. */
+  private _sampled: { bars: readonly Bar[]; sourceIndex: readonly number[] } | null = null;
 
   public constructor(
     host: IndicatorHost,
@@ -527,9 +551,13 @@ export class IndicatorInstance implements IndicatorApi {
     priceScaleId?: PriceScaleId,
     plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>,
     policy?: IndicatorPolicy,
+    barSource?: IndicatorBarSource,
+    restored = false,
   ) {
+    this._restored = restored;
     this._host = host;
     this._d = descriptor;
+    this._barSource = barSource === undefined ? 'chart' : parseIndicatorBarSource(barSource);
     // Before anything is built: the legend row's buttons are chosen by it.
     this._policy = policy === undefined ? Object.freeze({}) : parseIndicatorPolicy(policy);
     this._scaleOverride = priceScaleId ?? null;
@@ -593,7 +621,7 @@ export class IndicatorInstance implements IndicatorApi {
       row: host.legendRowsOn(this.paneIndex),
       paneIndex: this.paneIndex,
       hasSource: descriptor.hasSource === true,
-    });
+    } satisfies LooseOptional<Parameters<IndicatorHost['addIndicatorLegend']>[0]> as Parameters<IndicatorHost['addIndicatorLegend']>[0]); // `color` may be written undefined, read as absent
 
     this._applyRange();
     // Levels are applied inside `recompute`, so a data-derived one is built
@@ -713,10 +741,22 @@ export class IndicatorInstance implements IndicatorApi {
 
   private _overlayScaleOverrides(): Record<string, PriceScaleId> {
     return Object.fromEntries(this._d.plots.filter(plot => plot.overlay === true
-      && Object.prototype.hasOwnProperty.call(this._plotScaleOverrides, plot.key)).map(plot => [plot.key, this._plotScaleOverrides[plot.key]]));
+      && Object.prototype.hasOwnProperty.call(this._plotScaleOverrides, plot.key)).map(plot => [plot.key, this._plotScaleOverrides[plot.key]!]));
   }
 
   public policy(): Readonly<IndicatorPolicy> { return this._policy; }
+
+  public barSource(): IndicatorBarSource { return this._barSource; }
+
+  public setBarSource(source: IndicatorBarSource, options?: IndicatorEditOptions): boolean {
+    const next = parseIndicatorBarSource(source);
+    if (this._removed || next === this._barSource || !this._allows('configurable', options)) return false;
+    this._barSource = next;
+    this._barCount = 0; // other bars invalidate any calcTail state
+    this._requestRecompute(true);
+    this._host.emit?.('objects:change', {});
+    return true;
+  }
 
   public setPolicy(policy: IndicatorPolicy | null): void {
     const next = policy === null ? Object.freeze({}) : parseIndicatorPolicy(policy);
@@ -768,11 +808,11 @@ export class IndicatorInstance implements IndicatorApi {
       return api ? [{ api, scaleId: target }] : [];
     });
     const primitives: { primitive: IPrimitive; scaleId: PriceScaleId }[] = [];
-    for (let i = 0; i < this._fills.length; i++) {
-      const scale = this._fillScale(this._d.fills![i], scaleId, this.paneIndex, assignments);
+    for (let i = 0; i < this._fills.length; i++) { // one band per descriptor fill, in order
+      const scale = this._fillScale(this._d.fills![i]!, scaleId, this.paneIndex, assignments);
       if (scale === null) return false;
-      if ((overlays || this._d.fills![i].overlay !== true)
-        && scale !== this._fillScale(this._d.fills![i], this._scaleOverride)) primitives.push({ primitive: this._fills[i], scaleId: scale });
+      if ((overlays || this._d.fills![i]!.overlay !== true)
+        && scale !== this._fillScale(this._d.fills![i]!, this._scaleOverride)) primitives.push({ primitive: this._fills[i]!, scaleId: scale });
     }
     const local = this._localScale(scaleId, assignments);
     if (local !== this._localScale()) for (const primitive of [...this._levels, this._draws, ...this._attachedPrimitives]) {
@@ -802,7 +842,7 @@ export class IndicatorInstance implements IndicatorApi {
   /**
    * The numeric/select inputs as a compact string (`14 close`), the way a
    * charting legend abbreviates an indicator's configuration. Colors are
-   * excluded — the swatch already carries that. Booleans are excluded for the
+   * excluded: the swatch already carries that. Booleans are excluded for the
    * same reason in reverse: a bare `true true true` names nothing, and what a
    * visibility toggle did is already visible on the chart.
    */
@@ -871,7 +911,7 @@ export class IndicatorInstance implements IndicatorApi {
       const api = this._series.get(plot.key);
       return api ? [{ api, overlay: plot.overlay === true }] : [];
     });
-    const primitives = this._fills.map((primitive, index) => ({ primitive: primitive as IPrimitive, overlay: this._d.fills?.[index].overlay === true }));
+    const primitives = this._fills.map((primitive, index) => ({ primitive: primitive as IPrimitive, overlay: this._d.fills?.[index]!.overlay === true }));
     for (const { table, overlay } of this._tables.values()) primitives.push({ primitive: table, overlay });
     // A pass's restack hands the host routed layers alone (see `restacking`),
     // so series and every other layer, all of a study that names no target
@@ -932,7 +972,7 @@ export class IndicatorInstance implements IndicatorApi {
   }
 
   /**
-   * Show one reading per plot on the legend row, each in its plot's own color —
+   * Show one reading per plot on the legend row, each in its plot's own color:
    * a multi-plot source (an MA ribbon, MACD) is unreadable as a single number.
    * `index` is the crosshair's bar; omit it for the latest bar.
    */
@@ -962,7 +1002,7 @@ export class IndicatorInstance implements IndicatorApi {
       if (color !== undefined && isInvisible(color)) continue;
       const text = this._host.formatPrice?.(pane, v, this._series.get(plot.key))
         ?? formatValue(v, this._host.tickSize?.(pane));
-      out.push({ text, color });
+      out.push({ text, color } satisfies LooseOptional<LegendValue> as LegendValue);
     }
     this._legend.setValues(out);
   }
@@ -983,7 +1023,7 @@ export class IndicatorInstance implements IndicatorApi {
     for (let i = 0; i < fills.length; i++) {
       const band = this._fills[i];
       if (band === undefined) continue;
-      const spec = fills[i];
+      const spec = fills[i]!;
       const a = this._values[spec.between[0]];
       const b = this._values[spec.between[1]];
       band.setOptions({
@@ -1019,9 +1059,12 @@ export class IndicatorInstance implements IndicatorApi {
   private _syncMarkers(bars: readonly Bar[]): void {
     if (this._dependencyUnavailable) return;
     if (this._d.markers === undefined) return;
-    const all = this._visible
-      ? this._d.markers({ bars, values: this._values, settings: this._descriptorSettings() })
-      : [];
+    const sampled = this._sampled;
+    const all = !this._visible ? [] : this._d.markers({ bars, values: this._values, settings: this._descriptorSettings() })
+      .flatMap(mark => {
+        const time = sampled === null ? mark.time : drawnTime(mark.time, bars, sampled.bars, sampled.sourceIndex);
+        return time === null ? [] : [time === mark.time ? mark : { ...mark, time }];
+      });
     const primary = this._host.primarySeries?.() ?? undefined;
     const onPrice = this.paneIndex === this._pricePane();
     const first = (this._d.markerAnchor === 'price' && onPrice ? primary : undefined)
@@ -1235,8 +1278,8 @@ export class IndicatorInstance implements IndicatorApi {
       this._host.addIndicatorPrimitive(this._background, this.paneIndex);
     }
     this._background?.setColors(colors, bars);
-    this._syncRouted(this._bgLayers, groups, ([spec]) => (spec.colors.length > 0 ? new IndicatorBackground() : null),
-      (layer, [spec]) => layer.setColors(spec.colors, bars));
+    this._syncRouted(this._bgLayers, groups, ([spec]) => (spec!.colors.length > 0 ? new IndicatorBackground() : null),
+      (layer, [spec]) => layer.setColors(spec!.colors, bars)); // `_route` keeps no empty group, and one spec each passed above
   }
 
   /**
@@ -1259,33 +1302,30 @@ export class IndicatorInstance implements IndicatorApi {
    * arriving at the left edge changes every index and would otherwise re-fire
    * the whole chart.
    *
-   * Only a tail-only change can fire, which is the same gate `calcTail` uses and
-   * for the same reason: any other change replaced history, and an indicator
-   * dropped onto a loaded chart (or moved to another symbol) must not announce
-   * every crossover of the last two years at once. Such a pass reseeds silently.
+   * Only a tail-only change fires, and each bar it appended is judged in turn,
+   * as the newest, once per bar the study read: every element one bar under a
+   * transform completed reads it. Any other change replaced history, and an
+   * indicator dropped onto a loaded chart (or moved to another symbol) must not
+   * announce every crossover of the last two years at once; it reseeds silently.
    */
-  private _syncAlerts(
-    bars: readonly Bar[],
-    settings: Readonly<IndicatorSettings>,
-    tailOnly: boolean,
-    calculation: IndicatorCalcContext,
-    refresh: boolean,
-    current: () => boolean,
-  ): void {
+  private _syncAlerts(bars: readonly Bar[], settings: Readonly<IndicatorSettings>, tailOnly: boolean,
+    calculation: IndicatorCalcContext, refresh: boolean, current: () => boolean): void {
     const specs = this._d.alerts;
     const n = bars.length;
     if (specs === undefined || !current()) return;
-    const seen = this._alertTime;
-    if (n > 0) this._alertTime = bars[n - 1].time;
+    const seen = this._alertTime, read = studyBarTime(bars, this._sampled);
+    if (n > 0) this._alertTime = bars[n - 1]!.time;
     let from = n;
-    if (tailOnly && !refresh) while (from > 0 && bars[from - 1].time > seen) from--;
-    let failed = false;
-    let failure: unknown;
+    if (tailOnly && !refresh) while (from > 0 && bars[from - 1]!.time > seen) from--;
+    else this._alertRead = n > 0 ? read(n - 1) : -Infinity;
+    let failed = false, failure: unknown;
     for (let i = from; i < n; i++) {
+      if (read(i) <= this._alertRead) continue; // judged at an element before this one, in this pass or an earlier one
+      this._alertRead = read(i);
+      const ctx = alertContext(bars, this._values, settings, i);
       for (const spec of specs) {
         if (spec.frequency !== undefined) continue;
         if (!current()) return;
-        const ctx = { bars, values: this._values, settings, index: i };
         try {
           const matches = spec.when(ctx);
           if (!current()) return;
@@ -1294,7 +1334,7 @@ export class IndicatorInstance implements IndicatorApi {
           if (!current()) return;
           this._host.emit?.('indicator:alert', {
             indicatorId: this.indicatorId, instanceId: this.id, alertId: spec.id,
-            title: spec.title, message, time: bars[i].time, index: i,
+            title: spec.title, message, time: bars[i]!.time, index: i,
           });
         } catch (error) {
           if (!current()) return;
@@ -1304,7 +1344,7 @@ export class IndicatorInstance implements IndicatorApi {
     }
     if (!current()) return;
     try {
-      this._alertPolicy.evaluate({ bars, values: this._values, settings, calculation, tailOnly, refresh, current }, payload => {
+      this._alertPolicy.evaluate({ bars, values: this._values, settings, calculation, tailOnly, refresh, current, from, sampled: this._sampled }, payload => {
         this._host.emit?.('indicator:alert', { ...payload, indicatorId: this.indicatorId, instanceId: this.id });
       });
     } catch (error) {
@@ -1327,11 +1367,11 @@ export class IndicatorInstance implements IndicatorApi {
     const now = (): number => this._host.now?.() ?? Date.now() / 1000;
     const interval = this._host.interval?.();
     const timezone = this._host.timezone?.() ?? DEFAULT_TIMEZONE;
-    const step = n > 1 ? bars[n - 1].time - bars[n - 2].time : 0;
+    const step = n > 1 ? bars[n - 1]!.time - bars[n - 2]!.time : 0;
     let isConfirmed = n === 0;
     let confirmationSource: NonNullable<IndicatorCalcContext['execution']>['confirmationSource'] = n === 0 ? 'empty' : 'unknown';
     if (n > 0) {
-      const open = bars[n - 1].time;
+      const open = bars[n - 1]!.time;
       if (interval === undefined) {
         isConfirmed = step <= 0 || now() >= open + step;
         confirmationSource = 'clock';
@@ -1362,7 +1402,7 @@ export class IndicatorInstance implements IndicatorApi {
       } }),
       barState: {
         isNew: source === undefined ? appended : realtime && n > 0 &&
-          (this._sourceLastTime === undefined || bars[n - 1].time > this._sourceLastTime),
+          (this._sourceLastTime === undefined || bars[n - 1]!.time > this._sourceLastTime),
         isConfirmed,
         isRealtime: realtime,
         lastIndex: n - 1,
@@ -1379,7 +1419,7 @@ export class IndicatorInstance implements IndicatorApi {
       // would asking slot 0 once a study pane sits above the price pane.
       // 0 is the scale's "infer from the visible range" sentinel, not a tick.
       tickSize: this._host.tickSize?.(this._pricePane()) || undefined,
-    };
+    } satisfies LooseOptional<IndicatorCalcContext> as IndicatorCalcContext; // unknown members go as undefined, which `calc` reads as absent
   }
 
   /** The chart type to draw a plot as: the settings override, else declared. */
@@ -1449,7 +1489,7 @@ export class IndicatorInstance implements IndicatorApi {
       requestState: this._host.requestState ? () => this._host.requestState!() : undefined,
       subscribeRequestChanges: this._host.subscribeRequestChanges ? listener => this._host.subscribeRequestChanges!(listener) : undefined,
       settings: () => this._descriptorSettings(),
-      bars: () => this._host.sourceBars(),
+      bars: () => (this._barSource === 'underlying' ? this._host.underlyingBars?.()?.bars : undefined) ?? this._host.sourceBars(),
       requestRecompute: () => {
         if (this._removed) return;
         this._barCount = 0; // external data invalidates any calcTail state
@@ -1467,7 +1507,7 @@ export class IndicatorInstance implements IndicatorApi {
       },
       removePrimitive: (p: IPrimitive) => { this._attachedPrimitives.delete(p); this._host.removeIndicatorPrimitive?.(p); },
       emit: (event: string, payload: unknown) => { this._host.emit?.(event, payload); },
-    });
+    } satisfies LooseOptional<IndicatorAttachContext> as IndicatorAttachContext); // as the calc context: hooks the host lacks go as undefined
     this._detach = typeof detach === 'function' ? detach : null;
   }
 
@@ -1527,7 +1567,7 @@ export class IndicatorInstance implements IndicatorApi {
       source: this._outputSource, values: this._values[plotKey] ?? [],
       available: !this._removed && this._outputRevision > 0 && !this._outputPending && !this._calcFailed && !this._dependencyUnavailable
         && (this._lifecycleStatus === null || this._lifecycleStatus.state === 'ready'),
-    };
+    } satisfies LooseOptional<IndicatorStudyOutput> as IndicatorStudyOutput; // `source` is undefined before the first source write
   }
 
   private _studyBindings(bars: readonly Bar[], source: SeriesDataState | undefined): StudyBindings {
@@ -1641,7 +1681,7 @@ export class IndicatorInstance implements IndicatorApi {
     this._settings = this._validatedSettings({ ...this._settings, ...cloneIndicatorSettings(patch) });
     this._outputPending = true;
     this._host.indicatorOutputChanged?.(this.id, true);
-    // Restyle before recomputing — appearance is independent of the maths, so a
+    // Restyle before recomputing: appearance is independent of the maths, so a
     // colour or thickness change must not wait on a full recalculation.
     for (const plot of this._d.plots) {
       // Native hosts can retain the handle while changing its renderer.
@@ -1664,7 +1704,7 @@ export class IndicatorInstance implements IndicatorApi {
       }
       this._series.get(plot.key)?.applyOptions(this._plotStyle(plot) as never);
     }
-    this._legend?.setOptions({ params: this._paramSummary(), color: this._legendColor() });
+    this._legend?.setOptions({ params: this._paramSummary(), color: this._legendColor() } satisfies LooseOptional<Partial<PaneLegendOptions>> as Partial<PaneLegendOptions>);
     this._applyRange();
     this._values = {};
     this._barCount = 0; // force a full recompute; settings invalidate any tail state
@@ -1686,7 +1726,10 @@ export class IndicatorInstance implements IndicatorApi {
     const epoch = ++this._calculationEpoch;
     const settingsIdentity = this._settings;
     const source = this._host.sourceState?.();
-    const bars = this._host.sourceBars();
+    const shown = this._host.sourceBars();
+    const under = this._barSource === 'underlying' ? this._host.underlyingBars?.() ?? null : null;
+    const bars = under?.bars ?? shown;
+    const sourceIndex = under?.sourceIndex ?? null;
     let bindings: StudyBindings | undefined;
     const current = (): boolean => {
       if (this._removed || epoch !== this._calculationEpoch || settingsIdentity !== this._settings) return false;
@@ -1698,11 +1741,12 @@ export class IndicatorInstance implements IndicatorApi {
     };
     try {
       bindings = this._studyBindings(bars, source);
-      this._recompute(refresh, bars, source, bindings, current);
+      this._recompute(refresh, bars, sourceIndex === null ? bars : shown, sourceIndex, source, bindings, current);
     } catch (error) {
       if (!current()) return;
-      if (!this._constructed && !(error instanceof StudyInputUnavailable)) throw error;
-      if (error instanceof StudyInputUnavailable) this._clearUnavailableOutput(bars);
+      if (!this._constructed && !(error instanceof StudyInputUnavailable)
+        && !(this._restored && error instanceof IndicatorInputError)) throw error;
+      if (error instanceof StudyInputUnavailable) this._clearUnavailableOutput(sourceIndex === null ? bars : shown);
       // One study's bad input must not stall the frame for every other one, and
       // a study that silently stops drawing tells the user nothing. So the
       // failure goes where a Tier-2 fetch failure already goes, the previous
@@ -1721,8 +1765,14 @@ export class IndicatorInstance implements IndicatorApi {
     if (current()) this._host.indicatorOutputChanged?.(this.id, refresh);
   }
 
-  private _recompute(refresh: boolean, bars: readonly Bar[], source: SeriesDataState | undefined,
-    bindings: StudyBindings, current: () => boolean): void {
+  /**
+   * `calc` is what the study computes on and `bars` what it draws on: the same
+   * bars unless it computes on the bars under a transform, when `sourceIndex`
+   * reads its values across and the tail path, which splices by calculation
+   * index, is not taken.
+   */
+  private _recompute(refresh: boolean, calc: readonly Bar[], bars: readonly Bar[], sourceIndex: readonly number[] | null,
+    source: SeriesDataState | undefined, bindings: StudyBindings, current: () => boolean): void {
     const n = bars.length;
     // Resolved once: the zone is fixed for the frame, and calc, calcTail and
     // every colorBy below must be told the same calendar.
@@ -1734,27 +1784,35 @@ export class IndicatorInstance implements IndicatorApi {
     // page of history arriving at the left edge, or a symbol change, can land on
     // a matching count and would then splice new values onto a history that no
     // longer exists, leaving the plot silently wrong until the next full calc.
-    // Native revisions retain historical invalidation across coalesced writes.
-    // Hosts without them retain the timestamp heuristic: the first bar is
-    // unchanged and the last is replaced or followed by exactly one new bar.
-    const appended = this._barCount > 0 && n === this._barCount + 1 &&
-      bars[n - 2].time === this._lastTime && bars[0].time === this._firstTime;
-    const tailOnly = n > 0 && this._barCount > 0 && bars[0].time === this._firstTime &&
-      ((n === this._barCount && bars[n - 1].time === this._lastTime) || appended) &&
-      (source === undefined || (source.sourceId === this._sourceId && source.revision !== this._sourceRevision &&
-        source.historyRevision === this._sourceHistoryRevision && source.provenance === 'live'));
+    // Native revisions retain historical invalidation across coalesced writes,
+    // and let the last bar sit at its index with a later time: a transformed
+    // chart's forming element, dated at a newer source bar. Hosts without them
+    // retain the timestamp heuristic: the first bar is unchanged and the last
+    // is replaced or followed by new bars.
+    const last = this._barCount > 0 && n >= this._barCount ? bars[this._barCount - 1]!.time : NaN;
+    const kept = (last === this._lastTime || (source !== undefined && last > this._lastTime))
+      && (this._barCount === 1 || bars[0]!.time === this._firstTime);
+    const appended = kept && n > this._barCount;
+    const tailOnly = kept && (source === undefined || (source.sourceId === this._sourceId && source.revision !== this._sourceRevision &&
+      source.historyRevision === this._sourceHistoryRevision && source.provenance === 'live'));
     // Older hosts have no mutation provenance and retain the live heuristic.
     if (source === undefined && tailOnly) this._live = true;
-    const ctx = this._calcContext(bars, appended, source);
+    if (tailOnly && last > this._lastTime) this._redate(last, calc === bars);
+    const ctx = this._calcContext(calc, appended, source);
     ctx.resolveSource = bindings.resolve;
+    // The chart's own bars on a transformed series are its elements, not time bars.
+    if (this._barSource === 'chart' && (this._host.underlyingBars?.() ?? null) !== null) ctx.transformed = true;
     let usedTail = false;
-    if (tailOnly && bindings.canTail && this._d.calcTail !== undefined) {
+    // One appended bar at most: more (a frame's burst of ticks, or the bricks one source bar completes) take a full `calc`.
+    if (tailOnly && n <= this._barCount + 1 && sourceIndex === null && bindings.canTail && this._d.calcTail !== undefined) {
       const from = this._barCount - 1; // the previously-last bar may have been replaced
-      const tail = this._d.calcTail(bars, settings, from, this._values, this._store, ctx);
+      const tail = this._d.calcTail(calc, settings, from, this._values, this._store, ctx);
       if (tail !== null) { values = spliceTail(this._values, tail, from, n); usedTail = true; }
     }
-    if (values === null) values = this._d.calc(bars, settings, this._store, ctx);
+    if (values === null) values = this._d.calc(calc, settings, this._store, ctx);
     if (!current()) return;
+    if (sourceIndex !== null) values = sampleIndicatorValues(values, sourceIndex);
+    this._sampled = sourceIndex === null ? null : { bars: calc, sourceIndex };
 
     this._values = values;
     this._outputPending = false;
@@ -1764,13 +1822,13 @@ export class IndicatorInstance implements IndicatorApi {
     if (!usedTail) this._outputHistoryRevision++;
     this._outputSource = source ? { ...source } : undefined;
     this._barCount = n;
-    this._firstTime = n > 0 ? bars[0].time : 0;
-    this._lastTime = n > 0 ? bars[n - 1].time : 0;
+    this._firstTime = n > 0 ? bars[0]!.time : 0;
+    this._lastTime = n > 0 ? bars[n - 1]!.time : 0;
     if (source !== undefined) {
       this._sourceId = source.sourceId;
       this._sourceRevision = source.revision;
       this._sourceHistoryRevision = source.historyRevision;
-      this._sourceLastTime = bars[n - 1]?.time;
+      this._sourceLastTime = calc[calc.length - 1]?.time;
     }
 
     this._writes.begin(bars);
@@ -1789,11 +1847,23 @@ export class IndicatorInstance implements IndicatorApi {
     this._applyLevels(bars, settings);
     if (this._alertNeedsSeed) {
       this._alertNeedsSeed = false;
-      const seed = { ...ctx, execution: ctx.execution ? { ...ctx.execution, provenance: 'history' as const } : undefined };
+      const seed = { ...ctx, execution: ctx.execution ? { ...ctx.execution, provenance: 'history' as const } : undefined } satisfies LooseOptional<IndicatorCalcContext> as IndicatorCalcContext;
       this._syncAlerts(bars, settings, false, seed, false, current);
     } else this._syncAlerts(bars, settings, tailOnly, ctx, refresh, current);
     if (!current()) return;
     this.updateLegendValues(this._host.legendIndex?.());
+  }
+
+  /**
+   * The bar the last pass ended on, dated again at `time`: a transformed
+   * chart's forming element moved forward by a newer source bar. It is the
+   * same bar, so what the alerts and `barState.isNew` said of it holds there;
+   * `own` when the calculation runs on these bars, not the ones under them,
+   * which are never dated again and keep a study's checkpoints where they were.
+   */
+  private _redate(time: number, own: boolean): void {
+    if (this._alertTime === this._lastTime) this._alertTime = time;
+    if (own) { this._sourceLastTime = time; this._alertPolicy.redate(this._lastTime, time); }
   }
 
   /**
@@ -1836,7 +1906,7 @@ export class IndicatorInstance implements IndicatorApi {
           this.paneIndex,
         ),
       );
-      this._host.bindIndicatorPrimitiveScale?.(this._levels[this._levels.length - 1], this._localScale());
+      this._host.bindIndicatorPrimitiveScale?.(this._levels[this._levels.length - 1]!, this._localScale()); // the one just pushed
     }
   }
 
@@ -1889,29 +1959,4 @@ export class IndicatorInstance implements IndicatorApi {
     this._host.indicatorRemoved?.(this.id, !this._constructed && this._ownPane ? this.paneIndex : undefined);
     return true;
   }
-}
-
-/**
- * Overlay a `calcTail` result (values for `[from, n)`) onto the previous full
- * result. Any key the tail omits, or a previous column of the wrong length,
- * forces the caller back to a full recompute by returning `null`.
- */
-function spliceTail(
-  previous: IndicatorValues,
-  tail: IndicatorValues,
-  from: number,
-  n: number,
-): IndicatorValues | null {
-  const out: Record<string, (number | null)[]> = {};
-  for (const key of Object.keys(tail)) {
-    const prev = previous[key];
-    const add = tail[key];
-    if (prev === undefined || add === undefined) return null;
-    if (add.length !== n - from) return null;
-    const col = new Array<number | null>(n);
-    for (let i = 0; i < from; i++) col[i] = prev[i] ?? null;
-    for (let i = from; i < n; i++) col[i] = add[i - from] ?? null;
-    out[key] = col;
-  }
-  return out;
 }

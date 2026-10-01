@@ -6,14 +6,29 @@
  */
 import type { Bar } from '../model/bar';
 import type { VolumeProfileResult } from './profile-model';
-import { priceBuckets } from './profile-model';
+import { priceBuckets, valueArea } from './profile-model';
 
+/**
+ * @deprecated Removed in 3.0.0. No function takes this type:
+ * {@link computeVolumeProfile} takes the tick size and the value-area fraction
+ * as arguments. For an options object, use {@link computeVolumeProfileSessions}
+ * with {@link VolumeProfileFamilyOptions} (since 1.0.1).
+ */
 export interface VolumeProfileOptions {
   tickSize: number;
   /** Fraction of total volume contained in the value area (default 0.7). */
   valueAreaPercent: number;
 }
 
+/**
+ * One volume profile over all of `bars`, each bar's volume spread evenly
+ * across the rows its range spans. Arguments are taken as given, not repaired:
+ * a `tickSize` that is not a positive finite number gives an empty profile,
+ * and `valueAreaPercent` is a fraction that is not clamped. At 1 the value
+ * area grows from the point of control until it holds all the volume, which
+ * leaves out rows without volume at its edges; above 1 it takes every row.
+ * A profile without any volume has the point of control alone as its area.
+ */
 export function computeVolumeProfile(
   bars: readonly Bar[],
   tickSize: number,
@@ -34,27 +49,13 @@ export function computeVolumeProfile(
   }
 
   const total = buckets.reduce((s, b) => s + b.volume, 0);
-  // POC: max-volume bucket
-  let pocIdx = 0;
-  for (let i = 1; i < buckets.length; i++) if (buckets[i].volume > buckets[pocIdx].volume) pocIdx = i;
-
-  // Value area: expand from POC, adding the larger-volume neighbour each step.
-  let upper = pocIdx; // toward higher price (lower index, since sorted desc)
-  let lower = pocIdx; // toward lower price (higher index)
-  let acc = buckets[pocIdx].volume;
-  const target = total * valueAreaPercent;
-  while (acc < target && (upper > 0 || lower < buckets.length - 1)) {
-    const upVol = upper > 0 ? buckets[upper - 1].volume : -1;
-    const downVol = lower < buckets.length - 1 ? buckets[lower + 1].volume : -1;
-    if (upVol >= downVol) { upper -= 1; acc += buckets[upper].volume; }
-    else { lower += 1; acc += buckets[lower].volume; }
-  }
-
+  // `valueArea` hands back indices into `buckets`, which is not empty.
+  const va = valueArea(buckets.map((b) => b.volume), total * valueAreaPercent);
   return {
     buckets,
-    poc: buckets[pocIdx].price,
-    vah: buckets[upper].price, // highest price in the value area
-    val: buckets[lower].price, // lowest price in the value area
+    poc: buckets[va.poc]!.price,
+    vah: buckets[va.upper]!.price,
+    val: buckets[va.lower]!.price,
     totalVolume: total,
   };
 }

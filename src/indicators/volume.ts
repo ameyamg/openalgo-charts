@@ -2,31 +2,13 @@
  * Tier-1 volume indicators, computed from the chart's own OHLCV.
  * Part of the lazy `openalgo-charts/indicators` tier.
  */
-import type { Bar, IndicatorDescriptor } from 'openalgo-charts';
-import { nulls, sma, stdev } from './calc';
-import { smoothingMa, SMOOTHING_MA_TYPES, BOLLINGER_MA } from './smoothing';
+import type { IndicatorDescriptor } from 'openalgo-charts';
+import { nulls, sma } from './calc';
+import { smoothingBlock, smoothingInputs, smoothingPlots, smoothingFill } from './smoothing';
 import { withTail, machineTail, claimOf, settle, whole, cell } from './tail';
 import { seeded, smooth } from './steppers';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** A window length is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Readonly<Record<string, unknown>>, k: string, d: number, min = 1): number =>
-  Math.max(min, Math.round(num(s, k, d)));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-
-/**
- * A bar's volume for a running total: a bar the feed gave no usable volume for
- * traded nothing, as the flow studies read it. `?? 0` covered only an absent
- * volume, so one NaN reached the total and blanked it for the rest of the history.
- */
-const vol = (b: Bar): number =>
-  typeof b.volume === 'number' && Number.isFinite(b.volume) ? b.volume : 0;
+import { int, str } from './settings';
+import { volumeOf } from './series';
 
 export const VOLUME: IndicatorDescriptor = {
   id: 'volume',
@@ -45,8 +27,9 @@ export const VOLUME: IndicatorDescriptor = {
   plots: [
     {
       key: 'volume', type: 'histogram', title: 'Volume', colorKey: 'color', style: { base: 0 },
+      // `calc` below always writes `direction`.
       colorBy: ({ index, values, settings }) => settings.colorByDirection === true
-        ? values.direction[index] === -1 ? str(settings, 'downColor', '#ef5350') : str(settings, 'upColor', '#26a69a')
+        ? values.direction![index] === -1 ? str(settings, 'downColor', '#ef5350') : str(settings, 'upColor', '#26a69a')
         : undefined,
     },
     { key: 'ma', type: 'line', title: 'Volume average', colorKey: 'maColor', style: { lineWidth: 1.5 } },
@@ -61,30 +44,6 @@ export const VOLUME: IndicatorDescriptor = {
   },
 };
 
-/** OBV's smoothing block over a run of OBV values, shared by `calc` and the tail's windowed kinds. */
-function obvSmoothing(
-  out: readonly number[], volumes: readonly number[], s: Readonly<Record<string, unknown>>,
-): Record<string, (number | null)[]> {
-  const n = out.length;
-  const maType = str(s, 'maType', 'None');
-  const maLength = int(s, 'maLength', 9);
-  const mult = num(s, 'bbMult', 2);
-  const ma = maType === 'None'
-    ? new Array<number>(n).fill(NaN)
-    : smoothingMa(maType, out, volumes, maLength);
-  // The band offset exists only for the Bollinger kernel, and an absent
-  // offset makes both band columns absent too, which is how the reference
-  // keeps the two plots and their fill hidden for every other type.
-  const band = maType === BOLLINGER_MA
-    ? stdev(out, maLength).map((v) => v * mult)
-    : new Array<number>(n).fill(NaN);
-  return {
-    ma: nulls(ma),
-    bbUpper: nulls(ma.map((v, i) => v + band[i])),
-    bbLower: nulls(ma.map((v, i) => v - band[i])),
-  };
-}
-
 export const OBV: IndicatorDescriptor = withTail({
   id: 'obv',
   name: 'On-Balance Volume',
@@ -92,43 +51,30 @@ export const OBV: IndicatorDescriptor = withTail({
   placement: 'pane',
   inputs: [
     { key: 'color', type: 'color', label: 'Color', default: '#26c6da' },
-    {
-      key: 'maType', type: 'select', label: 'Type', default: 'None',
-      options: SMOOTHING_MA_TYPES, group: 'Smoothing',
-    },
     // 9, not the 14 the smoothing block carries elsewhere: the reference
     // definition of this study fixes its own smoothing length at 9.
-    { key: 'maLength', type: 'number', label: 'Length', default: 9, min: 1, max: 500, step: 1, group: 'Smoothing' },
-    { key: 'bbMult', type: 'number', label: 'BB StdDev', default: 2, min: 0.001, max: 50, step: 0.5, group: 'Smoothing' },
-    { key: 'maColor', type: 'color', label: 'OBV-based MA', default: '#ffeb3b', group: 'Smoothing' },
-    { key: 'bbUpperColor', type: 'color', label: 'Upper Bollinger Band', default: '#4caf50', group: 'Smoothing' },
-    { key: 'bbLowerColor', type: 'color', label: 'Lower Bollinger Band', default: '#4caf50', group: 'Smoothing' },
+    ...smoothingInputs('OBV', 'None', 9),
   ],
   plots: [
     { key: 'obv', type: 'line', title: 'OBV', colorKey: 'color', style: { lineWidth: 1.5 } },
-    { key: 'ma', type: 'line', title: 'OBV-based MA', colorKey: 'maColor', style: { lineWidth: 1.5 } },
-    { key: 'bbUpper', type: 'line', title: 'Upper Bollinger Band', colorKey: 'bbUpperColor', style: { lineWidth: 1 } },
-    { key: 'bbLower', type: 'line', title: 'Lower Bollinger Band', colorKey: 'bbLowerColor', style: { lineWidth: 1 } },
+    ...smoothingPlots('OBV'),
   ],
-  fills: [{
-    between: ['bbUpper', 'bbLower'],
-    colorUpKey: 'bbUpperColor',
-    colorDownKey: 'bbUpperColor',
-    opacity: 0.1,
-  }],
+  fills: [smoothingFill()],
   calc: (bars, s) => {
     const n = bars.length;
     const out = new Array<number>(n).fill(NaN);
     let acc = 0;
     for (let i = 0; i < n; i++) {
       if (i > 0) {
-        const v = vol(bars[i]);
-        if (bars[i].close > bars[i - 1].close) acc += v;
-        else if (bars[i].close < bars[i - 1].close) acc -= v;
+        const bar = bars[i]!;
+        const prev = bars[i - 1]!;
+        const v = volumeOf(bar);
+        if (bar.close > prev.close) acc += v;
+        else if (bar.close < prev.close) acc -= v;
       }
       out[i] = acc;
     }
-    return { obv: nulls(out), ...obvSmoothing(out, bars.map(vol), s) };
+    return { obv: nulls(out), ...smoothingBlock(out, bars.map(volumeOf), s, 'None', 9) };
   },
 }, (calc) => (bars, s, from, previous, store) => {
   // The running total resumes. An exponential or Wilder smoothing resumes with
@@ -144,9 +90,11 @@ export const OBV: IndicatorDescriptor = withTail({
     start: () => ({ acc: 0, ma: seeded() }),
     step: (st, i, row) => {
       if (i > 0) {
-        const v = vol(bars[i]);
-        if (bars[i].close > bars[i - 1].close) st.acc += v;
-        else if (bars[i].close < bars[i - 1].close) st.acc -= v;
+        const bar = bars[i]!;
+        const prev = bars[i - 1]!;
+        const v = volumeOf(bar);
+        if (bar.close > prev.close) st.acc += v;
+        else if (bar.close < prev.close) st.acc -= v;
       }
       row[0] = cell(st.acc);
       if (!recursive) return;
@@ -160,10 +108,11 @@ export const OBV: IndicatorDescriptor = withTail({
   const claim = claimOf(store, calc, bars, from);
   if (claim === undefined || held === undefined || held.length < from) return null;
   const start = Math.max(0, from - maLength);
+  // The machine above writes `obv`.
   const run: number[] = [];
-  for (let j = start; j < bars.length; j++) run.push((j < from ? held[j] : tail.obv[j - from]) ?? NaN);
-  const smoothed = settle(claim, obvSmoothing(run, bars.slice(start).map(vol), s), from - start, previous, from);
-  return smoothed === null ? null : { obv: tail.obv, ...smoothed };
+  for (let j = start; j < bars.length; j++) run.push((j < from ? held[j] : tail.obv![j - from]) ?? NaN);
+  const smoothed = settle(claim, smoothingBlock(run, bars.slice(start).map(volumeOf), s, 'None', 9), from - start, previous, from);
+  return smoothed === null ? null : { obv: tail.obv!, ...smoothed };
 });
 
 export const ADL: IndicatorDescriptor = {
@@ -177,7 +126,7 @@ export const ADL: IndicatorDescriptor = {
     const out = new Array<number>(bars.length).fill(NaN);
     let acc = 0;
     for (let i = 0; i < bars.length; i++) {
-      const b = bars[i];
+      const b = bars[i]!;
       // A bar missing its high, low or close, or whose span or term overflows, has
       // no term: it is absent and the total stays where it was. Added in, one NaN
       // would blank the line for the rest of the history, and a missing high used
@@ -188,7 +137,7 @@ export const ADL: IndicatorDescriptor = {
       // A doji bar (high === low) has an undefined money-flow multiplier;
       // the standard treatment is to contribute nothing.
       if (span > 0) {
-        const term = (((b.close - b.low) - (b.high - b.close)) / span) * vol(b);
+        const term = (((b.close - b.low) - (b.high - b.close)) / span) * volumeOf(b);
         if (!Number.isFinite(term)) continue;
         acc += term;
       }

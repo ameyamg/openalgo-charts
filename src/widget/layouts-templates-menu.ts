@@ -169,7 +169,7 @@ export function openTemplatesMenu(ctx: WidgetContext, anchor: HTMLElement, store
     catalog = next;
     if (!closed) paint();
   });
-  const offReplay = ['replay:start', 'replay:stop', 'objects:change'].map(event => ctx.chart.on(event, () => { if (!closed) paint(); }));
+  const offReplay = (['replay:start', 'replay:stop', 'objects:change'] as const).map(event => ctx.chart.on(event, () => { if (!closed) paint(); }));
   paint();
   void reload();
 

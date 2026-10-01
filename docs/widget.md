@@ -40,7 +40,7 @@ npm install openalgo-charts
 
 The widget entry imports `openalgo-charts` and `openalgo-charts/draw` itself. The
 indicator picker offers whatever the indicator registry holds, so import
-`openalgo-charts/indicators` alongside it for the 105 built-ins; without that import the
+`openalgo-charts/indicators` alongside it for the 112 built-ins; without that import the
 picker offers only what you registered yourself.
 
 ## One call
@@ -237,7 +237,7 @@ to `createChart` unchanged.
 | `exchange` | `string` | Passed to the feed with the symbol. Default `''`. |
 | `interval` | `string` | An interval code the interval registry knows (`'1m'`, `'5m'`, `'1d'`, or one you registered with `registerInterval`). An unknown code throws `UnknownIntervalError`; a persisted code this build does not know falls back to `'1d'`. Default `'1d'`. |
 | `intervals` | `string[]` | The interval pills. Default: `DEFAULT_INTERVALS` (`1m 5m 15m 1h 1d 1w`) plus every other registered code. |
-| `chartType` | `string` | The primary series type, a registered chart type id. Default `'candlestick'`. |
+| `chartType` | `string` | The primary chart type: a registered chart type id or a transform the chart applies to the bars it loads (`heikin-ashi`, `renko`, `range-bars`, `line-break`, `point-figure`, `kagi`, with the transform tier imported). Without a `feed`, point and figure and Kagi stay renderers over the elements the host feeds `widget.series`, as before. Default `'candlestick'`. |
 | `theme` | `'dark'` \| `'light'` \| `ChartTheme` | A named palette or a full theme object. Drives both the canvas and the chrome tokens (see below). Default `'dark'` (the engine's own default is light). |
 | `rail` | `boolean` \| `RailOptions` | The drawing rail. `false` hides it; `tools` restricts which registered tool ids appear (the order follows the rail's own groups); `favorites` seeds the pins when nothing is stored. |
 | `topbar` | `boolean` | The symbol, interval, chart type, indicators, capture, settings and theme controls. |
@@ -247,7 +247,7 @@ to `createChart` unchanged.
 | `persist` | `boolean` \| `string` | `true` saves the state under the `default` namespace (`oac-widget:default:state`) and restores it on the next `createWidget`; a string names the namespace, for more than one widget per origin. Since 2.5.10 the state lands when `widget.ready` settles (see [Persistence](#persistence)). |
 | `storage` | `StorageLike` \| `AsyncStorageLike` \| `null` | The store behind `persist`. Default: IndexedDB (since 2.5.10), else the page's `localStorage`. Pass `localStorage` to restore synchronously, as before. |
 | `locale` | `string` | A BCP 47 tag the status line formats numbers with. |
-| `symbolSearch` | `(query) => SymbolMatch[] \| Promise<SymbolMatch[]>` | Called as the user types in the symbol box; the results open as a menu under it. |
+| `symbolSearch` | `(query, { signal }?) => SymbolMatch[] \| Promise<SymbolMatch[]>` | Called as the user types in the symbol box; the results open as a menu under it. `signal` aborts once a newer query makes the answer stale. Default (since 2.6.0): the feed's `searchSymbols`, when it has one. |
 | `lookbackBars` | `number` | Bars per load. Default 500. |
 | `now` | `() => number` | The clock for the load window and the capture filename. Default `Date.now`. |
 | `onOrder` | `(order: OrderRequest) => void` | Order entry from the right-click menu (`{ side, type, price, paneIndex }`). Without it the menu draws no trade rows. |
@@ -352,7 +352,8 @@ a phone too), and the theme button, a sun on the dark theme and a moon on the li
 whose tip and accessible name say the theme a click switches to. Since 2.5.10 no widget
 file draws a picture of its own, so the registry's grid, overlap and crispness checks cover
 all of them. A row of `openMenu` takes an optional `icon`, a chrome icon id, for a host that
-builds its own menu the same way.
+builds its own menu the same way, and `placement: 'beside'` opens the menu beside its
+button, as the rail's right-click menus do, with the same arrow keys as every other menu.
 
 ## Extending the rail with your own tools
 
@@ -410,8 +411,23 @@ needed:
 </script>
 ```
 
-The standalone script (`openalgo-charts.standalone.js`) is base-only and cannot host the
-widget: a tier loaded beside it would import its own second engine.
+A page that cannot load modules uses the script-tag build instead: classic scripts for the
+base, the indicator and draw tiers and the widget, in that order, and
+`OpenAlgoCharts.widget.createWidget`. The widget's file reads the engine and the draw tier
+from the `OpenAlgoCharts` global, so there is one engine, and it carries the parts below in
+itself rather than fetching them.
+Never load `openalgo-charts.widget.mjs` beside the classic base: a module imports its own
+second engine.
+
+```html
+<script src="/dist/openalgo-charts.standalone.js"></script>
+<script src="/dist/openalgo-charts.indicators.standalone.js"></script>
+<script src="/dist/openalgo-charts.draw.standalone.js"></script>
+<script src="/dist/openalgo-charts.widget.standalone.js"></script>
+<script>
+  OpenAlgoCharts.widget.createWidget(document.getElementById('terminal'), { symbol: 'RELIANCE', interval: '5m' });
+</script>
+```
 
 Some of the widget loads on first use. The shortcuts panel, the Layouts menu, the
 indicator templates list, the chart data dialog, a chart grid's bar and menus, and the
@@ -438,14 +454,14 @@ cannot name a part either: allow the origin, or the directory as a path ending i
 
 ## Size
 
-Budgets from `.size-limit.json` and measurements from the 2.5.10 build, Brotli, enforced by
+Budgets from `.size-limit.json` and measurements from the 2.6.0 build, Brotli, enforced by
 `npm run size`:
 
 | Row | Files | Budget | Actual |
 |---|---|---|---|
-| Widget tier | `openalgo-charts.widget.mjs` | 121.36 kB | 121.36 kB |
-| Widget first-use parts | `openalgo-charts.widget.<part>-<hash>.mjs`, seven files | 18.19 kB | 18.19 kB |
-| Widget terminal | base + draw + indicators + widget | 354.46 kB | 354.46 kB |
+| Widget tier | `openalgo-charts.widget.mjs` | 123.57 kB | 123.57 kB |
+| Widget first-use parts | `openalgo-charts.widget.<part>-<hash>.mjs`, seven files | 18.24 kB | 18.24 kB |
+| Widget terminal | base + draw + indicators + widget | 362.48 kB | 362.48 kB |
 
 The widget is a tier because of these rows. A host that never calls `createWidget`
 downloads none of it, and the base engine's own budget is unchanged. Measure, do not

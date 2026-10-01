@@ -26,7 +26,8 @@ import type { SeriesRecord } from '../model/series';
 import type { IndicatorEditOptions } from '../model/indicator-policy';
 import type { IPrimitive, PrimitiveHost, PrimitiveAnchor } from '../primitives/primitive';
 import { EventMarkers, type ChartEvent } from '../primitives/event-markers';
-import { PaneLegend } from '../primitives/pane-legend';
+import { PaneLegend, type PaneLegendOptions } from '../primitives/pane-legend';
+import type { LooseOptional } from '../helpers/types';
 
 /**
  * The slice of the chart the primitives, the series band and the event strip
@@ -63,7 +64,7 @@ export interface PrimitivesHost {
   removePrimitive: Chart['removePrimitive'];
   invalidate: Chart['invalidate'];
   on: Chart['on'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
 }
 
 export class ChartPrimitives {
@@ -98,7 +99,7 @@ export class ChartPrimitives {
         const click = payload as ChartClickEvent;
         if (!click.id || click.viaDrag || click.paneIndex !== this._host._eventPane) return;
         const details = this._host._eventMarkers?.detailsForHit(click.id);
-        if (details) this._host.emit('event:click', { ...details,
+        if (details) this._host._emit('event:click', { ...details,
           point: { x: click.point.x, y: click.point.y + (this._host._paneLayout()[click.paneIndex]?.top ?? 0) },
           paneIndex: click.paneIndex } satisfies ChartEventClick);
       });
@@ -110,7 +111,7 @@ export class ChartPrimitives {
     if (this._host._eventMarkers === null && this._host._events.length === 0) return;
     const visible = this._eventVisible as Record<string, boolean | undefined>;
     this._ensureEventMarkers().setEvents(this._host._events.filter((e) => visible[e.type] !== false));
-    this._host.emit('events:change', undefined);
+    this._host._emit('events:change', undefined);
   }
 
   public seriesStack(paneIndex: number): string[] {
@@ -139,21 +140,22 @@ export class ChartPrimitives {
     // order, which every band of theirs follows; studies elsewhere keep theirs.
     const studies = next.flatMap(item => this._host._indicators.filter(entry => 'indicator:' + entry.id === item));
     const members = new Set(studies);
+    // Each slot a member holds takes the next study in order: one study per member slot.
     let k = 0;
-    for (let i = 0; i < this._host._indicators.length; i++) if (members.has(this._host._indicators[i])) this._host._indicators[i] = studies[k++];
+    for (let i = 0; i < this._host._indicators.length; i++) if (members.has(this._host._indicators[i]!)) this._host._indicators[i] = studies[k++]!;
     const at = next.indexOf('source:primary');
-    if (at >= 0) this._host._sourceAbove = at === 0 ? null : next[at - 1].slice('indicator:'.length);
+    if (at >= 0) this._host._sourceAbove = at === 0 ? null : next[at - 1]!.slice('indicator:'.length);
     this._host._studies._reorderIndicatorResources();
     this._host.invalidate(m => m.invalidateGlobal(InvalidationLevel.Full));
-    this._host.emit('objects:change', {});
+    this._host._emit('objects:change', {});
     return true;
   }
 
   public setPrimitiveStackAbove(primitive: IPrimitive, above: string | null): boolean {
     const index = this._host._panes.findIndex(pane => pane.hasPrimitive(primitive));
     if (index < 0 || (above !== null && typeof above !== 'string')) return false;
-    if (this._host._panes[index].primitiveStackAbove(primitive) === above) return true;
-    this._host._panes[index].setPrimitiveStackAbove(primitive, above);
+    if (this._host._panes[index]!.primitiveStackAbove(primitive) === above) return true; // `index` was found above
+    this._host._panes[index]!.setPrimitiveStackAbove(primitive, above);
     this._host.invalidate(m => m.invalidatePane(index, { level: InvalidationLevel.Light, autoScale: false }));
     return true;
   }
@@ -204,7 +206,8 @@ export class ChartPrimitives {
     if (at > from && (next < 0 || at < next)) return;
     // The least that puts it in place: right after its study, or right before
     // the first study at the back, so a host series beside it keeps its side.
-    pane.moveSeries(source, after === undefined ? records[next] : records[from + 1] ?? null);
+    // With no study to follow, `next` found one: it returned above otherwise.
+    pane.moveSeries(source, after === undefined ? records[next]! : records[from + 1] ?? null);
   }
 
   /**
@@ -215,7 +218,7 @@ export class ChartPrimitives {
     const pane = this._host._primary === null ? undefined : this._host._seriesOwners.get(this._host._primary.api)?.pane;
     if (typeof this._host._sourceAbove !== 'string' || pane === undefined) return;
     const order = this._host.seriesStack(this._host._panes.indexOf(pane)), at = order.indexOf('source:primary');
-    this._host._sourceAbove = at > 0 ? order[at - 1].slice('indicator:'.length) : null;
+    this._host._sourceAbove = at > 0 ? order[at - 1]!.slice('indicator:'.length) : null;
   }
 
   /** The pane a chart anchor currently resolves to. */
@@ -252,7 +255,7 @@ export class ChartPrimitives {
       const target = this._anchorTarget(entry.anchor);
       const current = this._host._panes.findIndex((pane) => pane.hasPrimitive(entry.primitive));
       if (current === target) continue;
-      if (current >= 0) this._host._panes[current].removePrimitive(entry.primitive);
+      if (current >= 0) this._host._panes[current]!.removePrimitive(entry.primitive);
       // `_addPrimitive` appends a legend row to `_legends`, so re-homing an
       // anchored PaneLegend without dropping its old record would register it
       // once per move and stack it against itself.
@@ -278,12 +281,12 @@ export class ChartPrimitives {
         this._host.invalidate((m) => m.invalidatePane(index, { level: top ? InvalidationLevel.Cursor : InvalidationLevel.Light, autoScale: false }));
       },
     };
-    this._host._panes[paneIndex].addPrimitive(primitive, host);
+    this._host._panes[paneIndex]!.addPrimitive(primitive, host); // made by `_ensurePane` above, which refuses an index with no slot
     // Track legend rows however they were added: a host can add its own (a
     // symbol/OHLC row) and indicator legends must stack beneath it.
     if (primitive instanceof PaneLegend) {
       this._host._legends.push({ legend: primitive, paneIndex });
-      primitive.setOptions({ hasOpenInterest: this._host.hasOpenInterest });
+      primitive.setOptions({ hasOpenInterest: this._host.hasOpenInterest } satisfies LooseOptional<Partial<PaneLegendOptions>> as Partial<PaneLegendOptions>); // undefined: not known
       // A row added after the switches were set still obeys them; a legend that
       // brought its own `statusLine` keeps whatever it set on top. Skipped when
       // the chart has no switches to push, which is the usual case: `setOptions`
@@ -313,7 +316,7 @@ export class ChartPrimitives {
     const li = this._host._legends.findIndex((l) => l.legend === primitive);
     if (li >= 0) this._host._legends.splice(li, 1);
     for (let i = 0; i < this._host._panes.length; i++) {
-      if (this._host._panes[i].removePrimitive(primitive)) {
+      if (this._host._panes[i]!.removePrimitive(primitive)) {
         if (li >= 0) this._host._legendStack._restackLegends();
         this._host._layout._recomputeAxisColumns();
         this._host.invalidate((m) => m.invalidatePane(i, { level: InvalidationLevel.Light, autoScale: false }));

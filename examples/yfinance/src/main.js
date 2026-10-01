@@ -5,7 +5,7 @@
 import * as engine from '/dist/openalgo-charts.mjs';
 import { createChart, PaneLegend } from '/dist/openalgo-charts.mjs';
 // Lazy tiers. Each registers into the base bundle's registries as a side
-// effect of being imported, so `addSeries('point-figure')` and
+// effect of being imported, so `setSeriesTransform({ type: 'renko' })` and
 // `addIndicator('macd')` resolve afterwards. The transform and draw tiers are
 // imported by the modules that call into them; the indicators tier is only
 // ever registered, so it is imported here.
@@ -16,7 +16,7 @@ import { el, initShell, chartTheme, chartMotionOptions, setChartState, toast, cu
 import { initHover } from './hover.js';
 import { fillIntervalSelect, clampPeriod, rangeLoad } from './intervals.js';
 import { initFeed, fetchBars, fetchNote, feedErrorState } from './feed.js';
-import { applyTransform } from './transforms.js';
+import { chartTypeSeries, inChartTransforms, keepsView } from './transforms.js';
 import { isExpression, fetchExpressionBars, mountOperatorKeypad, referenceDataContext } from './expression.js';
 import { initStatus, nameOf, symbolStatus } from './status.js';
 import { requestVariant, sessionOf, sessionLabel } from './session.js';
@@ -30,7 +30,7 @@ import {
 import { tickScheduleFor, axisMinMove, sessionCalendarFor } from './ticks.js';
 import { initBracket, attachBracketLines, setBracketPrice, updateBracket, removeBracket } from './bracket.js';
 import { initAccount } from './account.js';
-import { initIndicators, fillIndicatorPicker, renderIndicatorChips, openSettings, rememberIndicators } from './indicators.js';
+import { initIndicators, fillIndicatorPicker, renderIndicatorChips, openSettings, rememberIndicators, watchStudyStatus } from './indicators.js';
 import { afterChartSettingsWrite, chartDecorationsForRebuild, initChartSettings, normalizeLegendIconSize, restorePrimaryStyle } from './chart-settings.js';
 import { initHistory, attachHistory, historyFor, recordChartType } from './history.js';
 import { bindIndicatorSource, initIndicatorSource } from './indicator-source.js';
@@ -91,6 +91,7 @@ const MISSING = [];
 if (!createLinkGroup) MISSING.push('chart linking');
 if (!withBarCache || !barCloseSec) MISSING.push('bar cache');
 if (!registerInterval || !bucketStartOf) MISSING.push('interval registry');
+if (!inChartTransforms) MISSING.push('in-chart transforms');
 
 /**
  * The demo's shared state, created here and handed to every module's init.
@@ -99,7 +100,8 @@ if (!registerInterval || !bucketStartOf) MISSING.push('interval registry');
  * comparisons) lives here rather than on the chart.
  */
 const app = {
-  // The chart and its two series. `volume` is null on a transform chart.
+  // The chart and its two series. `volume` is null on a chart whose transform
+  // forms elements at times of its own (all but Heikin Ashi).
   chart: null,
   price: null,
   volume: null,
@@ -253,20 +255,20 @@ function render({ keepView = true, state } = {}) {
   // recorded with the type it replaced.
   app.renderedType = { chartType: sel, pfmode: el('pfmode').value };
 
-  // Family-B transforms replace the plotted series with derived elements, so
-  // Trading uses real prices. Volume also needs a source-bar mapping, which
-  // Heikin Ashi retains but price-bucket transforms do not provide.
-  const { type, data } = isTransform
-    ? applyTransform(sel.slice(2), app.currentBars)
-    : { type: sel, data: app.currentBars };
+  // Family-B transforms: the chart applies one to the bars it is fed and
+  // draws the elements, forming them again on every bar and tick. The series
+  // still takes the raw bars, and trading uses real prices. Volume needs a
+  // bar per element at the element's time, which Heikin Ashi keeps and the
+  // price-bucket transforms do not.
+  const { type, transform } = chartTypeSeries(sel, el('pfmode').value);
 
   const style = {};
   if (type === 'baseline') {
     const avg = app.currentBars.reduce((s, b) => s + b.close, 0) / (app.currentBars.length || 1);
     style.baseValue = avg;
   }
-  app.price = app.chart.addSeries(type, { style }); // first series -> drives the OHLC legend
-  app.price.setData(data);
+  app.price = app.chart.addSeries(type, { style, ...(transform ? { transform } : {}) }); // first series -> drives the OHLC legend
+  app.price.setData(app.currentBars);
   // The venue's hours for the empty space right of the last candle, so a
   // trend line or a box drawn there after Friday's close ends on Monday's
   // bars. Optional-called: an older dist/ has no calendar to take.
@@ -304,17 +306,17 @@ function render({ keepView = true, state } = {}) {
   // Indicators come from the lazy 'openalgo-charts/indicators' tier. The chart
   // owns the whole lifecycle: it creates one series per plot, picks the pane,
   // draws declared reference levels (RSI 70/30), pins a declared fixed range
-  // (RSI 0..100), and recomputes on every data change.
-  if (!isTransform) {
-    for (const spec of rebuildState ? [] : app.activeIndicators) {
-      try {
-        // A study the host protects comes back protected: the policy rides with the spec.
-        const instance = app.chart.addIndicator(spec.indicatorId, spec.settings, { paneIndex: spec.paneIndex,
-          ...(spec.policy ? { policy: spec.policy } : {}) });
-        if (spec.visible === false) instance.setVisible(false);
-      }
-      catch (e) { console.warn('indicator', spec.indicatorId, e.message); }
+  // (RSI 0..100), and recomputes on every data change. On a transformed chart
+  // a study reads the elements drawn, or the raw bars when set to (its
+  // settings' "Compute on" row), and draws on the elements either way.
+  for (const spec of rebuildState ? [] : app.activeIndicators) {
+    try {
+      // A study the host protects comes back protected: the policy rides with the spec, as its bars do.
+      const instance = app.chart.addIndicator(spec.indicatorId, spec.settings, { paneIndex: spec.paneIndex,
+        ...(spec.policy ? { policy: spec.policy } : {}), ...(spec.barSource ? { barSource: spec.barSource } : {}) });
+      if (spec.visible === false) instance.setVisible(false);
     }
+    catch (e) { console.warn('indicator', spec.indicatorId, e.message); }
   }
   renderIndicatorChips();
   attachDrawing();
@@ -381,6 +383,9 @@ function render({ keepView = true, state } = {}) {
     rememberIndicators();
     renderIndicatorChips();
   });
+  // A study that stops drawing (a failed calculation, a timeframe the chart
+  // refuses) says why; the listener goes with the chart.
+  watchStudyStatus(app.chart);
   // Any change to the pane stack moves which pane is the bottom one.
 
   // Replay is headless: the controller emits, the transport bar and the
@@ -739,15 +744,16 @@ el('save').addEventListener('click', () => {
 ['ctype', 'pfmode'].forEach((id) => el(id).addEventListener('change', () => {
   if (!app.currentBars.length) return;
   const from = app.renderedType;
-  render();
+  render({ keepView: !from || keepsView(from, { chartType: el('ctype').value, pfmode: el('pfmode').value }) });
   if (from) recordChartType(1, from, app.renderedType, showPrimaryType);
 }));
 
 /** Build the main chart as `type`: what undoing or redoing a type switch does. */
 function showPrimaryType(type) {
+  const keepView = !app.renderedType || keepsView(app.renderedType, type);
   el('ctype').value = type.chartType;
   el('pfmode').value = type.pfmode;
-  render();
+  render({ keepView });
   renderToolbar();
   autosave();
 }

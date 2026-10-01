@@ -6,7 +6,8 @@
  *   haHigh  = max(h, haOpen, haClose) ; haLow = min(l, haOpen, haClose)
  */
 import type { Bar } from '../model/bar';
-import type { ISeriesTransform } from './transform';
+import type { LooseOptional } from '../helpers/types';
+import { copyState, type ISeriesTransform } from './transform';
 
 export class HeikinAshiTransform implements ISeriesTransform {
   private _prevOpen = NaN;
@@ -15,6 +16,10 @@ export class HeikinAshiTransform implements ISeriesTransform {
   public reset(): void {
     this._prevOpen = NaN;
     this._prevClose = NaN;
+  }
+
+  public clone(): HeikinAshiTransform {
+    return copyState(this);
   }
 
   public push(bar: Bar): Bar[] {
@@ -26,6 +31,9 @@ export class HeikinAshiTransform implements ISeriesTransform {
     const haLow = Math.min(bar.low, haOpen, haClose);
     this._prevOpen = haOpen;
     this._prevClose = haClose;
-    return [{ time: bar.time, open: haOpen, high: haHigh, low: haLow, close: haClose, volume: bar.volume, oi: bar.oi }];
+    // Volume and open interest pass through as the source bar has them. A bar
+    // without them gives an element whose keys hold undefined, which every
+    // reader of a Bar takes as absent; the literal is still checked as a Bar.
+    return [{ time: bar.time, open: haOpen, high: haHigh, low: haLow, close: haClose, volume: bar.volume, oi: bar.oi } satisfies LooseOptional<Bar> as Bar];
   }
 }

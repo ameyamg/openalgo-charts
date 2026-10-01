@@ -26,12 +26,13 @@
  *   another's instrument.
  */
 import {
-  applyChartSettings, createLinkGroup, isKnownInterval, readChartSettings, registeredChartTypes,
-  type LinkChart, type LinkGroup, type LinkMemberOptions, type LinkOptions, type ResolvedLinkOptions,
+  applyChartSettings, createLinkGroup, isKnownInterval, readChartSettings,
+  type Chart, type ChartEventMap, type LinkChart, type LinkGroup, type LinkMemberOptions, type LinkOptions, type ResolvedLinkOptions,
 } from 'openalgo-charts';
 import { DrawingLinkGroup } from 'openalgo-charts/draw';
 import type { WorkspaceLinkChannels, WorkspaceLinkGroup, WorkspacePayload, WorkspaceSync } from 'openalgo-charts/workspace';
 import type { Widget } from './widget';
+import { isChartTypeChoice } from './chart-type-choice';
 
 /** One link group as the grid reports it. */
 export interface ChartGridLinkGroup {
@@ -59,7 +60,7 @@ export interface GridGroup<C = unknown> {
 }
 
 /** The slice of a grid cell the links drive. */
-export interface LinkedCell {
+interface LinkedCell {
   readonly id: string;
   readonly widget: Widget;
   member: LinkChart;
@@ -137,6 +138,32 @@ export function checkLinks(p: WorkspacePayload): string {
 }
 
 /**
+ * A chart as its link group reaches it. A pan or zoom the chart did not make
+ * itself (`own`: fresh bars, the grid, the group following another chart)
+ * is not passed on, and a window the group sets goes through `follow`, so the
+ * chart can tell that move from its own.
+ */
+export function linkMember(chart: Chart, own: () => boolean, follow: (move: () => void) => void): LinkChart {
+  return {
+    // The link group asks only for names the chart's map declares, so the
+    // forward stays on the typed overload rather than the string form 3.0.0 drops.
+    on: (event, cb) => chart.on(event as keyof ChartEventMap, event === 'pan' || event === 'zoom'
+      ? payload => { if (!own()) cb(payload); }
+      : event === 'symbol'
+        ? payload => { const p = payload as { symbol: string; exchange: string }; cb({ symbol: instrument(p.symbol, p.exchange) }); }
+        : cb),
+    getVisibleLogicalRange: () => chart.getVisibleLogicalRange(),
+    setVisibleLogicalRange: range => follow(() => chart.setVisibleLogicalRange(range)),
+    get dataLayer() { return chart.dataLayer; },
+    get isDestroyed() { return chart.isDestroyed; },
+    panes: () => chart.panes(),
+    addPrimitive: (primitive, pane) => chart.addPrimitive(primitive, pane),
+    removePrimitive: primitive => chart.removePrimitive(primitive),
+    setLinkedCrosshairIndex: index => chart.setLinkedCrosshairIndex(index),
+  };
+}
+
+/**
  * One chart's side of a group: how it reports and follows each channel. A
  * linked change is the leader's step, taken back on the leader's timeline and
  * sent here again; on this chart's own timeline it is never a step, so every
@@ -154,7 +181,7 @@ function memberOptions(cell: LinkedCell, group: GridGroup): LinkMemberOptions {
       return true;
     },
     onChartType: type => {
-      if (!registeredChartTypes().includes(type)) return false;
+      if (!isChartTypeChoice(type)) return false;
       widget.history.ignore(() => widget.setChartType(type));
       return widget.chartType() === type;
     },
@@ -173,7 +200,7 @@ export class GridLinks<C extends LinkedCell> {
   public constructor(private readonly defaults: LinkOptions = {}) {}
 
   /** A new, empty group on the grid's channels with `links` over them, or null when every letter is taken. */
-  public create(options: { id?: string; name?: string | null; links?: LinkOptions } = {}): GridGroup<C> | null {
+  public create(options: { id?: string | undefined; name?: string | null; links?: LinkOptions | undefined } = {}): GridGroup<C> | null {
     const free = (l: string): boolean => !this.groups.some(g => g.letter === l);
     // The grid names a group by its letter, so a saved group comes back under
     // the letter it was marked with, gaps an emptied group left included.
@@ -234,7 +261,7 @@ export class GridLinks<C extends LinkedCell> {
 
   /** One group holding every chart under no name: the desk as it linked before groups. */
   public trivial(cells: readonly C[]): boolean {
-    return this.groups.length === 1 && this.groups[0].name === null && cells.every(c => c.group === this.groups[0]);
+    return this.groups.length === 1 && this.groups[0]!.name === null && cells.every(c => c.group === this.groups[0]); // length checked first
   }
 
   /** The channels of `cell`'s group, or every channel off for a chart in none. */
@@ -247,7 +274,7 @@ export class GridLinks<C extends LinkedCell> {
    * than the flat ones can; an unnamed group is saved under the name it shows.
    */
   public sync(cells: readonly C[], name: (group: GridGroup<C>) => string): WorkspaceSync {
-    if (this.trivial(cells)) return savedChannels(this.groups[0].links.options()) as WorkspaceSync;
+    if (this.trivial(cells)) return savedChannels(this.groups[0]!.links.options()) as WorkspaceSync; // trivial: exactly one group
     const whole = this.groups.find(g => cells.every(c => c.group === g));
     const flat = savedChannels(whole?.links.options() ?? ALL_OFF);
     const groups: WorkspaceLinkGroup[] = this.groups.filter(g => cells.some(c => c.group === g))

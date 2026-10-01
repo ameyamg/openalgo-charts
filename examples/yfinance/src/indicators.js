@@ -7,6 +7,7 @@ import { createColorPicker, applyTokens, widgetTokens, inputStates } from '/dist
 import { bindTypedField, typedFieldValue, typedFieldError, typedFieldProblem, validateTypedRows, mountReferenceInputControls, outOfPlay } from './indicator-input-controls.js';
 import { studyAllows } from './host-study.js';
 import { anchoredGrowthSeed } from './anchored-study.js';
+import { INTERVALS, intervalLabel } from './intervals.js';
 
 let app;
 
@@ -72,6 +73,36 @@ export function renderIndicatorChips() {
     void first;
   }
   if (!chart.indicators().length) host.innerHTML = '<span style="color:var(--faint);font-size:12px">none</span>';
+}
+
+/**
+ * Why a study stopped drawing, in words that name it once, or null while it
+ * draws. Its calculation failed, or the chart refuses its inputs (a
+ * timeframe on Renko bricks); either way the error rides on its data status.
+ */
+function studyErrorText(inst) {
+  const status = inst.dataStatus?.();
+  if (status?.state !== 'error') return null;
+  const why = status.error instanceof Error && status.error.message ? status.error.message : 'its calculation failed';
+  return why.startsWith(`${inst.name}: `) ? why : `${inst.name}: ${why}`;
+}
+
+/**
+ * Say so when a study on `chart` stops drawing: the status line and a toast
+ * carry the reason once per new reason, not on every tick that fails again.
+ * Returns the call that stops listening.
+ */
+export function watchStudyStatus(chart) {
+  const said = new Map();
+  return chart.on('indicator:data-status', ({ id }) => {
+    const inst = chart.indicators().find((study) => study.id === id);
+    const message = inst ? studyErrorText(inst) : null;
+    if (message === null) { said.delete(id); return; }
+    if (said.get(id) === message) return;
+    said.set(id, message);
+    el('status').textContent = message;
+    toast('error', message);
+  });
 }
 
 // A study whose defaults cannot know the loaded history takes its first
@@ -344,9 +375,15 @@ export function destroyInputRows(host) {
 function inputField(host, key, kind, spec, value, onChange, unavailable) {
   const off = unavailable ? unavailable(key) : null;
   let field;
-  if (kind === 'select' || kind === 'source') {
+  if (kind === 'select' || kind === 'source' || kind === 'interval') {
     field = document.createElement('select');
-    const options = [...(kind === 'source' ? INDICATOR_SOURCES : spec.options)];
+    // A timeframe offers the chart's own and the intervals this page serves;
+    // a saved code it does not list stays an entry, since a select would
+    // otherwise drop it to the chart's own without a word.
+    const options = kind === 'interval'
+      ? [{ value: '', label: 'Chart' }, ...INTERVALS.concat(value && !INTERVALS.includes(value) ? [value] : [])
+        .map(code => ({ value: code, label: intervalLabel(code) }))]
+      : [...(kind === 'source' ? INDICATOR_SOURCES : spec.options)];
     const references = new Map();
     if (kind === 'source') {
       for (const output of spec.studyOutputs ?? []) {
@@ -563,6 +600,9 @@ export function collectInputRows(host) {
   ) };
 }
 
+/** The study's bar source, shown as a row of its inputs; not a descriptor setting. */
+const BAR_SOURCE = '@bars';
+
 // Inputs = the descriptor's own `inputs`. Style = `indicatorStyleInputs()`,
 // generated per plot (colour, opacity, thickness, line style) so every
 // indicator gets the same controls without declaring them.
@@ -570,7 +610,14 @@ export function renderSettingsTab(draft) {
   const inst = settingsFor;
   if (!inst) return;
   const descriptor = getIndicator(inst.indicatorId);
-  const inputs = settingsTab === 'style' ? indicatorStyleInputs(descriptor) : descriptor.inputs.map(input => {
+  // The bars the study computes on lead its inputs while the chart transforms:
+  // on any other chart they are the same bars, and the row would do nothing.
+  const primary = settingsTarget.chart.primarySeries?.();
+  const bars = settingsTab !== 'style' && primary && settingsTarget.chart.seriesTransform?.(primary) ? [{
+    key: BAR_SOURCE, type: 'select', label: 'Compute on', default: 'chart',
+    options: [{ label: 'Chart bars', value: 'chart' }, { label: 'Underlying bars', value: 'underlying' }],
+  }] : [];
+  const inputs = settingsTab === 'style' ? indicatorStyleInputs(descriptor) : [...bars, ...descriptor.inputs.map(input => {
     if (input.type !== 'source' || !input.allowStudyOutputs) return input;
     // Repeated studies are told apart as the widget numbers them, not by an internal id.
     const names = studyNames(settingsTarget.chart);
@@ -580,8 +627,8 @@ export function renderSettingsTab(draft) {
         label: `${names.get(producer.id)} / ${plot.title ?? plot.key}`,
       })));
     return { ...input, studyOutputs };
-  });
-  renderInputRows(el('set-body'), inputs, draft ?? inst.settings());
+  })];
+  renderInputRows(el('set-body'), inputs, draft ?? { ...inst.settings(), ...(bars.length ? { [BAR_SOURCE]: inst.barSource() } : {}) });
   const target = settingsTarget, host = el('set-body');
   const current = () => settingsFor === inst && settingsTarget === target && target.current()
     && target.chart.indicators().includes(inst);
@@ -614,7 +661,9 @@ export function collectSettings() {
   if (!currentSettings()) return false;
   if (!validateTypedRows(el('set-body'))) return false;
   try {
-    if (settingsFor.setSettings(collectInputRows(el('set-body'))) === false) return refused(settingsFor);
+    const { [BAR_SOURCE]: bars, ...settings } = collectInputRows(el('set-body'));
+    if (bars !== undefined && bars !== settingsFor.barSource() && !settingsFor.setBarSource(bars)) return refused(settingsFor);
+    if (settingsFor.setSettings(settings) === false) return refused(settingsFor);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'The study settings could not be applied';
     el('status').textContent = message;

@@ -1,12 +1,12 @@
 import { useState } from 'react';
 
-const version = '?v=2.5.10-architecture-1';
+const version = '?v=2.6.0-architecture-1';
 // The light file is generated from the dark one by scripts/sync-lib.mjs.
 const diagrams = {
   light: `/openalgo-charts/architecture-diagram-light.svg${version}`,
   dark: `/openalgo-charts/architecture-diagram.svg${version}`,
 } as const;
-const alt = 'OpenAlgo Charts 2.5.10 architecture: a custom host or widget owns data connections and application authority above the base engine\'s data-to-model-to-render pipeline, alerts, replay and linking, interaction, state and CSV. Eight optional tiers: indicators, draw, profile, transform, trade, workspace, WebGL and widget.';
+const alt = 'OpenAlgo Charts 2.6.0 architecture: a custom host or widget owns data connections and application authority above the base engine\'s data-to-model-to-render pipeline, alerts, replay and linking, interaction, state and CSV. Eight optional tiers: indicators, draw, profile, transform, trade, workspace, WebGL and widget.';
 
 export default function ArchitectureDiagram() {
   const [actualSize, setActualSize] = useState(false);
@@ -16,11 +16,11 @@ export default function ArchitectureDiagram() {
   return (
     <figure className="oac-architecture">
       <div className="oac-architecture__controls" role="group" aria-label="Diagram zoom">
-        <span>Architecture · 2.5.10</span>
+        <span>Architecture · 2.6.0</span>
         <button type="button" aria-pressed={!actualSize} onClick={() => setActualSize(false)}>Fit</button>
         <button type="button" aria-pressed={actualSize} onClick={() => setActualSize(true)}>Actual size</button>
         {(['light', 'dark'] as const).map(theme => (
-          <a key={theme} className={`oac-architecture__variant--${theme}`} href={diagrams[theme]} target="_blank" rel="noreferrer">Open SVG ↗</a>
+          <a key={theme} className={`oac-architecture__variant--${theme}`} href={diagrams[theme]} target="_blank" rel="noreferrer">Open SVG</a>
         ))}
       </div>
       <div className="oac-architecture__viewport" tabIndex={0} role="region" aria-label="Host boundary, base engine and optional tiers; scroll to explore at actual size">

@@ -6,7 +6,7 @@ export interface IndexedDbWorkspaceStorage extends WorkspaceStorage {
   close(): Promise<void>;
 }
 
-/** A revisioned catalog store: what the workspace and watchlist adapters share. */
+/** A revisioned catalog store: what the workspace, watchlist and drawing-template adapters share. */
 export interface IndexedDbCatalogStorage<C extends { revision: number }> {
   read(namespace: string): Promise<unknown | null>;
   write(namespace: string, catalog: C, expectedRevision: number, options?: WorkspaceOperationOptions): Promise<void>;

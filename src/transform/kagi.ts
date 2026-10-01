@@ -7,9 +7,10 @@
  * The kagi renderer connects vertices with a stepped line of varying width.
  */
 import type { Bar } from '../model/bar';
-import type { ISeriesTransform } from './transform';
+import { copyState, type ISeriesTransform } from './transform';
 
 export interface KagiOptions {
+  /** Price move that turns the line. The constructor throws unless it is above 0. */
   reversal: number;
 }
 
@@ -24,6 +25,8 @@ export class KagiTransform implements ISeriesTransform {
   private _prevShoulder = -Infinity; // last up-turn price
   private _prevWaist = Infinity; // last down-turn price
   private _thick = false;
+  /** Time of the newest bar pushed, which the vertex still forming is dated at. */
+  private _time = 0;
 
   public constructor(options: KagiOptions) {
     if (options.reversal <= 0) throw new Error('openalgo-charts: Kagi reversal must be > 0');
@@ -36,10 +39,16 @@ export class KagiTransform implements ISeriesTransform {
     this._prevShoulder = -Infinity;
     this._prevWaist = Infinity;
     this._thick = false;
+    this._time = 0;
+  }
+
+  public clone(): KagiTransform {
+    return copyState(this);
   }
 
   public push(bar: Bar): Bar[] {
     const p = bar.close;
+    this._time = bar.time;
     if (Number.isNaN(this._ext)) {
       this._ext = p;
       return [];
@@ -48,7 +57,7 @@ export class KagiTransform implements ISeriesTransform {
     if (this._dir >= 0) {
       if (p > this._ext) {
         this._ext = p;
-        if (p > this._prevShoulder) this._thick = true; // broke prior shoulder → yang
+        if (p > this._prevShoulder) this._thick = true; // broke prior shoulder: yang
       } else if (this._ext - p >= this._reversal) {
         out.push(vertex(bar.time, this._ext, this._thick)); // high turning point
         this._prevShoulder = this._ext;
@@ -58,7 +67,7 @@ export class KagiTransform implements ISeriesTransform {
     } else {
       if (p < this._ext) {
         this._ext = p;
-        if (p < this._prevWaist) this._thick = false; // broke prior waist → yin
+        if (p < this._prevWaist) this._thick = false; // broke prior waist: yin
       } else if (p - this._ext >= this._reversal) {
         out.push(vertex(bar.time, this._ext, this._thick)); // low turning point
         this._prevWaist = this._ext;
@@ -71,6 +80,6 @@ export class KagiTransform implements ISeriesTransform {
 
   public flush(): Bar[] {
     if (Number.isNaN(this._ext)) return [];
-    return [vertex(0, this._ext, this._thick)];
+    return [vertex(this._time, this._ext, this._thick)];
   }
 }

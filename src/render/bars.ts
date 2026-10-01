@@ -17,7 +17,7 @@ export interface BarDrawItem {
   prevClose?: number;
 }
 
-export interface BarGeometry {
+interface BarGeometry {
   cx: number;
   yOpen: number;
   yClose: number;
@@ -39,7 +39,7 @@ export function barGeometry(item: BarDrawItem, toY: (v: number) => number, dpr: 
   };
 }
 
-/** OHLC bars: vertical high→low, left tick = open, right tick = close. */
+/** OHLC bars: vertical high to low, left tick = open, right tick = close. */
 export function drawBars(
   ctx: CanvasRenderingContext2D,
   items: readonly BarDrawItem[],
@@ -53,7 +53,7 @@ export function drawBars(
   const lw = Math.max(1, Math.floor(dpr));
   ctx.save();
   for (let i = 0; i < items.length; i++) {
-    const item = items[i];
+    const item = items[i]!; // i, and i - 1 when positive, index items
     // `barGeometry`, worked out in place: this runs for every bar in view on
     // every frame, and an object per bar is garbage by the next one.
     const b = item.bar;
@@ -67,7 +67,7 @@ export function drawBars(
     // taken from `prevClose` for the first drawn bar, and a missing or
     // non-finite reference falls back to close-versus-own-open rather than
     // inventing one. See `CandleStyle.colorByPreviousClose`.
-    const ref = i > 0 ? items[i - 1].bar.close : item.prevClose;
+    const ref = i > 0 ? items[i - 1]!.bar.close : item.prevClose;
     const up = style.colorByPreviousClose === true && ref !== undefined && Number.isFinite(ref)
       ? item.bar.close >= ref
       : b.close >= b.open;

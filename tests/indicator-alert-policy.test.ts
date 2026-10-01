@@ -5,6 +5,7 @@ import type { AlertEventPayload } from '../src/alerts/types';
 
 function pass(times: number[], revision: number, patch: Partial<IndicatorExecutionContext> = {}, options: {
   confirmed?: boolean; refresh?: boolean; tailOnly?: boolean; values?: IndicatorValues; current?: () => boolean; legacy?: boolean;
+  from?: number;
 } = {}): IndicatorAlertPolicyPass {
   return {
     bars: times.map(time => ({ time, open: 1, high: 1, low: 1, close: 1 })),
@@ -18,6 +19,7 @@ function pass(times: number[], revision: number, patch: Partial<IndicatorExecuti
       timezone: 'Etc/UTC', now: () => 1_000, interval: '100t',
     },
     tailOnly: options.tailOnly ?? revision !== 1, refresh: options.refresh ?? false, current: options.current ?? (() => true),
+    from: options.from ?? times.length,
   };
 }
 
@@ -90,6 +92,20 @@ describe('explicit alert policy selection', () => {
     expect(h.events).toEqual([]);
     h.run(pass([0, 60, 120], 4, { historyRevision: 2 }, { confirmed: true }));
     expect(h.events.map(event => [event.alertId, event.time])).toEqual([['everyUpdate', 120], ['oncePerBar', 120], ['onBarClose', 120]]);
+  });
+
+  it.each(['everyUpdate', 'oncePerBar', 'once'] as const)('judges each bar a pass appended for %s, in order, on the bars through it', frequency => {
+    const judged: number[][] = [];
+    const h = policy([spec(frequency, { when: ctx => { judged.push([ctx.index, ctx.bars.length, ctx.values.v.length]); return ctx.index === 2; } })]);
+    h.run(pass([0, 60], 1));
+    h.run(pass([0, 60, 120, 180], 2, { change: 'append' }, { from: 2 }));
+    // A spent once alert judges nothing after its delivery.
+    expect(judged).toEqual(frequency === 'once' ? [[2, 3, 3]] : [[2, 3, 3], [3, 4, 4]]);
+    expect(h.events.map(event => [event.time, event.index])).toEqual([[120, 2]]);
+    // A tick on the newest bar appends nothing, so only it is judged.
+    judged.length = 0;
+    h.run(pass([0, 60, 120, 180], 3));
+    expect(judged).toEqual(frequency === 'once' ? [] : [[3, 4, 4]]);
   });
 
   it('supports empty history and first live observations without invented close events', () => {

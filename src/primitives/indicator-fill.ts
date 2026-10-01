@@ -1,11 +1,11 @@
 /**
- * Shaded band between two indicator plots — the Ichimoku cloud, a Bollinger
+ * Shaded band between two indicator plots: the Ichimoku cloud, a Bollinger
  * channel, a Keltner envelope.
  *
  * A pair of lines is not the same picture as a filled region: the fill is what
  * makes "price is above the cloud" or "the cloud flipped" readable at a glance,
  * and which side is on top is itself the signal. So the band is drawn as two
- * runs — one where A leads, one where B does — and the crossings between them
+ * runs (one where A leads, one where B does) and the crossings between them
  * are split at the exact intersection rather than at the nearest bar, or the
  * colours would bleed a bar past every flip.
  */
@@ -34,14 +34,14 @@ export interface IndicatorFillOptions {
   colorUp: string;
   /** Fill colour where the second is above the first. */
   colorDown: string;
-  /** 0..1. Defaults to 0.12 — a band must not drown the candles it sits behind. */
+  /** 0..1. Defaults to 0.12: a band must not drown the candles it sits behind. */
   opacity?: number;
   /**
    * Set to grade the band instead of flat-filling it, in place of
    * `colorUp`/`colorDown`. A point carrying its own `color` still overrides it.
    * Unset leaves the two-colour fill exactly as it was.
    */
-  gradient?: FillGradient;
+  gradient?: FillGradient | undefined;
 }
 
 /** One bar's pair of values; `null` where either plot has no value yet. */
@@ -56,12 +56,12 @@ export interface FillPoint {
    * split at the bar where the colour changes, or at the preceding intersection
    * if the plots cross into that bar. Overrides both point and band gradients.
    */
-  color?: string;
+  color?: string | undefined;
   /**
    * Price-anchored gradient starting at this bar, or at the preceding intersection
    * when the plots cross into it. Undefined uses the band's gradient.
    */
-  gradient?: FillGradient;
+  gradient?: FillGradient | undefined;
 }
 
 function sameGradient(a: FillGradient | undefined, b: FillGradient | undefined): boolean {
@@ -145,15 +145,16 @@ export class IndicatorFill implements IPrimitive {
     ctx.globalAlpha = this._opts.opacity ?? 0.12;
 
     // Walk the series accumulating one polygon per constant-sign run. A gap
-    // (either value missing) closes the current run — bridging it would fill
+    // (either value missing) closes the current run: bridging it would fill
     // across a stretch where the indicator has no opinion.
-    let run: { up: boolean; color?: string; gradient?: FillGradient; top: number[]; bot: number[]; xs: number[] } | null = null;
+    let run: { up: boolean; color?: string | undefined; gradient?: FillGradient | undefined; top: number[]; bot: number[]; xs: number[] } | null = null;
     const flush = (): void => {
       if (run !== null && run.xs.length >= 2) {
+        // xs, top and bot grow together, so every index inside xs reads all three.
         ctx.beginPath();
-        ctx.moveTo(run.xs[0], run.top[0]);
-        for (let i = 1; i < run.xs.length; i++) ctx.lineTo(run.xs[i], run.top[i]);
-        for (let i = run.xs.length - 1; i >= 0; i--) ctx.lineTo(run.xs[i], run.bot[i]);
+        ctx.moveTo(run.xs[0]!, run.top[0]!);
+        for (let i = 1; i < run.xs.length; i++) ctx.lineTo(run.xs[i]!, run.top[i]!);
+        for (let i = run.xs.length - 1; i >= 0; i--) ctx.lineTo(run.xs[i]!, run.bot[i]!);
         ctx.closePath();
         if (run.gradient === undefined || run.color !== undefined) {
           ctx.fillStyle = run.color ?? (run.up ? this._opts.colorUp : this._opts.colorDown);
@@ -167,7 +168,7 @@ export class IndicatorFill implements IPrimitive {
     };
 
     for (let i = 0; i < this._points.length; i++) {
-      const p = this._points[i];
+      const p = this._points[i]!;
       if (p.a === null || p.b === null || !Number.isFinite(p.a) || !Number.isFinite(p.b)) {
         flush();
         continue;

@@ -1,6 +1,6 @@
 ---
 title: Indicators
-description: 105 built-in indicators via chart.addIndicator, plus the registry for your own.
+description: 112 built-in indicators via chart.addIndicator, plus the registry for your own.
 ---
 
 import RunnableExample from '../../components/RunnableExample'
@@ -149,11 +149,11 @@ There are two ways to put an indicator on a chart, and they suit different jobs.
 
 **`chart.addIndicator(id)`** is the managed path: the chart creates the series, picks the
 pane, draws reference levels, recomputes on every data change, and cleans up on removal.
-The 105 built-ins live in the lazy `openalgo-charts/indicators` tier, 40.38 kB Brotli.
+The 112 built-ins live in the lazy `openalgo-charts/indicators` tier, 40.38 kB Brotli.
 
 ```ts
 import { createChart } from 'openalgo-charts';
-import 'openalgo-charts/indicators';   // registers all 105 built-ins
+import 'openalgo-charts/indicators';   // registers all 112 built-ins
 
 const chart = createChart(el);
 chart.addSeries('candlestick').setData(bars);
@@ -197,8 +197,8 @@ chart.addIndicator('macd');
 chart.timeScale.fitContent(bars.length);
 return chart;`} />
 
-105 descriptors ship in the tier, split across the four categories a picker reads off
-`descriptor.category`: Trend (36), Momentum (29), Volatility (22), and Volume (18).
+112 descriptors ship in the tier, split across the four categories a picker reads off
+`descriptor.category`: Trend (40), Momentum (31), Volatility (23), and Volume (18).
 
 `onchart` indicators overlay the price pane; `pane` indicators create their own. Override
 with `chart.addIndicator('rsi', {}, { paneIndex: 2 })`.
@@ -207,12 +207,15 @@ with `chart.addIndicator('rsi', {}, { paneIndex: 2 })`.
 carries per-plot style inputs (colour, width, line style, opacity) that are not listed
 here; read them off `indicatorStyleInputs(descriptor)` rather than hardcoding them. Ids
 are exact: `addIndicator` throws on one it does not know, so guard a user-supplied id
-with `hasIndicator(id)`.
+with `hasIndicator(id)`. The moving averages, the bands and ten other studies also take a
+`timeframe`, which computes them on a higher timeframe folded from the chart's bars: see
+[a built-in on a higher timeframe](#a-built-in-on-a-higher-timeframe).
 
-### Trend (36)
+### Trend (40)
 
 | Indicator | `id` | Placement | Key settings |
 |---|---|---|---|
+| 52 Week High/Low | `high-low-52-week` | onchart | colours only (the window is 52 weeks by definition) |
 | ADX / DMI | `adx` | pane | `period=14`, `adxPeriod=14` |
 | AlphaTrend | `alphatrend` | onchart | `coeff=1`, `AP=14`, `source=close`, `showsignalsk=true`, `novolumedata=false` |
 | Arnaud Legoux Moving Average | `alma` | onchart | `length=9`, `offset=0.85`, `sigma=6` |
@@ -244,13 +247,16 @@ with `hasIndicator(id)`.
 | Time Weighted Average Price | `twap` | onchart | `anchor=session`, `source=ohlc4`, `offset=0` |
 | Trend Strength Index | `trend-strength-index` | pane | `length=14` |
 | Triple EMA | `tema` | onchart | `length=9` |
+| Variable Index Dynamic Average | `vidya` | onchart | `length=9`, `cmoLength=9`, `source=close` |
 | Volatility Stop | `volatility-stop` | onchart | `length=20`, `source=close`, `factor=2` |
 | Vortex Indicator | `vortex` | pane | `length=14` |
 | Williams Alligator | `alligator` | onchart | `jawLength=21`, `teethLength=13`, `lipsLength=8`, `jawOffset=8`, `teethOffset=5`, `lipsOffset=3` |
 | Williams Fractals | `williams-fractals` | onchart | `periods=2`, `showUp=true`, `showDown=true` |
 | WMA | `wma` | onchart | `length=9`, `source=close` |
+| Zero Lag EMA | `zlema` | onchart | `length=20`, `source=close` |
+| ZigZag | `zigzag` | onchart | `deviation=5` |
 
-### Momentum (29)
+### Momentum (31)
 
 | Indicator | `id` | Placement | Key settings |
 |---|---|---|---|
@@ -261,6 +267,7 @@ with `hasIndicator(id)`.
 | Connors RSI | `connors-rsi` | pane | `lenrsi=3`, `lenupdown=2`, `lenroc=100` |
 | Coppock Curve | `coppock-curve` | pane | `wmaLength=10`, `longRoCLength=14`, `shortRoCLength=11` |
 | Detrended Price Oscillator | `dpo` | pane | `period=21`, `isCentered=false` |
+| Elder-Ray Index | `elder-ray` | pane | `length=13` |
 | Fisher Transform | `fisher-transform` | pane | `length=9` |
 | Know Sure Thing | `know-sure-thing` | pane | `roclen1=10`, `roclen2=15`, `roclen3=20`, `roclen4=30`, `smalen1=10`, `smalen2=10`, `smalen3=10`, `smalen4=15`, `siglen=9` |
 | MACD | `macd` | pane | `fastPeriod=12`, `slowPeriod=26`, `signalPeriod=9`, `source=close` |
@@ -272,6 +279,7 @@ with `hasIndicator(id)`.
 | Relative Vigor Index | `relative-vigor-index` | pane | `length=10`, `offset=0` |
 | RSI | `rsi` | pane | `length=14`, `source=close`, `overbought=70`, `oversold=30` |
 | RSI Divergence Indicator | `rsi-divergence` | pane | `length=14`, `source=close`, `lbR=5`, `lbL=5`, `rangeUpper=60`, `rangeLower=5`, `plotBull=true`, `plotHiddenBull=false`, `plotBear=true`, `plotHiddenBear=false` |
+| Schaff Trend Cycle | `schaff-trend-cycle` | pane | `fastLength=23`, `slowLength=50`, `cycleLength=10`, `factor=0.5`, `source=close` |
 | SMI Ergodic Indicator | `smi-ergodic-indicator` | pane | `longlen=20`, `shortlen=5`, `siglen=5` |
 | SMI Ergodic Oscillator | `smi-ergodic-oscillator` | pane | `longlen=20`, `shortlen=5`, `siglen=5` |
 | Stochastic | `stochastic` | pane | `kPeriod=14`, `kSmoothing=1`, `dPeriod=3` |
@@ -284,7 +292,7 @@ with `hasIndicator(id)`.
 | Williams Percent Range | `williams-percent-r` | pane | `length=14`, `source=close` |
 | Woodies CCI | `woodies-cci` | pane | `cciTurboLength=6`, `cci14Length=14` |
 
-### Volatility (22)
+### Volatility (23)
 
 | Indicator | `id` | Placement | Key settings |
 |---|---|---|---|
@@ -309,6 +317,7 @@ with `hasIndicator(id)`.
 | Standard Error | `standard-error` | pane | `length=14` |
 | Standard Error Bands | `standard-error-bands` | onchart | `periods=21`, `errors=2`, `method=Simple`, `averagePeriods=3` |
 | Ulcer Index | `ulcer-index` | pane | `source=close`, `length=14` |
+| Volatility Squeeze | `volatility-squeeze` | pane | `length=20`, `bbMult=2`, `kcMult=1.5` |
 | Williams VIX Fix | `williams-vix-fix` | pane | `pd=22`, `bbl=20`, `mult=2`, `lb=50`, `ph=0.85`, `pl=1.01`, `hp=false`, `sd=false` |
 
 ### Volume (18)
@@ -421,6 +430,55 @@ chart.addIndicator('halftrend', { amplitude: 2, channelDeviation: 2 });
 
 chart.timeScale.fitContent(bars.length);
 return chart;`} caption="HalfTrend: stepped level, half-ATR channel, trend-tinted ribbon, and Buy/Sell labels." />
+
+## ZigZag
+
+The swings left once every move smaller than `deviation` percent is filtered out, by the
+percent-reversal definition. While a swing rises, its end is the highest high since it
+began. A bar whose low is at least `deviation` percent below that high confirms the high as
+a swing point and starts a falling swing at that bar's low; a falling swing is the mirror.
+A move of exactly the deviation reverses, and a bar that makes a new extreme extends the
+swing even when its other end would also have reversed it.
+
+The `zigzag` column holds each swing point's price on its own bar, and nothing on the bars
+between. The legs are drawn as shapes, so a leg stays straight on a logarithmic scale, in
+the plot's colour, opacity, thickness and line style; the last leg is dashed.
+
+**Only the last leg repaints.** A tick that makes a new extreme moves the leg's end onto the
+forming bar, and the bar it left reads empty again. A tick that retraces by the deviation
+confirms the end and starts a new last leg on the forming bar. A corrected bar can move the
+end back. Confirmed swing points never move, and the live result always equals a full
+calculation of the same bars.
+
+## 52 Week High/Low
+
+The highest high and the lowest low of the 52 weeks ending with each bar, as two step lines.
+The window is calendar time in the chart's timezone, not a bar count: the 364 days that end
+on the bar's own day, so a high made on a Friday leaves the window on the Friday 52 weeks
+later, whatever holidays fall between. A bar prints only once the loaded history begins
+before its window. A chart with less than a year of history therefore draws nothing rather
+than a shorter range under a 52 week name; on an intraday chart the study needs a year of
+that interval loaded.
+
+<RunnableExample height={400} tiers={['indicators']} code={`const chart = lib.createChart(el);
+const bars = lib.generateBars(1700000000, 520, 86400);
+chart.addSeries('candlestick').setData(bars);
+
+chart.addIndicator('zigzag', { deviation: 4 });
+chart.addIndicator('high-low-52-week');
+
+chart.setVisibleLogicalRange({ from: 380, to: 522 });
+return chart;`} caption="ZigZag at 4 percent with its last leg dashed, and the 52 week high and low once a year of history is loaded." />
+
+The other five studies added with these pin their first bar and their flat-window rule:
+
+| Study | First value | A window that did not move |
+|---|---|---|
+| `zlema` | bar `lag + length - 1`, with `lag = floor((length - 1) / 2)` | not applicable |
+| `vidya` | bar `cmoLength`, seeded on the source itself | no momentum: the line holds |
+| `elder-ray` | bar `length - 1`, where its EMA starts | not applicable |
+| `schaff-trend-cycle` | bar `slowLength + 2 * cycleLength - 3` (67 at the defaults) | repeats the previous reading; before the first one, nothing |
+| `volatility-squeeze` | state at `length - 1`, momentum at `2 * length - 2` | flat closes shrink the bands onto the basis, so the squeeze is on unless the channel is flat too |
 
 ## Signal markers
 
@@ -1322,7 +1380,7 @@ typeInput.options;   // same list as INDICATOR_PLOT_STYLES
 import {
   registeredIndicators, hasIndicator, indicatorDefaults,
 } from 'openalgo-charts';
-import 'openalgo-charts/indicators';   // registers the 105 built-ins
+import 'openalgo-charts/indicators';   // registers the 112 built-ins
 
 // Group the catalog for a menu, with no per-indicator code.
 const byCategory = new Map<string, string[]>();
@@ -1388,7 +1446,7 @@ chart.addIndicator('momentum', { length: 14 });
 ### Shaded bands between plots
 
 A pair of lines is not the same picture as a filled region, so a descriptor can
-declare `fills`: the Ichimoku cloud, a Bollinger channel. 28 of the 105 built-ins
+declare `fills`: the Ichimoku cloud, a Bollinger channel. 28 of the 112 built-ins
 declare one or more, 38 fills in total.
 
 ```ts
@@ -1567,7 +1625,7 @@ calc: (bars) => ({
 
 The four columns live in the **same `IndicatorValues`** every other descriptor returns, so
 `calc` keeps one shape and every helper written against it keeps working. A second return
-type would have forked the contract for all 105 built-ins.
+type would have forked the contract for all 112 built-ins.
 
 - `key` stays the series identity, the thing `instance.series('ha')` resolves and the thing
   the style settings are keyed on. The legend reading falls back to the `close` column.
@@ -1687,6 +1745,7 @@ calcTail: (bars, settings, from, previous, store, ctx) => { ... },
 | `interval` | `string?` | The timeframe (`'5m'`, `'1d'`), on the same terms. |
 | `timezone` | `string` | The chart's IANA zone, the calendar its axis is labelled in. |
 | `now()` | `number` | Chart wall clock in UTC seconds, the clock the countdown row reads. |
+| `transformed` | `boolean?` | `true` when the bars are a transform's elements (a study on the chart's own bars of a transformed series), so their times do not mark out the clock. Absent otherwise. |
 
 <Callout type="info">
 **`isConfirmed` uses the declared interval when available.** Fixed bars close at their
@@ -1710,7 +1769,9 @@ or `replay`. `change` is `initial`,
 `reset`, `prepend`, `append`, `replace`, `correction` or `refresh`. Its `revision`
 advances with source mutations; `historyRevision` also changes whenever a cached
 prefix may be invalid. This makes same-shaped history replacements and coalesced
-historical corrections take a full calculation. `confirmationSource` is `provider`,
+historical corrections take a full calculation. On a transformed chart, a forming
+element that a newer source bar dates again at its index (a Kagi vertex, a range bar)
+is a live `replace`, or an `append` when the bar also added elements after it. `confirmationSource` is `provider`,
 `replay`, `clock`, `unknown` or `empty`. Mutations can coalesce into one calculation;
 these counters do not promise one script execution per provider tick.
 
@@ -1756,8 +1817,8 @@ The optional `IndicatorAlertSpec.frequency` uses `IndicatorAlertFrequency`:
 
 | Frequency | When a true condition emits |
 | --- | --- |
-| omitted | Once for a newly appended bar, retaining the original tail-only rule. Same-time updates do not emit. |
-| `everyUpdate` | Each observed live calculation after chart batching. Several provider ticks can coalesce into one calculation. |
+| omitted | Once for each newly appended bar, retaining the original tail-only rule. Same-time updates do not emit. |
+| `everyUpdate` | Each observed live calculation after chart batching. Several provider ticks on one bar can coalesce into one calculation. |
 | `oncePerBar` | The first matching live calculation for that bar, even when the condition was false at its opening. |
 | `onBarClose` | Once when native confirmation closes the bar. A false condition at close is not reconsidered. |
 | `once` | The first matching live result in this instance's lifetime. Removing and recreating the study creates a fresh lifetime. |
@@ -1775,11 +1836,29 @@ close several observations. A same-time `series.update(bar, { confirmation:
 is observed on the next eligible live calculation, without a polling timer;
 repaint, settings and asynchronous refresh alone do not trigger it.
 
-Close predicates and message functions receive only bars and output values
-through their evaluated index. Use causal calculations so those values do not
-already contain future information. A predicate or message error leaves that
-delivery unspent and reports through `dataStatus()`; a later live revision can
-retry, while repeated reads do not repeat successful sibling alerts. Subscriber
+A calculation that appends several bars after an unchanged history (ticks one frame
+batched, or one source bar that completes several Renko bricks; the other transforms
+add at most one element per source bar) judges each new bar in turn,
+as separate appends would, whatever the frequency. The newest may still be forming,
+so a close alert judges it only once it closes. A calculation that changed an earlier
+bar seeds silently instead. On a Kagi or range bar chart a newer source bar dates the
+forming element again at its index; that is the same bar revised, so it is not judged
+as new, and an alert that already delivered on it or closed it stays that way.
+
+A study on the underlying bars (`barSource: 'underlying'`) reads each element at the bar
+it was completed on, so the elements one bar completed all read that bar, and its alerts
+count the bars it computes on rather than the elements: such a bar is judged once, at the
+first element it completed, whatever the frequency. `oncePerBar` delivers at most once
+per underlying bar, `onBarClose` judges a bar after that bar has closed, and
+`everyUpdate` judges an update only when an element reads the bar it moved. On the
+chart's own bars every element is a bar of the study and is judged on its own.
+
+Close predicates and message functions, and any alert judged at a bar before the
+newest, receive only bars and output values through their evaluated index. Use
+causal calculations so those values do not already contain future information. A
+predicate or message error leaves that delivery unspent and reports through
+`dataStatus()`; a later live revision can retry, while repeated reads do not
+repeat successful sibling alerts. Subscriber
 exceptions happen after native dispatch is committed and do not retry that
 delivery.
 
@@ -1790,7 +1869,9 @@ to compare same-time ticks, confirmation, resets and replay.
 
 For a signal that arrives from outside the calculation entirely (a subscription your
 `attach` opened), use the imperative half instead: `ctx.emit(event, payload)` on
-[the attach context](#the-attach-context) puts anything you like on the same bus.
+[the attach context](#the-attach-context) puts anything you like on the same bus. Declare
+the name in `ChartEventMap` so a host's `chart.on` is typed for it; see
+[typed payloads](/docs/events#typed-payloads).
 
 ### Calculation errors (2.4.0)
 
@@ -1909,17 +1990,21 @@ same as a whole rewrite would leave.
 #### The built-ins' tails (2.5.8)
 
 The built-in `sma`, `ema`, `wma`, `rsi`, `atr`, `adx`, `macd`, `bollinger`, `vwap`,
-`supertrend`, `stochastic`, `obv`, `cci`, `keltner-channel`, `donchian` and
-`parabolic-sar` implement `calcTail`. A tick costs them a step, or one window, instead of
+`supertrend`, `stochastic`, `obv`, `cci`, `keltner-channel`, `donchian`,
+`parabolic-sar`, `zlema`, `vidya`, `elder-ray`, `schaff-trend-cycle`, `volatility-squeeze`,
+`zigzag` and `high-low-52-week` have a `calcTail` of their own. A tick costs them a step, or one window, instead of
 a pass over the loaded history, and the spliced result equals a full `calc` of the same
 bars value for value, NaN and negative zero included. A study that carries state from bar
 to bar rebuilds it once after each full calculation, so the first tick after a load or a
 settings change costs about one pass.
 
-Their tail declines, and the full `calc` runs, for a length that is not a positive whole
-number, a negative Donchian `offset`, any VWAP `offset`, and a VWAP bar that changes how
-the history's sessions are read: the first overnight gap in a short history, or a bar
-that moves the median gap between bars.
+A window length is read as a whole number, rounded and at least 1, in `calc` and in the
+tail alike (14.5 reads as 15), so a fractional length no longer turns the tail off. Their
+tail declines, and the full `calc` runs, for a negative Donchian `offset`, any VWAP
+`offset`, and a VWAP bar that changes how the history's sessions are read: the first
+overnight gap in a short history, or a bar that moves the median gap between bars.
+`zigzag` declines when a tick changes a bar before the tail, which is its last leg
+repainting (see [ZigZag](#zigzag)).
 
 A descriptor that spreads a built-in does not inherit its `calcTail`: the built-ins hold
 it as a property a spread does not copy. Such a descriptor recomputes in full on every
@@ -1937,6 +2022,81 @@ registerIndicator({
   calcTail: ema.calcTail,
 });
 ```
+
+## A built-in on a higher timeframe
+
+A 15-minute EMA or an hourly Supertrend on a 1-minute chart, without changing the chart's
+interval and without a second data source: 29 built-ins take a `timeframe` input, an
+interval whose empty default is the chart's own.
+
+```ts
+const ema = chart.addIndicator('ema', { length: 20, timeframe: '15m' });
+ema.setSettings({ timeframe: '1h' });
+ema.setSettings({ timeframe: '' });   // the chart's own timeframe again
+```
+
+Empty, which is the default, the study is exactly what it was: the same calculation and the
+same live tail, so a chart that never sets it draws what it drew before, and a layout saved
+by an earlier version loads and computes as it did. `getState()` and `indicatorDefaults()`
+carry the new key for these 29 studies only.
+
+Set, the chart's bars are folded to that interval, the study runs on the folded bars, and
+each bucket's value is drawn from the first bar of the bucket after it, then held across
+that bucket. A value appears once its period has closed and never changes after, live or on
+a reload. The bars of the first bucket are empty, and the legend names the timeframe
+(`EMA 20 close 15m`).
+
+Buckets follow the chart's calendar. Days and weeks are cut in the chart's timezone, and a
+sub-day bucket starts at the session open, which is read from the bars as the time of day
+most of the loaded days first trade at. An NSE hourly bucket therefore runs 09:15 to 10:15
+rather than 09:30 to 10:30, and the day's last is 15:15 to 15:30; a New York chart starts
+its buckets at 09:30, and a market that trades round the clock at midnight.
+
+| Case | What happens |
+|---|---|
+| A timeframe no coarser than the chart's interval | The chart's own timeframe: nothing is folded. |
+| An unknown code, a tick or volume interval, or a chart whose bars close on trade flow | Refused. `addIndicator` throws; a later `setSettings` sets the study's data status to `error` with the reason, and the next good setting clears it. A layout saved that way restores the study in that status. |
+| The `source` set to another study's output | Refused while a timeframe is set: an output is not a bar that can be folded. |
+| A live tick inside a bucket | The held values stand. The bar that opens a new bucket recomputes the fold once. |
+| A negative `offset` on VWMA or Donchian | It shifts a later bucket onto bars already shown, so it recomputes on every tick. |
+| A short history | The fold has only the loaded bars: an hourly EMA 20 needs about 20 hours of them. |
+| A chart that transforms its bars (Renko, Heikin Ashi and the rest), with the study on the chart's bars | Refused the same way: the elements' times are no clock. Compute the study on the underlying bars (**Compute on** in its settings, or `setBarSource('underlying')`) and it folds them, each value read at the bar its element completed on. |
+| Renko, Kagi or point and figure elements a host transformed itself and fed as the chart's bars | They cannot be told from time bars, so they are folded by their times, which means nothing. Compute a timeframe study on time bars. |
+
+The widget's study settings show the input as a select, **Chart** first and then the
+intervals the host serves (`intervals` in the widget options), and the reference host does
+the same with its own intervals. Try the
+[higher-timeframe example](/examples#a-built-in-study-on-a-higher-timeframe).
+
+**Which studies take it.** The moving averages: SMA, EMA, WMA, VWMA, Hull, DEMA, TEMA,
+ALMA, Smoothed, T3, Least Squares, KAMA, McGinley Dynamic, Zero Lag EMA and VIDYA. The
+bands: Bollinger, Keltner, Donchian and Envelope. Then Supertrend, Parabolic SAR, ATR, RSI,
+MACD, Stochastic, Stochastic RSI, Williams Percent Range, CCI and ADX.
+
+**Which do not, and why:**
+
+| Studies | Why |
+|---|---|
+| VWAP, TWAP | Anchored to the session or a period and accumulated within it: folded, the line barely moves and loses its anchor. |
+| CPR, Average Daily Range, 52 Week High/Low | Already computed from daily or longer periods. |
+| On-Balance Volume, Accumulation/Distribution, Price Volume Trend, Negative and Positive Volume Index, Net Volume | Running totals from the first loaded bar: a fold changes the step, not the reading. |
+| Volume and the three open interest studies | Each bar's own reading, which is the chart's timeframe. |
+| Ichimoku Cloud, Detrended Price Oscillator, Williams Alligator | Displaced or centred by a count of chart bars. |
+| HalfTrend, Williams Fractals, RSI Divergence, Consolidation and Breakout, AlphaTrend, WaveTrend Pro, ZigZag | Markers, pivots and swing lines dated at bars: folded they would repeat across a bucket, and a pivot is confirmed by later bars. |
+| Hull Suite, Seasonality | Recolour the candles or draw a table. |
+
+The rest are not in this first list. `withTimeframe` from `openalgo-charts/indicators` gives
+any study that computes from the bars alone, and reads no later bar, the same input:
+
+```ts
+import { registerIndicator, getIndicator } from 'openalgo-charts';
+import { withTimeframe } from 'openalgo-charts/indicators';
+
+registerIndicator(withTimeframe(getIndicator('mfi')));   // the built-in, with a timeframe
+```
+
+It throws for a descriptor that already has a `timeframe` input or that brings its own data
+through `attach`.
 
 ## Higher timeframes: `securitySeries` (2.4.0)
 
@@ -2927,5 +3087,7 @@ subscription unless explicitly invalidated. Native replay requires the explicit
 `loading`, `ready`, `empty`, `unsupported` and `error`, with optional `error` detail.
 Use `subscribeDataStatus(listener)` and release its returned unsubscribe function.
 `retryData()` retries the current source. The widget renders these states and
-Retry automatically. `indicator:data-status` emits `{ id, indicatorId, status }`
+Retry automatically. An error the study's inputs caused (an `IndicatorInputError`, such
+as a timeframe on transformed bars) shows its message instead, with no Retry, since
+the same inputs are refused the same way (since 2.6.0). `indicator:data-status` emits `{ id, indicatorId, status }`
 on the chart event bus. Existing synchronous indicators return null status.

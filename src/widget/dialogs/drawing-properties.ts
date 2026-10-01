@@ -1,4 +1,3 @@
-import { widgetText } from '../localization';
 /**
  * Properties of the selected drawing, generated from the tool's settings
  * schema (`drawingSettingsSchema`), which declares only the fields the tool's
@@ -19,15 +18,17 @@ import { widgetText } from '../localization';
  * look as the tool's default or by name, and applies a saved one, when the
  * widget was given a template store.
  */
-import { applyDrawingSettings, drawingSettingsSchema, getDrawingTool, readDrawingSettings } from 'openalgo-charts/draw';
+import { widgetText } from '../localization';
+import { applyDrawingSettings, drawingSettingsSchema, readDrawingSettings } from 'openalgo-charts/draw';
 import type { Drawing, DrawingTool, SettingsSchema } from 'openalgo-charts/draw';
-import { editableIds, type WidgetContext } from '../context';
+import { drawingToolOf, editableIds, type WidgetContext } from '../context';
+import { drawingActionState, runDrawingAction, type DrawingAction } from '../drawing-actions';
 import { commandChord } from '../keymap';
 import {
-  button, controlsFromFields, dialogFrame, el, openPanel, placePanel, renderForm, selectionPoint, tabList,
+  button, controlsFromFields, declinedPanel, dialogFrame, el, openPanel, placePanel, renderForm, selectionPoint, tabList,
   type ButtonSpec, type FormHandle, type PanelHandle,
 } from '../form';
-import { openMenu } from '../topbar';
+import { openMenu } from '../menu';
 import { templateMenuRows } from '../drawing-templates';
 import { mountDrawingCoordinates, type DrawingCoordinatesHandle } from './drawing-coordinates';
 import { mountLevelEditor } from './level-editor';
@@ -50,8 +51,8 @@ export interface DrawingPropertiesOptions {
 export function commonSchema(toolIds: readonly string[]): SettingsSchema {
   const schemas = toolIds.map((t) => drawingSettingsSchema(t));
   if (schemas.length === 0) return { fields: [] };
-  const [first, ...rest] = schemas;
-  const fields = first.fields.filter((f) => rest.every((s) => s.fields.some((g) => g.path === f.path && g.kind === f.kind)));
+  const [first, ...rest] = schemas; // not empty, checked above
+  const fields = first!.fields.filter((f) => rest.every((s) => s.fields.some((g) => g.path === f.path && g.kind === f.kind)));
   return schemas.every((s) => s.textIsContent === true) ? { fields, textIsContent: true } : { fields };
 }
 
@@ -102,10 +103,6 @@ export function resolvedDrawingValues(d: Drawing, schema: SettingsSchema, tool: 
   return out;
 }
 
-function toolOf(id: string): DrawingTool | null {
-  try { return getDrawingTool(id); } catch { return null; }
-}
-
 const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
 
 /**
@@ -118,21 +115,20 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
   if (opts.ids !== undefined && opts.ids.length > 0 && !sameIds(opts.ids, draw.selection())) draw.select(opts.ids.slice());
   let ids = draw.selection().slice();
   const drawingsOf = (): Drawing[] => ids.map((id) => draw.get(id)).filter((d): d is Drawing => d !== undefined);
+  // Never empty while the dialog is open: every assignment closes it on an
+  // empty selection, so live[0] is read with `!` throughout.
   let live = drawingsOf();
-  if (live.length === 0) {
-    ctx.toast(widgetText(ctx, 'Select a drawing first'), 'info');
-    return { el: doc.createElement('div'), close: () => {}, isOpen: () => false };
-  }
+  if (live.length === 0) return declinedPanel(ctx, widgetText(ctx, 'Select a drawing first'));
   let schema = commonSchema(live.map((d) => d.tool));
-  let tool = toolOf(live[0].tool);
+  let tool = drawingToolOf(live[0]!.tool);
   let form: FormHandle | null = null;
   let shownWhy: string | null = null;
 
-  const titleOf = (): string => (live.length === 1 ? widgetText(ctx, `schema.drawing.${live[0].tool}.name`, {}, tool?.name ?? live[0].tool) : widgetText(ctx, '{count} drawings', { count: live.length }));
+  const titleOf = (): string => (live.length === 1 ? widgetText(ctx, `schema.drawing.${live[0]!.tool}.name`, {}, tool?.name ?? live[0]!.tool) : widgetText(ctx, '{count} drawings', { count: live.length }));
   // A selection the user may not edit opens read-only: every value stays
   // readable, and every control that would change one is greyed with why.
   const lockedOut = (): string | null => editableIds(draw, ids).length === 0 ? widgetText(ctx, 'read-only') : null;
-  const values = (): Record<string, unknown> => resolvedDrawingValues(live[0], schema, tool, ctx.chartTheme.lineColor);
+  const values = (): Record<string, unknown> => resolvedDrawingValues(live[0]!, schema, tool, ctx.chartTheme.lineColor);
 
   /** Write `{ path: value }` to every selected drawing as one undo entry. */
   function apply(patch: Record<string, unknown>): void {
@@ -175,45 +171,37 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
 
   function renderTools(): void {
     tools.innerHTML = '';
-    const primary = live[0];
-    const locked = primary.locked === true;
-    const hidden = primary.visible === false;
-    // Between studies it is on neither side of the series, so neither toggle is pressed.
-    const between = primary.stackAbove !== undefined && ctx.chart.seriesStack(primary.paneIndex).includes(primary.stackAbove);
-    const behind = !between && primary.zIndex < 0;
-    const why = lockedOut();
-    const add = (spec: ButtonSpec, act: string, pressed?: boolean, edits = false): void => {
-      const b = button(doc, { ...spec, iconOnly: true });
+    // The rules every drawing surface keeps (drawing-actions.ts): one press is
+    // one undo step, and a switch reads the whole selection.
+    const state = drawingActionState(ctx, ids);
+    /** A button for one shared action, greyed with `off` when it has a reason to be. */
+    const add = (spec: Omit<ButtonSpec, 'onClick'>, act: DrawingAction, pressed?: boolean, off: string | null = null): void => {
+      const b = button(doc, { ...spec, iconOnly: true, onClick: () => { runDrawingAction(ctx, act, ids); } });
       b.dataset.act = act;
       if (pressed !== undefined) b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
-      if (edits && why !== null) { b.disabled = true; b.title += ` (${why})`; }
+      if (off !== null) { b.disabled = true; b.title += ` (${off})`; }
       tools.appendChild(b);
     };
     const sep = (): void => { tools.appendChild(el(doc, 'span', 'oac-sep')); };
     // The toggles keep one name each; the pressed state and the icon say locked or hidden.
-    add({ label: widgetText(ctx, 'Lock'), icon: locked ? 'lock' : 'unlock',
-      onClick: () => { draw.updateMany(ids.map((id) => ({ id, patch: { locked: !locked } }))); } }, 'lock', locked, true);
-    add({ label: widgetText(ctx, 'Hide'), icon: hidden ? 'eye-off' : 'eye',
-      onClick: () => { draw.updateMany(ids.map((id) => ({ id, patch: { visible: hidden } }))); } }, 'visible', hidden, true);
+    add({ label: widgetText(ctx, 'Lock'), icon: state.locked ? 'lock' : 'unlock' }, 'lock', state.locked, state.readOnly);
+    add({ label: widgetText(ctx, 'Hide'), icon: state.hidden ? 'eye-off' : 'eye' }, 'visible', state.hidden, state.readOnly);
     sep();
-    // The controller reorders one drawing at a time (the list position is part
-    // of the order), so a multi-selection is several calls.
-    add({ label: widgetText(ctx, 'Bring to front'), icon: 'front', onClick: () => { for (const id of ids) draw.bringToFront(id); } }, 'front');
-    add({ label: widgetText(ctx, 'Send to back'), icon: 'back', onClick: () => { for (const id of ids) draw.sendToBack(id); } }, 'back');
-    add({ label: widgetText(ctx, 'In front of the series'), icon: 'above-series',
-      onClick: () => { for (const id of ids) draw.bringAboveSeries(id); } }, 'above', !behind && !between);
-    add({ label: widgetText(ctx, 'Behind the series'), icon: 'behind-series',
-      onClick: () => { for (const id of ids) draw.sendBehindSeries(id); } }, 'behind', behind);
+    add({ label: widgetText(ctx, 'Bring to front'), icon: 'front' }, 'front');
+    add({ label: widgetText(ctx, 'Send to back'), icon: 'back' }, 'back');
+    // Between studies it is on neither side of the series, so neither toggle is pressed.
+    add({ label: widgetText(ctx, 'In front of the series'), icon: 'above-series' }, 'above', state.side === 'above');
+    add({ label: widgetText(ctx, 'Behind the series'), icon: 'behind-series' }, 'behind', state.side === 'behind');
     sep();
-    add({ label: widgetText(ctx, 'Duplicate'), icon: 'duplicate', chord: commandChord(ctx.keymap, 'duplicate', 'Mod+D'), onClick: () => { draw.duplicate(ids); } }, 'duplicate');
-    add({ label: widgetText(ctx, 'Delete'), icon: 'trash', chord: commandChord(ctx.keymap, 'delete', 'Delete'), variant: 'danger', onClick: () => { draw.removeMany(ids); } }, 'delete', undefined, true);
-    restore.disabled = why !== null;
+    add({ label: widgetText(ctx, 'Duplicate'), icon: 'duplicate', chord: commandChord(ctx.keymap, 'duplicate', 'Mod+D') }, 'duplicate');
+    add({ label: widgetText(ctx, 'Delete'), icon: 'trash', chord: commandChord(ctx.keymap, 'delete', 'Delete'), variant: 'danger' }, 'delete', undefined, state.noDelete);
+    restore.disabled = state.readOnly !== null;
   }
 
   function renderPane(): void {
     form?.destroy();
     pane.innerHTML = '';
-    const controls = controlsFromFields(schema.fields, { translate: ctx.translate, scope: `drawing.${live[0].tool}` });
+    const controls = controlsFromFields(schema.fields, { translate: ctx.translate, scope: `drawing.${live[0]!.tool}` });
     if (controls.length === 0) {
       pane.appendChild(el(doc, 'div', 'oac-empty', widgetText(ctx, 'These drawings share no settings.')));
       form = null;
@@ -238,7 +226,7 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
     if (schema.textIsContent === true && live.length === 1) {
       const row = pane.querySelector('[data-key="text.value"]');
       if (row !== null) {
-        const b = button(doc, { label: widgetText(ctx, 'Edit text'), icon: 'text', onClick: () => { mountTextEditor(ctx, undefined, { id: live[0].id }); } });
+        const b = button(doc, { label: widgetText(ctx, 'Edit text'), icon: 'text', onClick: () => { mountTextEditor(ctx, undefined, { id: live[0]!.id }); } });
         b.dataset.act = 'edit-text';
         b.disabled = why !== null;
         row.appendChild(b);
@@ -298,7 +286,7 @@ export function mountDrawingProperties(ctx: WidgetContext, anchor?: HTMLElement,
     live = drawingsOf();
     if (live.length === 0) { handle.close(); return; }
     schema = commonSchema(live.map((d) => d.tool));
-    tool = toolOf(live[0].tool);
+    tool = drawingToolOf(live[0]!.tool);
     frame.setTitle(titleOf());
     renderTools();
     renderPane();

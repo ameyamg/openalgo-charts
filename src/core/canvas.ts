@@ -7,23 +7,7 @@
  * them crisp on retina/HiDPI displays.
  */
 
-export interface Size {
-  width: number;
-  height: number;
-}
-
-/** Pure: compute the integer device-pixel backing-buffer size for a canvas. */
-export function bitmapSize(mediaWidth: number, mediaHeight: number, dpr: number): Size {
-  return {
-    width: Math.round(mediaWidth * dpr),
-    height: Math.round(mediaHeight * dpr),
-  };
-}
-
-/** Pure: snap a media-space coordinate to a crisp device-pixel edge. */
-export function snapToDevicePixel(mediaCoord: number, dpr: number): number {
-  return Math.round(mediaCoord * dpr) / dpr;
-}
+import { bitmapSize } from '../helpers/math';
 
 /**
  * Pure: move every boundary between stacked boxes onto a device-pixel edge,
@@ -45,7 +29,7 @@ export function alignToDevicePixels(
   const last = boxes[boxes.length - 1];
   if (!(dpr > 0) || !Number.isFinite(dpr) || last === undefined) return boxes.map(box => ({ ...box }));
   const end = last.top + last.height;
-  let top = boxes[0].top;
+  let top = boxes[0]!.top; // a last box means a first one
   return boxes.map((box, i) => {
     const bottom = i === boxes.length - 1 ? end : Math.round((box.top + box.height) * dpr) / dpr;
     const out = { top, height: Math.max(0, bottom - top) };

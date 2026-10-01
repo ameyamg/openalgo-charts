@@ -599,9 +599,10 @@ See also: [Keyboard Shortcuts](/docs/keyboard-shortcuts)
 
 A unified pub/sub interface on the `Chart` object. `chart.on(event, cb)` subscribes to
 named events; `chart.off(event, cb)` unsubscribes; `chart.once(event, cb)`
-auto-unsubscribes after one firing; `chart.emit(event, payload)` dispatches. Core events:
-`ready`, `crosshair:move`, `click`, `pan`, `zoom`, `resize`, `lazy-load`. The trading
-layer routes its own `trading:*` events through the same bus.
+auto-unsubscribes after one firing. `ChartEventMap` declares every name with its payload,
+so the listener is typed by the name; `chart.emit(event, payload)` is deprecated (removed in
+3.0.0). Core events include `ready`, `crosshair:move`, `click`, `pan`, `zoom`, `resize` and
+`lazy-load`. The trading layer routes its own `trading:*` events through the same bus.
 
 See also: [Events](/docs/events)
 
@@ -663,10 +664,10 @@ See also: [Data Feeds](/docs/data-feeds)
 ### TradeFeed
 
 A broker-agnostic interface for order management: `placeOrder`, `modifyOrder`,
-`cancelOrder`, `subscribeOrders`, and `subscribePositions`. The trading layer does not
-call a `TradeFeed` directly; your app bridges the two by listening to `trading:*` events
-and forwarding them to the feed, then pushing the resulting state back via
-`chart.trading.sync`.
+`cancelOrder`, `subscribeOrders`, and `subscribePositions`. Deprecated, removed in 3.0.0:
+nothing in the library takes or implements it. Implement `OrderFeed` from
+`openalgo-charts/trade` for the order engine, and push the book back with
+`chart.trading.syncState`.
 
 See also: [Trading API](/docs/trading-api), [Data Feeds](/docs/data-feeds)
 
@@ -707,7 +708,7 @@ See also: [Live Data](/docs/live-data), [Data Feeds](/docs/data-feeds)
 
 ### OpenAlgo trade feed (OpenAlgoTradeFeed)
 
-A `TradeFeed` implementation that calls the OpenAlgo REST order-management endpoints and
+An `OrderFeed` implementation that calls the OpenAlgo REST order-management endpoints and
 subscribes to live order and position updates via the API. Maps broker order objects to
 `TradingOrder` and `TradingPosition` records, decoding each order row with `decodeOrder`.
 

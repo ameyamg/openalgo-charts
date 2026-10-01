@@ -37,10 +37,11 @@
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from 'openalgo-charts';
 import type { Drawing, DrawingPoint, ScreenPoint, ViewportPoint } from './types';
-import { getDrawingTool, hasDrawingTool } from './tools';
+import { getDrawingTool, hasDrawingTool } from './registry';
 import { withDrawingTextMetrics } from './text-metrics';
-import { anchorCount, containInPlot, viewportToPlot } from './viewport';
+import { anchorCount, containInPlot, viewportToPlot, type PlotBox } from './viewport';
 import { boundsOf } from './geometry';
+import { projectPoint } from './tool-paint';
 import { createDrawingHitIndex, EVERYWHERE, NOWHERE, inHitBox, spanOf, toolHitBox, type HitBox } from './hit-index';
 
 /** Grab radius for a shape, in media px. */
@@ -69,7 +70,7 @@ export type DrawingPointerKind = 'mouse' | 'touch' | 'pen';
 const zOf = (d: Drawing): number => (Number.isFinite(d.zIndex) ? d.zIndex : 0);
 
 /** Read-only to the user (`policy.editable` false): selectable, never grabbed. */
-const readOnly = (d: Drawing): boolean => d.policy?.editable === false;
+export const readOnly = (d: Drawing | undefined): boolean => d?.policy?.editable === false;
 
 /**
  * Whether the layer can run this drawing's tool at all. A viewport drawing
@@ -93,8 +94,18 @@ function runnable(d: Drawing): boolean {
 export function placeViewportAnchors(d: Drawing, points: readonly ViewportPoint[], width: number, height: number): ScreenPoint[] {
   const pts = viewportToPlot(points, width, height);
   if (pts.length === 0) return pts;
-  const box = hasDrawingTool(d.tool) ? getDrawingTool(d.tool).bounds?.(pts, d) : undefined;
-  return containInPlot(pts, box ?? boundsOf(pts), width, height);
+  return containInPlot(pts, toolBounds(d, pts) ?? boundsOf(pts), width, height);
+}
+
+/**
+ * The box a drawing's tool declares at `pts` (`DrawingTool.bounds`), asked
+ * only of a complete anchor set, as `draw` and `distance` are. A box with one
+ * corner (a hand-edited save, a host's patch) has no box of its own: it is
+ * kept and not painted, and its anchors' own bounds place it.
+ */
+export function toolBounds(d: Drawing, pts: readonly ScreenPoint[]): PlotBox | undefined {
+  const tool = hasDrawingTool(d.tool) ? getDrawingTool(d.tool) : undefined;
+  return tool !== undefined && pts.length >= Math.max(1, tool.points) ? tool.bounds?.(pts, d) : undefined;
 }
 
 /**
@@ -103,10 +114,7 @@ export function placeViewportAnchors(d: Drawing, points: readonly ViewportPoint[
  */
 export function projectAnchors(rc: PrimitiveRenderContext, d: Drawing): ScreenPoint[] {
   if (d.space === 'viewport') return placeViewportAnchors(d, d.viewportPoints ?? [], rc.plotWidth, rc.plotHeight);
-  return d.points.map((p) => ({
-    x: rc.timeScale.indexToX(rc.dataLayer.timeToIndexFloat(p.time)),
-    y: rc.priceScale.priceToY(p.price),
-  }));
+  return d.points.map((p) => projectPoint(rc, p));
 }
 
 /**
@@ -274,14 +282,6 @@ export class DrawingLayer implements IPrimitive {
     return this._isTouch(rc) ? HANDLE * TOUCH_SCALE : HANDLE;
   }
 
-  /** Map an anchor to media px on this pane. */
-  private _project(rc: PrimitiveRenderContext, time: number, price: number): ScreenPoint {
-    return {
-      x: rc.timeScale.indexToX(rc.dataLayer.timeToIndexFloat(time)),
-      y: rc.priceScale.priceToY(price),
-    };
-  }
-
   private _points(rc: PrimitiveRenderContext, d: Drawing): ScreenPoint[] {
     return projectAnchors(rc, d);
   }
@@ -365,7 +365,7 @@ export class DrawingLayer implements IPrimitive {
     for (const layer of layers) {
       for (const d of layer._handled()) this._drawHandles(ctx, rc, this._points(rc, d), d.tool, readOnly(d));
     }
-    if (this._snap !== null) this._drawSnapRing(ctx, rc, this._project(rc, this._snap.time, this._snap.price));
+    if (this._snap !== null) this._drawSnapRing(ctx, rc, projectPoint(rc, this._snap));
   }
 
   private _drawPlacementGuide(
@@ -378,8 +378,9 @@ export class DrawingLayer implements IPrimitive {
     ctx.lineWidth = Math.max(1, (drawing.style.lineWidth ?? 1.5) * dpr);
     ctx.setLineDash([3 * dpr, 3 * dpr]);
     ctx.beginPath();
-    ctx.moveTo(points[0].x * dpr, points[0].y * dpr);
-    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x * dpr, points[i].y * dpr);
+    // The caller skips a drawing with no anchor, and i is in range.
+    ctx.moveTo(points[0]!.x * dpr, points[0]!.y * dpr);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i]!.x * dpr, points[i]!.y * dpr);
     ctx.stroke();
     ctx.setLineDash([]);
     for (const point of points) {
@@ -405,7 +406,7 @@ export class DrawingLayer implements IPrimitive {
     ctx.lineWidth = Math.max(1, Math.round((light ? 1 : 1.5) * dpr));
     if (light) ctx.globalAlpha = 0.6;
     for (const i of handleIndices(toolId, pts.length)) {
-      const p = pts[i];
+      const p = pts[i]!; // a handle is one of the anchors
       ctx.beginPath();
       ctx.arc(p.x * dpr, p.y * dpr, HANDLE * dpr, 0, Math.PI * 2);
       ctx.fillStyle = rc.theme.background;
@@ -484,13 +485,13 @@ export class DrawingLayer implements IPrimitive {
   private _hitHandle(x: number, y: number, rc: PrimitiveRenderContext): PrimitiveHit | null {
     const radius = this._handleRadius(rc) + 2;
     for (const at of this._selectedPositions()) {
-      const sel = this._drawings[at];
+      const sel = this._drawings[at]!; // a paint position in this list
       if (!runnable(sel) || readOnly(sel)) continue;
       // Every handle is an anchor, so none is further out than the anchors reach.
       if (!inHitBox(this._index.anchors[at] ??= spanOf(this._points(rc, sel), radius), x, y)) continue;
       const pts = this._points(rc, sel);
       for (const i of handleIndices(sel.tool, pts.length)) {
-        if (Math.hypot(x - pts[i].x, y - pts[i].y) <= radius) {
+        if (Math.hypot(x - pts[i]!.x, y - pts[i]!.y) <= radius) { // a handle is one of the anchors
           return {
             externalId: `draw:${sel.id}#${i}`,
             zOrder: 'top', distance: 0, cursor: 'grabbing', draggable: true,
@@ -506,7 +507,7 @@ export class DrawingLayer implements IPrimitive {
     let best: { d: Drawing; distance: number } | null = null;
     // Reverse paint order, so the shape painted last wins a tie.
     for (let i = this._drawings.length - 1; i >= 0; i--) {
-      const d = this._drawings[i];
+      const d = this._drawings[i]!; // i is in range
       if (!inHitBox(this._index.bodies[i] ??= this._measure(d, rc, grab), x, y)) continue;
       // An unselectable drawing is not there to the pointer: the click goes
       // through to whatever lies under it.

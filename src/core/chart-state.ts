@@ -19,10 +19,12 @@ import type { Chart } from './chart';
 import type { Pane } from './pane';
 import type { PriceScaleOptions } from '../scale/price-scale';
 import type { PriceScaleId } from '../model/series';
+import { isPriceScaleId } from '../model/price-axis-layout';
 import { cloneIndicatorSettings, planIndicatorDependencies } from '../model/indicator-dependencies';
 import { getIndicator, hasIndicator, type IndicatorDescriptor } from '../model/indicator-registry';
 import { IndicatorInstance, parseIndicatorPlotPriceScales, validateIndicatorScaleAssignment } from '../model/indicator-instance';
 import { parseIndicatorPolicy } from '../model/indicator-policy';
+import { parseIndicatorBarSource } from '../model/indicator-bar-source';
 import type { AlertsDocument } from '../alerts/types';
 import { parseAlertsDocument } from '../alerts/document';
 import {
@@ -39,6 +41,8 @@ import {
 import { validateIndicatorInputs } from '../model/indicator-inputs';
 import type { ChartSettingsState } from '../model/chart-settings';
 import { isValidTimezone } from '../feed/time';
+import type { LooseOptional } from '../helpers/types';
+import { hasOnlyDataProperties, isPlainObject } from '../helpers/validate';
 
 interface PreparedIndicatorRestore {
   specs: IndicatorState[];
@@ -69,8 +73,6 @@ export interface PersistenceHost {
   readonly _indicatorReservedIds: Chart['_indicatorReservedIds'];
   readonly _indicatorRefreshes: Chart['_indicatorRefreshes'];
   readonly _primaryPane: Chart['_primaryPane'];
-  readonly _timeNav: Chart['_timeNav'];
-  readonly _anchored: Chart['_anchored'];
   _crosshairMode: Chart['_crosshairMode'];
   _crosshairSnapToBar: Chart['_crosshairSnapToBar'];
   _priceOnlyAutoScale: Chart['_priceOnlyAutoScale'];
@@ -88,7 +90,8 @@ export interface PersistenceHost {
   getVisibleLogicalRange: Chart['getVisibleLogicalRange'];
   setVisibleLogicalRange: Chart['setVisibleLogicalRange'];
   navigationOptions: Chart['navigationOptions'];
-  _patchNavigation: Chart['_patchNavigation'];
+  readonly _input: Chart['_input'];
+  readonly _series: Chart['_series'];
   gridOptions: Chart['gridOptions'];
   setGridOptions: Chart['setGridOptions'];
   canvasOptions: Chart['canvasOptions'];
@@ -102,9 +105,8 @@ export interface PersistenceHost {
   eventOptions: Chart['eventOptions'];
   setEventOptions: Chart['setEventOptions'];
   setTimezone: Chart['setTimezone'];
-  _validPriceScaleId: Chart['_validPriceScaleId'];
   _reserveAlertStudyIds: Chart['_reserveAlertStudyIds'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
   _withinLayoutChange: Chart['_withinLayoutChange'];
   _mutateTimeScale: Chart['_mutateTimeScale'];
   invalidate: Chart['invalidate'];
@@ -147,7 +149,8 @@ export class ChartPersistence {
     this._host._panes.forEach((pane, paneIndex) => {
       for (const record of pane.series()) {
         const style = Object.fromEntries(Object.entries(record.style).filter(([, value]) => value !== undefined));
-        series.push({ type: record.type, style, paneIndex, priceScaleId: record.scaleId });
+        const transform = this._host._series._transformOf(record.dataId);
+        series.push({ type: record.type, style, paneIndex, priceScaleId: record.scaleId, ...(transform === undefined ? {} : { transform }) });
       }
     });
 
@@ -176,10 +179,11 @@ export class ChartPersistence {
       trading: { ...this._host._tradingSettings },
       // The two switches, never the clock function: a callback does not survive
       // JSON, and the host that supplied one supplies it again on the way back.
+      // Either is undefined only where the host passed that at construction.
       axisChrome: {
         sessionClock: this._host._axisChrome.sessionClock,
         barCountdown: this._host._axisChrome.barCountdown,
-      },
+      } satisfies LooseOptional<NonNullable<ChartSettingsState['axisChrome']>> as NonNullable<ChartSettingsState['axisChrome']>,
       events: this._host.eventOptions(),
       crosshairMode: this._host._crosshairMode,
       crosshairSnapToBar: this._host._crosshairSnapToBar,
@@ -199,6 +203,7 @@ export class ChartPersistence {
         ...(Object.keys(i.plotPriceScaleIds()).length ? { plotPriceScaleIds: i.plotPriceScaleIds() } : {}),
         // Restrictions only: an unrestricted study saves what it always did.
         ...(Object.keys(i.policy()).length ? { policy: { ...i.policy() } } : {}),
+        ...(i.barSource() === 'underlying' ? { barSource: 'underlying' as const } : {}),
       })),
       ...(typeof this._host._sourceAbove === 'string' ? { sourceAbove: this._host._sourceAbove } : {}),
     };
@@ -232,21 +237,19 @@ export class ChartPersistence {
       if (collapsed && (!('value' in collapsed) || (collapsed.value !== undefined && typeof collapsed.value !== 'boolean'))) {
         throw new Error('Invalid indicator legend preference');
       }
-      const plain = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object'
-        && [Object.prototype, null].includes(Object.getPrototypeOf(value))
-        && Object.values(Object.getOwnPropertyDescriptors(value)).every(property => 'value' in property);
+      const plain = (value: unknown): value is Record<string, unknown> => isPlainObject(value) && hasOnlyDataProperties(value);
       if (!plain(options)) throw new Error('Invalid chart restore options');
       if (options.preserveScaleFormats !== undefined) {
         const selectors = options.preserveScaleFormats;
         if (!Array.isArray(selectors)) throw new Error('Invalid preserved scale formats');
-        const properties = Object.getOwnPropertyDescriptors(selectors);
+        const properties = Object.getOwnPropertyDescriptors(selectors); // read below by its own keys
         if (Reflect.ownKeys(properties).some(key => key !== 'length' && (typeof key !== 'string'
           || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= selectors.length
-          || !('value' in properties[key])))) throw new Error('Invalid preserved scale formats');
+          || !('value' in properties[key]!)))) throw new Error('Invalid preserved scale formats');
         for (let index = 0; index < selectors.length; index++) {
           const selector = properties[index]?.value as unknown;
           if (!plain(selector) || typeof selector.paneIndex !== 'number' || !Number.isInteger(selector.paneIndex) || selector.paneIndex < 0
-            || !this._host._validPriceScaleId(selector.scaleId)) throw new Error('Invalid preserved scale selector');
+            || !isPriceScaleId(selector.scaleId)) throw new Error('Invalid preserved scale selector');
           const pane = this._host._panes[selector.paneIndex];
           if (!pane || !Object.prototype.hasOwnProperty.call(pane.scaleStates(), selector.scaleId)) {
             throw new Error('Preserved scale must already exist');
@@ -283,7 +286,8 @@ export class ChartPersistence {
             const property = Object.getOwnPropertyDescriptor(spec, 'plotPriceScaleIds');
             if (!property?.enumerable || !('value' in property)) throw new Error('Invalid indicator plot price scale map field');
           }
-          if (spec.priceScaleId !== undefined && !this._host._validPriceScaleId(spec.priceScaleId)) throw new Error('Invalid indicator price scale');
+          if (spec.priceScaleId !== undefined && !isPriceScaleId(spec.priceScaleId)) throw new Error('Invalid indicator price scale');
+          if (spec.barSource !== undefined) parseIndicatorBarSource(spec.barSource);
           if (spec.instanceId === undefined) continue;
           if (typeof spec.instanceId !== 'string' || !spec.instanceId.trim() || reservedIds.has(spec.instanceId)) {
             throw new Error('Invalid or duplicate indicator instance id');
@@ -337,7 +341,7 @@ export class ChartPersistence {
     const generation = ++this._restoreGeneration;
     const previousPriceOnly = this._host._priceOnlyAutoScale;
     const previousLegendCollapsed = this._host._indicatorLegendCollapsed;
-    this._host.emit('state:restore:start', {});
+    this._host._emit('state:restore:start', {});
     const before = this._host._timeScale.visibleRange();
     try {
       // A start listener can synchronously install a newer layout on this chart.
@@ -350,7 +354,7 @@ export class ChartPersistence {
         this._host._mutateTimeScale(() => this._restoreState(s, alerts, reservedIds, panes, primaryPane ?? 0, studies, preservedFormats)));
       if (report.applied && generation === this._restoreGeneration && (previousPriceOnly !== this._host._priceOnlyAutoScale
         || previousLegendCollapsed !== this._host._indicatorLegendCollapsed)) {
-        this._host.emit('objects:change', {});
+        this._host._emit('objects:change', {});
       }
       return report;
     }
@@ -359,7 +363,7 @@ export class ChartPersistence {
       // Restore listeners can replace the viewport after its last internal paint.
       this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
       this._host._emitViewportIfMoved(before);
-      this._host.emit('state:restore:end', {});
+      this._host._emit('state:restore:end', {});
     }
   }
 
@@ -379,7 +383,7 @@ export class ChartPersistence {
     if (s.watermark) this._host.setWatermarkOptions(s.watermark);
     if (s.trading) this._host.setTradingSettings(s.trading);
     if (s.axisChrome) this._host.setAxisChromeOptions(s.axisChrome);
-    if (s.navigation && typeof s.navigation === 'object') this._host._patchNavigation(s.navigation);
+    if (s.navigation && typeof s.navigation === 'object') this._host._input._patchNavigation(s.navigation);
     if (s.events) this._host.setEventOptions(s.events);
     if (s.crosshairMode) this._host._crosshairMode = s.crosshairMode;
     if (typeof s.crosshairSnapToBar === 'boolean') this._host._crosshairSnapToBar = s.crosshairSnapToBar;
@@ -401,7 +405,7 @@ export class ChartPersistence {
     if (panes) {
       for (let i = 0; i < panes.length; i++) this._host._layout._ensurePane(i);
       this._host.setPrimaryPaneIndex(primaryPane);
-      panes.forEach((ps, i) => { this._host._panes[i].weight = ps.weight; });
+      panes.forEach((ps, i) => { this._host._panes[i]!.weight = ps.weight; }); // made just above
     }
     if (panes || studies) {
       // A layout that does not fold a pane opens it, and the price pane never
@@ -429,7 +433,7 @@ export class ChartPersistence {
         const descriptor = studies.descriptors.get(id)!;
         const instance = new IndicatorInstance(
           this._host._indicatorHost(preservedFormats), descriptor, spec.settings, spec.paneIndex,
-          spec.instanceId, reservedIds, spec.priceScaleId, spec.plotPriceScaleIds, spec.policy,
+          spec.instanceId, reservedIds, spec.priceScaleId, spec.plotPriceScaleIds, spec.policy, spec.barSource, true,
         );
         reservedIds.add(instance.id);
         this._host._indicators.push(instance);
@@ -498,16 +502,15 @@ export class ChartPersistence {
     // case that needs it: a host that swaps studies keeps its drawings, and a
     // study pane above the price pane empties, which moves the price pane up.
     this._host._drawingState = s.drawings;
-    this._host.emit('drawings:restore', s.drawings ?? []);
+    this._host._emit('drawings:restore', s.drawings ?? []);
 
     // Unavailable studies leave empty panes, but a live study can have no plot
     // series. Keep its pane and host primitives; chart furniture alone does not
     // occupy a pane. Walk backwards so removal keeps the remaining indices valid.
     // A study pane above the price pane is as prunable as one below it.
     for (let i = this._host._panes.length - 1; i >= 0; i--) {
-      const pane = this._host._panes[i];
-      if (pane !== this._host._primaryPane && pane.series().length === 0 && !this._host._indicators.some(study => study.paneIndex === i)
-        && pane.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive))) this._host.removePane(i);
+      const pane = this._host._panes[i]!;
+      if (!this._host._indicators.some(study => study.paneIndex === i) && this._host._layout._holdsOnlyFurniture(pane)) this._host.removePane(i);
     }
 
     this._host._alertState = alerts;
@@ -520,8 +523,8 @@ export class ChartPersistence {
       if (this._host._panes.includes(pane)) pane.setRatioLock(id, true, reference.barSpacing, reference.height);
     }
     this._host.invalidate((m) => m.invalidateGlobal(InvalidationLevel.Full));
-    this._host.emit('alerts:restore', alerts ?? { version: 1, alerts: [] });
-    this._host.emit('objects:change', {});
+    this._host._emit('alerts:restore', alerts ?? { version: 1, alerts: [] });
+    this._host._emit('objects:change', {});
     return { applied: true, series: s.series ?? [], indicators };
   }
 }

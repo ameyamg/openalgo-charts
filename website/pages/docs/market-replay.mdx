@@ -402,6 +402,12 @@ It is safe to call twice, and a later `seek`, `step` or `play` re-enters replay 
 `startIndex`, so a transport bar can toggle replay on and off without rebuilding the
 controller.
 
+A chart destroyed while replay owns it ends the session on its own: the controller
+stops its timer, writes nothing more to the chart and restores nothing, so a later
+`stop()` does nothing. `Chart` reports its end through the `destroy` event; a custom
+`ReplayChartHost` gets the same by providing `on('destroy', callback)`. Before 2.6.0 a
+playing controller kept ticking into the destroyed chart until the host called `stop()`.
+
 <Callout type="info">
 **Fence live writes while replay owns the series.** With a
 [`DataLoadingController`](/docs/data-loading), call `data.setPaused(true)` before

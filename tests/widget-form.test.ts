@@ -18,7 +18,7 @@ import { INDICATOR_SOURCES } from 'openalgo-charts';
 import type { ChartSettingsInput } from 'openalgo-charts';
 import { chromeIconSvg, LINE_STYLE_OPTIONS, FONT_OPTIONS, type SettingsField } from 'openalgo-charts/draw';
 import {
-  controlsFromInputs, controlsFromFields, renderForm, toHexColor, formatNumber, placePanel, openPanel,
+  controlsFromInputs, controlsFromFields, renderForm, formatNumber, placePanel, openPanel,
   dialogFrame, tabList, button, selectionPoint, type FormControl,
 } from '../src/widget/form';
 
@@ -664,14 +664,6 @@ suite('renderForm', () => {
 });
 
 suite('value helpers', () => {
-  it('folds theme colours into the six-digit hex a picker takes', () => {
-    expect(toHexColor('#abc')).toBe('#aabbcc');
-    expect(toHexColor('#AABBCCDD')).toBe('#aabbcc');
-    expect(toHexColor('rgba(79, 140, 255, 0.4)')).toBe('#4f8cff');
-    expect(toHexColor('rgb(0 0 0)')).toBe('#000000');
-    expect(toHexColor('red')).toBeNull();
-    expect(toHexColor(3)).toBeNull();
-  });
   it('prints numbers without float noise', () => {
     expect(formatNumber(2.0000000000000004)).toBe('2');
     expect(formatNumber(1.5)).toBe('1.5');

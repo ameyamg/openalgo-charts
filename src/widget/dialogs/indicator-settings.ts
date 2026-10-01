@@ -1,4 +1,3 @@
-import { widgetText } from '../localization';
 /**
  * Settings for one indicator instance: the descriptor's own `inputs` on one
  * tab and the generated per-plot appearance (`indicatorStyleInputs`) on the
@@ -9,18 +8,26 @@ import { widgetText } from '../localization';
  * Edits apply live through `setSettings` (a colour change restyles without
  * a recompute, a period change recomputes), and Cancel puts back the keys
  * this session touched.
+ *
+ * On a chart that transforms its bars (Renko, Heikin Ashi and the rest) the
+ * inputs lead with the bars the study computes on, which is not a setting of
+ * the descriptor but of the study (`IndicatorApi.setBarSource`).
  */
+import { widgetText } from '../localization';
 import { getIndicator, indicatorDefaults, indicatorStyleInputs } from 'openalgo-charts';
-import type { IndicatorApi, IndicatorDescriptor, IndicatorInput, IndicatorSettings, IndicatorStudySource } from 'openalgo-charts';
+import type { Chart, IndicatorApi, IndicatorBarSource, IndicatorDescriptor, IndicatorInput, IndicatorSettings, IndicatorStudySource } from 'openalgo-charts';
 import type { WidgetContext } from '../context';
 import { mountIndicatorInputControls, type IndicatorInputControlsHandle } from '../indicator-input-controls';
 import { studyNames } from '../objects-panel';
 import {
-  button, controlsFromInputs, dialogFrame, el, openPanel, renderForm, tabList,
+  button, controlsFromInputs, declinedPanel as declined, dialogFrame, el, openPanel, renderForm, tabList,
   type FormHandle, type PanelHandle,
 } from '../form';
 
 export type IndicatorSettingsTab = 'inputs' | 'style';
+
+/** The row for the study's bar source. Not a descriptor key: no descriptor names one with an at sign. */
+const BAR_SOURCE = '@bars';
 
 export interface IndicatorSettingsOptions {
   /**
@@ -47,7 +54,7 @@ const detached = (settings: Readonly<IndicatorSettings>): IndicatorSettings => O
 );
 
 /** The defaults of a list of inputs, as a settings patch. */
-export function inputDefaults(inputs: readonly IndicatorInput[]): IndicatorSettings {
+function inputDefaults(inputs: readonly IndicatorInput[]): IndicatorSettings {
   const out: IndicatorSettings = Object.fromEntries(inputs.map(input => [input.key, input.default]));
   for (const input of inputs) {
     if (input.type === 'symbol' && input.exchangeKey !== undefined && !Object.prototype.hasOwnProperty.call(out, input.exchangeKey)) {
@@ -67,16 +74,11 @@ export function resolveInstance(
     const inst = all.find((i) => i.id === id) ?? null;
     return inst === null ? { inst: null, why: widgetText(ctx, 'That indicator is no longer on the chart') } : { inst, why: null };
   }
-  if (all.length === 1) return { inst: all[0], why: null };
+  if (all.length === 1) return { inst: all[0]!, why: null }; // the one there is
   return { inst: null, why: all.length === 0 ? widgetText(ctx, 'No indicator on the chart to configure') : widgetText(ctx, 'Pick an indicator from the legend first') };
 }
 
 /** A handle for a dialog that never opened, so a caller can `close()` it regardless. */
-function declined(ctx: WidgetContext, why: string): PanelHandle {
-  ctx.toast(why, 'info');
-  return { el: ctx.document.createElement('div'), close: () => {}, isOpen: () => false };
-}
-
 export function mountIndicatorSettings(
   ctx: WidgetContext, anchor?: HTMLElement, opts: IndicatorSettingsOptions = {},
 ): PanelHandle {
@@ -85,21 +87,31 @@ export function mountIndicatorSettings(
   if (resolved.inst === null) return declined(ctx, resolved.why ?? widgetText(ctx, 'No indicator to configure'));
   const inst: IndicatorApi = resolved.inst;
   // Every write would be refused, so the dialog says why instead of opening.
-  if ((inst as Partial<IndicatorApi>).policy?.().configurable === false) return declined(ctx, widgetText(ctx, '{name} settings are protected', { name: inst.name }));
+  if (inst.policy().configurable === false) return declined(ctx, widgetText(ctx, '{name} settings are protected', { name: inst.name }));
   const descriptor: IndicatorDescriptor = getIndicator(inst.indicatorId);
 
   const tabs: Array<{ id: IndicatorSettingsTab; label: string; icon: string; inputs: readonly IndicatorInput[] }> = [];
-  if (descriptor.inputs.length > 0) tabs.push({ id: 'inputs', label: widgetText(ctx, 'Inputs'), icon: 'settings', inputs: descriptor.inputs });
+  // Offered only while the chart transforms its bars: on any other chart the two are the same bars.
+  const chart: Partial<Chart> = ctx.chart;
+  const primary = chart.primarySeries?.() ?? null;
+  const bars: IndicatorInput[] = primary === null || (chart.seriesTransform?.(primary) ?? null) === null ? [] : [{
+    key: BAR_SOURCE, type: 'select', label: 'Compute on', default: 'chart',
+    options: [{ label: 'Chart bars', value: 'chart' }, { label: 'Underlying bars', value: 'underlying' }],
+  }];
+  const inputs = [...bars, ...descriptor.inputs];
+  if (inputs.length > 0) tabs.push({ id: 'inputs', label: widgetText(ctx, 'Inputs'), icon: 'settings', inputs });
   const style = indicatorStyleInputs(descriptor);
   if (style.length > 0) tabs.push({ id: 'style', label: widgetText(ctx, 'Style'), icon: 'brush', inputs: style });
   if (tabs.length === 0) return declined(ctx, widgetText(ctx, '{name} has nothing to configure', { name: inst.name }));
 
   const before = detached(inst.settings());
+  const barsBefore = bars.length > 0 ? inst.barSource() : 'chart';
   const dirty = new Set<string>();
   // Edits preview live, one write per keystroke or colour drag; the session
   // is one step, and a Cancel that restores every key leaves none.
   const endStep = ctx.history?.group('Study settings') ?? ((): void => {});
-  let activeTab: IndicatorSettingsTab = tabs.some((t) => t.id === opts.tab) ? (opts.tab as IndicatorSettingsTab) : tabs[0].id;
+  // tabs is not empty past the early return above, so tabs[0] is read with `!`.
+  let activeTab: IndicatorSettingsTab = tabs.some((t) => t.id === opts.tab) ? (opts.tab as IndicatorSettingsTab) : tabs[0]!.id;
   let form: FormHandle | null = null;
   let inputControls: IndicatorInputControlsHandle | null = null;
   let writeError: string | null = null;
@@ -110,6 +122,7 @@ export function mountIndicatorSettings(
   /** What the form shows: the instance's settings over every declared default. */
   const values = (): IndicatorSettings => ({
     ...indicatorDefaults(descriptor), ...inputDefaults(style), ...inst.settings(),
+    ...(bars.length > 0 ? { [BAR_SOURCE]: inst.barSource() } : {}),
   });
   const current = (): boolean => !ctx.chart.isDestroyed && ctx.chart.indicators().includes(inst);
   const report = (error: unknown): void => {
@@ -122,7 +135,9 @@ export function mountIndicatorSettings(
     writeError = null;
     if (!current()) { cancel(); return false; }
     try {
-      if (inst.setSettings(detached(patch)) === false) {
+      const { [BAR_SOURCE]: source, ...settings } = patch;
+      if ((source !== undefined && source !== inst.barSource() && !inst.setBarSource(source as IndicatorBarSource))
+        || (Object.keys(settings).length > 0 && inst.setSettings(detached(settings)) === false)) {
         writeError = locked(); ctx.toast(writeError, 'error'); return false;
       }
     } catch (error) {
@@ -149,9 +164,9 @@ export function mountIndicatorSettings(
   function renderPane(): void {
     inputControls?.destroy(); inputControls = null;
     form?.destroy();
-    const tab = tabs.find((t) => t.id === activeTab) ?? tabs[0];
+    const tab = tabs.find((t) => t.id === activeTab) ?? tabs[0]!;
     body.innerHTML = '';
-    const controls = controlsFromInputs(tab.inputs, { translate: ctx.translate, scope: `indicator.${descriptor.id}` });
+    const controls = controlsFromInputs(tab.inputs, { translate: ctx.translate, scope: `indicator.${descriptor.id}` }, ctx.intervals);
     const sources = new Map<string, Map<string, IndicatorStudySource>>();
     for (const input of tab.inputs) {
       if (input.type !== 'source') continue;
@@ -233,7 +248,7 @@ export function mountIndicatorSettings(
   frame.lead.appendChild(button(doc, {
     label: widgetText(ctx, 'Defaults'),
     onClick: () => {
-      const tab = tabs.find((t) => t.id === activeTab) ?? tabs[0];
+      const tab = tabs.find((t) => t.id === activeTab) ?? tabs[0]!;
       if (write(inputDefaults(tab.inputs))) renderPane();
     },
   }));
@@ -265,11 +280,12 @@ export function mountIndicatorSettings(
       return true;
     }
     if (committed || dirty.size === 0) return true;
-    const back: IndicatorSettings = Object.fromEntries([...dirty].map(key => [key, before[key]]));
+    const back: IndicatorSettings = Object.fromEntries([...dirty].filter(key => key !== BAR_SOURCE).map(key => [key, before[key]]));
     try {
       // Locked since the edits: nothing this dialog does can take them back,
       // so it says so and closes rather than holding the user in it.
-      if (inst.setSettings(detached(back)) === false) ctx.toast(locked(), 'error');
+      if ((dirty.has(BAR_SOURCE) && inst.barSource() !== barsBefore && !inst.setBarSource(barsBefore))
+        || (Object.keys(back).length > 0 && inst.setSettings(detached(back)) === false)) ctx.toast(locked(), 'error');
     } catch (error) { report(error); renderPane(); return false; }
     dirty.clear();
     opts.onChange?.(inst);

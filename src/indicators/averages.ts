@@ -10,94 +10,17 @@
  * to land on the same pixels as a reference platform plot uses `smaSeededEma` from `./calc`.
  *
  * `atr`, `sessionStartFlags`, and the `sourceValues` helper come from the base
- * bundle (`openalgo-charts`), not deep paths — see the note in
+ * bundle (`openalgo-charts`), not deep paths: see the note in
  * `src/indicators/index.ts`.
  */
-import {
-  atr, sourceValues, sessionStartFlags, DEFAULT_TIMEZONE, isValidTimezone,
-} from 'openalgo-charts';
-import type { Bar, IndicatorDescriptor, IndicatorInput, IndicatorSource } from 'openalgo-charts';
+import { atr, sourceValues, sessionStartFlags } from 'openalgo-charts';
+import type { IndicatorDescriptor, IndicatorInput } from 'openalgo-charts';
 import { sma, rma, nulls, smaSeededEma, vwma, percentileNearestRank } from './calc';
 import { emaOfGapped, smoothingMa } from './smoothing';
-
-const num = (s: Readonly<Record<string, unknown>>, k: string, d: number): number => {
-  const v = s[k];
-  return typeof v === 'number' && Number.isFinite(v) ? v : d;
-};
-/** the reference `input.int` is whole by construction; a settings blob carries whatever a UI wrote. */
-const int = (s: Readonly<Record<string, unknown>>, k: string, d: number, min = 1): number =>
-  Math.max(min, Math.round(num(s, k, d)));
-/** An offset is a displacement, so it is the one integer setting that may be negative. */
-const offsetOf = (s: Readonly<Record<string, unknown>>, k: string, d: number): number =>
-  Math.round(num(s, k, d));
-const str = (s: Readonly<Record<string, unknown>>, k: string, d: string): string => {
-  const v = s[k];
-  return typeof v === 'string' && v !== '' ? v : d;
-};
-const flag = (s: Readonly<Record<string, unknown>>, k: string, d: boolean): boolean => {
-  const v = s[k];
-  return typeof v === 'boolean' ? v : d;
-};
-const src = (s: Readonly<Record<string, unknown>>, k = 'source'): IndicatorSource =>
-  (s[k] as IndicatorSource) ?? 'close';
-
-/**
- * The chart's configured zone, as it reaches an indicator.
- *
- * A `calc` is handed `(bars, settings, store)` and never the chart, so the zone
- * travels on the settings blob under the reserved `timezone` key. A blob without
- * one, which is every caller that predates the option, resolves to the shipped
- * default and computes exactly what 1.2.0 computed.
- *
- * An unrecognised name falls back rather than throwing: `chart.setTimezone`
- * already rejects a bad zone at the call site, and a `calc` that throws takes
- * the whole repaint down with it.
- */
-const zoneOf = (s: Readonly<Record<string, unknown>>): string => {
-  const v = s.timezone;
-  if (typeof v !== 'string' || v === '' || v === DEFAULT_TIMEZONE) return DEFAULT_TIMEZONE;
-  return isValidTimezone(v) ? v : DEFAULT_TIMEZONE;
-};
-
-/** the reference `nz(volume)`: a bar the feed gave no volume for traded nothing. */
-const volumes = (bars: readonly Bar[]): number[] =>
-  bars.map((b) => (typeof b.volume === 'number' && Number.isFinite(b.volume) ? b.volume : 0));
-
-/**
- * the reference `plot(..., offset = n)`: a positive `n` draws the value `n` bars later,
- * so the value computed on bar `i` lands in slot `i + n`. This library has no
- * per-plot offset, so the displacement is baked into the returned column: the
- * first `n` slots are null and the last `n` slots carry the shifted tail.
- */
-function shift(values: readonly number[], k: number): number[] {
-  const n = values.length;
-  const out = new Array<number>(n).fill(NaN);
-  for (let i = 0; i < n; i++) {
-    const j = i - k;
-    if (j >= 0 && j < n) out[i] = values[j];
-  }
-  return out;
-}
-
-/**
- * the reference `cross(a, b)`: `crossover(a, b) or crossunder(a, b)`. Both
- * sides of the comparison must be real on both bars — an `na` comparison in
- * the reference is false, which is why nothing fires while either average is warming up.
- */
-function crossings(a: readonly number[], b: readonly number[]): boolean[] {
-  const n = a.length;
-  const out = new Array<boolean>(n).fill(false);
-  for (let i = 1; i < n; i++) {
-    const prevA = a[i - 1];
-    const prevB = b[i - 1];
-    const curA = a[i];
-    const curB = b[i];
-    if (!Number.isFinite(prevA) || !Number.isFinite(prevB)) continue;
-    if (!Number.isFinite(curA) || !Number.isFinite(curB)) continue;
-    out[i] = (curA > curB && prevA <= prevB) || (curA < curB && prevA >= prevB);
-  }
-  return out;
-}
+import { withTimeframe } from './timeframe';
+import { num, int, offsetOf, str, flag, src, zoneOf } from './settings';
+import { crosses } from './statistics';
+import { shift, volumeOf, zip } from './series';
 
 /**
  * `close` is hard-coded in the reference (`sma(close, ...)`, not an
@@ -123,7 +46,7 @@ export const MA_CROSS: IndicatorDescriptor = {
     { key: 'long', type: 'line', title: 'Long MA', colorKey: 'longColor', style: { color: '#43a047', lineWidth: 1.5 } },
     // the reference draws this one with `plot.style_cross`: a value only on the bars
     // where the averages actually crossed, `na` everywhere else. A line with
-    // `markersOnly` is the same picture here — the gaps carry no segment.
+    // `markersOnly` is the same picture here: the gaps carry no segment.
     {
       key: 'cross', type: 'line', title: 'Cross', colorKey: 'crossColor',
       style: { markersOnly: true, markerRadius: 3 },
@@ -132,8 +55,10 @@ export const MA_CROSS: IndicatorDescriptor = {
   calc: (bars, s) => {
     const closes = sourceValues(bars, 'close');
     const short = sma(closes, int(s, 'shortLength', 9));
-    const long = sma(closes, int(s, 'longLength', 21));
-    const hit = crossings(short, long);
+    const long = sma(closes, int(s, 'longLength', 26));
+    // the reference `cross(a, b)`: both averages real on this bar and the one before,
+    // so nothing fires while either is warming up.
+    const hit = crosses(short, long);
     return {
       short: nulls(short),
       long: nulls(long),
@@ -143,7 +68,7 @@ export const MA_CROSS: IndicatorDescriptor = {
 };
 
 /**
- * McGinley Dynamic — an average whose smoothing constant is itself a function of
+ * McGinley Dynamic: an average whose smoothing constant is itself a function of
  * how far price has run from the line, so it tightens in a trend and loosens in
  * a range instead of lagging by a fixed number of bars.
  *
@@ -153,7 +78,7 @@ export const MA_CROSS: IndicatorDescriptor = {
  * `close` is hard-coded in the reference (`source = close`), so there is no
  * source setting.
  */
-export const MCGINLEY_DYNAMIC: IndicatorDescriptor = {
+export const MCGINLEY_DYNAMIC: IndicatorDescriptor = withTimeframe({
   id: 'mcginley-dynamic',
   name: 'McGinley Dynamic',
   category: 'Trend',
@@ -172,31 +97,32 @@ export const MCGINLEY_DYNAMIC: IndicatorDescriptor = {
     const seed = smaSeededEma(values, length);
     const out = new Array<number>(values.length).fill(NaN);
     let prev = NaN;
+    // `seed` and `out` hold one value per bar.
     for (let i = 0; i < values.length; i++) {
       if (!Number.isFinite(prev) || prev === 0) {
         // the reference `na(mg[1]) ? ema(...)` branch, which also covers the
         // degenerate zero: the ratio `source / mg[1]` has no value there, so the
         // line re-seeds from the EMA rather than propagating a non-finite state.
-        out[i] = seed[i];
+        out[i] = seed[i]!;
       } else {
-        const step = length * Math.pow(values[i] / prev, 4);
-        const next = prev + (values[i] - prev) / step;
-        out[i] = Number.isFinite(next) ? next : seed[i];
+        const step = length * Math.pow(values[i]! / prev, 4);
+        const next = prev + (values[i]! - prev) / step;
+        out[i] = Number.isFinite(next) ? next : seed[i]!;
       }
-      prev = out[i];
+      prev = out[i]!;
     }
     return { mg: nulls(out) };
   },
-};
+});
 
 /**
- * Median — the nearest-rank 50th percentile of the source, banded by ATR and
+ * Median: the nearest-rank 50th percentile of the source, banded by ATR and
  * shaded against its own EMA. The percentile is a real member of the window
  * rather than an interpolation (see `percentileNearestRank`), so on an
  * even-length window it is the upper of the two middles, not their mean.
  *
  * The EMA is chained onto the percentile series, so it inherits that series'
- * warmup and first prints at `2 * length - 2` — see `emaOfGapped`.
+ * warmup and first prints at `2 * length - 2`: see `emaOfGapped`.
  */
 export const MEDIAN: IndicatorDescriptor = {
   id: 'median',
@@ -229,7 +155,7 @@ export const MEDIAN: IndicatorDescriptor = {
     opacity: 0.9,
   }],
   calc: (bars, s) => {
-    const values = sourceValues(bars, src(s));
+    const values = sourceValues(bars, src(s, 'source', 'hl2'));
     const length = int(s, 'length', 3);
     const mult = num(s, 'atrMult', 2);
     const median = percentileNearestRank(values, length, 50);
@@ -241,8 +167,9 @@ export const MEDIAN: IndicatorDescriptor = {
     );
     return {
       median: nulls(median),
-      upper: nulls(median.map((v, i) => v + mult * range[i])),
-      lower: nulls(median.map((v, i) => v - mult * range[i])),
+      // Both series hold one value per bar, as every calc helper returns.
+      upper: nulls(zip(median, range, (v, r) => v + mult * r)),
+      lower: nulls(zip(median, range, (v, r) => v - mult * r)),
       medianEma: nulls(emaOfGapped(median, length)),
     };
   },
@@ -281,7 +208,7 @@ const RIBBON_LANES: readonly { lane: number; length: number; color: string }[] =
 ];
 
 /**
- * Moving Average Ribbon — four independent averages on one overlay, so the
+ * Moving Average Ribbon: four independent averages on one overlay, so the
  * spacing between them reads as trend strength and their order as trend
  * direction. Every lane picks its own kernel, source, and length.
  *
@@ -302,7 +229,7 @@ export const MA_RIBBON: IndicatorDescriptor = {
     style: { color: l.color, lineWidth: 1.5 },
   })),
   calc: (bars, s) => {
-    const vols = volumes(bars);
+    const vols = bars.map(volumeOf);
     const out: Record<string, (number | null)[]> = {};
     for (const { lane, length } of RIBBON_LANES) {
       if (!flag(s, `showMa${lane}`, true)) {
@@ -327,7 +254,7 @@ export const MA_RIBBON: IndicatorDescriptor = {
  *
  * Three chained EMAs, each running over a series that is already `na` for its
  * own warmup, so the first printed bar is `3 * length - 3` and not `length - 1`
- * — see `emaOfGapped`. `close` is hard-coded in the reference, so there is no
+ * (see `emaOfGapped`). `close` is hard-coded in the reference, so there is no
  * source setting.
  *
  * The three terms are added left to right, as the definition writes them, not
@@ -335,7 +262,7 @@ export const MA_RIBBON: IndicatorDescriptor = {
  * digits, and the grouped form can hide an overflowing term. Any absent term, or
  * a sum that is not finite, leaves the bar absent (`nulls`).
  */
-export const TEMA: IndicatorDescriptor = {
+export const TEMA: IndicatorDescriptor = withTimeframe({
   id: 'tema',
   name: 'Triple EMA',
   category: 'Trend',
@@ -354,12 +281,12 @@ export const TEMA: IndicatorDescriptor = {
     const e1 = smaSeededEma(values, length);
     const e2 = emaOfGapped(e1, length);
     const e3 = emaOfGapped(e2, length);
-    return { tema: nulls(e1.map((v, i) => 3 * v - 3 * e2[i] + e3[i])) };
+    return { tema: nulls(e1.map((v, i) => 3 * v - 3 * e2[i]! + e3[i]!)) };
   },
-};
+});
 
 /**
- * Time Weighted Average Price — the running mean of the source since the anchor,
+ * Time Weighted Average Price: the running mean of the source since the anchor,
  * the volume-blind sibling of VWAP. Where VWAP asks what the average traded
  * price was, TWAP asks what the average quoted price was, so a thin bar counts
  * for exactly as much as a heavy one.
@@ -390,7 +317,7 @@ export const TWAP: IndicatorDescriptor = {
     style: { color: '#dd7a28', lineWidth: 1.5 },
   }],
   calc: (bars, s) => {
-    const values = sourceValues(bars, src(s));
+    const values = sourceValues(bars, src(s, 'source', 'ohlc4'));
     const perSession = s.anchor !== 'continuous';
     // Read from the bar gaps rather than a fixed midnight, so the average
     // restarts when the exchange opens and not partway through its afternoon.
@@ -405,7 +332,7 @@ export const TWAP: IndicatorDescriptor = {
       if (restarts !== null && restarts[i]) { sum = 0; count = 0; }
       // A bar with no price is a gap: it neither joins the sum nor counts as a
       // bar, so it costs only its own reading instead of the rest of the session.
-      const value = values[i];
+      const value = values[i]!;
       if (!Number.isFinite(value)) continue;
       sum += value;
       count += 1;
@@ -416,12 +343,12 @@ export const TWAP: IndicatorDescriptor = {
 };
 
 /**
- * Volume Weighted Moving Average — an SMA whose window is weighted by volume,
+ * Volume Weighted Moving Average: an SMA whose window is weighted by volume,
  * so the bars that actually traded set the level. Identical to an SMA when
  * volume is flat, and `na` on any window whose volume sums to zero, which is
  * what a feed with no volume produces.
  */
-export const VWMA: IndicatorDescriptor = {
+export const VWMA: IndicatorDescriptor = withTimeframe({
   id: 'vwma',
   name: 'Volume Weighted Moving Average',
   category: 'Volume',
@@ -437,13 +364,13 @@ export const VWMA: IndicatorDescriptor = {
     style: { color: '#2962ff', lineWidth: 1.5 },
   }],
   calc: (bars, s) => {
-    const ma = vwma(sourceValues(bars, src(s)), volumes(bars), int(s, 'length', 20));
+    const ma = vwma(sourceValues(bars, src(s)), bars.map(volumeOf), int(s, 'length', 20));
     return { vwma: nulls(shift(ma, offsetOf(s, 'offset', 0))) };
   },
-};
+});
 
 /**
- * Williams Alligator — three Wilder-smoothed medians of differing speed, each
+ * Williams Alligator: three Wilder-smoothed medians of differing speed, each
  * displaced forward in time. The lines braid when the market has nothing to say
  * and fan out in order once a trend takes hold.
  *
@@ -487,9 +414,9 @@ export const ALLIGATOR: IndicatorDescriptor = {
     // `hl2` is hard-coded in the reference, so there is no source setting.
     const values = sourceValues(bars, 'hl2');
     return {
-      jaw: nulls(shift(rma(values, int(s, 'jawLength', 13)), offsetOf(s, 'jawOffset', 8))),
-      teeth: nulls(shift(rma(values, int(s, 'teethLength', 8)), offsetOf(s, 'teethOffset', 5))),
-      lips: nulls(shift(rma(values, int(s, 'lipsLength', 5)), offsetOf(s, 'lipsOffset', 3))),
+      jaw: nulls(shift(rma(values, int(s, 'jawLength', 21)), offsetOf(s, 'jawOffset', 8))),
+      teeth: nulls(shift(rma(values, int(s, 'teethLength', 13)), offsetOf(s, 'teethOffset', 5))),
+      lips: nulls(shift(rma(values, int(s, 'lipsLength', 8)), offsetOf(s, 'lipsOffset', 3))),
     };
   },
 };
@@ -504,7 +431,7 @@ export const ALLIGATOR: IndicatorDescriptor = {
  * the simple average of the first `length` values, so it first prints at
  * `length - 1` and needs no code of its own here.
  */
-export const SMMA: IndicatorDescriptor = {
+export const SMMA: IndicatorDescriptor = withTimeframe({
   id: 'smma',
   name: 'Smoothed Moving Average',
   category: 'Trend',
@@ -519,7 +446,7 @@ export const SMMA: IndicatorDescriptor = {
     style: { color: '#673ab7', lineWidth: 1.5 },
   }],
   calc: (bars, s) => ({ smma: nulls(rma(sourceValues(bars, src(s)), int(s, 'length', 7))) }),
-};
+});
 
 /**
  * One T3 layer: an exponential average pushed past itself by `factor` times the
@@ -536,7 +463,7 @@ function generalizedDouble(values: readonly number[], length: number, factor: nu
   const e1 = emaOfGapped(values, length);
   if (factor === 0) return e1;
   const e2 = emaOfGapped(e1, length);
-  return e1.map((v, i) => v * (1 + factor) - e2[i] * factor);
+  return zip(e1, e2, (v, e) => v * (1 + factor) - e * factor);
 }
 
 /**
@@ -556,7 +483,7 @@ function generalizedDouble(values: readonly number[], length: number, factor: nu
  * continuous either way and only its paint changes, so a break in the colour
  * must not become a break in the series.
  */
-export const T3: IndicatorDescriptor = {
+export const T3: IndicatorDescriptor = withTimeframe({
   id: 't3',
   name: 'T3 Average',
   category: 'Trend',
@@ -596,7 +523,7 @@ export const T3: IndicatorDescriptor = {
     const twice = generalizedDouble(once, length, factor);
     return { t3: nulls(generalizedDouble(twice, length, factor)) };
   },
-};
+});
 
 export const AVERAGE_INDICATORS: readonly IndicatorDescriptor[] = [
   MA_CROSS, MCGINLEY_DYNAMIC, MEDIAN, MA_RIBBON, TEMA, TWAP, VWMA, ALLIGATOR, SMMA, T3,

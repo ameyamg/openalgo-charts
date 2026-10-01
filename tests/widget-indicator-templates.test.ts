@@ -7,7 +7,7 @@
  * timeline alone, a replay holding every apply back, and a delete that asks.
  */
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { ReplayController, registerIndicator, type Bar } from '../src/index';
+import { ReplayController, registerIndicator, type Bar, type IndicatorPolicy } from '../src/index';
 import '../src/indicators/index';
 import {
   WorkspaceRepository, captureIndicatorTemplate, createMemoryWorkspaceStorage, planIndicatorTemplateState,
@@ -16,6 +16,9 @@ import {
 import {
   applyIndicatorTemplate, createWidget, mountIndicatorPicker, saveIndicatorTemplate, type Widget, type WidgetOptions,
 } from '../src/widget/index';
+import { hostKept } from '../src/widget/layouts-templates';
+import { hostOwnedStudy } from '../src/model/indicator-policy';
+import { hostOwnedStudy as workspaceRule } from '../src/workspace/documents';
 import { ensureWindowGlobal, fakeContainer, fakeWidgetDocument, type FakeElement } from './helpers/fake-dom-widget';
 
 beforeAll(ensureWindowGlobal);
@@ -375,5 +378,28 @@ describe('the workspace store as the widget reaches it', () => {
     expect(strip(repo.planIndicatorTemplateState(widget.chart, input, 'append'))).toEqual(strip(planIndicatorTemplateState(widget.chart, input, 'append')));
     const store: WorkspaceStore = repo;
     expect(typeof store.planIndicatorTemplateState).toBe('function');
+  });
+});
+
+describe('the host-kept study rule', () => {
+  // One rule, declared in the base: the widget and the workspace tier each take
+  // that function by path, so they cannot disagree.
+  it('is one function, declared in the base policy module, in the widget and the workspace tier', () => {
+    expect(hostKept).toBe(hostOwnedStudy);
+    expect(workspaceRule).toBe(hostOwnedStudy);
+  });
+
+  it('keeps a study the user may not remove or cannot see, and no other', () => {
+    const flag = [true, false, undefined] as const;
+    const policies: Array<IndicatorPolicy | undefined> = [undefined];
+    for (const removable of flag) for (const configurable of flag) for (const movable of flag) for (const listed of flag) {
+      policies.push({ ...(removable === undefined ? {} : { removable }), ...(configurable === undefined ? {} : { configurable }),
+        ...(movable === undefined ? {} : { movable }), ...(listed === undefined ? {} : { listed }) });
+    }
+    expect(policies).toHaveLength(82);
+    for (const policy of policies) {
+      expect(hostOwnedStudy(policy), JSON.stringify(policy)).toBe(policy?.removable === false || policy?.listed === false);
+    }
+    expect(policies.filter(policy => hostOwnedStudy(policy))).toHaveLength(45);
   });
 });

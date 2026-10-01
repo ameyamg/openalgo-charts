@@ -119,7 +119,7 @@ map it through that chart's `dataLayer.indexToTime(i)` and read its own bar.
 
 The host owns instrument selection and loading. `chart.setDataContext(...)` declares identity for studies and alerts; symbol linking reports a selection without loading data by itself. The host does two things:
 
-1. **Reports a change**, by emitting `'symbol'` on that chart's own bus (`chart.emit('symbol', { symbol: 'INFY' })`, or a bare string) or by calling `group.setSymbol(chart, 'INFY')`.
+1. **Reports a change**, by calling `group.setSymbol(chart, 'INFY')`, or by emitting `'symbol'` on that chart's own bus (`chart.emit('symbol', { symbol: 'INFY' })`, or a bare string). `chart.emit` is deprecated and goes in 3.0.0, so prefer `setSymbol`; a draw-tier `DrawingLinkGroup` also follows `data:context`, which `setDataContext` emits.
 2. **Performs a change**, through the per-member `onSymbol(symbol, chart)` callback, which fetches the bars and calls `series.setData`.
 
 ```ts
@@ -147,7 +147,7 @@ It sits on the `'top'` z-order, which is the layer `Pane.paintTop` repaints for 
 
 ## Feedback loops and dead charts
 
-**One group-wide re-entrancy guard**, not one per channel. Any member event arriving while the group is broadcasting is an echo of that broadcast by definition, since a human cannot pan two charts in one call stack. It is group-wide because a symbol change that reloads data can move a viewport, and that second-order echo is the same bug wearing a different hat.
+**One group-wide re-entrancy guard**, not one per channel. Any member event arriving while the group is broadcasting is an echo of that broadcast by definition, since a human cannot pan two charts in one call stack. It is group-wide because a symbol change that reloads data can move a viewport, and that second-order echo is the same bug wearing a different hat. The symbol, interval and chart type channels also ignore a selection a follower reports while the group is applying one: a follower's `onSymbol` that announces the name it normalised to (a suffix, a case change) leaves the group on the leader's instrument (since 2.6.0; before, the follower's spelling became `group.symbol()`).
 
 Members are dropped the moment their chart dies. `chart.destroy()` sets `isDestroyed`, emits `'destroy'` and the group prunes on the spot; a `LinkChart` that is not a `Chart` and reports neither is probed by pane count instead (the price pane can never be removed by any other route). This matters beyond tidiness: `addPrimitive` on a destroyed chart would resurrect a pane.
 
@@ -179,7 +179,8 @@ Since 1.4.0 the programmatic viewport paths (`setVisibleLogicalRange`, `fitConte
 `createLinkGroup({ interval: true })` adds an independent timeframe channel,
 off by default. Supply the member's current `interval` and an `onInterval`
 callback to `group.add(chart, ...)`. Report subsequent choices through
-`group.setInterval(chart, token)` or `chart.emit('interval', { interval: token })`.
+`group.setInterval(chart, token)` or `chart.emit('interval', { interval: token })`
+(deprecated, removed in 3.0.0; prefer `setInterval`).
 `group.interval()` reads the latest selection, even while interval sync is off.
 Enabling sync or joining an enabled group adopts its latest interval.
 
@@ -195,7 +196,7 @@ Removing or destroying a member releases the interval listener with other links.
 default, and it works exactly like the interval channel: supply the member's
 current `chartType` and an `onChartType(chartType, chart)` callback to `add`,
 report changes with `group.setChartType(chart, id)` or
-`chart.emit('chartType', { chartType: id })`, and read `group.chartType()`.
+`chart.emit('chartType', { chartType: id })` (deprecated, removed in 3.0.0), and read `group.chartType()`.
 The core never emits `'chartType'`; the host reports it, as it does an interval.
 
 ```ts
@@ -244,9 +245,11 @@ Other host setters can call `group.syncAppearance(chart)` explicitly. The adapte
 reads supported chart-settings fields, so calling it after `setTheme` transfers
 those visual fields, not an entire theme object. `filterLinkAppearance(values)`
 returns a fresh allowlisted record: known series styling, readout visibility,
-scale presentation, grid, crosshair, watermark styling and axis chrome. It omits
-watermark text, instrument identity, interval, timezone, navigation, studies,
-event feeds, alerts and trading. No chart data or series type crosses. Each peer
+scale presentation (mode, auto-fit, the primary-prices-only fit since 2.6.0, and
+inversion), grid, crosshair, watermark styling and axis chrome. It omits
+watermark text, instrument identity, interval, timezone, navigation, the study
+legend fold (`statusLine.indicatorsCollapsed`), studies, event feeds, alerts and
+trading. No chart data or series type crosses. Each peer
 receives a separate record; callbacks cannot echo back through the group guard.
 Enabling appearance waits for the next edit or explicit notification.
 

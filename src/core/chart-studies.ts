@@ -20,26 +20,30 @@
  */
 import { InvalidationLevel } from './invalidate-mask';
 import type { Chart } from './chart';
+import type { AddIndicatorOptions } from './chart-types';
 import type { PreservedScaleFormats } from './chart-state';
 import type { Pane } from './pane';
 import type { PriceScale } from '../scale/price-scale';
 import type { SeriesApi, PriceScaleId } from '../model/series';
+import { isPriceScaleId } from '../model/price-axis-layout';
 import { replayWindow, observeReplayWindow } from '../model/replay-window';
 import { runAbortable } from '../model/abortable-request';
 import { cloneIndicatorSettings, planIndicatorDependencies } from '../model/indicator-dependencies';
 import type { SeriesType } from '../model/chart-type-registry';
-import { getIndicator, plotStyleKeys, type IndicatorDescriptor, type IndicatorSettings } from '../model/indicator-registry';
+import { getIndicator, plotStyleKeys, type IndicatorDescriptor, type IndicatorRequestState, type IndicatorSettings } from '../model/indicator-registry';
 import {
   IndicatorInstance, parseIndicatorPlotPriceScales, validateIndicatorScaleAssignment, type IndicatorApi, type IndicatorHost,
 } from '../model/indicator-instance';
-import { parseIndicatorPolicy, type IndicatorEditOptions, type IndicatorPolicy } from '../model/indicator-policy';
+import { parseIndicatorPolicy, type IndicatorEditOptions } from '../model/indicator-policy';
 import { validateIndicatorInputs } from '../model/indicator-inputs';
+import { parseIndicatorBarSource } from '../model/indicator-bar-source';
 import type { SeriesStyle } from '../render/series-style';
 import type { Bar } from '../model/bar';
 import type { IPrimitive } from '../primitives/primitive';
 import type { PriceLine, PriceLineOptions } from '../primitives/price-line';
 import { PaneLegend, type PaneLegendAction } from '../primitives/pane-legend';
 import { ChartTable } from '../primitives/table';
+import type { LooseOptional } from '../helpers/types';
 
 /**
  * Colours the 2nd and later instances of the same indicator rotate through.
@@ -75,8 +79,6 @@ export interface StudiesHost {
   readonly _legends: Chart['_legends'];
   readonly _legendActions: Chart['_legendActions'];
   readonly _studyLegends: Chart['_studyLegends'];
-  readonly _timeNav: Chart['_timeNav'];
-  readonly _anchored: Chart['_anchored'];
   readonly _timezone: Chart['_timezone'];
   readonly _dataContext: Chart['_dataContext'];
   readonly _barsProvider: Chart['_barsProvider'];
@@ -95,7 +97,6 @@ export interface StudiesHost {
   _wallClock: Chart['_wallClock'];
   _primaryIndex: Chart['_primaryIndex'];
   _readoutIndex: Chart['_readoutIndex'];
-  _validPriceScaleId: Chart['_validPriceScaleId'];
   _policyAllows: Chart['_policyAllows'];
   seriesType: Chart['seriesType'];
   primarySeries: Chart['primarySeries'];
@@ -105,7 +106,8 @@ export interface StudiesHost {
   removePane: Chart['removePane'];
   invalidate: Chart['invalidate'];
   on: Chart['on'];
-  emit: Chart['emit'];
+  _emit: Chart['_emit'];
+  _bus: Chart['_bus'];
 }
 
 export class ChartStudies {
@@ -137,16 +139,14 @@ export class ChartStudies {
   public addIndicator(
     indicatorId: string,
     settings: Readonly<IndicatorSettings>,
-    options: {
-      paneIndex?: number; priceScaleId?: PriceScaleId; plotPriceScaleIds?: Readonly<Record<string, PriceScaleId>>;
-      policy?: IndicatorPolicy; instanceId?: string;
-    },
+    options: AddIndicatorOptions,
   ): IndicatorApi {
     const instanceId = options.instanceId;
     if (instanceId !== undefined && (typeof instanceId !== 'string' || !instanceId.trim())) throw new TypeError('Invalid indicator instance id');
     if (instanceId !== undefined && this._host._indicators.some(item => item.id === instanceId)) throw new Error(`Indicator instance id already in use: ${instanceId}`);
-    if (options.priceScaleId !== undefined && !this._host._validPriceScaleId(options.priceScaleId)) throw new TypeError('Invalid indicator price scale');
+    if (options.priceScaleId !== undefined && !isPriceScaleId(options.priceScaleId)) throw new TypeError('Invalid indicator price scale');
     const policy = options.policy === undefined ? undefined : parseIndicatorPolicy(options.policy);
+    const barSource = options.barSource === undefined ? undefined : parseIndicatorBarSource(options.barSource);
     const descriptor = getIndicator(indicatorId);
     const validatedSettings = cloneIndicatorSettings(settings);
     validateIndicatorInputs(descriptor.inputs, validatedSettings);
@@ -169,6 +169,7 @@ export class ChartStudies {
       options.priceScaleId,
       plotPriceScaleIds,
       policy,
+      barSource,
     );
     this._host._indicators.push(instance);
     // Its first pass ran in the constructor, outside a flush.
@@ -176,7 +177,7 @@ export class ChartStudies {
     this._host._legendStack._restackLegends();
     this._host._indicatorReservedIds.add(instance.id);
     this._queueIndicatorDependents(instance.id, true);
-    this._host.emit('objects:change', {});
+    this._host._emit('objects:change', {});
     return instance;
   }
 
@@ -198,7 +199,7 @@ export class ChartStudies {
     const out: IndicatorSettings = { ...settings };
     const plots = descriptor.plots;
     for (let i = 0; i < plots.length; i++) {
-      const key = plotStyleKeys(plots[i]).color;
+      const key = plotStyleKeys(plots[i]!).color;
       if (out[key] !== undefined) continue; // an explicit colour always wins
       // Stride by the plot count so a multi-plot indicator (MACD) shifts as a
       // block rather than landing on the previous instance's colours.
@@ -220,7 +221,7 @@ export class ChartStudies {
     const previous = instance.paneIndex;
     const freshTarget = paneIndex === this._host._panes.length;
     this._host._layout._ensurePane(paneIndex);
-    const target = this._host._panes[paneIndex];
+    const target = this._host._panes[paneIndex]!; // a whole index up to one past the end, made above
     const resources = instance.renderResources();
     for (const { api, overlay } of resources.series) {
       if (overlay) continue;
@@ -245,15 +246,15 @@ export class ChartStudies {
     this._host._primitives._reanchorSource();
     this._host._legendStack._syncLegendPanes();
     // Alert visuals resolve the instance's new pane before we decide whether its old pane is empty.
-    this._host.emit('objects:change', {});
+    this._host._emit('objects:change', {});
     // Retain a pane holding drawings or host visuals even after its last plot moves.
-    const source = this._host._panes[previous];
-    if (source !== this._host._primaryPane && source.series().length === 0 && source.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive))) this._host.removePane(previous);
+    const source = this._host._panes[previous]!; // the pane the study was on still stands
+    if (this._host._layout._holdsOnlyFurniture(source)) this._host.removePane(previous);
     this._reorderIndicatorResources();
     this._host._layout._recomputeAxisColumns();
     this._host._layout._relayout();
     this._host.invalidate(m => m.invalidateGlobal(InvalidationLevel.Full));
-    this._host.emit('objects:change', {});
+    this._host._emit('objects:change', {});
     return true;
   }
 
@@ -261,15 +262,16 @@ export class ChartStudies {
   public reorderIndicator(instanceId: string, direction: -1 | 1, options: IndicatorEditOptions): boolean {
     if (direction !== -1 && direction !== 1) return false;
     const index = this._host._indicators.findIndex(item => item.id === instanceId);
-    if (this._host.isDestroyed || index < 0 || !this._host._policyAllows(this._host._indicators[index], 'movable', options)) return false;
-    const paneIndex = this._host._indicators[index].paneIndex;
+    // `index` was found in the list and `target` is kept inside it.
+    if (this._host.isDestroyed || index < 0 || !this._host._policyAllows(this._host._indicators[index]!, 'movable', options)) return false;
+    const paneIndex = this._host._indicators[index]!.paneIndex;
     let target = index + direction;
-    while (target >= 0 && target < this._host._indicators.length && this._host._indicators[target].paneIndex !== paneIndex) target += direction;
+    while (target >= 0 && target < this._host._indicators.length && this._host._indicators[target]!.paneIndex !== paneIndex) target += direction;
     if (target < 0 || target >= this._host._indicators.length) return false;
-    [this._host._indicators[index], this._host._indicators[target]] = [this._host._indicators[target], this._host._indicators[index]];
+    [this._host._indicators[index], this._host._indicators[target]] = [this._host._indicators[target]!, this._host._indicators[index]!];
     this._reorderIndicatorResources();
     this._host.invalidate(m => m.invalidateGlobal(InvalidationLevel.Full));
-    this._host.emit('objects:change', {});
+    this._host._emit('objects:change', {});
     return true;
   }
 
@@ -284,8 +286,9 @@ export class ChartStudies {
     for (const pane of this._host._panes) { pane.reorderSeries(records); pane.reorderPrimitives(primitives); }
     const legends = this._host._indicators.flatMap(instance => instance.legend() ? [instance.legend()!] : []);
     const owned = new Set(legends);
+    // One study row per owned entry, taken in study order.
     let index = 0;
-    for (const entry of this._host._legends) if (owned.has(entry.legend)) entry.legend = legends[index++];
+    for (const entry of this._host._legends) if (owned.has(entry.legend)) entry.legend = legends[index++]!;
     this._host._primitives._placeSource();
     this._host._legendStack._syncLegendPanes();
   }
@@ -300,23 +303,25 @@ export class ChartStudies {
     const i = this._host._indicators.findIndex((x) => x.id === instanceId);
     if (i < 0) {
       const pane = failedOwnedPane === undefined ? undefined : this._host._panes[failedOwnedPane];
-      if (failedOwnedPane !== undefined && pane !== undefined && pane !== this._host._primaryPane && pane.series().length === 0 && pane.primitives().every(primitive => primitive === this._host._timeNav || this._host._anchored.some(entry => entry.primitive === primitive))) this._host.removePane(failedOwnedPane);
+      if (failedOwnedPane !== undefined && pane !== undefined && this._host._layout._holdsOnlyFurniture(pane)) this._host.removePane(failedOwnedPane);
       return;
     }
-    const { indicatorId, paneIndex } = this._host._indicators[i];
+    const { indicatorId, paneIndex } = this._host._indicators[i]!;
     this._host._indicators.splice(i, 1);
     this._host._primitives._reanchorSource();
     this._host._legendStack._restackLegends();
     this._host._indicatorReservedIds.add(instanceId);
     this._host._indicatorRefreshes.delete(instanceId);
     this._queueIndicatorDependents(instanceId, true);
-    this._host.emit('indicatorRemoved', { instanceId, indicatorId, paneIndex });
+    this._host._emit('indicatorRemoved', { instanceId, indicatorId, paneIndex });
     // An indicator pane that just emptied has nothing left to show. This lived
     // in the legend's close handler, so only the on-chart × pruned the pane: a
     // host removing the same indicator from its own UI left it behind, and
     // `getState` then persisted the orphan, so every reload restored a blank
     // region. Doing it here means every caller behaves the same. The price
     // pane stays whatever emptied it, and it can sit in any slot.
+    // Unlike a move, this does not ask `_holdsOnlyFurniture`: what was placed
+    // on the pane was placed against the study's units, and it goes with it.
     const pane = this._host._panes[paneIndex];
     if (pane !== undefined && pane !== this._host._primaryPane && pane.series().length === 0) this._host.removePane(paneIndex);
   }
@@ -375,7 +380,7 @@ export class ChartStudies {
         (series?.priceScale() ?? this._host._panes[paneIndex]?.priceScale)?.format(value),
       policyChanged: (): void => {
         this._host._legendStack._restackLegends();
-        this._host.emit('objects:change', {});
+        this._host._emit('objects:change', {});
       },
       addIndicatorLegend: (o): PaneLegend => {
         // A row starts with its own show / settings / delete. Stacking it gives
@@ -439,6 +444,7 @@ export class ChartStudies {
       removeIndicatorTable: (table): void => this._host.removePrimitive(table),
       sourceBars: (): readonly Bar[] =>
         this._host._firstDataId.value === null ? [] : this._host._dataLayer.seriesBars(this._host._firstDataId.value),
+      underlyingBars: () => this._host._series._underlying(this._host._firstDataId.value),
       sourceState: () => {
         const state = this._host._seriesProvenance.get(this._host._firstDataId.value ?? -1)?.snapshot();
         const replay = replayWindow(this._chart);
@@ -488,9 +494,9 @@ export class ChartStudies {
         providerRevision: this._host._barsProviderRevision, dataRevision: this._host._requestedDataRevision,
         supportsSnapshots: this._host.hasSnapshotProvider(),
         replay: replayWindow(this._chart),
-      }),
+      }) satisfies LooseOptional<IndicatorRequestState> as IndicatorRequestState, // an absent source or replay window is written as undefined
       subscribeRequestChanges: listener => {
-        const subscriptions = ['data:context', 'data:range', 'data:requests'].map(event => this._host.on(event, listener));
+        const subscriptions = (['data:context', 'data:range', 'data:requests'] as const).map(event => this._host.on(event, listener));
         subscriptions.push(observeReplayWindow(this._chart, listener));
         return () => { for (const unsubscribe of subscriptions) unsubscribe(); };
       },
@@ -516,7 +522,8 @@ export class ChartStudies {
       setBarColors: (colors, owner): void => this._setBarColors(colors, owner),
       // Indicator alerts land on the same bus as every other chart event, so a
       // host wires one listener rather than a second subscription mechanism.
-      emit: (event, payload): void => this._host.emit(event, payload),
+      // A descriptor may name any event (`ctx.emit`), so this skips the map's check.
+      emit: (event, payload): void => this._host._bus.emit(event, payload),
       setPaneRange: (paneIndex, range): void => {
         const pane = this._host._panes[paneIndex];
         if (pane === undefined) return;
@@ -534,8 +541,8 @@ export class ChartStudies {
     series: readonly { api: SeriesApi; scaleId: PriceScaleId }[],
     primitives: readonly { primitive: IPrimitive; scaleId: PriceScaleId }[], commit: () => void): boolean {
     if (this._host._destroyed || !this._host._indicators.some(instance => instance.id === id)) return false;
-    for (const item of series) if (!this._host._validPriceScaleId(item.scaleId) || this._host.seriesType(item.api) === null) return false;
-    for (const item of primitives) if (!this._host._validPriceScaleId(item.scaleId) || !this._host._panes.some(pane => pane.hasPrimitive(item.primitive))) return false;
+    for (const item of series) if (!isPriceScaleId(item.scaleId) || this._host.seriesType(item.api) === null) return false;
+    for (const item of primitives) if (!isPriceScaleId(item.scaleId) || !this._host._panes.some(pane => pane.hasPrimitive(item.primitive))) return false;
     this._host._scaleMutationDepth++;
     try {
       for (const { api, scaleId } of series) {
@@ -552,7 +559,7 @@ export class ChartStudies {
       this._host._scaleMutationDepth--;
       this._host.invalidate(mask => mask.invalidateGlobal(InvalidationLevel.Full));
     }
-    this._host.emit('objects:change', {});
+    this._host._emit('objects:change', {});
     return true;
   }
 
@@ -623,18 +630,19 @@ export class ChartStudies {
     const n = bars.length;
     const base = this._barColorBase;
     // Anything that replaces history (a symbol change, a page of older bars)
-    // invalidates the snapshot, since index i is no longer the same bar.
-    if (n < base.length || (base.length > 0 && bars[0].time !== this._barColorAnchor)) base.length = 0;
-    if (base.length === 0) this._barColorAnchor = n > 0 ? bars[0].time : 0;
-    for (let i = base.length; i < n; i++) base[i] = bars[i].color;
+    // invalidates the snapshot, since index i is no longer the same bar. A
+    // snapshot is read against the bars only where there are at least as many.
+    if (n < base.length || (base.length > 0 && bars[0]!.time !== this._barColorAnchor)) base.length = 0;
+    if (base.length === 0) this._barColorAnchor = n > 0 ? bars[0]!.time : 0;
+    for (let i = base.length; i < n; i++) base[i] = bars[i]!.color;
     const colors = this._barColors;
     const out = new Array<Bar>(n);
     let changed = false;
     for (let i = 0; i < n; i++) {
-      const bar = bars[i];
+      const bar = bars[i]!;
       const color = colors?.[i] ?? base[i];
       if (color === bar.color) { out[i] = bar; continue; }
-      out[i] = { ...bar, color };
+      out[i] = { ...bar, color } satisfies LooseOptional<Bar> as Bar; // undefined restores a host bar that had no colour
       changed = true;
     }
     if (!changed) return;
@@ -666,7 +674,7 @@ export class ChartStudies {
    * value, which is the frame and the public `indicators()` accessor.
    */
   public _invalidateIndicators(): void {
-    this._host.emit('data:range', {});
+    this._host._emit('data:range', {});
     if (this._host._indicators.length === 0) return;
     this._host._indicatorsDirty = true;
     this._host._loop.requestFrame();

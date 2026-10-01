@@ -16,8 +16,7 @@ import { Canvas2dBackend } from '../src/render/canvas2d-backend';
 import type { IRenderBackend } from '../src/render/backend';
 import type { DrawItem, RendererEntry, SeriesRenderContext } from '../src/model/chart-type-registry';
 import type { SeriesStyle } from '../src/render/series-style';
-import { DataLayer } from '../src/model/data-layer';
-import { visibleSpan, type VisibleSpan } from '../src/render/draw-items';
+import { DataLayer, barAtIndex, visibleSpan, type VisibleSpan } from '../src/model/data-layer';
 import type { Bar } from '../src/model/bar';
 import { isNewIstDayCount } from '../src/render/axis';
 import { isNewIstDay } from '../src/feed/time';
@@ -176,10 +175,26 @@ describe('visibleSpan', () => {
       const to = from + rnd() * 300 - 20;
       for (const id of [dense, sparse, gapped, empty]) {
         expect(walk(layer, id, from, to), `series ${id} [${from}, ${to}]`).toEqual(layer.visibleBars(id, from, to));
+        // And both agree with a scan of every bar, which shares no code with them.
+        expect(layer.visibleBars(id, from, to), `scan ${id}`).toEqual(scan(layer, id, from, to));
+        const at = Math.round(from);
+        expect(barAtIndex(layer, id, at), `bar ${id} at ${at}`).toBe(scan(layer, id, at, at)[0]?.bar);
+        expect(barAtIndex(layer, id, from), `bar ${id} at ${from}`).toBe(scan(layer, id, from, from)[0]?.bar);
       }
     }
   });
 });
+
+/** Every bar of a series whose shared index lies in [from, to] rounded outward, by a plain scan. */
+function scan(layer: DataLayer, id: number, from: number, to: number): { index: number; bar: Bar }[] {
+  const lo = Math.max(0, Math.floor(from)), hi = Math.min(layer.baseIndex, Math.ceil(to));
+  const out: { index: number; bar: Bar }[] = [];
+  for (const bar of layer.seriesBars(id)) {
+    const index = layer.timeToIndex(bar.time);
+    if (index !== undefined && index >= lo && index <= hi) out.push({ index, bar });
+  }
+  return out;
+}
 
 /**
  * The time axis asks whether a day turned over between every pair of bars in

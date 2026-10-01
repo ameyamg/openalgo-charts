@@ -18,8 +18,9 @@
 // the chart reads, and a second copy inlined here would be empty.
 import { getIndicator, plotStyleKeys } from 'openalgo-charts';
 import type {
-  DataLayer, IndicatorApi, IPrimitive, PriceScale, PriceScaleId, PrimitiveHit, PrimitiveHost, PrimitiveRenderContext, ZOrder,
+  IndicatorApi, IPrimitive, PriceScale, PriceScaleId, PrimitiveHit, PrimitiveHost, PrimitiveRenderContext, ZOrder,
 } from 'openalgo-charts';
+import type { DrawingChartHost } from './controller-types';
 
 /** Where a study's price input is picked and anchored: a pane, and a scale on it. */
 export interface StudyInputTarget {
@@ -35,14 +36,7 @@ interface TargetPane {
 }
 
 /** The slice of the chart the anchors need. `Chart` satisfies it. */
-export interface InputAnchorHost {
-  on(event: string, handler: (payload: unknown) => void): () => void;
-  addPrimitive(primitive: IPrimitive, paneIndex?: number): void;
-  removePrimitive(primitive: IPrimitive): void;
-  readonly dataLayer: DataLayer;
-  indicators?(): readonly IndicatorApi[];
-  panes?(): readonly unknown[];
-}
+type InputAnchorHost = Pick<DrawingChartHost, 'on' | 'addPrimitive' | 'removePrimitive' | 'dataLayer' | 'indicators' | 'panes'>;
 
 /**
  * One anchor move as an undo step, walked by the drawing history or by the
@@ -94,7 +88,7 @@ export function studyInputTarget(chart: { panes?(): readonly unknown[] }, study:
       || (explicit.priceScaleId !== undefined && explicit.priceScaleId !== priceScaleId)) continue;
     targets.set(`${paneIndex}:${priceScaleId}`, { paneIndex, priceScaleId });
   }
-  return targets.size === 1 ? [...targets.values()][0] : null;
+  return targets.size === 1 ? [...targets.values()][0]! : null;
 }
 
 /** The handle itself: a ring at the point, with guides while it is in hand. */

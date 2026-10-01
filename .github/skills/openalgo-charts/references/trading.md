@@ -35,7 +35,7 @@ chart.trading.syncState({ positions, orders, trades });
 - Its `PriceLine`s and marker primitive always land on **the price pane** (`new TradingController(this)` routes through `chart.addPrimitive`, whose pane defaults to the price pane). That is pane 0, unless the chart was built with `movablePrimaryPane` and the price pane was moved below its studies; the lines follow it there.
 - `chart.tradeHost(paneIndex)` is the *other* host shape (`addPrimitive`/`removePrimitive` only) and is for the trade tier's `TradeController`, not for `chart.trading`.
 
-**Touching `chart.trading` steals `chart.subscribeClick` and `chart.subscribeDrag`.** Both are single-slot setters (`this._clickCb = cb`), and the `TradingController` constructor calls them. Register your own callbacks and the trading layer goes deaf; access `chart.trading` afterwards and your callbacks are dropped. Use `chart.on('click' | 'drag' | 'drag:end' | 'hover', cb)` (the multi-listener bus) for app-side handling alongside `chart.trading`.
+**`chart.trading` subscribes to `chart.subscribeClick` and `chart.subscribeDrag` beside the host.** Since 2.6.0 both take several subscribers and return an unsubscribe, so a host callback registered before or after `chart.trading` leaves cancel and modify working, and the host hears the same ids. Before 2.6.0 they were single slots and the last registration silenced the other. Building the layer also makes every `ns-resize` price line on the chart draggable, which is why inspecting code asks `chart.hasTrading()` first.
 
 ## Worked example: full round trip
 
@@ -79,7 +79,7 @@ chart.trading.on('trading:position_close', async ({ positionId }) => {
 });
 ```
 
-The payload argument is typed `unknown` on both buses; destructure with a local cast or an `as` in TypeScript.
+On `chart.on` the payload is typed by the name (`TradingOrderModifyEvent`, `TradingBracketModifyEvent`, or `ChartEventMap['trading:order_cancel']` and so on), so destructure it directly. `chart.trading.on` still types it `unknown`; cast there, or subscribe on the chart.
 
 ## `TradingPosition`
 
@@ -145,7 +145,7 @@ Markers snap to the **nearest bar index**, not an exact time; sub-bar fill preci
 | `upsertOrder(order)` | Filters by id then re-runs `setOrders` |
 | `removeOrder(id)` | Removes the order **and every order whose `parentId === id`** |
 | `addTrade(trade)` | One fill, keyed by `id` |
-| `updatePositionPnl(id, pnl, pnlText?, pnlPercent?)` | Rewrites the info segment in place |
+| `updatePositionPnl(id, pnlText?, pnlPercent?)` | Rewrites the info segment in place |
 | `getPositions()` / `getOrders()` / `getTrades()` | Current entities |
 | `clear()` | Removes every line and the marker primitive |
 | `setSettings(settings)` / `getSettings()` | Colours; see below |
@@ -153,7 +153,7 @@ Markers snap to the **nearest bar index**, not an exact time; sub-bar fill preci
 | `on(event, cb)` | Returns an unsubscribe function |
 | `off(event, cb)` | `cb` is required here (unlike `chart.off`) |
 
-**`updatePositionPnl`'s second argument is discarded.** The source does `void unrealizedPnl`; only `pnlText` and `pnlPercent` reach the pill. Format the number yourself.
+**`updatePositionPnl` takes texts, not a number.** Only `pnlText` and `pnlPercent` reach the pill, so format the number yourself. The 2.x form with the number first, `updatePositionPnl(id, pnl, pnlText?, pnlPercent?)`, still works and ignores the number; it is deprecated, removed in 3.0.0. The method tells the forms apart by the second argument: a string is a text, anything else (a number, or the undefined or null a script host passes before it has one) is the ignored number.
 
 Diffing: `_sync` recreates a line whenever `color | dashed | closeButton | cursor | hasLeftLabel | badge | qty` changes and otherwise patches `price` + `leftLabel` in place. Changing `size` therefore rebuilds the primitive; changing only `price` does not.
 

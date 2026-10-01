@@ -1,16 +1,24 @@
-// OpenAlgo Charts — public API surface (base tier).
-// Phase 0: foundation only. createChart and series factories arrive in Phases 1–2.
+// OpenAlgo Charts public API: the base tier, the `openalgo-charts` entry.
+// Every other tier has an entry of its own and imports its base from here.
 
 export { VERSION, version } from './version';
 
 export { createChart, Chart, compactVolume, PRICE_SCALE_MODES } from './core/chart';
 export type {
   ChartOptions, ChartNavigationOptions, ChartWatermarkOptions, BrandingChangedEvent, PlotRect, AddSeriesOptions, CrosshairMoveEvent, ChartEventOptions,
+  AddIndicatorOptions, ChartApplyOptions,
   ContextMenuEvent, ContextMenuTarget, ContextMenuTargetKind, PriceAxisState, LayoutChangeEvent, LayoutSetter,
   AxisChromeOptions, ZoomAnchor, DoubleClickAction, DoubleClickEvent, ExportSvgOptions,
   PointerModifiers, PointerKind, PointerSample, PointerInfo,
   ChartClickEvent, ChartEventClick, ChartDragEvent, ChartDragEndEvent, RendererFallbackEvent,
 } from './core/chart';
+// The bus's inventory: every name `chart.on` takes and its payload. A tier or a
+// host adds names by declaration merging into `ChartEventMap`.
+export type {
+  ChartEventMap, EmptyEvent, ChartHoverEvent, ChartDragCancelEvent, ChartViewportEvent, ChartResizeEvent, LazyLoadEvent,
+  PaneEvent, PaneMovedEvent, PaneMaximizedEvent, PaneCollapsedEvent, PriceAxisPlacementChangedEvent,
+  IndicatorInstanceEvent, IndicatorDataStatusEvent, TimezoneChangedEvent, PickStartEvent, PickEndEvent,
+} from './core/chart-events';
 // vector export: the serialising context behind `chart.exportSVG`, exported so
 // a host can run its own primitives or a bare renderer into one.
 export { SvgContext, SvgLinearGradient } from './render/svg-export';
@@ -32,8 +40,8 @@ export { ZoomGlide, DEFAULT_ZOOM_GLIDE_OPTIONS } from './input/zoom-glide';
 export type { ZoomGlideOptions } from './input/zoom-glide';
 export { InvalidationLevel } from './core/invalidate-mask';
 export type { PaneInvalidation, TimeScaleOp } from './core/invalidate-mask';
-export { bitmapSize, snapToDevicePixel } from './core/canvas';
-export type { Size } from './core/canvas';
+export { bitmapSize, snapToDevicePixel } from './helpers/math';
+export type { Size } from './helpers/math';
 
 export { PriceScale, autoscaleRange, isRebasing, DEFAULT_PRICE_SCALE_OPTIONS } from './scale/price-scale';
 export type { PriceRange, PriceScaleOptions, PriceScaleMode } from './scale/price-scale';
@@ -131,6 +139,8 @@ export type {
   DrawAnchor,
 } from './model/indicator-registry';
 export type { IndicatorApi, IndicatorHost } from './model/indicator-instance';
+// Which bars a study computes on under a transformed chart.
+export type { IndicatorBarSource } from './model/indicator-bar-source';
 // What a user may do with a study, and the host's way past it.
 export { parseIndicatorPolicy } from './model/indicator-policy';
 export type { IndicatorPolicy, IndicatorEditOptions } from './model/indicator-policy';
@@ -198,7 +208,7 @@ export { IndicatorFill } from './primitives/indicator-fill';
 export type { IndicatorFillOptions, FillPoint, FillGradient } from './primitives/indicator-fill';
 export { IndicatorDrawings } from './primitives/indicator-draws';
 export { IndicatorBackground } from './primitives/indicator-background';
-// `chart.dataLayer` is public, so its type has to be nameable by a consumer —
+// `chart.dataLayer` is public, so its type has to be nameable by a consumer,
 // and a tier that takes one in its own public API needs to name *this* one.
 export type { DataLayer, IndexedBar, SeriesId, SessionCalendarSource } from './model/data-layer';
 export { PriceLine } from './primitives/price-line';
@@ -236,7 +246,7 @@ export type {
 export { TimeNavigator, DEFAULT_TIME_NAVIGATOR_OPTIONS } from './primitives/time-navigator';
 export type { TimeNavigatorOptions, TimeNavigatorAction } from './primitives/time-navigator';
 export { EventMarkers } from './primitives/event-markers';
-export type { ChartEvent, ChartEventDetails, EventDetailField, EventGroup, EventMarkersOptions, EventMarkerDetails } from './primitives/event-markers';
+export type { ChartEvent, ChartEventDetails, EventDetailField, EventDetailSpan, EventDetailInline, EventDetailBlock, EventGroup, EventMarkersOptions, EventMarkerDetails } from './primitives/event-markers';
 
 // indicators
 export { ema, emaSeries } from './indicators/ema';
@@ -249,11 +259,16 @@ export { conflationGroupSize, conflateBars, conflateItems, mergeBars } from './m
 
 // Family-B transforms live in the lazy 'openalgo-charts/transform' entry point
 // (importing it also registers the 'point-figure' and 'kagi' renderers), so they
-// are intentionally NOT re-exported from the base bundle.
+// are intentionally NOT re-exported from the base bundle. The registry they
+// fill for in-chart transforms (`chart.setSeriesTransform`) is here, so a chart
+// that never draws one never loads one.
+export { getSeriesTransform, registeredSeriesTransforms } from './model/series-transform';
+export { registerSeriesTransform } from './core/chart-series-transform';
+export type { SeriesTransformSpec, SeriesTransformRun, SeriesTransformDefinition } from './model/series-transform';
 export type { Bar, LinePoint, Whitespace, SeriesDataItem, UTCSeconds, OriginalTime } from './model/bar';
 export { isWhitespace, toBar } from './model/bar';
 
-export type { DataFeed, TradeFeed, BarsRequest, BarsPageRequest, BarsPage, BarSubscriptionOptions, LiveBarMeta, MarketDepth, DepthLevel, OrderSide, OrderType, PlaceOrder, UnsubscribeFn } from './feed/types';
+export type { DataFeed, TradeFeed, BarsRequest, BarsPageRequest, BarsPage, BarSubscriptionOptions, LiveBarMeta, MarketDepth, DepthLevel, OrderSide, OrderType, PlaceOrder, UnsubscribeFn, SymbolMatch, SymbolSearchRequest } from './feed/types';
 export type { InstrumentKey, QuoteSnapshot, QuoteRequest, QuoteStreamStatus, QuoteStreamHandlers, QuoteFeed, NewsRequest, NewsItem, NewsPage, NewsFeed } from './feed/types';
 export { Instrument, SessionCalendar } from './feed/instrument';
 export type { InstrumentMetadata, InstrumentCalendar, InstrumentSession, SessionCalendarSpec } from './feed/instrument';
@@ -362,6 +377,8 @@ export type {
   TradingOrder,
   TradingTrade,
   TradingSyncPayload,
+  TradingOrderModifyEvent,
+  TradingBracketModifyEvent,
   TradingColors,
   TradingSettings,
   PositionSide,
@@ -406,7 +423,7 @@ export type {
   BarCondition, BarConditionContext,
   AlertDrawingValue, AlertDrawingLevel, AlertDrawingInfo, AlertDrawingProvider,
   DrawingAlertSource,
-  AlertsDocument,
+  AlertsDocument, AlertChangeEvent, AlertRemovedEvent, AlertErrorEvent, AlertsChangedEvent, AlertsRestoredEvent,
 } from './alerts/types';
 export { parseAlertsDocument } from './alerts/document';
 export { registerBarCondition, unregisterBarCondition, getBarCondition, registeredBarConditions } from './alerts/bar-conditions';

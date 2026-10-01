@@ -6,10 +6,12 @@
  * Its own module so grid.ts keeps the grid itself; everything here is plain
  * data in and plain data out.
  */
-import { isKnownInterval, registeredChartTypes, registeredIndicators } from 'openalgo-charts';
+import { isKnownInterval, registeredIndicators } from 'openalgo-charts';
+import { isChartTypeChoice } from './chart-type-choice';
 import type { DrawingDocumentStore, DrawingsDocument } from 'openalgo-charts/draw';
 import type { WorkspacePayload } from 'openalgo-charts/workspace';
 import { checkLinks } from './grid-links';
+import { isRecord } from '../helpers/validate';
 
 /** Each chart's drawing documents, by pane id, then by instrument key. */
 export type ChartDrawings = Map<string, Map<string, DrawingsDocument>>;
@@ -43,7 +45,6 @@ export function readChartDrawings(value: unknown): ChartDrawings {
   return out;
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const int = (v: unknown, lo: number, hi: number): boolean => Number.isInteger(v) && (v as number) >= lo && (v as number) <= hi;
 
 /** What a grid cannot honour, checked before anything is built. Empty when the payload is usable. */
@@ -65,7 +66,7 @@ export function checkWorkspace(p: WorkspacePayload): string {
     if (typeof pane.symbol !== 'string' || typeof pane.exchange !== 'string' || !isRecord(pane.chart)
       || !['string', 'undefined'].includes(typeof pane.historyPeriod)) return `${pane.id}: invalid chart`;
     if (!isKnownInterval(pane.interval)) return `${pane.id}: unknown interval ${String(pane.interval)}`;
-    if (!registeredChartTypes().includes(pane.chartType)) return `${pane.id}: unknown chart type ${String(pane.chartType)}`;
+    if (!isChartTypeChoice(pane.chartType)) return `${pane.id}: unknown chart type ${String(pane.chartType)}`;
     if (Array.isArray(pane.comparisons) && pane.comparisons.length > 0) return `${pane.id}: comparison symbols are not supported in a grid chart`;
     for (const study of Array.isArray(pane.chart.indicators) ? pane.chart.indicators : []) {
       if (!studies.has(study?.indicatorId)) return `${pane.id}: unavailable study ${String(study?.indicatorId)}`;

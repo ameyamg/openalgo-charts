@@ -40,7 +40,7 @@ export function distToVertical(px: number, x: number): number {
 export function distToPolyline(px: number, py: number, pts: readonly ScreenPoint[]): number {
   let best = Infinity;
   for (let i = 1; i < pts.length; i++) {
-    const d = distToSegment(px, py, pts[i - 1], pts[i]);
+    const d = distToSegment(px, py, pts[i - 1]!, pts[i]!); // i is in range
     if (d < best) best = d;
   }
   return best;
@@ -88,7 +88,7 @@ export function distToRect(px: number, py: number, a: ScreenPoint, b: ScreenPoin
   ];
   let best = Infinity;
   for (let i = 0; i < 4; i++) {
-    const d = distToSegment(px, py, corners[i], corners[(i + 1) % 4]);
+    const d = distToSegment(px, py, corners[i]!, corners[(i + 1) % 4]!); // four corners
     if (d < best) best = d;
   }
   return best;

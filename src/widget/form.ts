@@ -25,7 +25,7 @@ import { INDICATOR_SOURCES, registeredIntervals, parseSessionSpec } from 'openal
 import type { ChartSettingsInput, IndicatorInputPresentation } from 'openalgo-charts';
 import { chromeIconSvg, CHROME_ICON_STROKE } from 'openalgo-charts/draw';
 import type { SettingsField } from 'openalgo-charts/draw';
-import { glyph, type OverlayOptions } from './context';
+import { boxIn, glyph, h, type OverlayOptions } from './context';
 import { widgetText, type WidgetTranslationOptions } from './localization';
 import { createColorPicker, type ColorPickerOptions } from './color-picker';
 import { inputStates } from './input-conditions';
@@ -49,25 +49,25 @@ export interface FormControl extends IndicatorInputPresentation {
   kind: FormKind;
   label: string;
   /** Sub-heading the row sits under; consecutive rows with one group share a header. */
-  group?: string;
+  group?: string | undefined;
   /** Help text; rendered as a hover affordance beside the label. */
-  tooltip?: string;
-  min?: number;
-  max?: number;
-  step?: number;
+  tooltip?: string | undefined;
+  min?: number | undefined;
+  max?: number | undefined;
+  step?: number | undefined;
   /** `select` only. Absent means free-form: the control becomes a text box. */
-  options?: readonly { label: string; value: string }[];
+  options?: readonly { label: string; value: string }[] | undefined;
   /** `colorPair` only: the switch (optional) and the two swatches. */
   pair?: {
-    enabled?: { key: string };
+    enabled?: { key: string } | undefined;
     up: { key: string; label: string };
     down: { key: string; label: string };
-  };
+  } | undefined;
   /** `custom` only: what the dialog renders in the control column. */
-  custom?: string;
+  custom?: string | undefined;
 }
 
-export type FormValues = Readonly<Record<string, unknown>>;
+type FormValues = Readonly<Record<string, unknown>>;
 
 export interface FormOptions extends WidgetTranslationOptions {
   values: FormValues;
@@ -127,10 +127,10 @@ export interface FormHandle {
  */
 const BUILTIN_INTERVAL_CODES: readonly string[] = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '1d', '1w'];
 
-function intervalOptions(): { label: string; value: string }[] {
+function intervalOptions(served?: readonly string[]): { label: string; value: string }[] {
   const seen = new Set<string>();
   const out: { label: string; value: string }[] = [{ label: 'Chart', value: '' }];
-  for (const code of [...BUILTIN_INTERVAL_CODES, ...registeredIntervals().map((d) => d.code)]) {
+  for (const code of served ?? [...BUILTIN_INTERVAL_CODES, ...registeredIntervals().map((d) => d.code)]) {
     const key = code.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -144,8 +144,13 @@ function intervalOptions(): { label: string; value: string }[] {
 /**
  * Chart-settings and indicator inputs. `source` becomes a select over the
  * canonical price sources; a `colorPair` keeps its two or three keys.
+ * `intervals`, the codes the host serves, fills an `interval` select in their
+ * order; without it the select offers the built-in tokens and every
+ * registered code.
  */
-export function controlsFromInputs(inputs: readonly ChartSettingsInput[], translation?: FormTranslationOptions): FormControl[] {
+export function controlsFromInputs(
+  inputs: readonly ChartSettingsInput[], translation?: FormTranslationOptions, intervals?: readonly string[],
+): FormControl[] {
   const out: FormControl[] = [];
   for (const input of inputs) {
     const before = out.length;
@@ -178,12 +183,12 @@ export function controlsFromInputs(inputs: readonly ChartSettingsInput[], transl
         out.push({ key: input.key, kind: 'select', label: input.label, group: input.group, options: INDICATOR_SOURCES });
         break;
       case 'interval':
-        // Codes the engine can bucket by and nothing else: the built-in tokens
-        // (which the registry does not list) and whatever the host registered.
-        // The empty entry is the chart's own interval.
+        // Codes the engine can bucket by and nothing else: the host's own list,
+        // or the built-in tokens (which the registry does not list) and
+        // whatever the host registered. The empty entry is the chart's own.
         out.push({
           key: input.key, kind: 'select', label: input.label, group: input.group,
-          options: intervalOptions(),
+          options: intervalOptions(intervals),
         });
         break;
       case 'time':
@@ -202,7 +207,7 @@ export function controlsFromInputs(inputs: readonly ChartSettingsInput[], transl
     // Set once here rather than in seven branches: every variant carries the
     // field, and a branch that forgot it would drop the help text silently.
     if (out.length > before) {
-      const control = out[before];
+      const control = out[before]!; // the length test just above says this branch pushed it
       if (input.tooltip !== undefined) control.tooltip = input.tooltip;
       if (input.activeWhen !== undefined) control.activeWhen = input.activeWhen;
       if (input.visibleWhen !== undefined) control.visibleWhen = input.visibleWhen;
@@ -235,7 +240,7 @@ function localizeControls(controls: FormControl[], translation?: FormTranslation
 }
 
 /** Our words for the draw tier's group ids. */
-export const DRAWING_GROUP_LABELS: Readonly<Record<string, string>> = {
+const DRAWING_GROUP_LABELS: Readonly<Record<string, string>> = {
   line: 'Line', fill: 'Fill', text: 'Text', levels: 'Levels', behavior: 'Behavior',
 };
 
@@ -280,29 +285,6 @@ export function controlsFromFields(fields: readonly SettingsField[], translation
 
 // ── value helpers ─────────────────────────────────────────────────────────
 
-/**
- * A six-digit hex an `<input type=color>` will take, from the forms a theme
- * or a drawing uses. Alpha is dropped: the picker has no channel for it, and
- * the swatch still has to show the colour the chart is drawing. Null for
- * anything else (a named colour), which the caller turns into a fallback.
- */
-export function toHexColor(input: unknown): string | null {
-  if (typeof input !== 'string') return null;
-  const s = input.trim();
-  const hex = /^#([0-9a-f]{3,8})$/i.exec(s);
-  if (hex !== null) {
-    const h = hex[1];
-    if (h.length === 3 || h.length === 4) return '#' + h.slice(0, 3).split('').map((c) => c + c).join('').toLowerCase();
-    if (h.length === 6 || h.length === 8) return '#' + h.slice(0, 6).toLowerCase();
-    return null;
-  }
-  // See tokens.ts: one unambiguous separator alternation, not `\s*[, ]\s*`.
-  const fn = /^rgba?\(\s*([\d.]+)(?:\s*,\s*|\s+)([\d.]+)(?:\s*,\s*|\s+)([\d.]+)/i.exec(s);
-  if (fn === null) return null;
-  const part = (v: string): string => Math.round(Math.max(0, Math.min(255, Number(v)))).toString(16).padStart(2, '0');
-  return `#${part(fn[1])}${part(fn[2])}${part(fn[3])}`;
-}
-
 /** Print a number without float noise: 1.5 stays 1.5, 2.0000000000000004 prints 2. */
 export function formatNumber(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000);
@@ -310,12 +292,11 @@ export function formatNumber(n: number): string {
 
 // ── small DOM kit shared by the dialogs ───────────────────────────────────
 
-/** `doc.createElement` with the class and text most calls want. */
+/** `h` with the text most dialog calls want in place of attributes: one element factory, two call shapes. */
 export function el<K extends keyof HTMLElementTagNameMap>(
   doc: Document, tag: K, className?: string, text?: string,
 ): HTMLElementTagNameMap[K] {
-  const node = doc.createElement(tag);
-  if (className !== undefined && className !== '') node.className = className;
+  const node = h(doc, tag, className);
   if (text !== undefined) node.textContent = text;
   return node;
 }
@@ -338,17 +319,17 @@ export function chromeGlyph(doc: Document, id: string): HTMLElement {
   return glyph(doc, chromeIconSvg(id), 'chrome');
 }
 
-export type ButtonVariant = 'ghost' | 'primary' | 'danger';
+type ButtonVariant = 'ghost' | 'primary' | 'danger';
 
 export interface ButtonSpec {
   label: string;
   /** Chrome icon id. With `iconOnly` the label becomes the accessible name. */
   icon?: string;
   iconOnly?: boolean;
-  variant?: ButtonVariant;
+  variant?: ButtonVariant | undefined;
   onClick?: (e: MouseEvent) => void;
   /** Chord hint for the title, as `Ctrl+D`. */
-  chord?: string;
+  chord?: string | undefined;
 }
 
 /** A flat `.oac-btn`. Icon-only buttons carry their label as `aria-label` and `title`. */
@@ -404,7 +385,7 @@ export function stopOwnKeys(node: HTMLElement): void {
 
 // ── dialog furniture ──────────────────────────────────────────────────────
 
-export interface DialogFrame {
+interface DialogFrame {
   /** The card (`role="dialog"`), handed to `openOverlay` as is. */
   el: HTMLElement;
   head: HTMLElement;
@@ -418,12 +399,18 @@ export interface DialogFrame {
   setTitle(title: string): void;
 }
 
-export interface DialogFrameSpec extends WidgetTranslationOptions {
+interface DialogFrameSpec extends WidgetTranslationOptions {
   title: string;
   /** Extra class on the card. */
   className?: string;
   /** The close affordance top right. Escape and the scrim are the overlay stack's. */
   onClose(): void;
+  /**
+   * The close as the word rather than the icon, for a compact list panel whose
+   * rows act through words too and which carries no glyph (the objects panel,
+   * the alerts list). Default: the icon every form dialog shows.
+   */
+  closeText?: boolean;
 }
 
 let frameSeq = 0;
@@ -445,7 +432,7 @@ export function dialogFrame(doc: Document, spec: DialogFrameSpec): DialogFrame {
   const head = el(doc, 'div', 'oac-dialog__head');
   const title = el(doc, 'span', 'oac-dialog__title', spec.title);
   title.id = titleId;
-  const closeButton = button(doc, { label: widgetText(spec, 'Close'), icon: 'close', iconOnly: true, onClick: () => spec.onClose() });
+  const closeButton = button(doc, { label: widgetText(spec, 'Close'), ...(spec.closeText === true ? {} : { icon: 'close', iconOnly: true }), onClick: () => spec.onClose() });
   head.appendChild(title);
   head.appendChild(closeButton);
 
@@ -479,8 +466,17 @@ export interface PanelHandle {
 }
 
 /** The slice of the widget context a panel needs to show itself. */
-export interface PanelHost {
+interface PanelHost {
   openOverlay(el: HTMLElement, opts?: OverlayOptions): () => void;
+}
+
+/**
+ * A dialog that cannot open says why in a toast, and hands back a handle that
+ * is already closed, so the caller treats it like any other.
+ */
+export function declinedPanel(ctx: { readonly document: Document; toast(message: string, kind?: 'info'): unknown }, why: string): PanelHandle {
+  ctx.toast(why, 'info');
+  return { el: ctx.document.createElement('div'), close: () => {}, isOpen: () => false };
 }
 
 /**
@@ -532,15 +528,9 @@ export function openPanel(host: PanelHost, panel: HTMLElement, opts: OverlayOpti
   return { el: panel, close: finish, isOpen: () => !closed };
 }
 
-/** An element's box in root coordinates, for placing a panel by hand. */
-export function boxInRoot(root: HTMLElement, node: Element): { left: number; top: number; right: number; bottom: number } {
-  const r = root.getBoundingClientRect();
-  const b = node.getBoundingClientRect();
-  return { left: b.left - r.left, top: b.top - r.top, right: b.right - r.left, bottom: b.bottom - r.top };
-}
 
 /** The slice of a chart a popover needs to sit beside a drawing. */
-export interface AnchorChart {
+interface AnchorChart {
   timeToCoordinate(time: number): number;
   priceToCoordinate(price: number, paneIndex?: number): number | null;
   panes(): ReadonlyArray<{ element: HTMLElement }>;
@@ -560,7 +550,7 @@ export function selectionPoint(
   screenOf?: (id: string) => ReadonlyArray<{ x: number; y: number }> | null,
 ): { x: number; y: number } {
   const container = chart.panes()[0]?.element.parentElement ?? null;
-  const off = container === null ? { left: 0, top: 0 } : boxInRoot(root, container);
+  const off = container === null ? { left: 0, top: 0 } : boxIn(root, container);
   let x0 = Infinity;
   let y1 = -Infinity;
   for (const d of drawings) {
@@ -576,14 +566,14 @@ export function selectionPoint(
   return { x: off.left + x0, y: off.top + y1 + 12 };
 }
 
-export interface TabSpec {
+interface TabSpec {
   id: string;
   label: string;
   /** Chrome icon id for the glyph beside the label. */
   icon?: string;
 }
 
-export interface TabListHandle {
+interface TabListHandle {
   el: HTMLElement;
   /** Mark `id` as the selected tab. The buttons stay put, so a focused one keeps its focus. */
   setActive(id: string): void;
@@ -602,10 +592,11 @@ export function tabList(
   nav.setAttribute('aria-orientation', layout === 'rail' ? 'vertical' : 'horizontal');
   const buttons: HTMLButtonElement[] = [];
   const setActive = (id: string): void => {
+    // One button per tab, every one built before anything can call this.
     tabs.forEach((t, i) => {
       const on = t.id === id;
-      buttons[i].setAttribute('aria-selected', on ? 'true' : 'false');
-      buttons[i].tabIndex = on ? 0 : -1;
+      buttons[i]!.setAttribute('aria-selected', on ? 'true' : 'false');
+      buttons[i]!.tabIndex = on ? 0 : -1;
     });
   };
   const pick = (id: string): void => { setActive(id); onPick(id); };
@@ -629,9 +620,10 @@ export function tabList(
       else if (k === 'End') next = tabs.length - 1;
       if (next < 0) return;
       e.preventDefault();
-      buttons[next].focus();
-      buttons[next].scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-      pick(tabs[next].id);
+      // Every branch above leaves next inside the tab list, and a key needs a built button.
+      buttons[next]!.focus();
+      buttons[next]!.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      pick(tabs[next]!.id);
     });
     buttons.push(b);
     nav.appendChild(b);
@@ -642,7 +634,7 @@ export function tabList(
 
 // ── placement ─────────────────────────────────────────────────────────────
 
-export interface PlaceAt {
+interface PlaceAt {
   /** Below this control, left edges aligned; above it when the bottom has no room. */
   anchor?: HTMLElement;
   /** At this point, in root px (a context menu at the pointer). */
@@ -1176,7 +1168,7 @@ export function renderForm(host: HTMLElement, controls: readonly FormControl[], 
       const off = m.fields.length > 0 && m.offKeys.every(key => why.get(key) !== null);
       if (m.offEl !== null) {
         m.offEl.classList.toggle(m.offClass, off);
-        const lead = why.get(m.offKeys[0]) ?? null;
+        const lead = why.get(m.offKeys[0]!) ?? null; // only a custom row has no keys, and its offEl is null
         for (const node of m.titles) node.title = off ? lead ?? '' : '';
       }
       const name = m.control.label;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BUILTIN_DRAWING_TOOLS, getDrawingTool, registerBuiltinDrawingTools,
-  anchoredVwapAnalysis, fixedRangeVolumeProfileAnalysis } from '../src/draw/tools';
+import { BUILTIN_DRAWING_TOOLS, registerBuiltinDrawingTools } from '../src/draw/tools';
+import { anchoredVwapAnalysis, fixedRangeVolumeProfileAnalysis } from '../src/draw/analysis';
+import { getDrawingTool } from '../src/draw/registry';
 import type { Bar, PrimitiveRenderContext } from '../src';
 import type { Drawing } from '../src/draw/types';
 import { RecordingContext } from './helpers/fake-ctx';

@@ -16,7 +16,7 @@ const H = 600;
 
 // The chart only wires pointer listeners when a `window` exists (`_attachInput`),
 // so under the node environment these tests would otherwise assert against
-// handlers that were never attached — and pass for the wrong reason.
+// handlers that were never attached, and pass for the wrong reason.
 beforeAll(() => {
   const g = globalThis as unknown as { window?: unknown };
   g.window ??= {};
@@ -52,7 +52,7 @@ describe('pane weights', () => {
     chart.addSeries('histogram', { paneIndex: 1 }).setData(bars(50));
     chart.setPaneWeight(1, 0.8);
     expect(chart.paneWeight(1)).toBe(0.8);
-    // The DOM flex-basis must equal the pixel height the canvas was sized to —
+    // The DOM flex-basis must equal the pixel height the canvas was sized to:
     // when they diverge, every hit-test lands somewhere other than what's drawn.
     // The boundary between them sits on a whole pixel (the ratio is 1 here),
     // and the pane below takes what the one above leaves.
@@ -67,6 +67,17 @@ describe('pane weights', () => {
     chart.addSeries('candlestick').setData(bars(10));
     chart.setPaneWeight(0, 0);
     expect(chart.paneWeight(0)).toBeGreaterThan(0);
+  });
+
+  it('ignores a weight that is not a finite number, which would poison the layout', () => {
+    const { chart } = makeChart();
+    chart.addSeries('candlestick').setData(bars(50));
+    chart.addSeries('histogram', { paneIndex: 1 }).setData(bars(50));
+    chart.setPaneWeight(1, 0.5);
+    const flex = chart.panes().map((p) => p.element.style.flex);
+    for (const weight of [NaN, Infinity, -Infinity]) chart.setPaneWeight(1, weight);
+    expect(chart.paneWeight(1)).toBe(0.5);
+    expect(chart.panes().map((p) => p.element.style.flex)).toEqual(flex);
   });
 });
 
@@ -138,7 +149,7 @@ describe('pane legend rows', () => {
     // indicator's own legend flowing beneath it rather than overlapping.
     const symbol = new PaneLegend({ id: 'symbol', title: 'AAPL', actions: [] });
     chart.addPrimitive(symbol, 0);
-    chart.addIndicator('ema'); // onchart → same pane
+    chart.addIndicator('ema'); // onchart: same pane
     expect(symbol.options().row).toBe(0);
     const ema = chart.indicators()[0].legend();
     expect(ema?.options().row).toBe(2); // the persistent study count reserves one row
@@ -146,7 +157,7 @@ describe('pane legend rows', () => {
 
   it('starts indicator legends below a host overlay when legendOffset says so', () => {
     // A host that draws its own OHLC readout in the corner needs the canvas
-    // rows pushed clear of it — otherwise they land underneath, and their
+    // rows pushed clear of it; otherwise they land underneath, and their
     // settings / close buttons are invisible and unclickable.
     const el = fakeDocument().createElement('div') as unknown as FakeElement;
     const chart = new Chart(el, {
@@ -166,7 +177,7 @@ describe('pane legend rows', () => {
 
   it('offsets only the overlaid pane, leaving lower panes at the corner', () => {
     // A lower indicator pane is short. Applying a price-pane offset there would
-    // push its legend — and so its settings and close buttons — off the pane.
+    // push its legend (and so its settings and close buttons) off the pane.
     const el = fakeDocument().createElement('div') as unknown as FakeElement;
     const chart = new Chart(el, {
       document: fakeDocument(), raf: { schedule: () => 0 },
@@ -257,7 +268,7 @@ describe('pane legend rows', () => {
     const series = macd.series('macd') as unknown as { __style?: unknown };
     void series;
     expect(macd.settings()['macd:width']).toBe(4);
-    // Opacity folds into the colour as an alpha — a canvas stroke has no
+    // Opacity folds into the colour as an alpha: a canvas stroke has no
     // separate opacity channel.
     const legend = macd.legend();
     const values = (legend as unknown as { _values: { color?: string }[] })._values;
@@ -349,6 +360,39 @@ describe('pane removal, ordering, and maximize', () => {
     // Restored, the study pane sits under the price pane again and wears the rule.
     expect(chart.panes()[1].element.style.borderTopWidth).toBe('1px');
     expect(chart.panes()[0].element.style.borderTopWidth).toBe('0px');
+  });
+
+  it('drops a study pane with the study, host visuals and all, but keeps one a move leaves them on', () => {
+    // Two rules on purpose: a removed study takes its pane, whatever was
+    // placed on it against the study's units; a study moved away leaves a
+    // pane that still holds such a visual, as ChartPanes._holdsOnlyFurniture says.
+    const { chart } = makeChart();
+    chart.addSeries('candlestick').setData(bars(60));
+    const removed = chart.addIndicator('rsi');
+    chart.addPrimitive(new PaneLegend({ id: 'host-note', title: 'Note' }), removed.paneIndex);
+    expect(chart.panes()).toHaveLength(2);
+    chart.removeIndicator(removed.id);
+    expect(chart.panes()).toHaveLength(1);
+
+    const moved = chart.addIndicator('rsi');
+    chart.addPrimitive(new PaneLegend({ id: 'host-note-2', title: 'Note' }), moved.paneIndex);
+    expect(chart.moveIndicator(moved.id, 0)).toBe(true);
+    expect(chart.panes()).toHaveLength(2);
+
+    // A pane that held nothing but the study goes with a move too.
+    const bare = chart.addIndicator('rsi');
+    expect(chart.panes()).toHaveLength(3);
+    expect(chart.moveIndicator(bare.id, 0)).toBe(true);
+    expect(chart.panes()).toHaveLength(2);
+  });
+
+  it('refuses to maximize an index that names no pane, which would hide every pane', () => {
+    const { chart } = makeChart();
+    chart.addSeries('candlestick').setData(bars(60));
+    chart.addIndicator('rsi');
+    for (const index of [0.5, 1.5, NaN, -1, 2]) expect(chart.maximizePane(index)).toBe(false);
+    expect(chart.maximizedPane()).toBeNull();
+    expect(chart.panes().map((p) => p.element.style.display)).toEqual(['', '']);
   });
 
   it('hands the time axis to the maximized pane', () => {
@@ -523,3 +567,29 @@ describe('sub-plot indicators survive their pane changing slot', () => {
     expect(chart.panes().some((p) => p === moved)).toBe(false);
   });
 })
+
+describe('a pane index that names no slot', () => {
+  // A slot is a whole number of 0 or more. Anything else used to add panes up
+  // to it, find none there and throw a TypeError from inside, leaving the
+  // stray pane behind on a chart the call never changed.
+  it('is refused by addSeries before the chart changes', () => {
+    const { chart } = makeChart();
+    chart.addSeries('candlestick').setData(bars(20));
+    for (const paneIndex of [1.5, -1, Number.NaN]) {
+      expect(() => chart.addSeries('line', { paneIndex })).toThrow(RangeError);
+      expect(chart.panes()).toHaveLength(1);
+    }
+    chart.addSeries('line', { paneIndex: 1 }).setData(bars(20));
+    expect(chart.panes()).toHaveLength(2);
+  });
+
+  it('is refused by the primitive adders before the chart changes', () => {
+    const { chart } = makeChart();
+    chart.addSeries('candlestick').setData(bars(20));
+    for (const paneIndex of [1.5, -1, Number.NaN]) {
+      expect(() => chart.addPriceLine({ id: 'level', price: 100, color: '#26a69a' }, paneIndex)).toThrow(RangeError);
+      expect(() => chart.addPrimitive(new PaneLegend({ id: 'row', title: 'Row', actions: [] }), paneIndex)).toThrow(RangeError);
+      expect(chart.panes()).toHaveLength(1);
+    }
+  });
+});

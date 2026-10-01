@@ -1,5 +1,5 @@
 /**
- * Pane legend (ARCHITECTURE.md §8) — the row at the top-left
+ * Pane legend (ARCHITECTURE.md §8): the row at the top-left
  * of a pane: a color swatch, the source's name, its parameters, the value under
  * the crosshair, and inline action buttons on the right.
  *
@@ -22,12 +22,13 @@
  */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from './primitive';
 import { withAlpha } from '../render/pill';
+import type { LooseOptional } from '../helpers/types';
 
 export type PaneLegendAction = 'hide' | 'settings' | 'source' | 'up' | 'down' | 'collapse' | 'maximize' | 'close';
 
 /**
  * One reading on a legend row. Multi-plot sources show one per plot, each in
- * that plot's own color (an MA ribbon's four averages, MACD's three lines) —
+ * that plot's own color (an MA ribbon's four averages, MACD's three lines):
  * a single string in a single color cannot say which number is which.
  */
 export interface LegendValue {
@@ -135,7 +136,7 @@ export interface PaneLegendOptions {
   /** Swatch color; omitted draws no swatch. */
   color?: string;
   /**
-   * Color for the live value. Defaults to `color`, then the theme's text — so a
+   * Color for the live value. Defaults to `color`, then the theme's text, so a
    * row can tint its reading (an up/down change) without being forced to show a
    * swatch in that same color.
    */
@@ -145,16 +146,20 @@ export interface PaneLegendOptions {
   /**
    * Which inline action buttons to draw, left to right. Each hit-tests as
    * `${id}::<action>`:
-   *  - `up` / `down` — move this pane one slot (`::up` / `::down`)
-   *  - `hide`        — toggle visibility (`::hide`)
+   *  - `up` / `down`: move this pane one slot (`::up` / `::down`)
+   *  - `hide`: toggle visibility (`::hide`)
+   *  - `settings`: open this source's settings (`::settings`)
    *  - `source`: show the code this source was written from (`::source`)
    *  - `collapse`: fold this pane to a header strip, or open it again (`::collapse`)
-   *  - `maximize`    — expand this pane to fill the chart (`::maximize`)
-   *  - `close`       — remove the source, and its pane if it empties (`::close`)
+   *  - `maximize`: expand this pane to fill the chart (`::maximize`)
+   *  - `close`: remove the source, and its pane if it empties (`::close`)
    *
    * When only some actions fit, the end of this list stays visible.
-   * Defaults to `['up', 'down', 'hide', 'maximize', 'close']` for pane sources
-   * and `['hide', 'close']` for overlays (pass explicitly to override).
+   * Defaults to `['hide', 'settings', 'close']`. A chart drawing a study's row
+   * adds the pane's own controls to it: on the first row of a pane other than
+   * the price pane it puts `up`, `down`, `collapse` and `maximize` before
+   * `close` (last when the row has none), and it leaves out `close` or
+   * `settings` where the study's policy refuses them.
    */
   actions?: readonly PaneLegendAction[];
   /** Rendered as hidden (dimmed, eye hollow). */
@@ -221,7 +226,7 @@ const NO_SWITCHES: LegendStatusLineOptions = {};
 const NO_STATUS: LegendStatusData = {};
 
 /** One button's side in media px, held inside the range the row can carry. */
-function buttonSize(o: Pick<PaneLegendOptions, 'iconSize'>): number {
+function buttonSize(o: { iconSize?: number | undefined }): number {
   const wanted = o.iconSize;
   if (typeof wanted !== 'number' || !Number.isFinite(wanted)) return BTN;
   return Math.max(BTN_MIN, Math.min(BTN_MAX, wanted));
@@ -233,7 +238,7 @@ function buttonSize(o: Pick<PaneLegendOptions, 'iconSize'>): number {
  * Both the stacking offset and the hit box are measured from this, so a taller
  * row moves the rows below it instead of drawing through them.
  */
-export function paneLegendRowHeight(o: Pick<PaneLegendOptions, 'iconSize'>): number {
+export function paneLegendRowHeight(o: { iconSize?: number | undefined }): number {
   return Math.max(ROW_H, buttonSize(o) + BTN_MARGIN * 2);
 }
 
@@ -298,9 +303,9 @@ function fieldOn(s: LegendStatusLineOptions, field: LegendField | undefined, has
 const DEFAULT_ACTIONS: readonly PaneLegendAction[] = ['hide', 'settings', 'close'];
 
 /**
- * Action icons as vector strokes rather than text glyphs — `⛶`, `🗑`, and the
- * arrows render inconsistently (or as emoji) across platforms and font stacks,
- * and a stroked path stays crisp at any DPR.
+ * Action icons as vector strokes rather than text glyphs: the maximize square,
+ * the trash can and the arrows render inconsistently (or as emoji) across
+ * platforms and font stacks, and a stroked path stays crisp at any DPR.
  */
 function drawGlyph(
   ctx: CanvasRenderingContext2D,
@@ -450,15 +455,17 @@ export class PaneLegend implements IPrimitive {
 
   /** A single live reading after the params (typically crosshair-driven). */
   public setValue(text: string, color?: string): void {
-    this.setValues(text === '' ? [] : [{ text, color }]);
+    // An omitted color arrives as undefined, which every reader treats as absent.
+    this.setValues(text === '' ? [] : [{ text, color } satisfies LooseOptional<LegendValue> as LegendValue]);
   }
 
   /** One reading per plot, each in its own color. */
   public setValues(values: readonly LegendValue[]): void {
+    // The lengths match before `every` reads the old list at the new one's indices.
     const same = values.length === this._values.length
-      && values.every((v, i) => v.text === this._values[i].text
-        && v.label === this._values[i].label && v.color === this._values[i].color
-        && v.field === this._values[i].field && v.priority === this._values[i].priority);
+      && values.every((v, i) => v.text === this._values[i]!.text
+        && v.label === this._values[i]!.label && v.color === this._values[i]!.color
+        && v.field === this._values[i]!.field && v.priority === this._values[i]!.priority);
     if (same) return;
     this._values = values.map((v) => ({ ...v }));
     this._host?.requestUpdate();

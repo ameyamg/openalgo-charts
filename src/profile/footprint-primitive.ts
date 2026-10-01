@@ -1,6 +1,6 @@
 /** Footprint columns, volume profiles and cluster ladders from classified trades. */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from 'openalgo-charts';
-import type { FootprintBar, FootprintCell } from './profile-model';
+import { valueArea, type FootprintBar, type FootprintCell } from './profile-model';
 import { diagonalImbalances, stackedImbalances } from './footprint';
 import { footprintTextColor, readableTextColor, type FootprintTextColorMode } from './footprint-colors';
 import { parseColor, withAlpha } from '../render/pill';
@@ -172,7 +172,7 @@ export class Footprint implements IPrimitive {
     for (const bar of this._bars) {
       if (bar.rowSize !== undefined && bar.rowSize > 0) step = Math.min(step, bar.rowSize);
       for (let i = 1; i < bar.cells.length; i++) {
-        const gap = bar.cells[i - 1].price - bar.cells[i].price;
+        const gap = bar.cells[i - 1]!.price - bar.cells[i]!.price;
         if (gap > 0) step = Math.min(step, gap);
       }
     }
@@ -214,18 +214,12 @@ export class Footprint implements IPrimitive {
       const volume = totals.reduce((sum, v) => sum + v, 0);
       const bidVolume = bar.cells.reduce((sum, cell) => sum + cell.bidVol, 0);
       const askVolume = bar.cells.reduce((sum, cell) => sum + cell.askVol, 0);
-      let pocIndex = 0;
-      for (let i = 1; i < totals.length; i++) if (totals[i] > totals[pocIndex]) pocIndex = i;
-      let hi = pocIndex, lo = pocIndex, sum = totals[pocIndex] ?? 0;
-      while (sum < volume * this._opts.valueAreaPercent && (hi > 0 || lo < totals.length - 1)) {
-        if ((hi > 0 ? totals[hi - 1] : -1) >= (lo < totals.length - 1 ? totals[lo + 1] : -1)) sum += totals[--hi];
-        else sum += totals[++lo];
-      }
+      const va = valueArea(totals, volume * this._opts.valueAreaPercent);
       cvd += bar.delta;
       return { time: bar.time, volume, bidVolume, askVolume, delta: bar.delta,
         minDelta: bar.minDelta ?? null, maxDelta: bar.maxDelta ?? null, deltaPct: volume > 0 ? bar.delta / volume * 100 : 0,
-        cvd, trades: bar.tradeCount ?? null, poc: bar.cells[pocIndex]?.price ?? 0,
-        vah: bar.cells[hi]?.price ?? 0, val: bar.cells[lo]?.price ?? 0 };
+        cvd, trades: bar.tradeCount ?? null, poc: bar.cells[va.poc]?.price ?? 0,
+        vah: bar.cells[va.upper]?.price ?? 0, val: bar.cells[va.lower]?.price ?? 0 };
     });
   }
 
@@ -252,14 +246,15 @@ export class Footprint implements IPrimitive {
     const statsH = Math.min(rc.plotHeight, tableRows.length * o.statsRowHeight);
     const cellBottom = rc.plotHeight - statsH;
     const range = rc.timeScale.visibleRange();
+    // setBars recomputes the statistics, so there is one per bar.
     for (let i = 0; i < this._bars.length; i++) {
-      const bar = this._bars[i];
+      const bar = this._bars[i]!;
       if (!bar.cells.length) continue;
       const index = rc.dataLayer.timeToIndex(bar.time);
       if (index === undefined || index < range.from - 1 || index > range.to + 1) continue;
       const x0 = rc.timeScale.indexToX(index) - outerWidth / 2 + gutter;
       if (x0 + width < 0 || x0 > rc.plotWidth) continue;
-      this._cols.push({ bar, stats: this._stats[i], x: x0 + width / 2, x0, width, rowSize: this._step(bar), rows: [] });
+      this._cols.push({ bar, stats: this._stats[i]!, x: x0 + width / 2, x0, width, rowSize: this._step(bar), rows: [] });
     }
     ctx.save();
     ctx.beginPath(); ctx.rect(0, 0, rc.plotWidth * dpr, rc.plotHeight * dpr); ctx.clip();
@@ -341,7 +336,8 @@ export class Footprint implements IPrimitive {
     const b = col.bar, dpr = rc.dpr;
     const x = (col.x0 - gutter / 2) * dpr;
     const bodyWidth = Math.min(4, gutter * 0.45) * dpr;
-    const high = b.high ?? b.cells[0].price, low = b.low ?? b.cells[b.cells.length - 1].price;
+    // A column is only made for a bar with cells.
+    const high = b.high ?? b.cells[0]!.price, low = b.low ?? b.cells[b.cells.length - 1]!.price;
     const y1 = rc.priceScale.priceToY(high) * dpr, y2 = rc.priceScale.priceToY(low) * dpr;
     const hasBody = b.open !== undefined && b.close !== undefined;
     const color = hasBody ? ((b.close as number) >= (b.open as number) ? buy : sell) : rc.theme.axisText;

@@ -9,6 +9,7 @@
  */
 import type { InstrumentKey, QuoteFeed, QuoteSnapshot, QuoteStreamStatus, UnsubscribeFn } from 'openalgo-charts';
 import { errorText } from './localization';
+import { MAX_DELAY } from '../helpers/timers';
 
 /** How far a row's quote can be trusted right now. */
 export type QuoteRowStatus = 'loading' | 'live' | 'delayed' | 'snapshot' | 'stale' | 'unavailable' | 'error';
@@ -25,11 +26,11 @@ export interface QuoteRow {
 
 export interface QuoteBoardOptions {
   /** Without one, every row is `unavailable`. */
-  feed?: QuoteFeed | null;
+  feed?: QuoteFeed | null | undefined;
   /** A snapshot older than this is stale. Default 60000 ms. */
-  staleAfterMs?: number;
+  staleAfterMs?: number | undefined;
   /** Refresh interval for visible rows when the source cannot stream. 0 disables. Default 15000 ms. */
-  pollMs?: number;
+  pollMs?: number | undefined;
   now?: () => number;
   /** Called after any change a row or the status shows. */
   onChange?(): void;
@@ -52,8 +53,6 @@ interface Entry {
 interface Request { controller: AbortController; ids: Set<string>; seq: number }
 
 const RETAINED = 1000;
-// A timer keeps its delay in a signed 32-bit integer; a longer one wraps and fires at once.
-const MAX_DELAY = 2 ** 31 - 1;
 const idOf = (key: InstrumentKey): string => JSON.stringify([key.symbol, key.exchange]);
 const message = (error: unknown): string => errorText({}, error);
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);

@@ -1,11 +1,16 @@
 /**
- * Trade-layer data model (ARCHITECTURE.md §9). Broker-agnostic shapes the
- * TradeFeed produces; the chart depends only on these, not on OpenAlgo's REST.
+ * Trade-layer data model (ARCHITECTURE.md §9). Broker-agnostic shapes a broker
+ * adapter produces; the chart depends only on these, not on OpenAlgo's REST.
  */
-export type OrderSide = 'BUY' | 'SELL';
-export type OrderType = 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
+// Declared once, in the base's feed types, and named here too so the tier
+// exports them. Imported by path, not from 'openalgo-charts': the base's
+// OpenAlgo adapter imports this module, and going through the entry would
+// close an import loop.
+import type { OrderSide, OrderType } from '../feed/types';
 
-/** Lifecycle states (§9.5). Phase 8 reconciles read-only; Phase 9 drives writes. */
+export type { OrderSide, OrderType };
+
+/** Lifecycle states (§9.5): the trade controller reconciles them from book snapshots, and the order engine moves them as it writes. */
 export type OrderStatus =
   | 'pending'   // submitted, not yet acknowledged
   | 'working'   // live in the book
@@ -24,11 +29,11 @@ export interface Order {
   qty: number;
   filledQty: number;
   price: number;
-  triggerPrice?: number;
+  triggerPrice?: number | undefined;
   status: OrderStatus;
   /** Links SL/TP child orders to their position/entry. */
   parentId?: string;
-  role?: OrderRole;
+  role?: OrderRole | undefined;
 }
 
 export interface Position {

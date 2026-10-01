@@ -105,8 +105,8 @@ describe('OrderEngine modify (rate-limited drag)', () => {
     const r = await eng.placeOrder({ symbol: 'X', side: 'BUY', type: 'LIMIT', qty: 10, price: 100 });
     const id = r.clientId!;
     const brokerId = broker.orders()[0].id;
-    eng.requestModify(id, 101); // first → sends immediately (last=-inf)
-    eng.requestModify(id, 102); // within interval → coalesced
+    eng.requestModify(id, 101); // first: sends immediately (last=-inf)
+    eng.requestModify(id, 102); // within interval: coalesced
     eng.requestModify(id, 103);
     await Promise.resolve();
     expect(broker.orders()[0].price).toBeCloseTo(101); // only the first went

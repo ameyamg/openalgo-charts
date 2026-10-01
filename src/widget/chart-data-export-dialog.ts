@@ -3,10 +3,16 @@ import type { WidgetContext } from './context';
 import { button, dialogFrame, el, openPanel, renderForm, type FormControl, type PanelHandle } from './form';
 import { errorText, widgetText } from './localization';
 import { studyNames } from './objects-panel';
+import { formatWallClock, parseWallClock } from './wall-clock';
 
 let sequence = 0;
 
-/** Capture the offered studies and viewport once; the caller guards the source at download. */
+/**
+ * Capture the offered studies and viewport once; the caller guards the source
+ * at download. The bounds are a date and a time on the chart's clock, as in
+ * the go-to panel: the axis the user reads is labelled in that zone, and the
+ * export itself takes UTC seconds, which nobody reads or types.
+ */
 export function openChartDataExportDialog(
   ctx: WidgetContext, anchor: HTMLElement, onDownload: (options: ChartDataCsvOptions) => void,
 ): PanelHandle {
@@ -18,7 +24,10 @@ export function openChartDataExportDialog(
     const index = chart.dataLayer.timeToIndex(bar.time);
     return Number.isFinite(bar.time) && index !== undefined && index >= viewport.from && index <= viewport.to;
   });
-  const visibleRange = visible.length ? { from: visible[0].time, to: visible[visible.length - 1].time } : null;
+  const visibleRange = visible.length ? { from: visible[0]!.time, to: visible[visible.length - 1]!.time } : null; // not empty here
+  const zone = chart.timezone();
+  // The captured range to the second, so it stays exactly the bars in view.
+  const wall = (time: number): string => { const w = formatWallClock(time, zone, true); return `${w.date}T${w.time}`; };
   let closed = false;
   let panel: PanelHandle | null = null;
   let offDestroy = (): void => {};
@@ -30,10 +39,11 @@ export function openChartDataExportDialog(
   const formHost = el(ctx.document, 'div');
   const error = el(ctx.document, 'p', 'oac-csv__error');
   error.setAttribute('role', 'alert');
-  frame.body.append(hint, actions, formHost, error);
+  const clock = el(ctx.document, 'p', 'oac-csv__hint', widgetText(ctx, 'Times are on the chart clock, {zone}.', { zone }));
+  frame.body.append(hint, clock, actions, formHost, error);
   const controls: FormControl[] = [
-    { key: 'from', kind: 'text', label: widgetText(ctx, 'From (UTC seconds)') },
-    { key: 'to', kind: 'text', label: widgetText(ctx, 'To (UTC seconds)') },
+    { key: 'from', kind: 'text', label: widgetText(ctx, 'From') },
+    { key: 'to', kind: 'text', label: widgetText(ctx, 'To') },
     { key: 'alignment', kind: 'select', label: widgetText(ctx, 'Study alignment'), options: [
       { value: 'source', label: widgetText(ctx, 'Source rows') },
       { value: 'display', label: widgetText(ctx, 'Displayed rows') },
@@ -48,12 +58,16 @@ export function openChartDataExportDialog(
     values: { from: '', to: '', alignment: 'source', ...Object.fromEntries(studies.map((_, index) => [`study-${index}`, true])) },
     onChange: key => { form.setError(key, null); error.textContent = ''; },
   });
+  for (const key of ['from', 'to']) {
+    const input = formHost.querySelector<HTMLInputElement>(`[data-key="${key}"] input`);
+    if (input !== null) { input.type = 'datetime-local'; input.step = '1'; }
+  }
   const setBounds = (from: string, to: string): void => {
     form.setError('from', null); form.setError('to', null); error.textContent = '';
     form.sync({ from, to });
   };
   const visibleButton = button(ctx.document, { label: widgetText(ctx, 'Use captured visible range'),
-    onClick: () => { if (visibleRange) setBounds(String(visibleRange.from), String(visibleRange.to)); } });
+    onClick: () => { if (visibleRange) setBounds(wall(visibleRange.from), wall(visibleRange.to)); } });
   visibleButton.dataset.action = 'csv-visible';
   visibleButton.disabled = visibleRange === null;
   const allButton = button(ctx.document, { label: widgetText(ctx, 'All loaded rows'), onClick: () => setBounds('', '') });
@@ -77,9 +91,11 @@ export function openChartDataExportDialog(
         form.setError(key, null);
         const text = String(draft[key] ?? '').trim();
         if (text === '') continue;
-        const value = Number(text);
-        if (!Number.isFinite(value)) {
-          const message = widgetText(ctx, 'Enter finite UTC seconds or leave the bound blank');
+        // A To written to the minute takes in every bar that opens inside it.
+        const [date = '', time = ''] = text.split('T');
+        const value = parseWallClock(date, time, zone, key === 'to' ? { end: true } : {});
+        if (value === null) {
+          const message = widgetText(ctx, 'Enter a date and a time on the chart clock');
           form.setError(key, message); throw new Error(message);
         }
         range[key] = value;

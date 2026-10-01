@@ -1,12 +1,32 @@
 ﻿/** Time-anchored event badges. Event feeds and detail loading belong to the host. */
 import type { IPrimitive, PrimitiveHost, PrimitiveRenderContext, PrimitiveHit, ZOrder } from './primitive';
+import { isPlainObject } from '../helpers/validate';
 
 export interface EventDetailField { label: string; value: string }
 
-/** Plain text detail content. No field is interpreted as markup. */
+/** A run of text in a rich block, shown as text: nothing in it is read as markup. */
+export interface EventDetailSpan {
+  text: string;
+  strong?: boolean;
+  em?: boolean;
+  /** Opened in a new tab when it is an absolute http or https URL; any other value shows the text alone. */
+  href?: string;
+}
+
+/** One plain run, or runs with emphasis and links. */
+export type EventDetailInline = string | readonly EventDetailSpan[];
+
+/** Rich detail content as structure, never as markup, so a feed's text cannot run as code. */
+export type EventDetailBlock =
+  | { type: 'heading' | 'paragraph'; text: EventDetailInline }
+  | { type: 'list'; items: readonly EventDetailInline[] };
+
+/** Detail content. Every string is plain text: none is interpreted as markup. */
 export interface ChartEventDetails {
   summary?: string;
   fields?: readonly EventDetailField[];
+  /** Headings, paragraphs and lists shown after the fields. */
+  blocks?: readonly EventDetailBlock[];
 }
 
 export interface ChartEvent {
@@ -50,17 +70,26 @@ const TYPE_COLOR: Record<string, string> = {
   news: '#9aa0b4',
 };
 
-function cloneEvent(event: ChartEvent): ChartEvent {
-  return {
-    ...event,
-    ...(typeof event.details === 'object' && event.details !== null ? {
-      details: { ...event.details, ...(event.details.fields ? { fields: event.details.fields.map(field => ({ ...field })) } : {}) },
-    } : {}),
-  };
+/**
+ * Details copied all the way down, so a caller's later edits cannot reach an
+ * installed event: fields and blocks arrive from feeds in any shape. Only
+ * arrays and plain objects (a record without a prototype among them) are
+ * copied; anything else is shared, as before.
+ */
+function copyData<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(copyData) as T;
+  if (!isPlainObject(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copyData(v)])) as T;
+}
+
+/** An event a caller can keep: the widget's details popup copies with this too. */
+export function copyEvent(event: ChartEvent): ChartEvent {
+  return { ...event, ...(typeof event.details === 'object' ? { details: copyData(event.details) } : {}) };
 }
 
 interface Entry { event: ChartEvent; key: string }
-interface Badge { x: number; firstX: number; entries: Entry[] }
+/** A badge starts from one entry and only ever gains more. */
+interface Badge { x: number; firstX: number; entries: [Entry, ...Entry[]] }
 interface Position { id: string; x: number; y: number; r: number; entries: Entry[] }
 
 export class EventMarkers implements IPrimitive {
@@ -84,7 +113,7 @@ export class EventMarkers implements IPrimitive {
   public setEvents(events: readonly ChartEvent[]): void {
     const sorted = events.map(event => {
       if (!Number.isFinite(event.time)) throw new Error('openalgo-charts: event time must be finite');
-      return cloneEvent(event);
+      return copyEvent(event);
     }).sort((a, b) => a.time - b.time);
     const counts = new Map<string, number>();
     this._entries = sorted.map(event => {
@@ -100,7 +129,7 @@ export class EventMarkers implements IPrimitive {
     this._invalidate();
   }
 
-  public events(): ChartEvent[] { return this._entries.map(entry => cloneEvent(entry.event)); }
+  public events(): ChartEvent[] { return this._entries.map(entry => copyEvent(entry.event)); }
 
   /** Replace the hierarchy; duplicate IDs, missing parents and cycles are rejected. */
   public setGroups(groups: readonly EventGroup[]): void {
@@ -160,7 +189,7 @@ export class EventMarkers implements IPrimitive {
   public detailsForHit(externalId: string): EventMarkerDetails | null {
     const hit = this._hits.get(externalId);
     return hit === undefined ? null : {
-      id: hit.id, cluster: hit.entries.length > 1, events: hit.entries.map(entry => cloneEvent(entry.event)),
+      id: hit.id, cluster: hit.entries.length > 1, events: hit.entries.map(entry => copyEvent(entry.event)),
     };
   }
 

@@ -25,7 +25,7 @@ describe('TimeScale zoom anchoring', () => {
     ts.setWidth(600);
     ts.setBaseIndex(50);
     const before = ts.xToIndex(200);
-    ts.zoomAtX(200, 4); // would exceed max → clamped
+    ts.zoomAtX(200, 4); // would exceed max, so clamped
     expect(ts.barSpacing).toBe(80);
     // index under cursor stays reasonable (not NaN / jumped)
     expect(Number.isFinite(ts.xToIndex(200))).toBe(true);
@@ -74,7 +74,7 @@ describe('pinch gesture math', () => {
     const a = pinchState({ x: 0, y: 0 }, { x: 100, y: 0 });   // dist 100, cx 50
     const b = pinchState({ x: -10, y: 20 }, { x: 130, y: 20 }); // dist 140, cx 60, cy 20
     const d = pinchDelta(a, b);
-    expect(d.factor).toBeCloseTo(1.4); // fingers spread → zoom in
+    expect(d.factor).toBeCloseTo(1.4); // fingers spread: zoom in
     expect(d.dx).toBe(10);
     expect(d.dy).toBe(20);
   });
@@ -111,12 +111,12 @@ describe('history paging preserves the viewport', () => {
 
     const idxAfter = dl.timeToIndex(visibleBarTime)!;
     expect(idxAfter).toBe(idxBefore + 40); // index shifted up by inserted count
-    expect(ts.indexToX(idxAfter)).toBeCloseTo(xBefore, 6); // SAME screen x → no jump
+    expect(ts.indexToX(idxAfter)).toBeCloseTo(xBefore, 6); // SAME screen x, so no jump
   });
 });
 
 describe('pane x-sync (shared logical index space)', () => {
-  it('a bar shared by two series maps to one index → same x in both panes', () => {
+  it('a bar shared by two series maps to one index, so the same x in both panes', () => {
     const dl = new DataLayer();
     const price = dl.createSeries();
     const vol = dl.createSeries();
@@ -124,6 +124,6 @@ describe('pane x-sync (shared logical index space)', () => {
     dl.setSeriesData(vol, [bar(1060, 9)]); // only the middle time
     const sharedIndex = dl.timeToIndex(1060)!;
     expect(dl.indexedBars(price).find((b) => b.bar.time === 1060)!.index).toBe(sharedIndex);
-    expect(dl.indexedBars(vol)[0].index).toBe(sharedIndex); // same index → same x for both panes
+    expect(dl.indexedBars(vol)[0].index).toBe(sharedIndex); // same index, so the same x for both panes
   });
 });
