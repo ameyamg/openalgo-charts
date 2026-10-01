@@ -281,20 +281,27 @@ export function setShadeIndex(index) {
       target.shades.push(shade);
     }
     let cut = null;
-    // A transformed chart is cut after the last element formed before the picked bar closed.
-    if (active && transformed(target)) cut = lastWhere(target.chart.primaryBars(), t => t < time);
-    else if (active) {
+    if (active) {
       const bars = target.series.getData(), end = replayBarEndTime(target.request.interval, target.timezone);
-      if (target === owner) cut = index;
-      else {
+      // The last bar closed when the picked one did: on its own chart, the picked bar.
+      let closed = index;
+      if (target !== owner) {
         let from = 0, to = bars.length;
         while (from < to) {
           const mid = (from + to) >>> 1;
           if (end(bars[mid]) <= time) from = mid + 1;
           else to = mid;
         }
-        cut = from - 1;
+        closed = from - 1;
       }
+      // A transformed chart is cut after the last element those bars formed.
+      // Elements are dated at the bar they form on (a second apart when one bar
+      // forms several), so the next bar's time bounds them. Comparing an
+      // element's own time with the picked close instead would leave in view what
+      // a longer bar, still open at that close, had formed.
+      const next = bars[closed + 1];
+      if (!transformed(target)) cut = closed;
+      else cut = next ? lastWhere(target.chart.primaryBars(), t => t < next.time) : target.chart.primaryBars().length - 1;
     }
     for (const shade of target.shades) shade.setOptions({ index: cut });
   }

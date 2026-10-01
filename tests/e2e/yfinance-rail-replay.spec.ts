@@ -110,3 +110,49 @@ test('the replay bar names the chart once and the scope toggle names the scope',
   expect(await page.locator('#replaybar').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
   await page.locator('#replaybar').screenshot({ path: info.outputPath('replay-bar-narrow.png') });
 });
+
+test('picking a replay start on all charts veils what a still open bar of a longer interval formed', async ({ page }, info) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  // Chart 1 shows days; chart 2 shows weekly Renko bricks, which the chart forms from weekly bars.
+  await page.evaluate(async () => {
+    const app = (window as any).__oac.app, path = '/examples/yfinance/src/split.js';
+    Object.assign(app.p2, { symbol: 'AAPL', interval: '1wk', period: '5y', chartType: 't:renko' });
+    await (await import(path)).openSplit();
+  });
+  await page.waitForFunction(() => { const app = (window as any).__oac.app; return !app.loading2 && app.chart2?.primaryBars().length > 0; });
+  const found = await page.evaluate(async () => {
+    const app = (window as any).__oac.app;
+    const replayPath = '/examples/yfinance/src/replay.js', distPath = '/dist/openalgo-charts.mjs';
+    const replay = await import(replayPath), { ReplayShade } = await import(distPath);
+    // The cut each veil is given, read through its public setter.
+    const cuts = new Map<unknown, number | null>(), set = ReplayShade.prototype.setOptions;
+    ReplayShade.prototype.setOptions = function (patch: { index?: number | null }) {
+      if ('index' in patch) cuts.set(this, patch.index ?? null);
+      return set.call(this, patch);
+    };
+    const daily = app.chart.primarySeries().getData(), weekly = app.chart2.primarySeries().getData(), bricks = app.chart2.primaryBars();
+    const endOfDay = replay.replayBarEndTime('1d', app.chart.timezone()), endOfWeek = replay.replayBarEndTime('1wk', app.chart2.timezone());
+    // A day inside a week whose bar, still open at that day's close, formed bricks.
+    for (let pick = daily.length - 30; pick > daily.length / 2; pick--) {
+      const close = endOfDay(daily[pick]);
+      const week = weekly.findIndex((bar: { time: number }) => endOfWeek(bar) > close);
+      if (week < 1 || weekly[week].time >= close) continue;
+      const first = bricks.findIndex((brick: { time: number }) => brick.time >= weekly[week].time);
+      const next = weekly[week + 1]?.time ?? Infinity;
+      if (first < 0 || bricks[first].time >= next) continue;
+      app.focusPane = 1;
+      replay.enterReplay(); replay.setReplayScope('all'); replay.movePick(pick, app.chart);
+      const shade = app.chart2.panes()[app.chart2.primaryPaneIndex()].primitives().find((primitive: unknown) => cuts.has(primitive));
+      return { cut: cuts.get(shade), firstOfOpenWeek: first, picking: app.replayPicking, scope: app.replayScope };
+    }
+    return null;
+  });
+  expect(found).not.toBeNull();
+  expect(found).toMatchObject({ picking: true, scope: 'all' });
+  // Every brick the open week formed is behind the veil: its close is still to come.
+  expect(found!.cut).toBe(found!.firstOfOpenWeek - 1);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.screenshot({ path: info.outputPath('replay-pick-weekly-renko.png') });
+  expect(errors).toEqual([]);
+});
