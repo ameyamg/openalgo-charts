@@ -20,9 +20,11 @@ export default {
     type: 'page',
     theme: { layout: 'full', toc: false },
   },
+  // Reached from the Examples page rather than the top bar.
   'order-flow': {
     title: 'Order flow',
     type: 'page',
+    display: 'hidden',
     theme: { layout: 'full', toc: false },
   },
   benchmarks: {
