@@ -41,20 +41,41 @@ A real market profile draws **letter blocks**: one letter per time period, stack
 price that period traded. `computeMarketProfile` builds them and the `MarketProfile` primitive
 renders them:
 
-<RunnableExample height={420} tiers={['profile']} code={`const chart = lib.createChart(el);
-const bars = lib.generateBars(1700000000, 160, 1800); // ~30-min bars
-chart.addSeries('candlestick').setData(bars);
+<RunnableExample height={440} tiers={['profile']} code={`const chart = lib.createChart(el, { priceScale: { marginTop: 0.06, marginBottom: 0.06 } });
+const bars = lib.generateBars(1700000000, 160, 1800); // ~30-min bars over three days
+
+// The letters are the picture; the candles only give the profiles their
+// sessions and the time axis.
+const price = chart.addSeries('candlestick');
+price.setData(bars);
+price.applyOptions({ visible: false });
 
 const mp = lib.computeMarketProfile(bars, {
   tickSize: 0.1,
   rowTicks: lib.rowTicksFor(0.5, 0.1),  // 0.5-point rows
-  session: 'composite',
-  blockMinutes: 120,
+  session: 'day',                         // one profile per session
+  blockMinutes: 30,                       // a letter per half hour
+  valueAreaPercent: 0.7,
+  initialBalancePeriods: 2,
 });
-chart.addPrimitive(new lib.MarketProfile(mp, { colorMode: 'period', letterWidth: 9 }));
 
-chart.timeScale.fitContent(bars.length);
-return chart;`} caption="TPO letter blocks, one hue per period, with POC / value area and the initial-balance bracket." />
+// The page hands the chart its light or dark theme; the profile follows it.
+const dark = chart.theme().background === lib.darkTheme.background;
+chart.addPrimitive(new lib.MarketProfile(mp, {
+  blockDisplay: 'compact', letterWidth: 7, profileSpacing: 12,
+  colorMode: 'valueArea',                 // value area strong, the tails quiet
+  fillValueArea: true, valueAreaFillOpacity: 0.07,
+  showValueArea: false,                   // the shading marks it; no lines through the letters
+  showVolumeProfile: true, volumeProfileWidth: 40,
+  showInitialBalance: true, showSessionOpen: true, showLastPrice: true,
+  showPocLabel: false, showValueAreaLabels: false, showSessionLabel: false,
+  ...(dark
+    ? { volumeColor: '#2f7f8f' }
+    : { color: '#405b72', vaColor: '#193e56', volumeColor: '#84a7bb', pocColor: '#a24929', labelColor: '#45566b' }),
+}), 0);
+
+chart.timeScale.setVisibleLogicalRange({ from: -4, to: bars.length + 4 });
+return chart;`} caption="Compact TPO profiles, one per session: the value area strong and the tails quiet, the POC, the initial-balance bracket, the session open and the latest price, with volume at price beside each." />
 
 <Callout>
 There is also a simpler `computeTpo(bars, periodBars, tickSize, valueAreaPct)` that returns
