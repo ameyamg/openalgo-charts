@@ -140,7 +140,10 @@ function builtinBucketing(trimmed: string): IntervalBucketing | null {
 const REGISTRY = new Map<string, IntervalDescriptor>();
 
 function normalise(code: string): string {
-  return code.trim().toLowerCase();
+  const trimmed = code.trim();
+  // Month tokens are the one case-sensitive unit. Registering 2M must never
+  // shadow the built-in 2m, including while another chart still uses minutes.
+  return /^\d*\s*M$/.test(trimmed) ? trimmed : trimmed.toLowerCase();
 }
 
 function validate(b: Bucketing): void {
@@ -190,7 +193,7 @@ export function registeredIntervals(): readonly IntervalDescriptor[] {
 /** Resolve a code, or null when nothing recognises it. */
 export function tryResolveInterval(code: string): IntervalDescriptor | null {
   const trimmed = code.trim();
-  const registered = REGISTRY.get(trimmed.toLowerCase());
+  const registered = REGISTRY.get(normalise(trimmed));
   if (registered !== undefined) return registered;
   const builtin = builtinBucketing(trimmed);
   return builtin === null ? null : { code: trimmed, bucketing: builtin };

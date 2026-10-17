@@ -11,6 +11,8 @@ import { mountSymbolPicker, type SymbolPickerHandle } from './symbol-picker';
 import { timeBuckets } from './date-navigator';
 import { SCALE_TOGGLES, type BottombarControls } from './bottombar';
 import { mountMobileDrawings } from './mobile-drawings';
+import { openTimeframeMenu } from './timeframe-menu';
+import type { TimeframePreferences } from './timeframe-preferences';
 
 export type MobileMode = 'auto' | 'always' | 'never';
 
@@ -50,6 +52,8 @@ export function resolveMobileMode(mode: MobileMode, width: number, height: numbe
 }
 
 export interface MobileOptions {
+  timeframePreferences?: TimeframePreferences;
+  canSelectInterval?: (code: string) => boolean;
   mode?: MobileMode | undefined;
   container: HTMLElement;
   intervals: readonly string[];
@@ -223,6 +227,11 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
       type: 'text', 'aria-label': widgetText(ctx, 'Symbol'), placeholder: widgetText(ctx, 'Symbol'), autocomplete: 'off', spellcheck: 'false',
     });
     intervalButton = makeAction('interval', '', (anchor) => {
+      if (opts.timeframePreferences) {
+        openTimeframeMenu(ctx, anchor, { intervals: opts.intervals, current: () => opts.state().interval,
+          preferences: opts.timeframePreferences, ...(opts.canSelectInterval ? { canSelect: opts.canSelectInterval } : {}), onSelect: opts.onInterval });
+        return;
+      }
       openSheet(widgetText(ctx, 'Interval'), anchor, (body, close) => {
         for (const code of opts.intervals) {
           const button = makeAction('pick-interval', intervalLabel(code), () => {

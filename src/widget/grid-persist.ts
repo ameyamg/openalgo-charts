@@ -159,6 +159,7 @@ export function openStoredDesk(s: GridState, apply: Apply): void {
   s.root.style.visibility = 'hidden';
   s.ready = s.storage.load().then(() => {
     if (s.destroyed) return;
+    s.timeframePreferences.reload();
     s.restoring = false;
     // `ready` never rejects: a desk that cannot be applied is reported, as the widget reports its own.
     try { restore(s, true, apply); } catch (error) {

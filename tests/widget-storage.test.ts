@@ -157,6 +157,7 @@ describe('a synchronous store the host passes', () => {
 // savedBy stamp), so its state hashes were taken again then, and again in 2.6.4
 // once the stamp's version was left out of the hash.
 const SYNC_LOG: readonly string[] = [
+  'get oac-widget:pin:timeframes null',
   'get oac-widget:pin:state null',
   'get oac-widget:pin:drawings:NSE:ALPHA null',
   'get oac-widget:pin:rail null',
@@ -168,6 +169,7 @@ const SYNC_LOG: readonly string[] = [
   'set oac-widget:pin:drawings:NSE:BETA 37916dec368c',
   'set oac-widget:pin:state 92ca0b81d21d',
   'set oac-widget:pin:state 92ca0b81d21d',
+  'get oac-widget:pin:timeframes null',
   'get oac-widget:pin:state 92ca0b81d21d',
   'get oac-widget:pin:drawings:NSE:BETA 37916dec368c',
   'get oac-widget:pin:drawings:NSE:BETA 37916dec368c',

@@ -23,6 +23,10 @@
  * would open them disabled, with their state visible.
  */
 export const WIDGET_TIER = 'widget' as const;
+export { createTimeframePreferences, customTimeframeCode } from './timeframe-preferences';
+export type { TimeframePreferences, TimeframePreferencesOptions, TimeframeUnit } from './timeframe-preferences';
+export { openTimeframeMenu, openCustomTimeframeDialog } from './timeframe-menu';
+export type { TimeframeMenuOptions, TimeframeMenuContext } from './timeframe-menu';
 
 export { widgetText } from './localization';
 export type { WidgetBuiltinMessage, WidgetMessageKey, WidgetMessageValues, WidgetMessageParameters, WidgetTranslator, WidgetTranslationOptions } from './localization';

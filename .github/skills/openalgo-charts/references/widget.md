@@ -1,5 +1,35 @@
 # Widget tier
 
+## Custom timeframes and favorites
+
+`createTimeframePreferences(options)` returns a `TimeframePreferences` handle;
+`TimeframePreferencesOptions` supplies synchronous `storage` (or null), `key` and
+default favorite codes. Share one handle through `WidgetOptions.timeframePreferences`
+or `ChartGridOptions.timeframePreferences`. A grid creates one by default.
+`favorites()`, `custom()`, `toggle(code)`, `addCustom(code)`, `removeCustom(code)`,
+`subscribe(listener)`, `reload()` and `destroy()` own preference state only, never
+a pane's selected interval. `reload` supports a host's asynchronous storage mirror
+and preserves local edits. Empty saved favorites remain empty. Removing a custom
+choice also removes its favorite, while an active chart keeps its interval.
+
+`customTimeframeCode(count, unit)` validates a positive integer up to 100000 and
+registers calendar rules when needed. `TimeframeUnit` is seconds, minutes, hours,
+days, weeks, months, quarters or years. Minute `m` and month `M` stay distinct,
+including registered numeric month tokens such as `2M`.
+
+`openTimeframeMenu(context, anchor, options)` and `openCustomTimeframeDialog`
+provide grouped choices and unit/quantity entry to hosts. `TimeframeMenuOptions`
+supplies intervals, `current()`, preferences, optional `canSelect(code)` and
+`onSelect(code)`. The context needs document, openOverlay and optional translate.
+`TimeframeMenuContext` names that minimal context. Both return a closer. The
+existing widget overlay handles focus, Escape and Tab.
+`WidgetOptions.canSelectInterval`, `TopbarOptions.canSelectInterval` and
+`MobileOptions.canSelectInterval` let hosts validate actual data capabilities.
+The widget uses a timeframe feed's resolver when one is available. Saved unavailable
+choices remain visible and disabled. Fixed action columns keep favorite/remove
+buttons steady on hover. Custom choices are bounded to 128, persisted independently
+of the existing chart-state document, and shared across desktop/mobile controls.
+
 *When to read this: the user wants a chart with a toolbar, a drawing rail, dialogs or shortcuts without writing that chrome; or asks whether the library "has a UI"; or is embedding one of the widget's dialogs in a host of their own.*
 
 Source of truth: `src/widget/index.ts` (the export list), `src/widget/widget.ts` (options, handle, state), `src/widget/widget-persist.ts` (the saved layout, per-instrument drawings, `restoreState`, the debounced save and the pagehide flush), `src/widget/widget-keys.ts` (the shell's key scopes and bindings), `src/widget/storage.ts` and `src/widget/storage-idb.ts` (the IndexedDB store, its change announcements, the one-time copy from `localStorage` and the default store; the store's code loads when the first store is created), `src/widget/mobile.ts` (responsive chrome), `src/widget/context.ts` (the context, the bus, storage, the overlay stack, the dialog registry), `src/widget/keymap.ts`, `src/widget/keymap-editor.ts`, `src/widget/rail.ts`, `src/widget/topbar.ts`, `src/widget/statusline.ts`, `src/widget/toast.ts`, `src/widget/tokens.ts`, `src/widget/styles.ts`, `src/widget/form.ts`, the dialog modules under `src/widget/dialogs/`, and `dist/widget/index.d.ts` once built. Packaging: `rollup.config.js`, `package.json` (`exports['./widget']`), `.size-limit.json`, `scripts/check-dts.mjs`, `scripts/check-shake.mjs`.

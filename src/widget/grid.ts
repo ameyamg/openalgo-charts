@@ -52,7 +52,8 @@ import { mountBottombar, type BottombarHandle } from './bottombar';
 import type { LayoutsController } from './layouts';
 import { widgetText, type WidgetTranslationOptions } from './localization';
 import { applyTokens, widgetTokens, type WidgetThemeName } from './tokens';
-import { GRID_BAR_CHARTS, createWidget, resolveTheme, type Widget, type WidgetOptions } from './widget';
+import { GRID_BAR_CHARTS, createWidget, resolveTheme, DEFAULT_INTERVALS, type Widget, type WidgetOptions } from './widget';
+import { storedTimeframePreferences, type TimeframePreferences } from './timeframe-preferences';
 import type { GridSaved } from './grid-saved';
 import { canCopyImage } from './capture';
 import { restorePane, THEME_SETTING, widgetPane } from './layouts-target';
@@ -324,6 +325,7 @@ export interface GridState {
   readonly cellOptions: Record<string, unknown>;
   /** Made once the state is, since its failures are said on the active chart. */
   storage: WidgetStorage;
+  timeframePreferences: TimeframePreferences;
   readonly bus: WidgetBus<ChartGridEvents>;
   readonly links: GridLinks<Cell>;
   /** Undoes the grid's own listeners. */
@@ -436,8 +438,11 @@ export function createChartGrid(container: HTMLElement | string, options: ChartG
     themeSync: false, compact: false, maxed: false, pointerIn: false, destroyed: false, syncing: false, nextId: 0,
     saveTimer: 0, saveQueued: false, saveRefused: false, held: false, restored: null, drawings: new Map(),
     chromeLayer: null, bar: null, foot: null, saved: null, ready: Promise.resolve(),
-  } as Omit<GridState, 'storage' | 'grid' | 'barHost' | 'restoring'> as GridState;
+  } as Omit<GridState, 'storage' | 'grid' | 'barHost' | 'restoring' | 'timeframePreferences'> as GridState;
   s.storage = gridStorage(s);
+  s.timeframePreferences = options.timeframePreferences ?? storedTimeframePreferences(s.storage, options.intervals ?? DEFAULT_INTERVALS);
+  s.cellOptions.timeframePreferences = s.timeframePreferences;
+  if (!options.timeframePreferences) s.offs.push(() => s.timeframePreferences.destroy());
   s.restoring = !s.storage.loaded;
   const grid = s.grid = gridApi(s);
   s.barHost = barHostOf(s);

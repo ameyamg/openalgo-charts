@@ -37,6 +37,7 @@ import {
   type AsyncStorageLike, type OverlayOptions, type OverlayStack, type TipController, type StorageLike, type WidgetBus, type WidgetBusEvents, type WidgetContext, type WidgetDialogName,
 } from './context';
 import { defaultWidgetStore } from './storage';
+import { storedTimeframePreferences, type TimeframePreferences } from './timeframe-preferences';
 import { ChartHistory } from './history';
 import { Keymap } from './keymap';
 import { mountRail, toolName, type RailHandle, type RailOptions, type RailPrefs } from './rail';
@@ -145,6 +146,10 @@ export interface WidgetOptions extends Omit<ChartOptions, 'theme'>, WidgetBottom
   variant?: DataVariant | undefined;
   /** The interval pills, each a known code. Default: `DEFAULT_INTERVALS` plus every registered code. */
   intervals?: readonly string[];
+  /** Share favorites and custom choices across host-owned chart panes. */
+  timeframePreferences?: TimeframePreferences;
+  /** Host capability validation, including derivable intervals. */
+  canSelectInterval?: (code: string) => boolean;
   /**
    * Primary chart type. Default `candlestick`. A registered renderer, or a
    * transform the chart applies (`registeredSeriesTransforms`, once the
@@ -390,7 +395,7 @@ export interface Widget {
 /** The options the shell consumes; the rest of `WidgetOptions` is the chart's. */
 const WIDGET_ONLY_KEYS: ReadonlyArray<keyof WidgetOptions> = [
   'feed', 'symbol', 'exchange', 'interval', 'variant', 'intervals', 'chartType', 'theme', 'rail', 'topbar', 'statusline',
-  'mobile', 'loading', 'persist', 'storage', 'drawingScope', 'drawingStore', 'locale', 'translate', 'indicators', 'symbolSearch', 'lookbackBars', 'now', 'onOrder', 'styleNonce',
+  'mobile', 'loading', 'persist', 'storage', 'timeframePreferences', 'canSelectInterval', 'drawingScope', 'drawingStore', 'locale', 'translate', 'indicators', 'symbolSearch', 'lookbackBars', 'now', 'onOrder', 'styleNonce',
   'tradingCapabilities', 'tradingMode', 'tradingLocked', 'account',
   'eventDetails', 'captureRows',
   'panels', 'typingNavigation', 'keyboardRoute', 'watchlist', 'news', 'drawingTemplates', 'drawingToolbar',
@@ -633,6 +638,7 @@ class WidgetImpl implements Widget {
   private readonly _opts: WidgetOptions;
   private readonly _bus = new ShellBus();
   private readonly _storage: WidgetStorage;
+  private readonly _timeframePreferences: TimeframePreferences;
   private readonly _keymap: Keymap;
   private readonly _toasts: Toaster;
   private readonly _chartEl: HTMLElement;
@@ -703,6 +709,8 @@ class WidgetImpl implements Widget {
     const ns = typeof options.persist === 'string' ? options.persist : 'default';
     const store = options.persist ? (options.storage === undefined ? defaultWidgetStore() : options.storage) : null;
     this._storage = new WidgetStorage(ns, store, { onError: failure => reportStorage.call(this as unknown as PersistHost, failure) });
+    this._timeframePreferences = options.timeframePreferences ?? storedTimeframePreferences(this._storage, options.intervals ?? DEFAULT_INTERVALS);
+    if (!options.timeframePreferences) this._cleanups.push(() => this._timeframePreferences.destroy());
     // An asynchronous store answers later: until then `saved` is null, the
     // shell is built on the defaults, and `restoreWhenLoaded` applies it.
     this._restoring = !this._storage.loaded;
@@ -730,9 +738,20 @@ class WidgetImpl implements Widget {
     this._themeName = t.name;
     this._chartTheme = t.theme;
 
-    const set = new Set<string>(options.intervals ?? [...DEFAULT_INTERVALS, ...registeredIntervals().map((d) => d.code)]);
+    const custom = new Set(this._timeframePreferences.custom());
+    const set = new Set<string>(options.intervals ?? [...DEFAULT_INTERVALS, ...registeredIntervals().map((d) => d.code).filter(code => !custom.has(code))]);
     set.add(this._interval);
     this._intervals = Array.from(set);
+    const nativeIntervals = this._intervals.filter(code => !custom.has(code) || options.intervals?.includes(code));
+    const syncIntervals = (): void => { this._intervals.splice(0, this._intervals.length, ...new Set([...nativeIntervals, ...this._timeframePreferences.custom()])); };
+    syncIntervals(); this._cleanups.push(this._timeframePreferences.subscribe(syncIntervals));
+    const canSelectInterval = options.canSelectInterval ?? ((code: string): boolean => {
+      const feed = options.feed;
+      if (feed && 'resolve' in feed && typeof feed.resolve === 'function') {
+        try { feed.resolve({ symbol: this._symbol, exchange: this._exchange, interval: code }); return true; } catch { return false; }
+      }
+      return nativeIntervals.includes(code);
+    });
 
     // ── the frame ──────────────────────────────────────────────────────
     const root = h(doc, 'div', 'oac-widget');
@@ -857,6 +876,7 @@ class WidgetImpl implements Widget {
     if (options.topbar !== false) {
       this._topbar = mountTopbar(this.context, topbarEl, {
         intervals: this._intervals,
+        timeframePreferences: this._timeframePreferences, canSelectInterval,
         indicators: options.indicators,
         search: this.context.symbolSearch,
         state: () => ({ symbol: this._symbol, exchange: this._exchange, interval: this._interval, chartType: this.chartType(), theme: this._themeName }),
@@ -883,6 +903,7 @@ class WidgetImpl implements Widget {
       mode: options.mobile,
       container,
       intervals: this._intervals,
+      timeframePreferences: this._timeframePreferences, canSelectInterval,
       topbar: options.topbar !== false,
       rail: this._rail,
       tools: typeof options.rail === 'object' ? options.rail.tools : undefined,

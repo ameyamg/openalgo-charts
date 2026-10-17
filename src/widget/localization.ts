@@ -4,6 +4,22 @@ import type { ChartGridMessage } from './grid-text';
 /** English source keys keep fallback messages available without a locale bundle. */
 export type WidgetBuiltinMessage =
   | ChartGridMessage
+  | "Add custom interval"
+  | "Timeframes"
+  | "Type"
+  | "Add"
+  | "Ticks"
+  | "Seconds"
+  | "Minutes"
+  | "Hours"
+  | "Days"
+  | "Weeks"
+  | "Months"
+  | "Other intervals"
+  | "Remove {code}"
+  | "Add {code} to favorites"
+  | "Remove {code} from favorites"
+  | "The current source cannot build this interval"
   | "Only loaded rows are exported. Blank bounds include all loaded times."
   | "Study alignment"
   | "Source rows"

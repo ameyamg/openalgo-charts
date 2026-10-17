@@ -65,6 +65,7 @@ export interface PersistHost {
   readonly _opts: WidgetImpl['_opts'];
   readonly _bus: WidgetImpl['_bus'];
   readonly _storage: WidgetImpl['_storage'];
+  readonly _timeframePreferences: WidgetImpl['_timeframePreferences'];
   readonly _toasts: WidgetImpl['_toasts'];
   readonly _series: WidgetImpl['_series'];
   readonly _rail: WidgetImpl['_rail'];
@@ -435,6 +436,7 @@ export function restoreWhenLoaded(this: PersistHost): Promise<void> {
   this.root.style.visibility = 'hidden';
   return this._storage.load().then(() => {
     if (this._destroyed) return;
+    this._timeframePreferences.reload();
     try { this._bus.shelter(() => applyLoaded.call(this, start)); }
     catch (error) {
       this._restoring = false;
