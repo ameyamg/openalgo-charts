@@ -271,6 +271,8 @@ export { isWhitespace, toBar } from './model/bar';
 export type { DataFeed, TradeFeed, BarsRequest, BarsPageRequest, BarsPage, BarSubscriptionOptions, LiveBarMeta, MarketDepth, DepthLevel, OrderSide, OrderType, PlaceOrder, UnsubscribeFn, SymbolMatch, SymbolSearchRequest } from './feed/types';
 export type { InstrumentKey, QuoteSnapshot, QuoteRequest, QuoteStreamStatus, QuoteStreamHandlers, QuoteFeed, NewsRequest, NewsItem, NewsPage, NewsFeed } from './feed/types';
 export { Instrument, SessionCalendar } from './feed/instrument';
+export { planTimeframe, timeframeBucketAt } from './feed/timeframe-plan';
+export type { TimeframeBucket, TimeframeSource, TimeframeMarket, TimeframePlan } from './feed/timeframe-plan';
 export type { InstrumentMetadata, InstrumentCalendar, InstrumentSession, SessionCalendarSpec } from './feed/instrument';
 // market phases and status, derived from a calendar when the host supplies none
 export { marketStatusAt, calendarMarketPhase } from './feed/market-status';

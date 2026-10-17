@@ -4,6 +4,22 @@
 
 ## The DataFeed contract
 
+### Compatible custom timeframes
+
+Base exports `planTimeframe`, `timeframeBucketAt`, `TimeframeBucket`,
+`TimeframeSource`, `TimeframeMarket` and `TimeframePlan`. Supply native wire tokens,
+their half-open `bounds(time)` and a `SessionCalendar`, with a market key that
+changes when provider/calendar/session/adjustment metadata changes. A null source
+bound permits native requests but refuses derivation. Native aliases preserve the
+provider's wire token. Derived intraday bars use the coarsest divisible source,
+anchored separately to each exchange session and clipped at its close. Daily
+observations supply calendar W/M/Q periods; register month/quarter codes through
+`registerInterval` first. Weeks start Monday with a continuous multi-week anchor.
+`earliest` rejects requests outside a source's declared retention. `maxBars` and
+`maxSpanSeconds` describe per-call limits, for paging rather than silently truncating
+results. Source bounds must also be checked against every returned candle: a
+resolution probe cannot prove all historical bars have the same alignment.
+
 `src/feed/types.ts`. The chart core never imports a broker SDK; it depends only on this.
 
 ```ts
