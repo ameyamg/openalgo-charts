@@ -147,7 +147,9 @@ describe('the widget is budgeted', () => {
   it('has its own size-limit row', () => {
     const own = sizeRows.filter((r) => pathsOf(r).length === 1 && pathsOf(r)[0] === WIDGET_BUNDLE);
     expect(own).toHaveLength(1);
-    expect(own[0].limit).toMatch(/^\d+(?:\.\d+)? kB$/);
+    // Exact bytes avoid decimal kB rounding one byte below a measured limit.
+    expect(own[0].limit).toMatch(/^\d+(?:\.\d+)? (?:kB|B)$/);
+    expect(Number.parseFloat(own[0].limit)).toBeGreaterThan(0);
   });
 
   it('its first-use parts have a row, by glob, since each name changes with its content', () => {
