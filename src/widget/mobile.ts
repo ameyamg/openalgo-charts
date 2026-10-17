@@ -114,6 +114,20 @@ interface ActionIdentity {
 /** The data attributes an action's identity is read from, so a repaint can put focus back on the same control. */
 const IDENTITY_KEYS = ['tool', 'interval', 'chartType', 'range', 'scale', 'zone'] as const;
 
+function fillIntervals(opts: MobileOptions, body: HTMLElement, close: () => void,
+  makeAction: (action: string, label: string, onClick: () => void) => HTMLButtonElement): void {
+  for (const code of opts.intervals) {
+    const button = makeAction('pick-interval', intervalLabel(code), () => {
+      opts.onInterval(code);
+      close();
+    });
+    button.dataset.interval = code;
+    const selected = opts.state().interval === code;
+    button.setAttribute('aria-pressed', String(selected));
+    body.appendChild(button);
+  }
+}
+
 /** Mount the narrow widget controls against the same chart and controllers as the desktop chrome. */
 export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHandle {
   const doc = ctx.document;
@@ -233,16 +247,7 @@ export function mountMobile(ctx: WidgetContext, opts: MobileOptions): MobileHand
         return;
       }
       openSheet(widgetText(ctx, 'Interval'), anchor, (body, close) => {
-        for (const code of opts.intervals) {
-          const button = makeAction('pick-interval', intervalLabel(code), () => {
-            opts.onInterval(code);
-            close();
-          });
-          button.dataset.interval = code;
-          const selected = opts.state().interval === code;
-          button.setAttribute('aria-pressed', String(selected));
-          body.appendChild(button);
-        }
+        fillIntervals(opts, body, close, makeAction);
       });
     });
     const commitSymbol = (symbol: string, exchange?: string): void => {

@@ -5,7 +5,6 @@ import { descriptionOf, exchangeOf, marketStatusReading, previousSessionClose } 
 import { syncTimezoneFromChart } from './timezone.js';
 import { exitReplay } from './replay.js';
 import { syncAxisChromeFromChart, syncStatusLineFromChart, syncTradeChoiceFromChart } from './axis-chrome.js';
-import { foldedInterval } from './intervals.js';
 import { restyleTradeChrome } from './orders.js';
 import { autosave } from './persist.js';
 import { asStep, historyGroup, withoutHistory } from './history.js';
@@ -250,7 +249,6 @@ export function restoreChartSettingsTab() {
 export function closeChartSettings(revert) {
   const target = settingsOwner();
   if (!target) return;
-  const zoneBefore = chartSetBefore['time.timezone'];
   if (revert && chartSetBefore) {
     const back = {};
     for (const key of chartSetDirty) back[key] = chartSetBefore[key];
@@ -263,14 +261,7 @@ export function closeChartSettings(revert) {
     el('vgrid').checked = now['canvas.grid.vertLines'] !== false;
     el('hgrid').checked = now['canvas.grid.horzLines'] !== false;
   }
-  const refold = target.chart.timezone() !== zoneBefore && foldedInterval(target.request.interval);
   discardChartSettings();
-  // Calendar bars need new boundaries after an accepted zone change. Wait for
-  // the dialog decision so Cancel can restore its owner without racing history.
-  if (refold) {
-    if (target.pane === 2) app.loadSecondary();
-    else app.load();
-  }
   autosave();
 }
 

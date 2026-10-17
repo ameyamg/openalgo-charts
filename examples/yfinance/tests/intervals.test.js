@@ -1,14 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import * as engine from '/dist/openalgo-charts.mjs';
 import {
-  CUSTOM_INTERVALS, customInterval, foldedInterval, intervalSeconds, foldToBuckets,
+  CUSTOM_INTERVALS, customInterval, intervalSeconds,
   INTERVALS, intervalLabel, intervalName, periodsFor, clampPeriod, PERIODS, PERIOD_DAYS, fillIntervalSelect,
   resolvePickerInterval, UnknownIntervalError, rangeLoad,
 } from '../src/intervals.js';
 import { DEFAULT_RANGES, rangeInterval } from '/dist/openalgo-charts.widget.mjs';
-import { fakeDom, flatBar } from './helpers.js';
+import { fakeDom } from './helpers.js';
 
-const { bucketStartOf } = engine;
 
 describe('interval registry', () => {
   it('registers the calendar codes so the picker and the registry agree', () => {
@@ -16,13 +15,6 @@ describe('interval registry', () => {
     expect(CUSTOM_INTERVALS.map((i) => i.code)).toEqual(['1wk', '1mo', '1q']);
     expect(customInterval('1mo').name).toBe('Calendar month');
     expect(customInterval('1d')).toBeNull();
-  });
-
-  it('knows which codes are folded locally rather than fetched', () => {
-    expect(foldedInterval('1mo').foldFrom).toBe('1d');
-    expect(foldedInterval('1q').foldFrom).toBe('1d');
-    expect(foldedInterval('1wk')).toBeNull();
-    expect(foldedInterval('1d')).toBeNull();
   });
 
   it('answers bar length off the registry, and 0 for a calendar bucket', () => {
@@ -42,37 +34,10 @@ describe('interval registry', () => {
   });
 });
 
-describe('folding into calendar buckets', () => {
-  const month = customInterval('1mo').bucketing;
-  // 12:00 UTC on 31 January 2024 is still January everywhere; 18:30 UTC is
-  // 00:00 on 1 February in Kolkata and 13:30 on 31 January in New York.
-  const bars = [
-    flatBar(Date.UTC(2024, 0, 31, 12) / 1000, 100, 10),
-    { time: Date.UTC(2024, 0, 31, 18, 30) / 1000, open: 101, high: 105, low: 99, close: 104, volume: 20 },
-  ];
-
-  it('moves the month boundary with the zone', () => {
-    const kolkata = foldToBuckets(bars, month, 'Asia/Kolkata');
-    expect(kolkata).toHaveLength(2);
-    expect(kolkata[1].time).toBe(bucketStartOf(month, bars[1].time, 'Asia/Kolkata'));
-
-    const newYork = foldToBuckets(bars, month, 'America/New_York');
-    expect(newYork).toHaveLength(1);
-    expect(newYork[0]).toEqual({
-      time: bucketStartOf(month, bars[0].time, 'America/New_York'),
-      open: 100, high: 105, low: 99, close: 104, volume: 30,
-    });
-  });
-
-  it('returns nothing for no bars', () => {
-    expect(foldToBuckets([], month, 'Asia/Kolkata')).toEqual([]);
-  });
-});
-
 describe('ranges an interval can serve', () => {
   it('caps intraday frames at what the source goes back to', () => {
-    expect(periodsFor('5m')).toEqual(['1mo']);
-    expect(periodsFor('1h')).toEqual(['1mo', '6mo', '1y']);
+    expect(periodsFor('5m')).toEqual(['1d', '5d', '1mo']);
+    expect(periodsFor('1h')).toEqual(['1d', '5d', '1mo', '6mo', '1y']);
     // Daily and up have no cap: weekly, which has no floor either, offers
     // every range, and daily still reaches back as far as the source goes.
     expect(periodsFor('1wk')).toEqual(PERIODS);
@@ -105,7 +70,7 @@ describe('ranges an interval can serve', () => {
   it('loads a preset range at an interval whose history reaches all of it', () => {
     const range = id => DEFAULT_RANGES.find(r => r.id === id);
     const load = (id, days) => rangeLoad(range(id), days * 86400, rangeInterval);
-    expect(load('1D', 3)).toEqual({ interval: '5m', period: '1mo' });
+    expect(load('1D', 3)).toEqual({ interval: '5m', period: '5d' });
     expect(load('5D', 7)).toEqual({ interval: '5m', period: '1mo' });
     // A month back to midnight inside the 31 days of the page's month keeps
     // the month's 30-minute bars; a longer one would stop a few hours short.

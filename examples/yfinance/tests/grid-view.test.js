@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { DataLoadingController } from '/dist/openalgo-charts.mjs';
 import { parseWorkspaceDocument } from '/dist/openalgo-charts.workspace.mjs';
 import { layoutIconPath } from '/dist/openalgo-charts.draw.mjs';
 import { CHART_GRID_LAYOUTS, CHART_GRID_LAYOUT_NAMES } from '/dist/openalgo-charts.widget.mjs';
@@ -32,9 +31,9 @@ describe('grid view feed', () => {
     const signal = new AbortController().signal;
     for (const interval of GRID_INTERVALS) await feed.getBars({ symbol: 'AAPL', exchange: '', interval, from: 0, to: 1, signal });
     expect(asked.map(req => [req.interval, req.period])).toEqual([
-      ['1m', '5d'], ['5m', '1mo'], ['15m', '1mo'], ['1h', '6mo'], ['1d', '5y'], ['1wk', '10y'],
+      ['1m', '5d'], ['5m', '1mo'], ['15m', '1mo'], ['1h', '6mo'], ['1d', '5y'], ['1d', '10y'],
     ]);
-    expect(asked.every(req => req.signal === signal && req.symbol === 'AAPL')).toBe(true);
+    expect(asked.every(req => !req.signal.aborted && req.symbol === 'AAPL')).toBe(true);
   });
 
   it('loads the history period a layout saved wherever the interval can serve it', async () => {
@@ -46,7 +45,7 @@ describe('grid view feed', () => {
     // Five years of 5m bars is more than the source keeps, so that chart loads its usual month.
     // A year of daily bars is under 500 candles, so that chart loads its usual five years;
     // a weekly chart has no such floor and keeps the year.
-    expect(asked).toEqual([['1d', '10y'], ['1h', '1y'], ['5m', '1mo'], ['1m', '5d'], ['1d', '5y'], ['1wk', 'max'], ['1d', '5y'], ['1d', '5y'], ['1wk', '1y']]);
+    expect(asked).toEqual([['1d', '10y'], ['1h', '1y'], ['5m', '1mo'], ['1m', '5d'], ['1d', '5y'], ['1d', 'max'], ['1d', '5y'], ['1d', '5y'], ['1d', '1y']]);
     expect(gridPeriod('1h', '2y')).toBe('6mo');
     for (const short of ['1d', '5d', '1mo', '3mo', '6mo', 'ytd', '1y', '2y']) expect(gridPeriod('1d', short)).toBe('5y');
     expect(['5y', '10y', 'max'].map(long => gridPeriod('1d', long))).toEqual(['5y', '10y', 'max']);
@@ -64,16 +63,16 @@ describe('grid view feed', () => {
     expect(asked).toEqual(['max', '5y']);
   });
 
-  it('tells history paging there is nothing older, so a left edge downloads nothing again', async () => {
+  it('pages older history using explicit windows instead of downloading the initial period again', async () => {
     const asked = [];
-    const bars = Array.from({ length: 50 }, (_, i) => ({ time: 1_700_000_000 + i * 86400, open: 1, high: 2, low: 0.5, close: 1.5 }));
-    const feed = gridFeed({ getBars: async req => { asked.push(req.period); return bars.map(bar => ({ ...bar })); } });
-    const controller = new DataLoadingController(feed);
-    await controller.load({ symbol: 'AAPL', exchange: '', interval: '1d', from: 1_700_000_000, to: 1_705_000_000 });
-    for (let i = 0; i < 3; i++) await controller.loadMore();
-    expect(asked).toEqual(['5y']);
-    expect(controller.getState()).toMatchObject({ hasMore: false, historyStatus: 'exhausted' });
-    controller.destroy();
+    const feed = gridFeed({ getBars: async req => { asked.push(req); return []; } });
+    const before = Date.parse('2026-10-01T00:00:00Z') / 1000;
+    const page = await feed.getBarsPage({ symbol: 'AAPL', exchange: '', interval: 'D', before, countBack: 200 });
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatchObject({ interval: '1d', to: before });
+    expect(asked[0].from).toBeLessThan(before - 200 * 86400);
+    expect(page.nextBefore).toBeLessThan(before);
+    expect(page.hasMore).not.toBe(false);
   });
 
   it('holds requests until the hand-off is applied, and drops the ones cancelled meanwhile', async () => {
@@ -127,7 +126,7 @@ describe('grid view documents', () => {
     expect(gridViewRefusal(compared)).toMatch(/MSFT: comparison symbols/);
     const monthly = payload(2, 2);
     monthly.panes[2].interval = '1mo';
-    expect(gridViewRefusal(monthly)).toMatch(/TSLA: the grid view has no 1mo interval/);
+    expect(gridViewRefusal(monthly)).toBe('');
     const weekly = payload(2, 2);
     for (const pane of weekly.panes) pane.interval = '1wk';
     weekly.sync.interval = true;
@@ -143,7 +142,9 @@ describe('grid view documents', () => {
     const linked = payload(2, 2);
     linked.sync.symbol = true;
     expect(gridViewRefusal(linked)).toMatch(/linked by symbol/);
-    expect(() => readGridFile(JSON.stringify(monthly))).toThrow(/1mo/);
+    expect(readGridFile(JSON.stringify(monthly)).panes[2].interval).toBe('1mo');
+    monthly.panes[2].interval = '5s';
+    expect(gridViewRefusal(monthly)).toMatch(/no 5s interval/);
   });
 
   it('checks saved link groups one by one: two groups may show two instruments, one group may not', () => {
@@ -199,10 +200,10 @@ describe('grid view documents', () => {
 
   it('opens a grid layout on the main page with the page range nearest each server period it saved', () => {
     // Per interval: the server's periods the main page has no range for, and the range each opens with.
-    const nearest = { '1d': '1mo', '5d': '1mo', '3mo': '6mo', ytd: '1y', '2y': '1y', '10y': '5y' };
+    const nearest = { '1d': '1d', '5d': '5d', '3mo': '6mo', ytd: '1y', '2y': '1y', '10y': '5y' };
     const expected = {
-      '5m': { '1d': '1mo', '5d': '1mo', '3mo': '1mo', ytd: '1mo', '2y': '1mo', '10y': '1mo' },
-      '15m': { '1d': '1mo', '5d': '1mo', '3mo': '1mo', ytd: '1mo', '2y': '1mo', '10y': '1mo' },
+      '5m': { '1d': '1d', '5d': '5d', '3mo': '1mo', ytd: '1mo', '2y': '1mo', '10y': '1mo' },
+      '15m': { '1d': '1d', '5d': '5d', '3mo': '1mo', ytd: '1mo', '2y': '1mo', '10y': '1mo' },
       '1h': { ...nearest, '10y': '1y' },
       // Every nearest range under five years is raised to the daily floor.
       '1d': { '1d': '5y', '5d': '5y', '3mo': '5y', ytd: '5y', '2y': '5y', '10y': '5y' },

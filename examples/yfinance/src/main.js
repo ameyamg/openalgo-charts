@@ -14,8 +14,9 @@ import '/dist/openalgo-charts.indicators.mjs';
 import * as widgetTier from '/dist/openalgo-charts.widget.mjs';
 import { el, initShell, chartTheme, chartMotionOptions, setChartState, toast, currentTheme } from './ui.js';
 import { initHover } from './hover.js';
-import { fillIntervalSelect, clampPeriod, rangeLoad } from './intervals.js';
+import { fillIntervalSelect, clampPeriod, rangeLoad, ensureIntervalOption } from './intervals.js';
 import { initFeed, fetchBars, fetchNote, feedErrorState } from './feed.js';
+import { attachReferenceTimeframes, referenceTimeframePreferences } from './timeframes.js';
 import { chartTypeSeries, inChartTransforms, keepsView } from './transforms.js';
 import { isExpression, fetchExpressionBars, mountOperatorKeypad, referenceDataContext } from './expression.js';
 import { initStatus, nameOf, symbolStatus } from './status.js';
@@ -230,6 +231,7 @@ function render({ keepView = true, state } = {}) {
     ...decorations,
   });
   app.chart.setDataContext(dataContext);
+  attachReferenceTimeframes(app.chart, app.timeframes.provider);
   app.offBranding = app.chart.on('branding:changed', renderToolbar);
   applyAxisChrome();
   applyStatusLineChoice();   // before the legends: a row added later obeys the switches
@@ -444,6 +446,7 @@ function installWorkspace({ layout, bars }) {
   invalidateComparisons(1);
   removeBracket(); removeAllOrders(); clearPosition();
   app.req = { ...selection.request };
+  ensureIntervalOption(app.req.interval);
   for (const key of ['symbol', 'interval', 'period']) el(key).value = app.req[key];
   el('session').value = sessionOf(app.req);
   el('ctype').value = selection.chartType || 'candlestick';
@@ -799,7 +802,7 @@ app.onFocusPane = () => { renderToolbar(); renderIndicatorChips(); autosave(); a
 initRail(app, { mountPropertiesBar });
 initDrawing(app);
 initMobile(app);
-fillIntervalSelect();
+fillIntervalSelect(referenceTimeframePreferences().custom());
 initWorkspaceHost(app, installWorkspace);
 app.startupLayout = await initWorkspaces(app);
 initTemplates(app);

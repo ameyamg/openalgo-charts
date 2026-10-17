@@ -28,7 +28,7 @@ function valid(code: string, custom = false): string {
   return text;
 }
 
-function identity(code: string): string {
+export function timeframeIdentity(code: string): string {
   const parts = intervalParts(code);
   return parts && parts.unit !== 'other' ? `${parts.unit}:${parts.multiplier}` : code;
 }
@@ -38,7 +38,7 @@ function choices(value: unknown, custom: boolean): string[] {
   const seen = new Set<string>(), out: string[] = [];
   for (const code of value) {
     if (typeof code !== 'string' || code.length > 40) throw new Error('Invalid timeframe code');
-    const checked = valid(code, custom), key = identity(checked);
+    const checked = valid(code, custom), key = timeframeIdentity(checked);
     if (!seen.has(key)) { seen.add(key); out.push(checked); }
   }
   return out;
@@ -85,23 +85,23 @@ export function createTimeframePreferences(options: TimeframePreferencesOptions)
     favorites: () => [...favorites], custom: () => [...custom],
     toggle(code) {
       if (destroyed) return;
-      const checked = valid(code), key = identity(checked), exists = favorites.some(item => identity(item) === key);
+      const checked = valid(code), key = timeframeIdentity(checked), exists = favorites.some(item => timeframeIdentity(item) === key);
       if (!exists && favorites.length >= 128) throw new Error('Too many favorite intervals');
-      favorites = exists ? favorites.filter(item => identity(item) !== key) : [...favorites, checked]; save();
+      favorites = exists ? favorites.filter(item => timeframeIdentity(item) !== key) : [...favorites, checked]; save();
     },
     addCustom(code) {
       if (destroyed) return;
-      const checked = valid(code, true), key = identity(checked);
-      if (custom.some(item => identity(item) === key)) return;
+      const checked = valid(code, true), key = timeframeIdentity(checked);
+      if (custom.some(item => timeframeIdentity(item) === key)) return;
       if (custom.length >= 128) throw new Error('Too many custom intervals');
       custom.push(checked); save();
     },
     removeCustom(code) {
       if (destroyed) return;
-      const key = identity(code);
-      if (!custom.some(item => identity(item) === key)) return;
-      custom = custom.filter(item => identity(item) !== key);
-      favorites = favorites.filter(item => identity(item) !== key); save();
+      const key = timeframeIdentity(code);
+      if (!custom.some(item => timeframeIdentity(item) === key)) return;
+      custom = custom.filter(item => timeframeIdentity(item) !== key);
+      favorites = favorites.filter(item => timeframeIdentity(item) !== key); save();
     },
     subscribe(listener) { if (!destroyed) listeners.add(listener); return () => { listeners.delete(listener); }; },
     reload() { if (destroyed || edited) return; read(); for (const listener of listeners) listener(); },

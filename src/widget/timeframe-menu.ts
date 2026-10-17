@@ -2,7 +2,7 @@ import { intervalParts } from 'openalgo-charts';
 import { chromeIconSvg } from 'openalgo-charts/draw';
 import { h, glyph, type WidgetContext } from './context';
 import { widgetText, type WidgetBuiltinMessage } from './localization';
-import { customTimeframeCode, type TimeframePreferences, type TimeframeUnit } from './timeframe-preferences';
+import { customTimeframeCode, timeframeIdentity, type TimeframePreferences, type TimeframeUnit } from './timeframe-preferences';
 
 export type TimeframeMenuContext = Pick<WidgetContext, 'document' | 'openOverlay' | 'translate'>;
 type Context = TimeframeMenuContext;
@@ -49,7 +49,7 @@ export function openCustomTimeframeDialog(ctx: TimeframeMenuContext, anchor: HTM
   typeLabel.appendChild(unitWrap); quantityLabel.appendChild(quantity); fields.append(typeLabel, quantityLabel); panel.appendChild(fields);
   const error = h(ctx.document, 'div', 'oac-timeframe-dialog__error', { role: 'status' }); panel.appendChild(error);
   const footer = h(ctx.document, 'div', 'oac-timeframe-dialog__footer'), cancel = button(ctx, widgetText(ctx, 'Cancel')), add = button(ctx, widgetText(ctx, 'Add'));
-  add.dataset.confirmInterval = ''; add.classList.add('is-primary'); footer.append(cancel, add); panel.appendChild(footer);
+  add.dataset.confirmInterval = ''; add.classList.add('oac-btn--primary'); footer.append(cancel, add); panel.appendChild(footer);
   let code = '', close = (): void => {};
   const validate = (): void => {
     try {
@@ -78,31 +78,38 @@ export function openTimeframeMenu(ctx: TimeframeMenuContext, anchor: HTMLElement
     const focus = ctx.document.activeElement as HTMLElement | null;
     const focusCode = focus?.dataset.favorite ?? focus?.dataset.removeInterval;
     const wasRemove = focus?.dataset.removeInterval !== undefined;
+    const focusGroup = focus?.dataset.intervalGroup;
     body.textContent = '';
-    const codes = [...new Set([...opts.intervals, ...opts.preferences.custom(), ...opts.preferences.favorites(), opts.current()])];
-    const favorites = new Set(opts.preferences.favorites()), custom = new Set(opts.preferences.custom());
+    const unique = new Map<string, string>();
+    for (const code of [opts.current(), ...opts.preferences.custom(), ...opts.preferences.favorites(), ...opts.intervals]) {
+      const key = timeframeIdentity(code); if (!unique.has(key)) unique.set(key, code);
+    }
+    const codes = [...unique.values()];
+    const favorites = new Set(opts.preferences.favorites().map(timeframeIdentity)), custom = new Set(opts.preferences.custom().map(timeframeIdentity));
     for (const group of ORDER) {
       const items = codes.filter(code => (intervalParts(code)?.unit ?? 'other') === group);
       if (!items.length) continue;
       const section = h(ctx.document, 'div', 'oac-timeframe-menu__group'), heading = button(ctx, widgetText(ctx, GROUPS[group]!));
-      heading.classList.add('oac-timeframe-menu__heading'); heading.setAttribute('aria-expanded', String(!collapsed.has(group)));
+      heading.dataset.intervalGroup = group; heading.classList.add('oac-timeframe-menu__heading'); heading.setAttribute('aria-expanded', String(!collapsed.has(group)));
       heading.appendChild(glyph(ctx.document, chromeIconSvg(collapsed.has(group) ? 'chevron-down' : 'chevron-up'), 'chrome'));
       heading.addEventListener('click', () => { if (!collapsed.delete(group)) collapsed.add(group); paint(); });
       section.appendChild(heading); body.appendChild(section);
       if (collapsed.has(group)) continue;
       for (const code of items.sort((a, b) => (intervalParts(a)?.multiplier ?? 0) - (intervalParts(b)?.multiplier ?? 0))) {
+        const key = timeframeIdentity(code);
         const row = h(ctx.document, 'div', 'oac-timeframe-menu__row'); row.dataset.selected = String(opts.current() === code);
         const pick = button(ctx, label(ctx, code)); pick.dataset.pickInterval = code; pick.dataset.interval = code; pick.classList.add('oac-timeframe-menu__pick');
         pick.setAttribute('aria-pressed', String(opts.current() === code)); pick.disabled = opts.canSelect?.(code) === false;
         if (pick.disabled) pick.title = widgetText(ctx, 'The current source cannot build this interval');
         pick.addEventListener('click', () => { if (pick.disabled) return; close(); opts.onSelect(code); });
-        const remove = button(ctx, widgetText(ctx, 'Remove {code}', { code }), 'trash'); remove.dataset.removeInterval = code; remove.hidden = !custom.has(code);
+        const remove = button(ctx, widgetText(ctx, 'Remove {code}', { code }), 'trash'); remove.dataset.removeInterval = code; remove.hidden = !custom.has(key);
         remove.addEventListener('click', () => opts.preferences.removeCustom(code));
-        const star = button(ctx, widgetText(ctx, favorites.has(code) ? 'Remove {code} from favorites' : 'Add {code} to favorites', { code }), favorites.has(code) ? 'star-filled' : 'star');
-        star.dataset.favorite = code; star.setAttribute('aria-pressed', String(favorites.has(code))); star.addEventListener('click', () => opts.preferences.toggle(code));
+        const star = button(ctx, widgetText(ctx, favorites.has(key) ? 'Remove {code} from favorites' : 'Add {code} to favorites', { code }), favorites.has(key) ? 'star-filled' : 'star');
+        star.dataset.favorite = code; star.setAttribute('aria-pressed', String(favorites.has(key))); star.addEventListener('click', () => opts.preferences.toggle(code));
         const actions = h(ctx.document, 'div', 'oac-timeframe-menu__actions'); actions.append(remove, star); row.append(pick, actions); section.appendChild(row);
       }
     }
+    if (focusGroup) Array.from(body.querySelectorAll<HTMLElement>('[data-interval-group]')).find(node => node.dataset.intervalGroup === focusGroup)?.focus();
     if (focusCode) Array.from(body.querySelectorAll<HTMLElement>('button')).find(node =>
       (wasRemove ? node.dataset.removeInterval : node.dataset.favorite) === focusCode)?.focus();
   };
@@ -121,26 +128,26 @@ export function openTimeframeMenu(ctx: TimeframeMenuContext, anchor: HTMLElement
 }
 
 export const TIMEFRAME_MENU_CSS = `
-.oac-timeframe-menu{width:260px;max-width:calc(100vw - 24px);padding:6px}
-.oac-timeframe-menu>[data-add-interval]{display:flex;gap:8px;width:100%;justify-content:flex-start;min-height:34px}
-.oac-timeframe-menu__body{max-height:min(65vh,560px);overflow:auto;scrollbar-width:thin;scrollbar-color:var(--oac-sb-thumb) transparent}
-.oac-timeframe-menu__body::-webkit-scrollbar{width:6px}.oac-timeframe-menu__body::-webkit-scrollbar-thumb{background:var(--oac-sb-thumb);border-radius:3px}
-.oac-timeframe-menu__body::-webkit-scrollbar-thumb:hover{background:var(--oac-sb-thumb-hover)}
-.oac-timeframe-menu__group{border-top:1px solid var(--oac-bd);padding:5px 0}
-.oac-timeframe-menu__heading{width:100%;display:flex;justify-content:space-between;text-transform:uppercase;font-size:10px;letter-spacing:.06em;color:var(--oac-mut);min-height:28px}
-.oac-timeframe-menu__row{display:flex;align-items:center;border-radius:4px;min-height:34px}
-.oac-timeframe-menu__row:hover,.oac-timeframe-menu__row:focus-within{background:var(--oac-elev-2)}
-.oac-timeframe-menu__row[data-selected="true"]{background:var(--oac-on-bg)}
-.oac-timeframe-menu__pick{flex:1;text-align:left;min-height:34px;justify-content:flex-start}
-.oac-timeframe-menu__actions{display:grid;grid-template-columns:28px 28px;flex:none;gap:2px}
-.oac-timeframe-menu__actions button{width:28px;height:28px;padding:5px}.oac-timeframe-menu__actions [hidden]{display:block;visibility:hidden;pointer-events:none}
-.oac-timeframe-dialog{width:340px;max-width:calc(100vw - 24px);padding:14px}
-.oac-timeframe-dialog__header,.oac-timeframe-dialog__footer{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.oac-timeframe-dialog__header h3{font-size:15px;margin:0}.oac-timeframe-dialog__fields{display:grid;gap:12px;margin-top:20px}
-.oac-timeframe-dialog__fields label{display:grid;grid-template-columns:80px 1fr;align-items:center;gap:12px}
-.oac-timeframe-dialog__unit{position:relative;display:block}.oac-timeframe-dialog__unit .oac-glyph{position:absolute;right:8px;top:8px;pointer-events:none}
-.oac-timeframe-dialog__unit select{padding-right:30px}
-.oac-timeframe-dialog__fields input,.oac-timeframe-dialog__fields select{width:100%;min-width:0;background:var(--oac-bg);color:var(--oac-tx);border:1px solid var(--oac-bd);border-radius:4px;padding:7px;appearance:none}
-.oac-timeframe-dialog__error{min-height:30px;padding:8px 0;font-size:11px;color:var(--oac-mut)}
-.oac-timeframe-dialog__footer{justify-content:flex-end}.oac-timeframe-dialog__footer button{min-width:58px;min-height:30px}
+.oac-widget .oac-timeframe-menu{display:flex;flex-direction:column;width:260px;max-width:calc(100% - 16px);padding:6px;max-height:calc(100% - 16px);overflow:hidden}
+.oac-widget .oac-timeframe-menu>[data-add-interval]{display:flex;flex-shrink:0;gap:8px;width:100%;justify-content:flex-start;min-height:34px}
+.oac-widget .oac-timeframe-menu__body{min-height:0;max-height:min(65vh,560px);overflow:auto;scrollbar-width:thin;scrollbar-color:var(--oac-sb-thumb) transparent}
+.oac-widget .oac-timeframe-menu__body::-webkit-scrollbar{width:6px}.oac-widget .oac-timeframe-menu__body::-webkit-scrollbar-thumb{background:var(--oac-sb-thumb);border-radius:3px}
+.oac-widget .oac-timeframe-menu__body::-webkit-scrollbar-thumb:hover{background:var(--oac-sb-thumb-hover)}
+.oac-widget .oac-timeframe-menu__group{border-top:1px solid var(--oac-bd);padding:5px 0}
+.oac-widget .oac-timeframe-menu .oac-timeframe-menu__heading{width:100%;display:flex;justify-content:space-between;text-transform:uppercase;font-size:10px;letter-spacing:.06em;color:var(--oac-mut);min-height:28px;background:transparent;border-color:transparent}
+.oac-widget .oac-timeframe-menu__row{display:flex;align-items:center;border-radius:4px;min-height:34px}
+.oac-widget .oac-timeframe-menu__row:hover,.oac-widget .oac-timeframe-menu__row:focus-within{background:var(--oac-elev-2)}
+.oac-widget .oac-timeframe-menu__row[data-selected="true"]{background:var(--oac-on-bg)}
+.oac-widget .oac-timeframe-menu__pick[aria-pressed]{background:transparent;border-color:transparent;flex:1;text-align:left;min-height:34px;justify-content:flex-start}
+.oac-widget .oac-timeframe-menu__actions{display:grid;grid-template-columns:28px 28px;flex:none;gap:2px}
+.oac-widget .oac-timeframe-menu__actions .oac-btn{background:transparent;border-color:transparent;width:28px;height:28px;padding:5px}.oac-widget .oac-timeframe-menu__actions [hidden]{display:block;visibility:hidden;pointer-events:none}
+.oac-widget .oac-timeframe-dialog{width:340px;max-width:calc(100% - 24px);max-height:calc(100% - 24px);overflow:auto;padding:14px}
+.oac-widget .oac-timeframe-dialog__header,.oac-widget .oac-timeframe-dialog__footer{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.oac-widget .oac-timeframe-dialog__header h3{font-size:15px;margin:0}.oac-widget .oac-timeframe-dialog__fields{display:grid;gap:12px;margin-top:20px}
+.oac-widget .oac-timeframe-dialog__fields label{display:grid;grid-template-columns:80px 1fr;align-items:center;gap:12px}
+.oac-widget .oac-timeframe-dialog__unit{position:relative;display:block}.oac-widget .oac-timeframe-dialog__unit .oac-glyph{position:absolute;right:8px;top:8px;pointer-events:none}
+.oac-widget .oac-timeframe-dialog__unit select{padding-right:30px}
+.oac-widget .oac-timeframe-dialog__fields input,.oac-widget .oac-timeframe-dialog__fields select{width:100%;min-width:0;background:var(--oac-bg);color:var(--oac-tx);border:1px solid var(--oac-bd);border-radius:4px;padding:7px;appearance:none}
+.oac-widget .oac-timeframe-dialog__error{min-height:30px;padding:8px 0;font-size:11px;color:var(--oac-mut)}
+.oac-widget .oac-timeframe-dialog__footer{justify-content:flex-end}.oac-widget .oac-timeframe-dialog__footer button{min-width:58px;min-height:30px}
 `;

@@ -69,4 +69,13 @@ describe('custom interval menu', () => {
     fireKey(count as unknown as FakeElement, 'Enter');
     expect(h.onSelect).toHaveBeenCalledWith('2h'); h.preferences.destroy();
   });
+  it('shows equivalent interval aliases once with the saved favorite state', () => {
+    const h = harness(); h.preferences.addCustom('60m'); h.preferences.toggle('60m');
+    const close = h.open();
+    expect(h.panel().querySelectorAll('[data-pick-interval="1h"]').length
+      + h.panel().querySelectorAll('[data-pick-interval="60m"]').length).toBe(1);
+    const star = h.panel().querySelector<HTMLButtonElement>('[data-favorite="60m"]')!;
+    expect(star.getAttribute('aria-pressed')).toBe('true');
+    close(); h.preferences.destroy();
+  });
 });

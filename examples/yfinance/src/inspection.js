@@ -10,7 +10,7 @@ import { toolName } from './rail.js';
 import { openSettings } from './indicators.js';
 import { openChartSettings } from './chart-settings.js';
 import { autosave } from './persist.js';
-import { INTERVALS } from './intervals.js';
+import { referenceSupports } from './timeframes.js';
 import { referenceSymbolSearch } from './symbol-search.js';
 import { referenceWatchlists, referenceQuotes, referenceNewsFeed, referencePanelStorage, watchlistSymbolSearch } from './market-panels.js';
 
@@ -90,11 +90,11 @@ export function attachInspection(host, pane = 1) {
       if (target?.current() && target.chart === chart) host.changeRequest?.(target, { symbol });
     },
     onInterval: interval => {
-      if (!INTERVALS.includes(interval)) {
+      const target = capturePaneTarget(host, pane);
+      if (!target || !referenceSupports(interval, target.request.symbol)) {
         el('status').textContent = `The reference feed does not offer ${interval}`;
         return;
       }
-      const target = capturePaneTarget(host, pane);
       if (target?.current() && target.chart === chart) host.changeRequest?.(target, { interval });
     },
   });

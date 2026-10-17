@@ -8,6 +8,7 @@ import { bindTypedField, typedFieldValue, typedFieldError, typedFieldProblem, va
 import { studyAllows } from './host-study.js';
 import { anchoredGrowthSeed } from './anchored-study.js';
 import { INTERVALS, intervalLabel } from './intervals.js';
+import { referenceTimeframePreferences } from './timeframes.js';
 
 let app;
 
@@ -381,7 +382,7 @@ function inputField(host, key, kind, spec, value, onChange, unavailable) {
     // a saved code it does not list stays an entry, since a select would
     // otherwise drop it to the chart's own without a word.
     const options = kind === 'interval'
-      ? [{ value: '', label: 'Chart' }, ...INTERVALS.concat(value && !INTERVALS.includes(value) ? [value] : [])
+      ? [{ value: '', label: 'Chart' }, ...[...new Set([...INTERVALS, ...referenceTimeframePreferences().custom(), ...(value ? [value] : [])])]
         .map(code => ({ value: code, label: intervalLabel(code) }))]
       : [...(kind === 'source' ? INDICATOR_SOURCES : spec.options)];
     const references = new Map();

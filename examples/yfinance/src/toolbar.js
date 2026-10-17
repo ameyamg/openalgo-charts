@@ -1,7 +1,8 @@
 import { el, esc, currentTheme, toggleTheme, plural } from './ui.js';
 import { attachTip, hideTip } from './hover.js';
 import { cycleMagnet, magnetMode, focusChart, syncNavigationControls, applyRailCollapsed } from './rail.js';
-import { INTERVALS, intervalLabel, intervalName, periodsFor, clampPeriod, foldedInterval } from './intervals.js';
+import { INTERVALS, intervalLabel, intervalName, periodsFor, clampPeriod, ensureIntervalOption } from './intervals.js';
+import { referenceTimeframePreferences, referenceSupports, referenceSource } from './timeframes.js';
 import { popupMenu } from './menus.js';
 import { openCompare, comparisonState } from './compare.js';
 import { enterReplay, askExitReplay } from './replay.js';
@@ -16,7 +17,7 @@ import { capturePaneTarget, selectedPane } from './pane-target.js';
 import { autosave } from './persist.js';
 import { rememberIndicators, renderIndicatorChips } from './indicators.js';
 import { recordChartType, withoutHistory } from './history.js';
-import { mountSymbolPicker, mountIndicatorPicker } from '/dist/openalgo-charts.widget.mjs';
+import { mountSymbolPicker, mountIndicatorPicker, openTimeframeMenu } from '/dist/openalgo-charts.widget.mjs';
 import { referenceSymbolSearch } from './symbol-search.js';
 import { toggleInspection } from './inspection.js';
 import { openGoTo } from './goto.js';
@@ -202,6 +203,7 @@ export function changeRequest(target, patch) {
     Object.assign(app.p2, request);
     app.loadSecondary();
   } else {
+    ensureIntervalOption(request.interval);
     for (const key of ['symbol', 'interval', 'period']) el(key).value = request[key];
     el('session').value = sessionOf(request);
     app.load();
@@ -339,16 +341,30 @@ export function renderToolbar() {
   // interval pills
   const ig = document.createElement('div');
   ig.className = 'pills';
-  for (const iv of INTERVALS) {
+  const preferences = referenceTimeframePreferences();
+  for (const iv of new Set([...preferences.favorites(), ...(request.interval ? [request.interval] : [])])) {
     const b = document.createElement('button');
     b.textContent = intervalLabel(iv);
     b.title = intervalName(iv);
     b.className = request.interval === iv ? 'is-on' : '';
     b.setAttribute('aria-pressed', String(request.interval === iv));
+    b.disabled = !referenceSupports(iv, request.symbol, request.session === 'extended' ? { session: 'extended' } : undefined);
     b.addEventListener('click', () => changeRequest(target, { interval: iv }));
     ig.appendChild(b);
   }
   bar.appendChild(ig);
+  const intervals = tbtn(ticon('chevron'), 'Timeframes');
+  intervals.id = 'timeframe-menu';
+  intervals.addEventListener('click', () => {
+    const context = app['inspection' + pane]?.context;
+    if (!context) return;
+    openTimeframeMenu(context, intervals, {
+      intervals: INTERVALS, preferences, current: () => request.interval,
+      canSelect: code => referenceSupports(code, request.symbol, request.session === 'extended' ? { session: 'extended' } : undefined),
+      onSelect: code => changeRequest(target, { interval: code }),
+    });
+  });
+  bar.appendChild(intervals);
 
   // range menu
   const range = tbtn('<span>' + esc(request.period || '') + '</span>' + ticon('chevron'), 'History range');
@@ -365,7 +381,8 @@ export function renderToolbar() {
   // keeps that choice through an interval change and says it is unavailable,
   // rather than quietly showing regular hours under the old label.
   const session = sessionOf(request);
-  const wire = foldedInterval(request.interval)?.foldFrom || request.interval;
+  let wire = request.interval;
+  try { wire = referenceSource(request.interval, request.symbol); } catch { /* The unsupported state remains visible. */ }
   const extendedServed = extendedSessionAvailable(request.symbol, wire);
   const sessionButton = tbtn('<span>' + esc(sessionLabel(session)) + '</span>' + ticon('chevron'), 'Trading session',
     extendedServed ? 'Regular or extended hours' : 'Extended hours are served only for intraday bars of US listed stocks');
@@ -612,6 +629,7 @@ export function initToolbar(a) {
   app.changeRequest = changeRequest;
   app.changeType = changeType;
   app.renderToolbar = renderToolbar;
+  referenceTimeframePreferences().subscribe(renderToolbar);
   document.addEventListener('fullscreenchange', () => {
     if (!isChartFull()) app.fullscreenPane = null;
     hideTip(); syncFullscreenChrome(); renderToolbar();

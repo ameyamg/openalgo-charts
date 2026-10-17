@@ -496,6 +496,16 @@ class WidgetContextImpl implements WidgetContext {
   public get chartTheme(): ChartTheme { return this._source.chartThemeInUse(); }
 }
 
+function initialInterval(options: WidgetOptions, saved: { interval: string } | null): string {
+  // A code nothing recognises is an error at the call site (the engine's
+  // own rule: a chart showing the wrong timeframe is a wrong trade), and a
+  // saved code from a build that registered it is dropped for the default.
+  if (options.interval !== undefined) resolveInterval(options.interval);
+  for (const code of options.intervals ?? []) resolveInterval(code);
+  const savedInterval = saved !== null && isKnownInterval(saved.interval) ? saved.interval : '1d';
+  return options.interval ?? savedInterval;
+}
+
 /**
  * The chart's options from the widget's. Everything the widget does not
  * consume itself goes to the chart as is, so a host keeps every engine option
@@ -661,7 +671,7 @@ class WidgetImpl implements Widget {
   private _loading: Promise<unknown> | null = null;
   /** Set while the widget itself moves the view for arriving data, which is not the user moving on. */
   private _anchoring = false;
-  private readonly _intervals: string[];
+  private readonly _intervals: string[] = [];
 
   private _symbol: string;
   private _exchange: string;
@@ -694,6 +704,23 @@ class WidgetImpl implements Widget {
   private _destroyed = false;
   private readonly _cleanups: Array<() => void> = [];
 
+  private _initTimeframes(options: WidgetOptions): (code: string) => boolean {
+    const custom = new Set(this._timeframePreferences.custom());
+    const set = new Set<string>(options.intervals ?? [...DEFAULT_INTERVALS, ...registeredIntervals().map((d) => d.code).filter(code => !custom.has(code))]);
+    set.add(this._interval);
+    this._intervals.push(...set);
+    const nativeIntervals = this._intervals.filter(code => !custom.has(code) || options.intervals?.includes(code));
+    const syncIntervals = (): void => { this._intervals.splice(0, this._intervals.length, ...new Set([...nativeIntervals, ...this._timeframePreferences.custom()])); };
+    syncIntervals(); this._cleanups.push(this._timeframePreferences.subscribe(syncIntervals));
+    return options.canSelectInterval ?? ((code: string): boolean => {
+      const feed = options.feed;
+      if (feed && 'resolve' in feed && typeof feed.resolve === 'function') {
+        try { feed.resolve({ symbol: this._symbol, exchange: this._exchange, interval: code }); return true; } catch { return false; }
+      }
+      return nativeIntervals.includes(code);
+    });
+  }
+
   public constructor(container: HTMLElement, options: WidgetOptions) {
     this._opts = options;
     this.dataController = options.feed ? new DataLoadingController(options.feed, {
@@ -719,13 +746,7 @@ class WidgetImpl implements Widget {
 
     this._symbol = (options.symbol ?? saved?.symbol ?? '').toUpperCase();
     this._exchange = options.exchange ?? saved?.exchange ?? '';
-    // A code nothing recognises is an error at the call site (the engine's
-    // own rule: a chart showing the wrong timeframe is a wrong trade), and a
-    // saved code from a build that registered it is dropped for the default.
-    if (options.interval !== undefined) resolveInterval(options.interval);
-    for (const code of options.intervals ?? []) resolveInterval(code);
-    const savedInterval = saved !== null && isKnownInterval(saved.interval) ? saved.interval : '1d';
-    this._interval = options.interval ?? savedInterval;
+    this._interval = initialInterval(options, saved);
     // Like the interval: a malformed variant is an error at the call site, and
     // `readSaved` has already dropped one the stored record could not name.
     this._variant = options.variant !== undefined ? normalizeDataVariant(options.variant) : saved?.variant;
@@ -738,20 +759,7 @@ class WidgetImpl implements Widget {
     this._themeName = t.name;
     this._chartTheme = t.theme;
 
-    const custom = new Set(this._timeframePreferences.custom());
-    const set = new Set<string>(options.intervals ?? [...DEFAULT_INTERVALS, ...registeredIntervals().map((d) => d.code).filter(code => !custom.has(code))]);
-    set.add(this._interval);
-    this._intervals = Array.from(set);
-    const nativeIntervals = this._intervals.filter(code => !custom.has(code) || options.intervals?.includes(code));
-    const syncIntervals = (): void => { this._intervals.splice(0, this._intervals.length, ...new Set([...nativeIntervals, ...this._timeframePreferences.custom()])); };
-    syncIntervals(); this._cleanups.push(this._timeframePreferences.subscribe(syncIntervals));
-    const canSelectInterval = options.canSelectInterval ?? ((code: string): boolean => {
-      const feed = options.feed;
-      if (feed && 'resolve' in feed && typeof feed.resolve === 'function') {
-        try { feed.resolve({ symbol: this._symbol, exchange: this._exchange, interval: code }); return true; } catch { return false; }
-      }
-      return nativeIntervals.includes(code);
-    });
+    const canSelectInterval = this._initTimeframes(options);
 
     // ── the frame ──────────────────────────────────────────────────────
     const root = h(doc, 'div', 'oac-widget');

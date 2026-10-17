@@ -21,7 +21,7 @@ import { mountSymbolPicker, type SymbolPickerHandle } from './symbol-picker';
 import { timeBuckets } from './date-navigator';
 import { boxChartType } from './chart-type-choice';
 import { openTimeframeMenu } from './timeframe-menu';
-import type { TimeframePreferences } from './timeframe-preferences';
+import { timeframeIdentity, type TimeframePreferences } from './timeframe-preferences';
 export { SEARCH_DEBOUNCE_MS } from './symbol-picker';
 export type { SymbolMatch, SymbolSearch } from './symbol-picker';
 import type { SymbolSearch } from './symbol-picker';
@@ -202,6 +202,55 @@ function typeSettingsButton(ctx: WidgetContext, host: HTMLElement): { el: HTMLBu
   };
 }
 
+function visibleIntervals(opts: TopbarOptions): readonly string[] {
+  if (!opts.timeframePreferences) return opts.intervals;
+  return [...new Map([...opts.timeframePreferences.favorites(), opts.state().interval].map(code => [timeframeIdentity(code), code])).values()];
+}
+
+function mountIntervals(ctx: WidgetContext, host: HTMLElement, opts: TopbarOptions): { refresh(): void; destroy(): void } {
+  const doc = ctx.document;
+  const pills = h(doc, 'div', 'oac-pills', { role: 'radiogroup', 'aria-label': widgetText(ctx, 'Interval') });
+  const pillByCode = new Map<string, HTMLButtonElement>();
+  const paintPills = (): void => {
+    pills.textContent = ''; pillByCode.clear();
+    const codes = visibleIntervals(opts);
+    for (const code of codes) {
+      const b = h(doc, 'button', undefined, { type: 'button', role: 'radio', 'aria-pressed': 'false', 'aria-label': widgetText(ctx, 'Interval {code}', { code: intervalLabel(code) }) });
+      b.textContent = intervalLabel(code);
+      b.dataset.interval = code;
+      b.disabled = opts.canSelectInterval?.(code) === false;
+      b.addEventListener('click', () => opts.onInterval(code));
+      pills.appendChild(b);
+      pillByCode.set(code, b);
+    }
+  };
+  paintPills();
+  host.appendChild(pills);
+  let closeIntervals: (() => void) | undefined;
+  if (opts.timeframePreferences) {
+    const menu = h(doc, 'button', 'oac-btn oac-topbar__interval-menu', { type: 'button', 'aria-label': widgetText(ctx, 'Timeframes') });
+    menu.appendChild(glyph(doc, chromeIconSvg('chevron-down'), 'chrome'));
+    menu.setAttribute('aria-haspopup', 'dialog');
+    menu.addEventListener('click', () => { closeIntervals?.(); closeIntervals = openTimeframeMenu(ctx, menu, {
+      intervals: opts.intervals, current: () => opts.state().interval, preferences: opts.timeframePreferences!,
+      ...(opts.canSelectInterval ? { canSelect: opts.canSelectInterval } : {}), onSelect: opts.onInterval,
+    }); });
+    host.appendChild(menu);
+  }
+  const refresh = (): void => {
+    const s = opts.state();
+    const codes = visibleIntervals(opts);
+    if (codes.join('|') !== [...pillByCode.keys()].join('|')) paintPills();
+    for (const [code, button] of pillByCode) {
+      button.setAttribute('aria-pressed', String(code === s.interval));
+      button.setAttribute('aria-checked', String(code === s.interval));
+      button.disabled = opts.canSelectInterval?.(code) === false;
+    }
+  };
+  const off = opts.timeframePreferences?.subscribe(refresh);
+  return { refresh, destroy: () => { off?.(); closeIntervals?.(); } };
+}
+
 export function mountTopbar(ctx: WidgetContext, host: HTMLElement, opts: TopbarOptions): TopbarHandle {
   const doc = ctx.document;
   host.classList.add('oac-topbar');
@@ -251,34 +300,7 @@ export function mountTopbar(ctx: WidgetContext, host: HTMLElement, opts: TopbarO
   symInput.addEventListener('focus', () => { symInput.select(); });
   symInput.addEventListener('blur', () => { refresh(); });
 
-  // ── intervals ────────────────────────────────────────────────────────
-  const pills = h(doc, 'div', 'oac-pills', { role: 'radiogroup', 'aria-label': widgetText(ctx, 'Interval') });
-  const pillByCode = new Map<string, HTMLButtonElement>();
-  const paintPills = (): void => {
-    pills.textContent = ''; pillByCode.clear();
-    const codes = opts.timeframePreferences ? [...new Set([...opts.timeframePreferences.favorites(), opts.state().interval])] : opts.intervals;
-    for (const code of codes) {
-    const b = h(doc, 'button', undefined, { type: 'button', role: 'radio', 'aria-pressed': 'false', 'aria-label': widgetText(ctx, 'Interval {code}', { code: intervalLabel(code) }) });
-    b.textContent = intervalLabel(code);
-    b.dataset.interval = code;
-    b.disabled = opts.canSelectInterval?.(code) === false;
-    b.addEventListener('click', () => opts.onInterval(code));
-    pills.appendChild(b);
-    pillByCode.set(code, b);
-    }
-  };
-  paintPills();
-  host.appendChild(pills);
-  let closeIntervals: (() => void) | undefined;
-  if (opts.timeframePreferences) {
-    const menu = btn(widgetText(ctx, 'Timeframes'), 'oac-topbar__interval-menu'); menu.appendChild(chev());
-    menu.setAttribute('aria-haspopup', 'dialog');
-    menu.addEventListener('click', () => { closeIntervals?.(); closeIntervals = openTimeframeMenu(ctx, menu, {
-      intervals: opts.intervals, current: () => opts.state().interval, preferences: opts.timeframePreferences!,
-      ...(opts.canSelectInterval ? { canSelect: opts.canSelectInterval } : {}), onSelect: opts.onInterval,
-    }); });
-    host.appendChild(menu);
-  }
+  const intervals = mountIntervals(ctx, host, opts);
   host.appendChild(sep());
 
   // ── chart type ───────────────────────────────────────────────────────
@@ -494,16 +516,10 @@ export function mountTopbar(ctx: WidgetContext, host: HTMLElement, opts: TopbarO
 
   const refresh = (): void => {
     const s = opts.state();
-    const codes = opts.timeframePreferences ? [...new Set([...opts.timeframePreferences.favorites(), s.interval])] : opts.intervals;
-    if (codes.join('|') !== [...pillByCode.keys()].join('|')) paintPills();
+    intervals.refresh();
     if (doc.activeElement !== symInput) symInput.value = s.symbol;
     symEx.textContent = s.exchange;
     symEx.hidden = s.exchange === '';
-    for (const [code, b] of pillByCode) {
-      const on = code === s.interval;
-      b.setAttribute('aria-pressed', String(on));
-      b.setAttribute('aria-checked', String(on));
-    }
     if (typeGlyph.dataset.type !== s.chartType) {
       typeGlyph.dataset.type = s.chartType;
       typeGlyph.hidden = chartTypeIcon(s.chartType) === undefined;
@@ -538,7 +554,6 @@ export function mountTopbar(ctx: WidgetContext, host: HTMLElement, opts: TopbarO
     }
   };
   const offBranding = ctx.chart.on('branding:changed', refresh);
-  const offTimeframes = opts.timeframePreferences?.subscribe(refresh);
   refresh();
 
   return {
@@ -547,7 +562,7 @@ export function mountTopbar(ctx: WidgetContext, host: HTMLElement, opts: TopbarO
     refresh,
     focusSymbol: () => { symInput.focus(); },
     destroy: () => {
-      offTimeframes?.(); closeIntervals?.();
+      intervals.destroy();
       dataDialog?.close();
       typeSettings.close();
       offLayouts?.();

@@ -1,7 +1,8 @@
 import * as engine from '/dist/openalgo-charts.mjs';
 import {
-  intervalSeconds, foldedInterval, foldToBuckets, PERIOD_DAYS, resolvePickerInterval, UnknownIntervalError,
+  intervalSeconds, PERIOD_DAYS, resolvePickerInterval, UnknownIntervalError,
 } from './intervals.js';
+import { createReferenceTimeframes } from './timeframes.js';
 import { venueLive, exchangeOf } from './status.js';
 import { popupMenu } from './menus.js';
 import { renderToolbar } from './toolbar.js';
@@ -99,7 +100,8 @@ const NOT_FOUND_TEXT = /delisted|no data found|no price data|not found|\b404\b|n
 // The session goes on the URL only when the request names one, so a regular
 // load asks exactly what it asked before sessions existed.
 const historyUrl = (req) =>
-  `/api/history?symbol=${encodeURIComponent(req.symbol)}&interval=${encodeURIComponent(req.interval)}&period=${encodeURIComponent(req.period)}`
+  `/api/history?symbol=${encodeURIComponent(req.symbol)}&interval=${encodeURIComponent(req.interval)}&period=${encodeURIComponent(req.period || '1y')}`
+  + (Number.isFinite(req.from) && Number.isFinite(req.to) ? `&from=${Math.floor(req.from)}&to=${Math.ceil(req.to)}` : '')
   + (req.variant?.session ? `&session=${encodeURIComponent(req.variant.session)}` : '');
 
 /**
@@ -129,6 +131,7 @@ export function classifyHistoryResponse(status, body, req, headers) {
   const code = record && typeof record.code === 'string' ? record.code : '';
   const where = `${req.symbol} ${req.interval}/${req.period}`;
   if (code === 'unsupported_session') throw new UnsupportedSessionError(text || `${req.symbol}: no extended hours for ${req.interval}`, { status });
+  if (code === 'no_data' && req.allowEmpty) return [];
   if (status === 404 || code === 'no_data' || NOT_FOUND_TEXT.test(text)) {
     throw new NotFoundError(`${req.symbol}: no bars${text ? ' (' + text + ')' : ''}`, { status });
   }
@@ -146,7 +149,7 @@ export function classifyHistoryResponse(status, body, req, headers) {
   if (text) throw new FeedError(text, { status });
   if (status < 200 || status >= 300) throw new FeedError(`history failed (${status})`, { status });
   if (!Array.isArray(json)) throw new FeedError('unexpected response shape from the data server', { status });
-  if (json.length === 0) throw new NotFoundError(`${req.symbol}: no bars for ${where} (unknown symbol, or nothing in this range)`, { status });
+  if (json.length === 0 && !req.allowEmpty) throw new NotFoundError(`${req.symbol}: no bars for ${where} (unknown symbol, or nothing in this range)`, { status });
   return json;
 }
 
@@ -249,29 +252,21 @@ export class YFinanceDataFeed {
 // this page's own tests; the stale badge below is what tells the user the
 // chart is a bar short, and the cache menu's reload is the remedy.
 export function initFeed(a, feedOptions) {
+  feed?.destroy?.();
   app = a;
   liveFeed = new YFinanceDataFeed(feedOptions);
   app.cache = withBarCache
     ? withBarCache(liveFeed, {
         ttlMs: 10 * 60_000,
-        // `barCloses` reports the instant a bar CLOSES, which is not the same
-        // question as how many seconds it lasts, and is the only one the cache
-        // can act on: it is what decides whether the last bar is still forming
-        // and must be refetched. The registry answers it for calendar codes
-        // too, where there is no fixed length to state, and returns null for
-        // tick and volume bars so they opt themselves out of caching.
-        //
-        // This used to pass `intervalSeconds`, which 1.4.0 renamed. Nothing
-        // read it, so the wrapper had silently been running on its default,
-        // which happens to be exactly this, hence no visible symptom.
-        //
-        // The zone is read inside the closure, not captured now: the chart's
-        // timezone is a runtime setting, and a New York month is not a Mumbai
-        // month.
-        barCloses: (code, barStartSec) => barCloseSec(code, barStartSec, app.chartTimezone),
+        // Only native clock bars enter this cache. Waiting a full duration
+        // is conservative for shortened sessions and daily midnight labels;
+        // display timezone must never make a forming source bar cacheable.
+        barCloses: (code, barStartSec) => barStartSec + intervalSeconds(code),
       })
     : null;
-  feed = app.cache || liveFeed;
+  const service = createReferenceTimeframes(app.cache || liveFeed);
+  feed = service.feed;
+  app.timeframes = service;
 }
 
 /** Newest bar time this page has actually seen, per `symbol|interval`, and session when it is extended. */
@@ -339,16 +334,14 @@ export function abortFetch(slot) {
 }
 
 /**
- * Every bar request in this page goes through here. A folded interval is
- * fetched at its source frame (so the cache holds daily bars once, shared
- * with the 1D view) and bucketed afterwards.
+ * Chart history uses the shared timeframe feed. The cache holds native bars
+ * once; compatible custom candles aggregate them in the exchange calendar.
  *
  * `opts`: `noCache` reaches the wire and refreshes the entry; `slot` (see
  * `inflight`) cancels the slot's previous request; `signal` is a caller's
  * own AbortSignal for anything else.
  */
 export async function fetchBars(symbol, interval, period, opts) {
-  const timezone = opts?.timezone || app.chartTimezone;
   // Validated before anything is built from it: `barsRequest` would fall
   // back to a day for a code it cannot size, and the wire would then draw
   // whatever came back under the label that was asked for.
@@ -360,13 +353,12 @@ export async function fetchBars(symbol, interval, period, opts) {
     }
     throw e;
   }
-  const fold = foldedInterval(interval);
-  const wire = fold ? fold.foldFrom : interval;
   const variant = opts && opts.variant;
-  const req = barsRequest(symbol, wire, period, variant);
+  const req = barsRequest(symbol, interval, period, variant);
+  const wire = feed.resolve(req).source.interval;
   // Asked of the feed's own declaration, before the wire: extended hours the
   // source does not have are refused here rather than fetched as regular ones.
-  if (variant && variant.session === 'extended' && !liveFeed.dataVariants(req).sessions.includes('extended')) {
+  if (variant && variant.session === 'extended' && !liveFeed.dataVariants({ ...req, interval: wire }).sessions.includes('extended')) {
     throw new UnsupportedSessionError(`Extended hours are not available for ${symbol} ${interval} bars from this source`);
   }
   if (opts && opts.noCache) req.noCache = true;
@@ -386,29 +378,35 @@ export async function fetchBars(symbol, interval, period, opts) {
   let warm = false;
   try {
     bars = await feed.getBars(req);
+    if (!bars.length) throw new NotFoundError(`${symbol}: no bars for the selected range`);
     warm = Boolean(app.cache) && app.cache.stats().hits > before;
     // The cache holds back a bar that has not closed, as it must, so a warm
     // answer can end before the newest bar this page has already shown: the
     // day's candle after the close, the forming one in the session. With no
     // live subscription here to supply it again, the chart would put an
     // older close up as the last price. The wire has it.
-    const seen = lastBarSeen.get(seenKey(symbol, wire, variant));
-    if (warm && seen !== undefined && (bars.at(-1)?.time ?? -Infinity) < seen) {
+    const seen = lastBarSeen.get(seenKey(symbol, interval, variant));
+    const sourceSeen = newestSeen.get(seenKey(symbol, interval, variant))?.time;
+    if (warm && ((seen !== undefined && (bars.at(-1)?.time ?? -Infinity) < seen)
+      || (sourceSeen !== undefined && (app.timeframes.latest(req) ?? -Infinity) < sourceSeen))) {
       bars = await feed.getBars({ ...req, noCache: true });
       warm = false;
     }
+  } catch (error) {
+    if (req.signal?.aborted || error?.name === 'AbortError') throw new AbortedError();
+    throw error;
   } finally {
     if (controller && inflight.get(slot) === controller) inflight.delete(slot);
   }
   lastFetch = { cached: Boolean(app.cache), warm, ms: Math.round(performance.now() - t0) };
   if (bars.length) {
-    lastBarSeen.set(seenKey(symbol, wire, variant), bars[bars.length - 1].time);
+    lastBarSeen.set(seenKey(symbol, interval, variant), bars[bars.length - 1].time);
     // Freshness is judged on the wire frame: a folded month is as fresh as
     // the daily bars under it, and a calendar bucket has no length to judge by.
-    newestSeen.set(seenKey(symbol, interval, variant), { wire, time: bars[bars.length - 1].time });
+    newestSeen.set(seenKey(symbol, interval, variant), { wire, time: app.timeframes.latest(req) ?? bars[bars.length - 1].time });
     syncStaleBadge();
   }
-  return fold ? foldToBuckets(bars, fold.bucketing, timezone) : bars;
+  return bars;
 }
 
 /**

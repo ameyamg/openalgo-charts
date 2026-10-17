@@ -12,6 +12,7 @@ import {
 } from './grid-view.js';
 import { THEME_KEY } from './ui.js';
 import { sessionCalendarFor } from './ticks.js';
+import { attachReferenceTimeframes, referenceTimeframePreferences } from './timeframes.js';
 import { referenceWatchlists, referenceQuotes, referenceNewsFeed } from './market-panels.js';
 
 const PERSIST = 'yfinance-grid';
@@ -39,9 +40,11 @@ export function initGridView(doc = document) {
   let release = () => {};
   const ready = handed === null ? undefined : new Promise(resolve => { release = resolve; });
   const coarse = view.matchMedia?.('(pointer: coarse)').matches === true;
+  const feeds = gridFeeds({ ready });
   const grid = createChartGrid($('grid'), {
     // Each chart loads the history period its layout saved.
-    document: doc, feed: gridFeeds({ ready }), symbol: 'AAPL', exchange: '', interval: '1d', intervals: GRID_INTERVALS,
+    document: doc, feed: feeds, symbol: 'AAPL', exchange: '', interval: '1d', intervals: GRID_INTERVALS,
+    timeframePreferences: referenceTimeframePreferences(),
     theme, preset: '2x2', persist: PERSIST, links: { crosshair: true, viewport: true },
     // The grid's own bar: layouts up to sixteen charts, maximize, link groups,
     // one picture of every chart and the desk's saved layouts. The page's bar
@@ -66,6 +69,14 @@ export function initGridView(doc = document) {
     watchlist: { store: referenceWatchlists(), quotes: referenceQuotes() },
     news: { feed: referenceNewsFeed },
   });
+  const attached = new WeakSet();
+  const attach = () => {
+    for (const { widget } of grid.cells()) if (!attached.has(widget.chart)) {
+      attachReferenceTimeframes(widget.chart, feeds.provider); attached.add(widget.chart);
+    }
+  };
+  attach(); grid.on('layout', attach);
+  view.addEventListener('pagehide', () => feeds.destroy(), { once: true });
   const status = text => { $('grid-status-text').textContent = text; };
   const glyph = $('grid-glyph');
   glyph.style.display = 'inline-block';

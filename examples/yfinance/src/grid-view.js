@@ -5,6 +5,7 @@ import { parseWorkspaceDocument, parseWorkspacePayload } from '/dist/openalgo-ch
 import { layoutIconPath } from '/dist/openalgo-charts.draw.mjs';
 import { CHART_GRID_LAYOUTS, CHART_GRID_LAYOUT_NAMES } from '/dist/openalgo-charts.widget.mjs';
 import { YFinanceDataFeed, AbortedError } from './feed.js';
+import { createReferenceTimeframes, referenceSource, referenceSupports, SOURCE_MAX_DAYS } from './timeframes.js';
 
 /** Interval pills in each grid chart: widget codes this server can answer. */
 export const GRID_INTERVALS = ['1m', '5m', '15m', '1h', '1d', '1w'];
@@ -19,15 +20,12 @@ export const GRID_PRESET_LABELS = Object.fromEntries(Object.keys(CHART_GRID_LAYO
 /** Where the main page leaves a layout it cannot show, for this page to open. */
 export const GRID_HANDOFF_KEY = 'oac-grid-handoff';
 
-const WIRE = { '1w': '1wk' };
-// The widget asks for a time window; this server answers by named period, so
-// a chart whose layout saved no period asks for its interval's one here, and
-// the keys are every interval this view can load at all.
+// Initial history uses the saved period. Subsequent pages and independent
+// study requests use explicit windows through the shared timeframe feed.
 const PERIODS = { '1m': '5d', '5m': '1mo', '15m': '1mo', '30m': '1mo', '1h': '6mo', '1d': '5y', '1w': '10y' };
 // The periods the server knows, in days, and how far back the source serves
 // each intraday interval: a longer ask comes back empty, not refused.
 const PERIOD_DAYS = { '1d': 1, '5d': 5, '1mo': 31, '3mo': 92, '6mo': 186, ytd: 366, '1y': 366, '2y': 731, '5y': 1830, '10y': 3653, max: Infinity };
-const MAX_DAYS = { '1m': 7, '5m': 60, '15m': 60, '30m': 60, '1h': 730 };
 // A daily chart loads five years at least, as on the main page, so it holds
 // 500 candles or more. A shorter period its layout saved, such as the year an
 // hourly chart kept when it moved to daily, would draw about 250.
@@ -42,7 +40,8 @@ const ALIASES = { '1wk': '1w' };
  */
 export function gridPeriod(interval, saved) {
   const days = PERIOD_DAYS[saved];
-  return days >= (MIN_DAYS[interval] ?? 0) && days <= (MAX_DAYS[interval] ?? Infinity) ? saved : PERIODS[interval] || '1y';
+  const source = referenceSource(interval), cap = SOURCE_MAX_DAYS[source] ?? Infinity;
+  return days >= (MIN_DAYS[interval] ?? 0) && days <= cap ? saved : PERIODS[interval] || (cap < 31 ? '5d' : cap < 366 ? '1mo' : '1y');
 }
 
 /**
@@ -52,18 +51,16 @@ export function gridPeriod(interval, saved) {
  * never reaches the source.
  */
 export function gridFeed(source = new YFinanceDataFeed(), { ready, period } = {}) {
+  const feed = source.resolve ? source : createReferenceTimeframes(source).feed;
   return {
+    resolve: req => feed.resolve(req),
     getBars: async req => {
       await ready;
       if (req.signal?.aborted) throw new AbortedError();
-      return source.getBars({
-        symbol: req.symbol, interval: WIRE[req.interval] || req.interval, period: gridPeriod(req.interval, period), signal: req.signal,
-      });
+      const selected = gridPeriod(req.interval, period), to = Date.now() / 1000;
+      return feed.getBars({ ...req, period: selected, from: to - Math.min(PERIOD_DAYS[selected], 40000) * 86400, to });
     },
-    // The first answer already holds the whole period this view asks for, so
-    // there is no older page. Saying so stops history paging from downloading
-    // the same period again at every left edge.
-    getBarsPage: async () => ({ bars: [], hasMore: false }),
+    getBarsPage: req => feed.getBarsPage(req),
   };
 }
 
@@ -73,11 +70,14 @@ export function gridFeed(source = new YFinanceDataFeed(), { ready, period } = {}
  * instrument still share one request.
  */
 export function gridFeeds({ ready } = {}, source = new YFinanceDataFeed()) {
-  const feeds = new Map();
-  return ({ historyPeriod }) => {
-    if (!feeds.has(historyPeriod)) feeds.set(historyPeriod, gridFeed(source, { ready, period: historyPeriod }));
+  const feeds = new Map(), service = createReferenceTimeframes(source);
+  const select = ({ historyPeriod }) => {
+    if (!feeds.has(historyPeriod)) feeds.set(historyPeriod, gridFeed(service.feed, { ready, period: historyPeriod }));
     return feeds.get(historyPeriod);
   };
+  select.provider = service.provider;
+  select.destroy = () => service.feed.destroy();
+  return select;
 }
 
 /**
@@ -88,7 +88,7 @@ export function gridViewRefusal(payload) {
   const interval = pane => ALIASES[pane.interval] || pane.interval;
   for (const pane of payload.panes) {
     if (pane.comparisons?.length) return `${pane.symbol}: comparison symbols are not drawn in the grid view`;
-    if (!(interval(pane) in PERIODS)) return `${pane.symbol}: the grid view has no ${pane.interval} interval`;
+    if (!referenceSupports(interval(pane), pane.symbol)) return `${pane.symbol}: the grid view has no ${pane.interval} interval`;
     if (pane.historyPeriod !== undefined && !Object.prototype.hasOwnProperty.call(PERIOD_DAYS, pane.historyPeriod)) {
       return `${pane.symbol}: the grid view cannot load a ${pane.historyPeriod} history period`;
     }

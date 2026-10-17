@@ -326,6 +326,16 @@ export class ChartStudies {
     if (pane !== undefined && pane !== this._host._primaryPane && pane.series().length === 0) this._host.removePane(paneIndex);
   }
 
+  private _requestState(): IndicatorRequestState {
+    return {
+      source: this._host._seriesProvenance.get(this._host._firstDataId.value ?? -1)?.snapshot(),
+      providerRevision: this._host._barsProviderRevision, dataRevision: this._host._requestedDataRevision,
+      supportsSnapshots: this._host.hasSnapshotProvider(),
+      supportsWarmup: typeof this._host._barsProvider === 'object' && this._host._barsProvider?.supportsWarmup === true,
+      replay: replayWindow(this._chart),
+    } satisfies LooseOptional<IndicatorRequestState> as IndicatorRequestState; // an absent source or replay window is written as undefined
+  }
+
   public _indicatorHost(preservedFormats?: PreservedScaleFormats): IndicatorHost {
     return {
       assignIndicatorScale: (id, series, primitives, commit) => this._assignIndicatorScale(id, series, primitives, commit),
@@ -489,13 +499,7 @@ export class ChartStudies {
           return provider.requestSnapshot({ ...request, ...(asOf === undefined ? {} : { asOf }), signal });
         }, [request.signal, this._host._barsRequests.signal]);
       },
-      requestState: () => ({
-        source: this._host._seriesProvenance.get(this._host._firstDataId.value ?? -1)?.snapshot(),
-        providerRevision: this._host._barsProviderRevision, dataRevision: this._host._requestedDataRevision,
-        supportsSnapshots: this._host.hasSnapshotProvider(),
-        supportsWarmup: typeof this._host._barsProvider === 'object' && this._host._barsProvider?.supportsWarmup === true,
-        replay: replayWindow(this._chart),
-      }) satisfies LooseOptional<IndicatorRequestState> as IndicatorRequestState, // an absent source or replay window is written as undefined
+      requestState: () => this._requestState(),
       subscribeRequestChanges: listener => {
         const subscriptions = (['data:context', 'data:range', 'data:requests'] as const).map(event => this._host.on(event, listener));
         subscriptions.push(observeReplayWindow(this._chart, listener));

@@ -119,6 +119,12 @@ function ownSnapshot(value: RequestedBarsSnapshot, asOf?: number): RequestedBars
   });
 }
 
+function validateDescriptor(d: RequestedIndicatorDescriptor): void {
+  if (typeof d.request !== 'function' || typeof d.expression !== 'function') invalid('request and expression must be functions');
+  if (d.gaps !== undefined && d.gaps !== 'carry' && d.gaps !== 'missing') invalid('gaps must be carry or missing');
+  if (d.targetTimes !== undefined && typeof d.targetTimes !== 'function') invalid('targetTimes must be a function');
+}
+
 /**
  * Manage one requested snapshot per instance. Changes are observed through the
  * optional native request hooks, or through data notifications on older hosts.
@@ -128,9 +134,7 @@ function ownSnapshot(value: RequestedBarsSnapshot, asOf?: number): RequestedBars
  * unchanged. Calculation performs no requests and never prealigns cached values.
  */
 export function createRequestedIndicator(d: RequestedIndicatorDescriptor): IndicatorDescriptor {
-  if (typeof d.request !== 'function' || typeof d.expression !== 'function') invalid('request and expression must be functions');
-  if (d.gaps !== undefined && d.gaps !== 'carry' && d.gaps !== 'missing') invalid('gaps must be carry or missing');
-  if (d.targetTimes !== undefined && typeof d.targetTimes !== 'function') invalid('targetTimes must be a function');
+  validateDescriptor(d);
   const columns = [...new Set(d.plots.flatMap(plot => plot.ohlc === undefined
     ? [plot.key] : [plot.ohlc.open, plot.ohlc.high, plot.ohlc.low, plot.ohlc.close]))];
   // Native hosts can contain calculation errors instead of throwing to attach.

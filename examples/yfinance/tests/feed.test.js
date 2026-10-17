@@ -189,7 +189,8 @@ describe('bar requests', () => {
     expect(r.to).toBe(Math.floor(now / DAY) * DAY + DAY - 1);
   });
 
-  it('fetches a folded frame at its source interval and buckets the result', async () => {
+  it('fetches a calendar frame from daily observations in the exchange timezone', async () => {
+    vi.setSystemTime(Date.UTC(2024, 1, 2, 22));
     // Daily bars either side of the February boundary in Kolkata.
     const bars = [
       flatBar(Date.UTC(2024, 0, 30, 12) / 1000, 100, 1),
@@ -218,7 +219,8 @@ describe('bar requests', () => {
     expect(barsRequest('BTC-USD', '1d', '1y').to).toBe(Math.floor(now / DAY) * DAY + DAY - 1);
   });
 
-  it('folds a secondary request in its captured timezone instead of the primary zone', async () => {
+  it('keeps exchange boundaries unchanged by either pane display timezone', async () => {
+    vi.setSystemTime(Date.UTC(2024, 1, 2, 22));
     const bars = [
       flatBar(Date.UTC(2024, 0, 31, 18) / 1000, 100, 1),
       flatBar(Date.UTC(2024, 0, 31, 20) / 1000, 101, 2),

@@ -56,7 +56,7 @@ describe('demo modules', () => {
       'indicators.js', 'inspection.js', 'intervals.js', 'level-editor.js',
       'link.js', 'market-panels.js', 'menus.js', 'orders.js', 'pane-target.js', 'persist.js', 'properties.js', 'rail-flyout.js',
       'rail.js', 'replay-timing.js', 'replay.js', 'routed-study.js', 'session-marks.js', 'session.js', 'snapshot.js', 'split.js', 'status.js', 'symbol-search.js', 'templates.js', 'text-editor.js',
-      'ticks.js', 'timeline.js', 'timezone.js', 'toolbar.js', 'transforms.js', 'ui.js', 'volume.js', 'workspace-catalog.js', 'workspace-document.js', 'workspace-host.js', 'workspace-transition.js', 'workspaces.js',
+      'ticks.js', 'timeframes.js', 'timeline.js', 'timezone.js', 'toolbar.js', 'transforms.js', 'ui.js', 'volume.js', 'workspace-catalog.js', 'workspace-document.js', 'workspace-host.js', 'workspace-transition.js', 'workspaces.js',
     ]);
   });
 

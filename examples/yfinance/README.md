@@ -90,7 +90,26 @@ picker, including alpha-bearing values; the drawing palette also offers it.
 With a chart focused, typing a letter opens symbol entry and typing a number
 opens interval entry. Text fields, dialogs, replay, pending loads, drawing
 tools and registered shortcuts retain priority. The reference feed accepts
-only the intervals listed in its toolbar.
+compatible custom clock and calendar intervals from its native source bars.
+
+The **Timeframes** menu groups intervals by unit. Use **Add custom interval**
+to enter a unit and positive whole-number quantity, for example 7 minutes or
+2 hours. Favorite buttons control the toolbar shortcuts; custom entries can
+be removed without changing a chart already using them. Preferences are shared
+across panes and the grid, and survive reloads. Seconds are unavailable because
+this reference source does not serve second bars.
+
+`7m` uses `1m` observations with a maximum seven-day source history, so the
+picker offers one-day and five-day ranges. `2h` uses compatible hourly bars.
+Weeks, months, quarters and years aggregate daily observations. Boundaries
+follow the exchange calendar, independently of the display timezone.
+
+Built-in higher-timeframe studies load independent confirmed history. To test,
+open a five-minute chart over five days, add EMA, set Length to 200 and Timeframe
+to Daily. The daily request loads its own warmup observations. The current
+unclosed daily candle does not alter the confirmed result. The reference source
+does not provide historical value versions, so these independent studies report
+unsupported during replay. The demo calendars do not include exchange holidays.
 
 ## Run
 
@@ -312,6 +331,7 @@ examples/yfinance/
     ui.js             el(), number and text formatting, the candle palette, toasts, the overlay stack (focus trap, one Escape per layer), the chart loading, empty and error card, the theme switch
     hover.js          the one hover label every icon-only control shares
     intervals.js      interval registry, the picker's codes, period clamping
+    timeframes.js     source capabilities, shared resampling, confirmed study history and interval preferences
     goto.js           Go to a date or range: the shared navigator, loading a longer period
     feed.js           YFinanceDataFeed and its typed errors, the bar cache wrapper, the cache menu
     transforms.js     the chart type select mapped onto the chart's own transforms (Renko, P&F and the rest), and the options kept per transform
@@ -414,8 +434,8 @@ chart is a complete widget with its own top bar, loading status and retry.
   and 30m 1mo; 1h 6mo; 1d 5y; 1w 10y). A chart keeps its period when its
   interval changes, for when it changes back, and a preset copies the active
   chart's period to the charts it adds. The grid writes
-  the periods back into its saved layout and exports. No older history is paged,
-  since the server answers by period.
+  the periods back into its saved layout and exports. Older history uses explicit
+  date windows, bounded by the source's retention.
 - Each chart's top bar opens the Watchlist and News panels in its own dock, through
   the widget's `watchlist` and `news` options, which the grid passes to every chart.
   They share the main page's list store, one quote poll for every visible row and
@@ -425,8 +445,8 @@ chart is a complete widget with its own top bar, loading status and retry.
   intervals (`1wk` from the main page opens as `1w`) and periods the server knows.
   It is validated in full, then applied all at once; on failure nothing on screen
   changes and the status line says why. Comparison symbols are refused, since a
-  widget draws none, and so are the main page's folded calendar frames (`1mo`,
-  `1q`).
+  widget draws none. Compatible custom intervals, including calendar months and
+  quarters, are accepted.
 
 The main page draws one chart or two side by side. Importing a layout with more
 charts, or with rows, into its Layouts dialog offers **Open in grid view**, which
@@ -440,10 +460,10 @@ through the same Layouts import. The widget's `1w` becomes the page's `1wk`, the
 per-chart theme is dropped because the main page has one theme for the page, and
 each chart opens fitted to its data with its studies and drawings, because the
 saved window counts the grid view's bars. A saved history period the main page
-has no range for opens as the nearest range it has (`1d` and `5d` as `1mo`, `3mo`
+has no range for opens as the nearest range it has (`3mo`
 as `6mo`, `ytd` and `2y` as `1y`, `10y` as `5y`), and every saved period is then
 clamped to what the chart's interval can serve, as the main page clamps its own.
-The main page still refuses what it cannot show, such as a `1m` chart or two
+The main page still refuses what it cannot show, such as two
 charts with different drawing magnet or stay settings.
 
 ## How it connects
@@ -561,7 +581,7 @@ exists to show one engine surface carrying real use, not just being present.
 |---|---|
 | `expression.js` | A symbol box holding arithmetic (`AAPL/MSFT`, `NSEIX:NIFTY1!/NSE:RELIANCE+NASDAQ:META`) charts the result. `parseExpression` names the legs before anything is fetched, so exactly those are loaded, in parallel, with the first failure winning: a ratio missing a leg is not a chart with a gap. `evaluateExpression` folds them onto the first leg's time grid, gapping any bar the others did not trade rather than carrying a stale price forward. Closes are exact; a high and low can be bounded by interval arithmetic, which is offered rather than assumed because the bound assumes each leg hit its extreme at the worst possible moment. |
 | `feed.js` | A `DataFeed` is one method. The bar cache wrapper (`withBarCache`) keys on symbol, exchange, interval and the data variant, snaps `from` to the bar grid so a reload inside the same bar hits, stops `to` at the last seen bar while the venue is shut (for an extended-hours chart, shut means outside its pre and post market too), and refetches only the forming bar. The cache holds back a bar that has not closed, so a warm answer that ends before the newest bar this page has already shown (the forming candle, or the day's candle after the close) is asked of the wire again: the page has no live subscription to supply that bar, and an older close would stand as the last price. A 404, 429 or 5xx becomes a typed error (`NotFoundError`, `RateLimitedError`, `NetworkError`) with a deadline and one retry, so the readout can say "check the symbol" or "try again in a minute" rather than printing whatever the server wrote. A staleness badge says when the newest bar is older than the venue's clock allows, on the clock of the chart's session: an extended-hours chart can go stale in the pre and post market. |
-| `intervals.js` | The interval registry accepts codes the built-in grammar does not (`1wk`, a calendar month, a quarter). Monthly and quarterly bars are folded from daily ones through `bucketStartOf`, so a month runs first-to-first in the chart's zone and February is 29 days long in 2024. Ranges are clamped to what the interval can serve. |
+| `intervals.js`, `timeframes.js` | Registered aliases preserve saved layouts. The shared `withTimeframes` feed builds compatible custom candles from native observations, with exchange-session intraday boundaries and calendar W/M/Q/Y boundaries. `createTimeframeProvider` fetches confirmed higher-timeframe warmup independently of the chart window. Source retention limits constrain the range menu. |
 | `history.js` | One undo timeline per chart through the widget tier's `ChartHistory`: a study added or removed (with its settings, pane and scale), its settings, the chart type, the price scales, pane moves, folds and heights, and drawings, in the order they were made. Ctrl+Z and Ctrl+Y and the mobile bar walk the focused chart's; the drawing toolbar's Undo and Redo and the rail's walk the main chart's, as the rest of that toolbar and the rail act on the main chart. The study settings dialog is one step per session, however many tabs commit its form, and an appearance change a linked chart applies from the other one is never a step of its own. The chart is rebuilt on every load and type switch, so the timeline lives on the app and each new chart is attached to it; the type switch itself is recorded as a command that rebuilds again. The chart settings dialog is one step per session, and a Cancel leaves none. Comparisons, the volume row and a loaded layout are the demo's own and go through `ignore`; a loaded layout starts a new timeline. No undo writes bars, fires an alert or places an order. |
 | `indicators.js` | The picker is built from `registeredIndicators()`, so built-ins and the host's opt-in example appear grouped by category. The gear opens a form generated from the descriptor's `inputs`; the same code renders MACD, Bollinger or your own indicator. An input's `visibleWhen` and `activeWhen` are read against the drafts on every committed edit with the widget's own `inputStates`, so a row appears, leaves or greys out as the settings it depends on change (a number box commits as the widget's does, clamped to its bounds, a blank one getting its last value back); a hidden draft is kept, an invalid hidden one never blocks Apply, and the change is announced in a polite live region. Inputs sharing an `inline` id sit on one row. An `interval` input, such as the Timeframe of a built-in moving average, RSI or MACD, is a select of Chart and the intervals the page serves, and a saved code outside that list stays an entry of its own. On a transformed chart the form leads with Compute on (Chart bars or Underlying bars). A study that stops drawing (a timeframe refused on Renko bricks, a calculation that fails) says why on the status line and in a toast, once per new reason. |
 | `indicator-input-controls.js` | Validates typed drafts and connects shared symbol lookup and chart picking to the reference modal, preserving its Apply and Cancel behavior. |
@@ -640,8 +660,8 @@ and Sell controls are disabled while chart 2 is selected.
 Chart settings keep the chart that opened the dialog, including when focus
 changes. Cancel restores that chart's edited fields; removing it closes the
 dialog. Each chart retains its own timezone, readout options and saved price
-style. For calendar intervals, accepting a timezone change rebuilds the owning
-chart's buckets. Cancel leaves the original history intact.
+style. Changing the display timezone preserves the exchange calendar's candle
+boundaries. Cancel leaves the original history intact.
 
 The Volume settings tab controls each chart's visibility, candle colours and
 moving average (period, colour, thickness and line style). The average shares
@@ -857,8 +877,8 @@ each option as a pane setting of its own (`reference.transform.renko.mode`), and
 one saved with `reference.pfmode` opens the same way.
 
 On startup, the primary request, chart type, transform options and timezone are restored
-before the first history request. Calendar month and quarter bars therefore fold
-in the saved timezone on their first load. These fields are optional additions to
+before the first history request. Calendar month and quarter bars use the source
+exchange calendar on their first load. These fields are optional additions to
 schema 2. Older documents can recover a request from an unambiguous, supported
 `symbol|interval|period` key; state-only documents keep the default source. Invalid
 explicit selection fields are quarantined with the document, before changing any

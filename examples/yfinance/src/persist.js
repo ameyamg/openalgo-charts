@@ -7,7 +7,8 @@ import { comparisonSnapshot, restoreComparisons, syncComparisons } from './compa
 import { renderIndicatorChips } from './indicators.js';
 import { CHART_TYPES, renderToolbar } from './toolbar.js';
 import { savedTransforms } from './transforms.js';
-import { INTERVALS, PERIODS } from './intervals.js';
+import { PERIODS, ensureIntervalOption } from './intervals.js';
+import { referenceSupports } from './timeframes.js';
 import { SESSIONS, sessionOf } from './session.js';
 import { withoutViewportSync } from './split.js';
 import { normalizeLegendIconSize, restorePrimaryStyle } from './chart-settings.js';
@@ -76,7 +77,7 @@ const isRecord = (v) => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 function layoutRequest(value) {
   if (!isRecord(value) || typeof value.symbol !== 'string' || !value.symbol.trim()
-    || !INTERVALS.includes(value.interval) || !PERIODS.includes(value.period)
+    || !referenceSupports(value.interval, value.symbol) || !PERIODS.includes(value.period)
     || (value.session !== undefined && !SESSIONS.includes(value.session))) return null;
   return { symbol: value.symbol.trim(), interval: value.interval, period: value.period,
     ...(value.session === 'extended' ? { session: 'extended' } : {}) };
@@ -125,6 +126,7 @@ export function restorePrimarySelection(doc = readLayout()) {
   const { request, chartType, transforms, timezone } = primaryLayoutSelection(doc);
   if (request) {
     app.req = request;
+    ensureIntervalOption(request.interval);
     for (const key of ['symbol', 'interval', 'period']) el(key).value = request[key];
     el('session').value = sessionOf(request);
   }

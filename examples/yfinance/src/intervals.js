@@ -1,12 +1,13 @@
 import * as engine from '/dist/openalgo-charts.mjs';
 import { el } from './ui.js';
+import { referenceSource, SOURCE_MAX_DAYS } from './timeframes.js';
 
 // Only what this page actually calls. `registeredIntervals` and
 // `isKnownInterval` are on the engine too, and were pulled in here and then
 // used by nothing: the picker is built from CUSTOM_INTERVALS, which is the
 // list that also has the labels and the fold source, so reading the
 // registry back would be a second source of truth for the same thing.
-const { registerInterval, tryResolveInterval, bucketStartOf } = engine;
+const { registerInterval, tryResolveInterval } = engine;
 
 /**
  * The error a code nothing recognises raises. The engine's own class when
@@ -29,11 +30,8 @@ export const UnknownIntervalError = engine.UnknownIntervalError || class Unknown
 // this page can put on screen, which is in turn what lets the cache below
 // ask the registry (rather than a private table) how long a bar is.
 //
-// `1mo` and `1q` are the demonstration: the engine has no such interval and
-// yfinance's own monthly frame is not what a calendar bucket means here.
-// They are folded locally from daily bars through `bucketStartOf`, so a
-// month runs first-to-first at local midnight in the chart's timezone and
-// February really is 29 days long in 2024.
+// These aliases keep existing saved layouts valid. The shared timeframe feed
+// derives calendar candles from daily observations in the exchange timezone.
 export const CUSTOM_INTERVALS = [
   { code: '1wk', label: '1W', name: 'Week', bucketing: { mode: 'interval', seconds: 604800 } },
   { code: '1mo', label: '1MO', name: 'Calendar month', bucketing: { mode: 'calendar', unit: 'month', count: 1 }, foldFrom: '1d' },
@@ -44,12 +42,6 @@ if (registerInterval) {
 }
 /** The demo's own entry for a code, when it has one. */
 export const customInterval = (code) => CUSTOM_INTERVALS.find((i) => i.code === code) || null;
-/** A code we fold ourselves out of a shorter frame, rather than fetch. */
-export const foldedInterval = (code) => {
-  const iv = customInterval(code);
-  return iv && iv.foldFrom ? iv : null;
-};
-
 /**
  * Validate a code before anything is fetched with it. The picker only ever
  * writes codes from INTERVALS, but the hidden select can be set by hand and
@@ -81,33 +73,6 @@ export function intervalSeconds(code) {
   return d && d.bucketing.mode === 'interval' ? d.bucketing.seconds : 0;
 }
 
-/**
- * Fold shorter bars into calendar buckets. The bucket start comes from the
- * registry, never from arithmetic here: that is the whole point of a
- * calendar bucketing, and it is why changing the chart's timezone moves the
- * month boundary instead of leaving it pinned to UTC.
- */
-export function foldToBuckets(bars, bucketing, zone) {
-  const out = [];
-  let cur = null;
-  let start = null;
-  for (const b of bars) {
-    const s = bucketStartOf(bucketing, b.time, zone);
-    if (s !== start) {
-      if (cur) out.push(cur);
-      start = s;
-      cur = { time: s, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume || 0 };
-    } else {
-      if (b.high > cur.high) cur.high = b.high;
-      if (b.low < cur.low) cur.low = b.low;
-      cur.close = b.close;
-      cur.volume += b.volume || 0;
-    }
-  }
-  if (cur) out.push(cur);
-  return out;
-}
-
 /* The picker is built from the built-in tokens this demo's data source
    serves plus whatever was registered above, so a code added to
    CUSTOM_INTERVALS appears here without a second list to keep in step. A
@@ -129,26 +94,34 @@ export const intervalName = (iv) => {
    option for and leaves `.value` empty, so a registered code that was in
    the pills but not in here drew daily bars under a monthly label. Built
    from the same list the pills are, so the two cannot drift. */
-export function fillIntervalSelect() {
+export function fillIntervalSelect(extra = []) {
   const sel = el('interval');
   const keep = sel.value || '1d';
   sel.innerHTML = '';
-  for (const iv of INTERVALS) {
+  const choices = [...new Set([...INTERVALS, ...extra])];
+  for (const iv of choices) {
     const o = document.createElement('option');
     o.value = iv;
     o.textContent = intervalLabel(iv);
     sel.appendChild(o);
   }
-  sel.value = INTERVALS.includes(keep) ? keep : '1d';
+  sel.value = choices.includes(keep) ? keep : '1d';
 }
 
-export const PERIODS = ['1mo', '6mo', '1y', '5y', 'max'];
+/** A select must contain a restored or newly added custom value before assignment. */
+export function ensureIntervalOption(code) {
+  const select = el('interval');
+  if (!select || Array.from(select.options ?? select.children).some(option => option.value === code)) return;
+  const option = document.createElement('option'); option.value = code; option.textContent = intervalLabel(code); select.appendChild(option);
+}
+
+export const PERIODS = ['1d', '5d', '1mo', '6mo', '1y', '5y', 'max'];
 
 /* Yahoo caps how far back intraday data goes, and answers an over-long
    request with an *empty* frame rather than an error, so 5m/15m/30m with
    the default 1y range silently drew nothing while 1h and 1d worked. Clamp
    the range to what the interval can actually serve. */
-export const PERIOD_DAYS = { '1mo': 31, '6mo': 186, '1y': 366, '5y': 1830, max: 1e6 };
+export const PERIOD_DAYS = { '1d': 1, '5d': 5, '1mo': 31, '6mo': 186, '1y': 366, '5y': 1830, max: 1e6 };
 export const INTERVAL_MAX_DAYS = { '1m': 7, '2m': 60, '5m': 60, '15m': 60, '30m': 60, '60m': 730, '90m': 60, '1h': 730 };
 /* A calendar frame needs years of source bars to draw anything: a quarter
    chart over one month is a single candle, which reads as a broken load
@@ -159,7 +132,9 @@ export const INTERVAL_MAX_DAYS = { '1m': 7, '2m': 60, '5m': 60, '15m': 60, '30m'
 export const INTERVAL_MIN_DAYS = { '1d': 1830, '1mo': 1500, '1q': 1800 };
 /** Periods this interval can serve, longest last: up to an intraday frame's cap, from a daily or calendar frame's floor. */
 export function periodsFor(interval) {
-  const cap = INTERVAL_MAX_DAYS[interval];
+  let source;
+  try { source = referenceSource(interval); } catch { return []; }
+  const cap = SOURCE_MAX_DAYS[source];
   const floor = INTERVAL_MIN_DAYS[interval];
   let out = cap === undefined ? PERIODS.slice() : PERIODS.filter((p) => PERIOD_DAYS[p] <= cap);
   if (floor !== undefined) out = out.filter((p) => PERIOD_DAYS[p] >= floor);

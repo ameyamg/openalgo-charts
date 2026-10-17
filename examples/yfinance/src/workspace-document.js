@@ -1,7 +1,8 @@
 import { parseWorkspacePayload, WorkspaceDocumentError } from '/dist/openalgo-charts.workspace.mjs';
 import { stripView } from '/dist/openalgo-charts.widget.mjs';
 import { primaryLayoutSelection, datasetKey, LAYOUT_SCHEMA } from './persist.js';
-import { clampPeriod, foldedInterval, PERIODS, PERIOD_DAYS } from './intervals.js';
+import { clampPeriod, PERIODS, PERIOD_DAYS } from './intervals.js';
+import { referenceSource } from './timeframes.js';
 import { EXTENDED, extendedSessionAvailable } from './session.js';
 import { VOLUME_DEFAULTS, volumeValues } from './volume.js';
 import { normalizeLegendIconSize } from './chart-settings.js';
@@ -154,7 +155,7 @@ export function validateReferenceWorkspace(input) {
     if (pane.variant !== undefined) {
       if (Object.keys(pane.variant).some(key => key !== 'session')) fail('This reference feed serves only regular or extended trading hours');
       if (pane.variant.session === 'extended'
-        && !extendedSessionAvailable(pane.symbol, foldedInterval(pane.interval)?.foldFrom || pane.interval)) {
+        && !extendedSessionAvailable(pane.symbol, referenceSource(pane.interval, pane.symbol))) {
         fail(`Extended hours are not available for ${pane.symbol} ${pane.interval}`);
       }
     }
