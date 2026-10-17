@@ -1,6 +1,6 @@
 {
   "name": "openalgo-charts",
-  "version": "2.6.4",
+  "version": "2.6.5",
   "description": "From-scratch, dependency-free canvas charting engine for OpenAlgo: professional-grade interactive rendering, advanced on-chart trading, and a one-call widget tier that adds the toolbar, drawing rail, dialogs and shortcuts.",
   "license": "Apache-2.0",
   "author": "marketcalls",
@@ -101,7 +101,7 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "rimraf dist && rollup -c",
+    "build": "rimraf dist && node --max-old-space-size=4096 node_modules/rollup/dist/bin/rollup -c",
     "build:watch": "rollup -c --watch",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tests",
     "test": "vitest run",

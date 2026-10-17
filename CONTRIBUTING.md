@@ -21,6 +21,10 @@ npm run build
 installed separately with `npm --prefix website ci`. Use synthetic fixtures for local
 feed tests; keep credentials and recorded account data out of commits.
 
+The release build gives Rollup a 4 GiB JavaScript heap budget for the nine tier
+declarations and script builds. Allow enough available memory for that budget and
+the operating system. This is a build-tool requirement, not a chart runtime allocation.
+
 ## Choose the relevant checks
 
 For library or reference-demo code, run the complete local gate:
@@ -81,6 +85,26 @@ For indicator performance or allocation changes, use `npm run bench` or `npm run
 as appropriate. [CI](.github/workflows/ci.yml) also checks skill coverage, browser
 behavior, documentation builds and supply-chain constraints.
 
+Measure a release with `npm run bench:release` after its final versioned build,
+on an idle machine that the benchmark budget profile covers. The desktop profile
+was measured on its recorded desktop, so a different software graphics device
+can exceed those budgets even on an unchanged release. Keep such failures and
+compare the previous build before diagnosing a source regression.
+
+The existing Nightly workflow also has a dedicated release benchmark mode:
+
+```sh
+gh workflow run nightly.yml --ref <candidate-branch> -f release_version=<version>
+```
+
+It prepares the requested version without committing, tagging or publishing,
+then measures five current and five previous runs on one dedicated hosted runner
+under the existing runner budgets. Other nightly jobs are skipped in this mode.
+Download `release-benchmark`, compare its built runtime files with the local
+candidate, and review and commit its generated benchmark data and website page.
+Update the home page's benchmark values from that same entry. A failed run is
+evidence to investigate, never a reason to carry an earlier release's figures.
+
 A prose-only change needs accurate links and examples. Run the website build when
 editing its MDX or components; a root Markdown correction does not require new tests
 or an unrelated screenshot refresh.
@@ -88,8 +112,8 @@ or an unrelated screenshot refresh.
 ## The compatibility gate
 
 Within a major version a release is additive ([compatibility](COMPATIBILITY.md)), and
-two checks hold every change to that against two published releases: the previous one
-and the one OpenAlgo pins. Both are listed in `BASELINES` in
+two checks hold every change to that against the previous published release, the one
+OpenAlgo pins and retained 2.x baselines. These are listed in `BASELINES` in
 `scripts/compat-packages.mjs`, which fetches each with `npm pack` into a cache outside the
 repository (the system temporary folder, or `OAC_COMPAT_CACHE`). Nothing is installed or
 published; the registry is needed once per version.
