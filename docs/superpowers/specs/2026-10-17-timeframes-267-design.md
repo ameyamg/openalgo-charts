@@ -1,6 +1,6 @@
 # 2.6.7: custom timeframes, independent indicator history and favorites
 
-Status: proposed design, awaiting written-spec review. Product implementation has not started.
+Status: approved by the user on 2026-10-17. The user subsequently authorized autonomous implementation, validation, commits and publication in both repositories, including `/trading`, Historify, changelogs, releases and the website.
 
 ## User intent and delivery order
 
@@ -13,7 +13,7 @@ The user explicitly requires this order:
 
 1. Implement the SDK and local yfinance reference host.
 2. Test the reference host locally, including actual rendered charts.
-3. Only after those checks pass, implement the integration in OpenAlgo `/trading`.
+3. Only after those checks pass, implement the integration in OpenAlgo `/trading` and Historify charts.
 4. Validate the consumer against the packed 2.6.7 candidate.
 
 Starting SDK commit: `f1afd4d6c7dee4706ce8000523423a2984bf2ab6` (2.6.6).
@@ -203,7 +203,7 @@ Gate A passes only when the implemented features have passing automated checks a
 inspected local browser results. No OpenAlgo product implementation begins before it.
 Leave the user's existing local server running; use separate ports for automated tests.
 
-## Validation gate B: OpenAlgo /trading integration
+## Validation gate B: OpenAlgo /trading and Historify integration
 
 After gate A, use an isolated consumer checkout with the packed SDK candidate.
 
@@ -218,9 +218,10 @@ After gate A, use an isolated consumer checkout with the packed SDK candidate.
   multiple panes and active-pane ownership. Never place real orders to test chart data.
 - Run consumer trading tests, typecheck, production build, API/skill generation checks
   and the real `/trading` browser harness in all three browsers and supported themes.
-- Run existing Historify regressions to detect collateral changes from the SDK upgrade.
-  Changes to Historify aggregation are not presumed necessary; any demonstrated parity
-  defect gets a focused regression and a scoped correction after the reference gate.
+- Integrate the same independent indicator history, custom interval choices and saved
+  favorites into Historify charts using its existing stored-data feed. Verify daily EMA
+  200 on five-minute stored history and matching custom candles. Reuse its database
+  aggregation; any demonstrated parity defect gets a focused regression and correction.
 - Follow the consumer's required Linux gthread and resource-lifecycle checks before
   committing consumer changes, including the local `fd-audit` skill where applicable.
 
