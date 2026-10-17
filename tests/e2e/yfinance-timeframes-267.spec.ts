@@ -4,7 +4,7 @@ import type * as Engine from '../../src/index';
 import type { ChartGrid } from '../../src/widget/index';
 
 type Host = Window & { __oac: { app: {
-  chart: Chart; chart2?: Chart; loading: boolean; loading2: boolean;
+  chart: Chart; chart2?: Chart; loading: boolean; loading2: boolean; loadFailed: boolean;
   req: { symbol: string; interval: string; period: string };
   timeframes: { provider: IndicatorBarsProviderAccess }; load(): Promise<void>;
 } }; __dailyStudy?: IndicatorApi };
@@ -13,7 +13,15 @@ async function ready(page: Page, interval?: string) {
   await page.waitForFunction(code => {
     const app = (window as unknown as Host).__oac?.app;
     return app?.chart && !app.loading && (!code || app.req.interval === code);
-  }, interval);
+  }, interval, { timeout: 15000 }).catch(async error => {
+    console.error('Reference readiness:', await page.evaluate(() => {
+      const app = (window as unknown as Host).__oac?.app;
+      return { url: location.href, chart: !!app?.chart, loading: app?.loading, request: app?.req,
+        status: document.querySelector('#status')?.textContent,
+        saved: JSON.parse(localStorage.getItem('oa-charts:layout') || 'null')?.request };
+    }));
+    throw error;
+  });
 }
 async function custom(page: Page, unit: string, count: string) {
   await page.locator('#timeframe-menu').click();
@@ -24,6 +32,7 @@ async function custom(page: Page, unit: string, count: string) {
   await dialog.getByRole('button', { name: 'Add', exact: true }).click();
 }
 test.beforeEach(async ({ page }) => {
+  page.on('pageerror', error => console.error('Reference page error:', error.message));
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/examples/yfinance/index.html?test=1');
   await ready(page);
@@ -149,4 +158,16 @@ test('grid panes share custom favorites and independent daily history', async ({
   await expect(menu.locator('[data-pick-interval="1w"]')).toBeInViewport();
   await page.screenshot({ path: info.outputPath('grid-custom-intervals-light.png') });
   expect(errors).toEqual([]);
+});
+
+test('removing an active custom calendar choice preserves it through a fresh reload', async ({ page }, info) => {
+  await custom(page, 'months', '5'); await ready(page, '5M');
+  expect(await page.evaluate(() => (window as unknown as Host).__oac.app.loadFailed)).toBe(false);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('oa-charts:layout') || 'null')?.request.interval)).toBe('5M');
+  await page.locator('#timeframe-menu').click();
+  await page.locator('[data-remove-interval="5M"]').click();
+  await page.keyboard.press('Escape');
+  await page.reload(); await ready(page, '5M');
+  expect(await page.evaluate(() => (window as unknown as Host).__oac.app.chart.primaryBars().length)).toBeGreaterThan(0);
+  await page.screenshot({ path: info.outputPath('removed-calendar-choice-restored.png') });
 });

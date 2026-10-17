@@ -45,7 +45,7 @@ import { initSplit, joinLink, installSecondaryWorkspace, drawingLinkContext } fr
 import { initLink } from './link.js';
 import { initClipboard } from './clipboard.js';
 import { initMenus, openContextMenu } from './menus.js';
-import { initPersist, datasetKey, applyLayout, stripView, autosave, restorePrimarySelection, primaryLayoutSelection } from './persist.js';
+import { initPersist, datasetKey, applyLayout, stripView, autosave, flushAutosave, restorePrimarySelection, primaryLayoutSelection } from './persist.js';
 import { attachAlerts, detachAlerts } from './alerts.js';
 import { initInspection, attachInspection, detachInspection } from './inspection.js';
 import { initToolbar, renderToolbar } from './toolbar.js';
@@ -585,7 +585,11 @@ async function load(opts) {
       app.loading = false;
       syncReplayAlertPause();
       renderToolbar();
-      if (!app.loadFailed) autosave();
+      if (!app.loadFailed) {
+        autosave();
+        // A completed context switch must survive an immediate browser reload.
+        if (identityChanged) flushAutosave();
+      }
     }
   }
 }

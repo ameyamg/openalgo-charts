@@ -4,8 +4,81 @@ description: An interval code resolves to a bucketing rule, not to a number of s
 ---
 
 import { Callout } from 'nextra/components'
+import RunnableExample from '../../components/RunnableExample'
+import { STOCK_BARS_SOURCE } from '../../components/synthetic-market'
 
 # Custom intervals
+
+## Build intervals from available history
+
+Starting in 2.6.7, `withTimeframes` can build compatible intervals from a feed's
+native candles. The host supplies native wire tokens, source candle boundaries,
+exchange sessions and actual retention/request limits. Registration gives a code
+meaning; this wrapper supplies its data.
+
+| Native source | Examples it can build |
+|---|---|
+| 1 second | 5 seconds, 45 seconds, 7 minutes |
+| 1 minute | 7 minutes, 45 minutes, 2 hours |
+| 1 hour | 2 hours, 4 hours, when their boundaries align |
+| Daily | Weeks, months, quarters, years and calendar multiples |
+
+Five-minute candles cannot produce exact seven-minute candles. Minute data cannot
+produce historical seconds. Native requests keep their provider's token. Derived
+requests use the coarsest compatible source, validate every returned candle,
+expand the request to whole buckets and aggregate OHLCV. Missing observations are
+not filled with invented prices. An adapter must report its actual page/retention
+limits; a clipped broker response is not evidence of complete coverage.
+
+Intraday candles restart at each exchange session, including shortened or special
+sessions. Daily and longer candles follow the exchange calendar. Changing the
+display timezone does not change these boundaries. Calendar rules can explicitly
+pin a timezone; otherwise they use the supplied market calendar.
+
+<RunnableExample height={320} code={`${STOCK_BARS_SOURCE}
+const calendar = new lib.SessionCalendar({
+  timezone: 'UTC', sessions: ['0000-0000'],
+});
+const start = Date.UTC(2026, 8, 10) / 1000;
+const source = stockBars(start, 420, 60, 100, 33, 0.0022, 900);
+const request = { symbol: 'SAMPLE', exchange: 'UTC', interval: '7m',
+  from: start, to: start + 420 * 60 };
+const plan = lib.planTimeframe(request, {
+  key: 'sample-v1', calendar,
+  sources: [{ interval: '1m', bounds(time) {
+    const from = Math.floor(time / 60) * 60;
+    return { time: from, from, to: from + 60 };
+  } }],
+});
+const chart = lib.createChart(el, { timezone: 'UTC' });
+chart.addSeries('candlestick').setData(lib.aggregateTimeframeBars(source, plan));
+chart.fitContent();
+return chart;`} caption="Sixty seven-minute candles built from 420 one-minute observations." />
+
+Wrap a transport with `withTimeframes(rawFeed, { market })`, where `market(request)`
+returns this metadata for the requested instrument and data variant. Use the
+returned `feed.getBars`, `getBarsPage` and optional `subscribeBars` throughout the
+host. Call `feed.destroy()` when its owner closes. Live updates replace the
+contribution of an updated source candle, including its volume. Older corrections
+or reconnections request a history resynchronization.
+
+## Custom interval controls and favorites
+
+The packaged widget and reference host provide grouped interval lists, a type and
+count dialog, removal and favorite buttons. Saved favorites are shared between
+panes; selection stays with the active pane. Empty favorites remain empty on
+reload. Unsupported saved choices stay visible but disabled for the current feed.
+With widget persistence, omit an explicit `interval` option when the saved
+selection should be restored. An interval supplied by the host continues to take
+precedence over saved state.
+
+React and other hosts can use `createTimeframePreferences` and
+`customTimeframeCode` from `openalgo-charts/widget` with their own controls. The
+store handles validation, equivalent-code deduplication, persistence failures and
+subscriptions. Supply capability validation from the data source. Adding a
+favorite does not make unavailable history available.
+
+## Interval registration
 
 A host registers its own interval codes, and the engine asks the registry how a code
 buckets. The entry is a **bucketing rule, not a duration**, because three of the four kinds

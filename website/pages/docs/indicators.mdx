@@ -208,7 +208,8 @@ carries per-plot style inputs (colour, width, line style, opacity) that are not 
 here; read them off `indicatorStyleInputs(descriptor)` rather than hardcoding them. Ids
 are exact: `addIndicator` throws on one it does not know, so guard a user-supplied id
 with `hasIndicator(id)`. The moving averages, the bands and ten other studies also take a
-`timeframe`, which computes them on a higher timeframe folded from the chart's bars: see
+`timeframe`, which uses independent confirmed history when a capable provider is attached,
+or folds the chart's bars otherwise: see
 [a built-in on a higher timeframe](#a-built-in-on-a-higher-timeframe).
 
 ### Trend (40)
@@ -2031,8 +2032,8 @@ registerIndicator({
 
 ## A built-in on a higher timeframe
 
-A 15-minute EMA or an hourly Supertrend on a 1-minute chart, without changing the chart's
-interval and without a second data source: 29 built-ins take a `timeframe` input, an
+A daily EMA or an hourly Supertrend on a 5-minute chart, without changing the chart's
+interval: 29 built-ins take a `timeframe` input, an
 interval whose empty default is the chart's own.
 
 ```ts
@@ -2045,6 +2046,54 @@ Empty, which is the default, the study is exactly what it was: the same calculat
 same live tail, so a chart that never sets it draws what it drew before, and a layout saved
 by an earlier version loads and computes as it did. `getState()` and `indicatorDefaults()`
 carry the new key for these 29 studies only.
+
+### Independent history in 2.6.7
+
+With a warmup-capable snapshot provider, the study requests its own timeframe
+history. A daily EMA 200 can appear on a short five-minute chart because its 200
+daily observations come from separate history requests. The chart's five-minute
+window no longer limits the seed to a handful of daily candles.
+
+```ts
+import { timeframeBucketAt } from 'openalgo-charts';
+import { createTimeframeProvider } from 'openalgo-charts/indicators';
+
+// `feed` is the withTimeframes adapter configured for this market.
+const provider = createTimeframeProvider(feed, {
+  availability(bar, request) {
+    const plan = feed.resolve({ ...request, exchange: request.exchange ?? '' });
+    const bucket = timeframeBucketAt(plan, bar.time);
+    return { at: bucket?.to ?? null,
+      confirmed: bucket !== null && bucket.to <= Date.now() / 1000 };
+  },
+});
+chart.setBarsProvider(provider);
+chart.addIndicator('ema', { length: 200, timeframe: 'D' });
+```
+
+The host supplies the actual availability contract. The example assumes complete
+source candles become final at the declared bucket close. Delayed or incomplete
+sources need their own confirmation logic. A result appears only at a chart
+observation at or after its confirmed availability, so today's eventual daily
+close cannot appear earlier in the session.
+
+Warmup counts returned, confirmed observations, including each study's multi-stage
+lookback. The provider retains a stable confirmed seed across advancing windows.
+Recursive indicators still depend on that seed; loading earlier history can change
+them. Compare equal source history when comparing readings. Caches and request
+traversal are bounded; insufficient history and failed requests remain visible
+through study data status.
+
+Replay needs historical value versions. Supply `historicalSnapshot(request)` to
+the provider when the source can honor `asOf`; otherwise independent studies
+report replay as unsupported. Filtering today's revised candles is not a
+historical snapshot. Negative displaced plots are unsupported in this path.
+
+For a custom causal descriptor, pass `withTimeframe(descriptor, { historyBars })`
+with a function returning its required confirmed seed count. Legacy providers
+and custom descriptors without that declaration retain local folding.
+
+### Local folding with legacy providers
 
 Set, the chart's bars are folded to that interval, the study runs on the folded bars, and
 each bucket's value is drawn from the first bar of the bucket after it, then held across

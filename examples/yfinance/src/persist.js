@@ -8,7 +8,7 @@ import { renderIndicatorChips } from './indicators.js';
 import { CHART_TYPES, renderToolbar } from './toolbar.js';
 import { savedTransforms } from './transforms.js';
 import { PERIODS, ensureIntervalOption } from './intervals.js';
-import { referenceSupports } from './timeframes.js';
+import { referenceSupports, restoreReferenceTimeframe } from './timeframes.js';
 import { SESSIONS, sessionOf } from './session.js';
 import { withoutViewportSync } from './split.js';
 import { normalizeLegendIconSize, restorePrimaryStyle } from './chart-settings.js';
@@ -443,6 +443,7 @@ function applyLayoutNow(doc, { keepView = true, replaceComparisons = true } = {}
   // Mirror the restored indicators into our own spec list so a later chart
   // rebuild (type switch / reload) keeps them.
   app.activeIndicators = (state.indicators || []).map(study => ({ ...study, settings: { ...study.settings } }));
+  for (const study of app.activeIndicators) restoreReferenceTimeframe(study.settings?.timeframe);
   const report = app.chart.restoreState(state);
   if (!report.applied) {
     toast('error', 'The layout could not be restored: ' + report.reason);

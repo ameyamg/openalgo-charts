@@ -11,7 +11,7 @@ vi.mock('../src/compare.js', async importOriginal => ({ ...await importOriginal(
 vi.mock('../src/indicators.js', () => ({ renderIndicatorChips: vi.fn() }));
 vi.mock('../src/toolbar.js', async importOriginal => ({ ...await importOriginal(), renderToolbar: vi.fn() }));
 
-import { CHART_STATE_VERSION } from '/dist/openalgo-charts.mjs';
+import { unregisterInterval, CHART_STATE_VERSION } from '/dist/openalgo-charts.mjs';
 import {
   LAYOUT_KEY, LEGACY_LAYOUT_KEY, QUARANTINE_PREFIX, QUARANTINE_KEEP, LAYOUT_SCHEMA, SAVE_DEBOUNCE_MS,
   LayoutError, MIGRATIONS, schemaOf, upgradeLayout, quarantine, quarantinedKeys, readLayout, writeLayout,
@@ -636,4 +636,10 @@ describe('layout files', () => {
     expect(await importLayoutFile(JSON.stringify({ layout: doc }))).toBe(true);
     expect(JSON.stringify(app.chart.restored[0].drawings)).not.toContain('policy');
   });
+});
+
+it('restores an active calendar interval even after its menu definition was removed', () => {
+  unregisterInterval('5M');
+  expect(primaryLayoutSelection({ request: { symbol: 'AAPL', interval: '5M', period: '5y' } }).request.interval).toBe('5M');
+  unregisterInterval('5M');
 });

@@ -16,7 +16,9 @@ before `from`, in addition to the requested range. A provider advertises
 `createRequestedIndicator` includes warmup in request identity and cancellation.
 
 The timeframe provider counts actual observations, pages until enough history or
-explicit exhaustion, and rejects after 512 pages or 100,000 observations rather
+explicit exhaustion. Four consecutive empty windows without an exhaustion hint
+produce a retryable insufficient-history error, so a new listing cannot trigger
+hundreds of empty reads. It also rejects after 512 pages or 100,000 observations rather
 than fabricating history. It retains a stable confirmed seed across advancing
 windows. Its bounded memo (24 series, 250,000 bars, five-minute lifetime) never
 retains a forming or unknown-availability tail as immutable history. Tail refreshes

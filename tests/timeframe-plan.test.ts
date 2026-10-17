@@ -21,6 +21,16 @@ const disposers: (() => void)[] = [];
 afterEach(() => disposers.splice(0).forEach(off => off()));
 
 describe('timeframe source selection', () => {
+  it('uses a finer source when a mid-bucket probe hides coarse misalignment', () => {
+    const cal = new SessionCalendar({ timezone: 'UTC', sessions: ['0930-1630:23456'] });
+    const hourly: TimeframeSource = { interval: '1h', bounds(t) {
+      const from = Math.floor(t / 3600) * 3600;
+      return { time: from, from, to: from + 3600 };
+    } };
+    const plan = planTimeframe(request('2h', time('2026-01-28T10:00:00Z')), market([hourly, source('1m', 60, cal)], cal));
+    expect(plan.source.interval).toBe('1m');
+  });
+
   it('uses native wire aliases', () => {
     const result = planTimeframe(request('60m'), market([source('1h', 3600)]));
     expect(result.native).toBe(true);

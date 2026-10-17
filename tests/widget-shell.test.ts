@@ -362,9 +362,8 @@ describe('symbol, interval and chart type', () => {
     try {
       w.setInterval('1wk');
       expect(w.interval()).toBe('1wk');
-      // The registered code joins the default pills of a new widget.
-      const b = make();
-      expect(b.root.querySelectorAll('.oac-pills > button').map((x) => x.dataset.interval)).toContain('1wk');
+      // Favorites collapse equivalent codes, but the selected host code stays visible.
+      expect(Array.from(w.root.querySelectorAll<HTMLButtonElement>('.oac-pills > button'), x => x.dataset.interval)).toContain('1wk');
       // A saved code this build no longer knows falls back to the default rather than a wrong frame.
       const store = new MemoryStorage();
       store.setItem(`${STORAGE_PREFIX}default:${STATE_KEY}`, JSON.stringify({ version: 1, symbol: 'A', interval: 'MN' }));

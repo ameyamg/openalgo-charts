@@ -275,7 +275,10 @@ const BUNDLE = new URL('../dist/openalgo-charts.mjs', import.meta.url).pathname.
 // 2.6.6 measures 89437 bytes, up 18 for stable legend actions and the version.
 // Keep the byte ceiling exact rather than giving
 // a rounded KiB display room that the measured build does not need.
-const LIMIT_BYTES = 89437;
+// 2.6.7 adds optional confirmed-bar availability context to charts. Source
+// planning, resampling and the custom interval UI still shake out. The final
+// build measures 89568 bytes, 131 more than 2.6.6; retain the exact ceiling.
+const LIMIT_BYTES = 89568;
 
 // Absent from a chart-only build. Each is a string that appears in the adapter
 // source and nowhere in the rendering core.

@@ -25,6 +25,25 @@ function fixture(input = history) {
 }
 
 describe('independent timeframe snapshots', () => {
+  it('bounds empty-window traversal when a new listing has no retention metadata', async () => {
+    const input = history.slice(220, 230);
+    const getBars = vi.fn(async (r: BarsRequest) => input.filter(bar => bar.time >= r.from! && bar.time < r.to!));
+    const feed = withTimeframes({ getBars }, { market: () => ({ key: 'new-listing', calendar, sources: [
+      { interval: 'D', bounds: time => ({ time, from: time, to: time + day }) },
+    ] }) });
+    const provider = createTimeframeProvider(feed, { availability: bar => ({ at: bar.time + day, confirmed: true }) });
+    await expect(provider.requestSnapshot!(req)).rejects.toThrow(/Insufficient.*history/i);
+    expect(getBars.mock.calls.length).toBeLessThanOrEqual(6);
+    feed.destroy();
+  });
+  it('continues after one empty window instead of assuming history is exhausted', async () => {
+    const f = fixture();
+    f.getBarsPage.mockResolvedValueOnce({ bars: [], hasMore: true, nextBefore: req.from - 1 });
+    const result = await createTimeframeProvider(f.feed, { availability: f.availability }).requestSnapshot!(req);
+    expect(result.bars.filter(bar => bar.time < req.from)).toHaveLength(200);
+    f.feed.destroy();
+  });
+
   it('loads 200 observations before an intraday window despite weekends and short pages', async () => {
     const f = fixture(), provider = createTimeframeProvider(f.feed, { availability: f.availability });
     const result = await provider.requestSnapshot!(req);

@@ -872,6 +872,8 @@ class DemoServer(ThreadingHTTPServer):
     # hangs cannot hold the process open after Ctrl+C.
     daemon_threads = True
     allow_reuse_address = True
+    # ES module bursts from concurrent chart pages exceed the stdlib backlog.
+    request_queue_size = 128
 
     def __init__(self, address, source, quiet=False, quotes=None, news=None):
         self.source = source
@@ -950,6 +952,21 @@ def _start(source=None, fixture=True):
 
 
 class SelfTest(unittest.TestCase):
+    def test_static_module_burst_can_queue_before_accept_loop(self):
+        import socket
+        server = make_server('127.0.0.1', 0, fixture=True, quiet=True)
+        clients = []
+        try:
+            # Two browser contexts can open more than the stdlib's five queued
+            # connections while fetching the reference host's module graph.
+            for _ in range(16):
+                clients.append(socket.create_connection(server.server_address, timeout=0.2))
+            self.assertEqual(len(clients), 16)
+        finally:
+            for client in clients:
+                client.close()
+            server.server_close()
+
     @classmethod
     def setUpClass(cls):
         cls.server, cls.thread, cls.base = _start()

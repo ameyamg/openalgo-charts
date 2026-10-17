@@ -2,6 +2,84 @@
 
 All notable changes to OpenAlgo Charts.
 
+## 2.6.7
+
+2026-10-17
+
+Custom intervals and independently fetched, confirmed higher-timeframe studies.
+
+### Added
+
+- **Compatible custom candles.** `planTimeframe`, `timeframeBucketAt`,
+  `aggregateTimeframeBars` and `withTimeframes` derive intervals from native
+  sources, using exchange sessions and calendar periods. Examples include 7m
+  from 1m, aligned 2h from 1h, and weeks, months, quarters and years from daily
+  history. Seconds require a suitable seconds source. Source candles are never
+  split to invent smaller observations.
+- **Independent indicator history.** `createTimeframeProvider` supplies confirmed
+  snapshots and warmup for built-in higher-timeframe studies. Daily EMA 200 on a
+  five-minute chart reads daily history independently. Optional descriptor
+  `historyBars` and provider capabilities support custom requested studies.
+- **Custom interval controls.** The widget and reference host have grouped,
+  collapsible choices, an add dialog, removal and saved favorites. Favorite
+  preferences are shared; selection remains pane-owned. Empty favorites stay
+  empty and unsupported choices are disabled. Removing an active calendar
+  choice preserves its saved chart through reload.
+- **Reference examples.** The yfinance example supplies source capabilities,
+  requests daily study history separately and exposes the custom interval UI.
+  The website includes a runnable seven-minute aggregation example.
+
+### Correctness and compatibility
+
+- Source alignment is checked at the target boundary and for every returned
+  candle. Session resets, shortened days and calendar periods retain their
+  actual boundaries. Month tokens remain distinct from minute tokens.
+- Live updates replace a source candle's contribution instead of adding its
+  cumulative volume again. Reconnects and older corrections request resync.
+- Only confirmed source observations reach the chart at their availability
+  time. Unknown availability remains a gap. Independent replay requires a
+  historical snapshot provider; a live-only provider cannot expose later data.
+- History traversal has explicit page and bar ceilings and stops with a
+  retryable insufficient-history error after four consecutive empty windows.
+  A single empty holiday window does not declare exhaustion. Requests cancel
+  on context changes and teardown; confirmed-prefix caching is bounded.
+- Hosts must supply accurate native capabilities, source bounds, retention and
+  request limits. Missing broker history is reported, not fabricated. Recursive
+  studies remain sensitive to their retained seed history. Revised historical
+  snapshots are not invented by a live feed.
+- Existing native feed calls, legacy indicator providers and saved-state
+  formats remain supported. No runtime dependencies are added.
+
+### Size
+
+The base engine is 140.11 kB Brotli, base + trade 156.98 kB, indicators
+44.85 kB, the widget 128.98 kB, the widget terminal 372.38 kB and all tiers
+435.01 kB. Against published 2.6.6, the base adds 2,167 bytes, indicators
+1,836 bytes and the widget 3,142 bytes; the other six tier files retain
+their compressed sizes. The chart-only import measures 89,568 bytes
+(87.47 KiB), up 131 bytes. Source planning and the UI remain tree-shakeable;
+budgets cover the measured need without added runtime dependencies.
+
+### Performance
+
+Five runs per version on one dedicated 4-vCPU Linux runner (AMD EPYC 9V45),
+headless Chromium 149.0.7827.55 and software GL (SwiftShader), under the unchanged
+render budgets. At 200,000 bars, the lowest Canvas 2D p95 pan, full zoom-out and
+ten-study tick are 4, 56.7 and 175.5 ms against 4.3, 61.3 and 177.5 ms for 2.6.6 in the same
+session. Runs vary, particularly zoom-out; these measurements do not establish
+a general speedup. All built files match the locally validated candidate.
+See the [same-session benchmark](https://marketcalls.github.io/openalgo-charts/benchmarks#267).
+
+### Tests
+
+11,854 engine tests across 525 files and 734 reference-host tests across
+69 files. The reference custom-interval suite passes 18 browser cases across
+Chromium, Firefox and WebKit. The packaged widget passes 12 desktop/mobile
+cases for addition, favorites, hover targets, reload and removal. OpenAlgo's full frontend suite covers 3,528 tests;
+its actual trading and Historify routes exercise custom intervals, daily EMA
+200 values and rendered pixels, favorites, reload, multiple panes and themes.
+Consumer traffic is synthetic and does not place live broker orders.
+
 ## 2.6.6
 
 2026-10-17

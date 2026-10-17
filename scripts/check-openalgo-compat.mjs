@@ -103,6 +103,14 @@ const server = await createServer({
     load(id) {
       if (id !== '\0openalgo-compat-entry') return;
       return `import { TradingTerminal } from '/src/lib/trading/terminal.ts';
+        import * as Charts from 'openalgo-charts';
+        window.__compatEngine = Charts;
+        window.__compatCharts = [];
+        const setProvider = Charts.Chart.prototype.setBarsProvider;
+        Charts.Chart.prototype.setBarsProvider = function(provider) {
+          window.__compatCharts.push({ chart: this, provider });
+          return setProvider.call(this, provider);
+        };
         window.__compatTerminals = [];
         const init = TradingTerminal.prototype.init;
         TradingTerminal.prototype.init = function(...args) {
@@ -255,12 +263,15 @@ try {
   }));
   const waitDialogClosed = () => page.waitForFunction(() => !document.querySelector('[role="dialog"]')
     && getComputedStyle(document.body).pointerEvents !== 'none');
-  const reload = async () => {
+  const reload = async (url) => {
+    // Sonner schedules toast renders independently of chart readiness. Finish
+    // their lifecycle before navigation hides the departing document in Firefox.
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 15_000 });
     // Let state changes from the preceding interaction paint before automation
     // interrupts the document with navigation and its visibility event.
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     reloading = true;
-    try { return await page.reload(); }
+    try { return await (url ? page.goto(url) : page.reload()); }
     finally { reloading = false; }
   };
   const sendDepth = async (symbol, exchange, ltp) => {

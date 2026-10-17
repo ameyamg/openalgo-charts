@@ -1,6 +1,6 @@
 import {
   SessionCalendar, planTimeframe, timeframeBucketAt, withTimeframes,
-  resolveInterval, utcSecondsToZonedParts, zonedWallClockToUtcSeconds,
+  resolveInterval, tryResolveInterval, registerInterval, utcSecondsToZonedParts, zonedWallClockToUtcSeconds,
 } from '/dist/openalgo-charts.mjs';
 import { createTimeframeProvider } from '/dist/openalgo-charts.indicators.mjs';
 import { createTimeframePreferences } from '/dist/openalgo-charts.widget.mjs';
@@ -52,7 +52,18 @@ export function referenceMarket(req, now = Date.now() / 1000) {
   };
 }
 
+/** Restore a saved calendar choice even when it is no longer in the menu. */
+export function restoreReferenceTimeframe(code) {
+  if (typeof code !== 'string' || tryResolveInterval(code)) return;
+  const match = /^(\d*)([MQY])$/.exec(code);
+  if (!match) return;
+  const count = match[1] === '' ? 1 : Number(match[1]);
+  if (!Number.isInteger(count) || count < 1 || count > 100000) return;
+  registerInterval({ code, bucketing: { mode: 'calendar', unit: { M: 'month', Q: 'quarter', Y: 'year' }[match[2]], count } });
+}
+
 export function referenceSource(interval, symbol = 'AAPL', variant, now = Date.now() / 1000) {
+  restoreReferenceTimeframe(interval);
   const req = { symbol, exchange: exchangeOf(symbol), interval, variant };
   return planTimeframe(req, referenceMarket(req, now)).source.interval;
 }
@@ -68,16 +79,25 @@ export function createReferenceTimeframes(source, { now = () => Date.now() / 100
   const feed = withTimeframes({
     getBars: async req => {
       const bars = await source.getBars({ ...req, allowEmpty: true });
-      if (bars.length) latest.set(key(req), bars.at(-1).time);
+      if (bars.length) {
+        const id = key(req), previous = latest.get(id), horizon = Math.min(req.to ?? now(), now());
+        // Older warmup pages cannot replace the tail, but a fresh tail can
+        // regress when the source falls behind. The stale badge must see it.
+        const seen = previous && previous.horizon > horizon ? previous : { horizon, time: bars.at(-1).time };
+        latest.delete(id); latest.set(id, seen);
+        if (latest.size > 128) latest.delete(latest.keys().next().value);
+      }
       return bars;
     },
     ...(source.dataVariants ? { dataVariants: req => source.dataVariants(req) } : {}),
   }, { market: req => referenceMarket(req, now()), now });
+  const destroy = feed.destroy;
+  feed.destroy = () => { latest.clear(); destroy(); };
   const provider = createTimeframeProvider(feed, { now, availability: (bar, req) => {
     const bucket = timeframeBucketAt(feed.resolve({ ...req, exchange: req.exchange ?? '' }), bar.time);
     return { at: bucket?.to ?? null, confirmed: bucket !== null && bucket.to <= now() };
   } });
-  return { feed, provider, latest: req => latest.get(key({ ...req, interval: feed.resolve(req).source.interval })) };
+  return { feed, provider, latest: req => latest.get(key({ ...req, interval: feed.resolve(req).source.interval }))?.time };
 }
 
 export function attachReferenceTimeframes(chart, provider) { chart.setBarsProvider(provider); }

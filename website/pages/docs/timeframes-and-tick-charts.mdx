@@ -29,6 +29,10 @@ There are two sources of bars:
 
 ## History intervals
 
+For custom intervals over native source candles, use the opt-in
+[`withTimeframes` adapter](/docs/custom-intervals). It works with any `DataFeed`
+when the host supplies source capabilities and candle/session boundaries.
+
 The OpenAlgo REST adapter passes the interval through verbatim, so any interval your broker
 supports works. Fetch the exact list at runtime instead of hard-coding it:
 

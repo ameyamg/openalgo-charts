@@ -43,9 +43,13 @@
     const errors = [];
     window.__widgetErrors = errors;
     const widget = createWidget(document.getElementById('t'), {
-      mobile: 'auto', feed, symbol: 'FIXTURE', exchange: 'NSE', interval: '5m',
+      mobile: 'auto', feed, symbol: 'FIXTURE', exchange: 'NSE',
+      // The persistence checks let saved selection win; other fixtures pin 5m.
+      interval: new URLSearchParams(location.search).has('timeframes') ? undefined : '5m',
       theme: 'dark', rail: { favorites: ['trend-line'] },
       persist: new URLSearchParams(location.search).has('persist'),
+      canSelectInterval: new URLSearchParams(location.search).has('timeframes')
+        ? code => !code.endsWith('s') : undefined,
       onOrder: (o) => { window.__lastOrder = o; },
     });
     widget.on('data', (e) => { if (e.error) errors.push(e.error); window.__loaded = e.bars; });

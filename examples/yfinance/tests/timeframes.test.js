@@ -12,6 +12,18 @@ const request = interval => ({ symbol: 'AAPL', exchange: 'US', interval, from, t
 afterEach(() => vi.unstubAllGlobals());
 
 describe('reference timeframe integration', () => {
+  it('bounds source-horizon memory and does not rewind it during warmup paging', async () => {
+    const service = createReferenceTimeframes({ getBars: async req => [bar(req.from, 100)] }, { now: () => now });
+    await service.feed.getBars(request('1d'));
+    await service.feed.getBars({ ...request('1d'), from: from - 86400, to: from });
+    expect(service.latest(request('1d'))).toBe(from);
+    await service.feed.getBars({ ...request('1d'), from: from - 86400 });
+    expect(service.latest(request('1d'))).toBe(from - 86400);
+    for (let i = 0; i < 128; i++) await service.feed.getBars({ ...request('1d'), symbol: `TEST${i}` });
+    expect(service.latest(request('1d'))).toBeUndefined();
+    service.feed.destroy();
+  });
+
   it('uses compatible native observations and exchange session buckets', async () => {
     const calls = [];
     const source = { getBars: async req => {

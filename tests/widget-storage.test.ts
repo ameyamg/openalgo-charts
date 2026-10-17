@@ -7,12 +7,13 @@
  * pinned call for call against the widget as it was.
  */
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
-import { VERSION, type Bar, type BarsRequest, type DataFeed } from '../src/index';
+import { unregisterInterval, VERSION, type Bar, type BarsRequest, type DataFeed } from '../src/index';
 import {
   createWidget, createIndexedDbWidgetStorage, WidgetStorage, SAVE_DEBOUNCE_MS,
   type Widget, type WidgetOptions, type StorageLike, type WidgetStorageError,
 } from '../src/widget/index';
 import { fakeWidgetDocument, fakeContainer, ensureWindowGlobal, fire, type FakeDocument, type FakeElement } from './helpers/fake-dom-widget';
+import { createTimeframePreferences } from '../src/widget/timeframe-preferences';
 import { FakeIndexedDb } from './helpers/fake-indexeddb';
 import { FakeAsyncStore, settle } from './helpers/fake-async-store';
 
@@ -1060,5 +1061,27 @@ describe('the widget over an asynchronous store', () => {
       delete g.addEventListener;
       delete g.removeEventListener;
     }
+  });
+});
+
+describe('removed active calendar intervals', () => {
+  it.each([false, true])('restores saved custom definitions independently of menu membership (async %s)', async (asynchronous) => {
+    const store = new MemoryStorage();
+    const preferences = createTimeframePreferences({ storage: store, key: 'prefs', defaults: [] });
+    preferences.addCustom('5M');
+    const first = make({ persist: 'calendar', storage: store, interval: '5M', symbol: 'TEST', timeframePreferences: preferences });
+    const saved = first.getState();
+    preferences.removeCustom('5M');
+    first.destroy(); preferences.destroy(); unregisterInterval('5M');
+    const asyncStore = new FakeAsyncStore();
+    for (const [key, value] of store.map) asyncStore.map.set(key, value);
+    const restored = make({ persist: 'calendar', storage: asynchronous ? asyncStore : store });
+    if (asynchronous) await settle();
+    expect(restored.interval()).toBe('5M');
+    unregisterInterval('5M');
+    const imported = make({});
+    expect(imported.restoreState(saved).applied).toBe(true);
+    expect(imported.interval()).toBe('5M');
+    unregisterInterval('5M');
   });
 });

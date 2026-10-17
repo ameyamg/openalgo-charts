@@ -110,6 +110,7 @@ jobs:
           # while this check was run by hand only.
           node scripts/check-site-design.mjs
           OAC_WEBSITE_BROWSERS=chromium node scripts/check-analysis-website.mjs
+          OAC_WEBSITE_BROWSERS=chromium node scripts/check-timeframes-website.mjs
           OAC_WEBSITE_BROWSERS=chromium node scripts/check-alert-drag-website.mjs
           OAC_WEBSITE_BROWSERS=chromium node scripts/check-table-website.mjs
           OAC_WEBSITE_BROWSERS=chromium node scripts/check-alert-lifecycle-website.mjs
