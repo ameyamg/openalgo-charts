@@ -32,6 +32,8 @@ export function widenBar(base: Bar, observed: Bar): Bar {
 
 export interface CandleBuilderOptions {
   intervalSec: number;
+  /** Host calendar bucket, when session lengths or calendar periods vary. */
+  bucketStart?: (time: UTCSeconds) => UTCSeconds;
   /** 'ltq-sum' accumulates last-traded-qty; 'day-delta' diffs cumulative day volume. */
   volumeMode: VolumeMode;
   lateTickPolicy: LateTickPolicy;
@@ -150,6 +152,7 @@ export class CandleBuilder {
 
   /** Bucket-start (bar-open) time for a tick, aligned to the session anchor. */
   public bucketStart(time: UTCSeconds): UTCSeconds {
+    if (this._opts.bucketStart) return this._opts.bucketStart(time);
     const a = this._opts.sessionAnchorSec;
     const i = this._opts.intervalSec;
     return a + Math.floor((time - a) / i) * i;
@@ -234,6 +237,10 @@ export class CandleBuilder {
       // The first quote establishes that baseline without inventing old trades.
       this._cumAtBarStart = cum - (bar.volume ?? 0);
       this._hasCum = true;
+    } else if (this._opts.bucketStart && cum < this._lastCum) {
+      // A calendar candle can span several volume-reset days. Keep the
+      // previous days' trades when the source's cumulative counter restarts.
+      this._cumAtBarStart = -(bar.volume ?? 0);
     }
     this._lastCum = cum;
     return Math.max(0, cum - this._cumAtBarStart);
