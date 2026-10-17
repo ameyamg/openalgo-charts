@@ -1,5 +1,29 @@
 # Indicators
 
+## Independent higher-timeframe history
+
+`createTimeframeProvider(feed, options)` from the indicators tier accepts a base
+`TimeframeFeed` and `TimeframeProviderOptions`. The host supplies
+`availability(bar, request)` returning explicit `{at, confirmed}`. Unknown
+availability stays null. Optional `historicalSnapshot` must return historical
+value versions; without it `asOf` requests reject. Optional `now` returns UTC
+seconds. Attach the result with `chart.setBarsProvider(provider)`.
+
+The additive `IndicatorSnapshotRequest.warmupBars` asks for confirmed observations
+before `from`, in addition to the requested range. A provider advertises
+`IndicatorBarsProviderAccess.supportsWarmup`; the chart exposes it through
+`IndicatorRequestState.supportsWarmup`. Legacy providers default to false.
+`createRequestedIndicator` includes warmup in request identity and cancellation.
+
+The timeframe provider counts actual observations, pages until enough history or
+explicit exhaustion, and rejects after 512 pages or 100,000 observations rather
+than fabricating history. It retains a stable confirmed seed across advancing
+windows. Its bounded memo (24 series, 250,000 bars, five-minute lifetime) never
+retains a forming or unknown-availability tail as immutable history. Tail refreshes
+and shared requests preserve independent cancellation. Change the market key when
+calendar, provider, adjustment policy or historical data corrections invalidate
+earlier values.
+
 ## Per-bar open interest
 
 `OPEN_INTEREST`, `OPEN_INTEREST_CHANGE` and `OPEN_INTEREST_BUILDUP` are exported

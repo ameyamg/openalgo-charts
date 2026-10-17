@@ -88,13 +88,15 @@ function checkedRequest(value: Omit<IndicatorSnapshotRequest, 'signal'>, market?
     || typeof value.interval !== 'string' || value.interval.trim() === ''
     || (value.exchange !== undefined && typeof value.exchange !== 'string')
     || !Number.isFinite(value.from) || !Number.isFinite(value.to) || value.from > value.to
-    || (value.asOf !== undefined && !Number.isFinite(value.asOf))) invalid('request requires an instrument and a finite ordered time window');
+    || (value.asOf !== undefined && !Number.isFinite(value.asOf))
+    || (value.warmupBars !== undefined && (!Number.isInteger(value.warmupBars) || value.warmupBars < 0 || value.warmupBars > 100_000))) invalid('request requires an instrument and a finite ordered time window');
   let variant;
   try { variant = value.variant === undefined ? inheritedDataVariant(market?.variant) : normalizeDataVariant(value.variant); }
   catch { invalid('request variant must be a data variant'); }
   // An absent `exchange` or `asOf` is copied as undefined, which a provider
   // reads as absent; the request types keep those members exact for hosts.
   return { symbol: value.symbol, exchange: value.exchange, interval: value.interval, from: value.from, to: value.to, asOf: value.asOf,
+    ...(value.warmupBars === undefined ? {} : { warmupBars: value.warmupBars }),
     ...(variant ? { variant } : {}) } as Omit<IndicatorSnapshotRequest, 'signal'>;
 }
 
@@ -282,7 +284,7 @@ export function createRequestedIndicator(d: RequestedIndicatorDescriptor): Indic
         const source = requestState?.source;
         const market = context.dataContext;
         const key = JSON.stringify([
-          selected.symbol, selected.exchange, selected.interval, selected.asOf,
+          selected.symbol, selected.exchange, selected.interval, selected.asOf, selected.warmupBars,
           market?.symbol, market?.exchange, market?.interval, variant, selected.variant ?? null,
           requestState?.providerRevision, source?.sourceId,
           replay === undefined ? source?.historyRevision : null, replay !== undefined,
@@ -291,7 +293,7 @@ export function createRequestedIndicator(d: RequestedIndicatorDescriptor): Indic
         if (state.key !== key || backward) { clear(); if (!fresh()) return; state.key = key; }
         if (replay?.asOf !== undefined) selected.asOf = selected.asOf === undefined ? replay.asOf : Math.min(selected.asOf, replay.asOf);
         const version = JSON.stringify([
-          key, selected.from, selected.to, selected.asOf, replay === undefined ? source?.revision : null,
+          key, selected.from, selected.to, selected.asOf, selected.warmupBars, replay === undefined ? source?.revision : null,
           requestState?.dataRevision, replay?.time, replay?.forming, fallbackRevision,
         ]);
         const selection = { key, version, request: selected };

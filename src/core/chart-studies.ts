@@ -493,6 +493,7 @@ export class ChartStudies {
         source: this._host._seriesProvenance.get(this._host._firstDataId.value ?? -1)?.snapshot(),
         providerRevision: this._host._barsProviderRevision, dataRevision: this._host._requestedDataRevision,
         supportsSnapshots: this._host.hasSnapshotProvider(),
+        supportsWarmup: typeof this._host._barsProvider === 'object' && this._host._barsProvider?.supportsWarmup === true,
         replay: replayWindow(this._chart),
       }) satisfies LooseOptional<IndicatorRequestState> as IndicatorRequestState, // an absent source or replay window is written as undefined
       subscribeRequestChanges: listener => {

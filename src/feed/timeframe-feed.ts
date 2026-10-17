@@ -88,7 +88,8 @@ export function withTimeframes(feed: DataFeed, options: TimeframeFeedOptions): T
     if (!Number.isInteger(req.countBack) || req.countBack < 1 || req.countBack > 100_000) throw new Error('Invalid timeframe page count');
     const plan = resolve(req);
     if (plan.native && feed.getBarsPage) return pool.getBarsPage({ ...req, signal, interval: plan.source.interval });
-    const to = req.before, from = req.from ?? to - duration(req.interval) * req.countBack * 2;
+    const to = req.before, from = Math.max(plan.source.earliest ?? -Infinity, req.from ?? to - duration(req.interval) * req.countBack * 2);
+    if (from >= to) return { bars: [], hasMore: false, nextBefore: from };
     const bars = (await getBars({ ...req, signal, from, to })).filter(bar => bar.time < to).slice(-req.countBack);
     const nextBefore = bars[0]?.time ?? from;
     return { bars, nextBefore, ...(plan.source.earliest !== undefined && nextBefore <= plan.source.earliest ? { hasMore: false } : {}) };

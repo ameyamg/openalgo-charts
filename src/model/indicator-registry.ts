@@ -749,12 +749,16 @@ export interface RequestedBarsSnapshot {
 
 /** An optional historical knowledge cutoff, separate from opening-time bounds. */
 export interface IndicatorSnapshotRequest extends IndicatorBarsRequest {
+  /** Confirmed observations required before from, in addition to the visible window. */
+  warmupBars?: number;
   /** The provider must supply values as known then, or reject if unsupported. */
   asOf?: number;
 }
 
 /** Native provider access with optional explicit requested-data metadata. */
 export interface IndicatorBarsProviderAccess {
+  /** Explicit support for independently fetching warmupBars in snapshot requests. */
+  supportsWarmup?: boolean;
   requestBars: IndicatorBarsProvider;
   requestSnapshot?(request: IndicatorSnapshotRequest): Promise<RequestedBarsSnapshot>;
 }
@@ -766,6 +770,8 @@ export interface IndicatorRequestState {
   /** Host announcements of changed external data, independently of price ticks. */
   dataRevision: number;
   supportsSnapshots: boolean;
+  /** False or absent preserves studies that fold only the loaded chart history. */
+  supportsWarmup?: boolean;
   /** Legacy replay has no known availability cutoff. */
   replay?: { time: number; asOf?: number; forming: boolean };
 }
