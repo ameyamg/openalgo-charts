@@ -34,13 +34,15 @@ import {
   type IndicatorValues,
 } from 'openalgo-charts';
 import { keyOf, localDays, securityExpression } from './security';
+import { createTimeframeHistory } from './timeframe-history';
+import { timeframeHistoryBars } from './timeframe-warmup';
 
 /** The settings key the input writes. */
 const KEY = 'timeframe';
 
 const INPUT: IndicatorInput = {
   key: KEY, type: 'interval', label: 'Timeframe', default: '',
-  tooltip: 'Compute on a higher timeframe folded from the chart bars. Each value appears once its period closes.',
+  tooltip: 'Compute on a higher timeframe, using independent history when the host supports it. Values appear once their periods close.',
 };
 
 const DAY = 86400;
@@ -179,7 +181,12 @@ function remember(store: IndicatorStore, memo: Memo | null): void {
  * them. A descriptor that already has the key, or that brings its own data
  * through `attach`, cannot be folded and is refused.
  */
-export function withTimeframe(descriptor: IndicatorDescriptor): IndicatorDescriptor {
+export interface TimeframeOptions {
+  /** Confirmed requested observations needed before the chart window for this calculation. */
+  historyBars?: (settings: Readonly<IndicatorSettings>) => number;
+}
+
+export function withTimeframe(descriptor: IndicatorDescriptor, options: TimeframeOptions = {}): IndicatorDescriptor {
   if (descriptor.inputs.some((input) => input.key === KEY)) {
     throw new Error(`withTimeframe: ${descriptor.id} already has a "${KEY}" input`);
   }
@@ -249,5 +256,7 @@ export function withTimeframe(descriptor: IndicatorDescriptor): IndicatorDescrip
   // Not enumerable, like a built-in's own tail: a spread that brings another
   // calc must not splice this tail onto that calc's numbers (see ./tail).
   Object.defineProperty(out, 'calcTail', { value: tail, enumerable: false, writable: true, configurable: true });
-  return out;
+  return createTimeframeHistory(descriptor, out,
+    options.historyBars ?? (settings => timeframeHistoryBars(descriptor.id, settings)),
+    (settings, context) => plan(descriptor, settings, context)?.tf ?? null);
 }

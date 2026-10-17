@@ -19,6 +19,8 @@ export interface RequestedIndicatorContext {
 /** A requested expression with an instance-owned snapshot lifecycle. */
 export interface RequestedIndicatorDescriptor extends Pick<IndicatorDescriptor,
   'id' | 'name' | 'category' | 'placement' | 'inputs' | 'plots' | 'levels' | 'range'> {
+  /** False refreshes on range/provider/data changes, not price-only source revisions. Default true. */
+  refreshOnSourceUpdate?: boolean;
   /**
    * Select a complete history window, including expression warmup. null means
    * unsupported. The helper owns cancellation; signal is not a selector input.
@@ -293,7 +295,8 @@ export function createRequestedIndicator(d: RequestedIndicatorDescriptor): Indic
         if (state.key !== key || backward) { clear(); if (!fresh()) return; state.key = key; }
         if (replay?.asOf !== undefined) selected.asOf = selected.asOf === undefined ? replay.asOf : Math.min(selected.asOf, replay.asOf);
         const version = JSON.stringify([
-          key, selected.from, selected.to, selected.asOf, selected.warmupBars, replay === undefined ? source?.revision : null,
+          key, selected.from, selected.to, selected.asOf, selected.warmupBars,
+          replay === undefined && d.refreshOnSourceUpdate !== false ? source?.revision : null,
           requestState?.dataRevision, replay?.time, replay?.forming, fallbackRevision,
         ]);
         const selection = { key, version, request: selected };

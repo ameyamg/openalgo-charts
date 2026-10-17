@@ -50,6 +50,7 @@ import { SWING_INDICATORS } from './swings';
 export const INDICATORS_TIER = 'indicators' as const;
 export { createTimeframeProvider } from './timeframe-provider';
 export type { TimeframeProviderOptions } from './timeframe-provider';
+export type { TimeframeOptions } from './timeframe';
 
 /** Every built-in descriptor, in picker order. */
 export const BUILTIN_INDICATORS: readonly IndicatorDescriptor[] = [

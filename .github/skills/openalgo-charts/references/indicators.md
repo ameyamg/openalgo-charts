@@ -24,6 +24,22 @@ and shared requests preserve independent cancellation. Change the market key whe
 calendar, provider, adjustment policy or historical data corrections invalidate
 earlier values.
 
+The 29 built-ins with a timeframe input use this independent history only when
+both snapshot and warmup capabilities are advertised. Daily EMA 200 can therefore
+show on a short five-minute chart. Values align by explicit availability, so the
+current daily close never appears on earlier intraday bars. Built-in recipes cover
+each kernel's sufficient seed length, including multi-stage smoothers; recursive
+values depend on the supplied seed history and are not convergence guarantees.
+Negative displaced plots are unsupported in this independent path. The existing
+local fold remains available with legacy providers and direct `calc` calls.
+
+`withTimeframe(descriptor, options?)` accepts `TimeframeOptions.historyBars(settings)`
+for a custom causal study's required seed count. Unknown custom descriptors keep
+local folding unless this callback is supplied. `RequestedIndicatorDescriptor`
+accepts `refreshOnSourceUpdate?: boolean` (default true). The independent built-ins
+set it false so price-only primary revisions do not refetch external history;
+range, settings, provider, replay and explicit requested-data changes still do.
+
 ## Per-bar open interest
 
 `OPEN_INTEREST`, `OPEN_INTEREST_CHANGE` and `OPEN_INTEREST_BUILDUP` are exported
@@ -1555,7 +1571,8 @@ ema.setSettings({ timeframe: '' });   // the chart's own timeframe again
   change. A layout saved before the key existed loads as `''` and computes what it did;
   `getState()` then writes `timeframe: ''` for these 29 studies only, and
   `indicatorDefaults()` gains the key for them only.
-- **Set, it reads each completed bucket.** The bars are folded by the `securityExpression`
+- **Set, it reads each completed bucket.** With a capable provider it reads independent
+  confirmed history as described above. Without one, bars are folded by the `securityExpression`
   fold in `confirmed` mode: the study runs on the folded bars, and a bucket's value is
   drawn from the first bar of the next bucket and held across it. A value never changes
   once shown, live or on reload; the first bucket's bars are `null`. The legend reads
@@ -1577,7 +1594,7 @@ ema.setSettings({ timeframe: '' });   // the chart's own timeframe again
   new bucket recomputes the fold once. A setting that reads ahead (a negative `offset` on
   `vwma` or `donchian`) shifts a later bucket onto shown bars, so it recomputes in full
   on every tick instead.
-- **History depth.** The fold has only the loaded bars: an hourly EMA 20 needs about 20
+- **Legacy history depth.** Without a warmup-capable provider, the fold has only the loaded bars: an hourly EMA 20 needs about 20
   hours of bars on the chart, a daily one about 20 sessions.
 - **Refused on a transformed chart's own bars.** A study computing on the
   bars of a chart that transforms them (`chart.setSeriesTransform`, Heikin Ashi
